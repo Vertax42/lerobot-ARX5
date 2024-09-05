@@ -18,7 +18,7 @@
         "dtype": "float32",
         "_type": "Value"
       },
-      "length": 3,
+      "length": 4,
       "_type": "Sequence"
     },
     "episode_index": {
