@@ -45,7 +45,7 @@ develop-eggs/
 .installed.cfg
 *.egg
 MANIFEST
-lib/
+# lib/
 lib64/
 
 # PyInstaller

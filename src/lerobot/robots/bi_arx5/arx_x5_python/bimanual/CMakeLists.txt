@@ -4,8 +4,8 @@ project(arx_x5_python VERSION 1.0)
 find_package(pybind11 REQUIRED)
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
-include_directories(${PROJECT_SOURCE_DIR}/lib/arx_x5_src/include)
-include_directories(${PROJECT_SOURCE_DIR}/lib/arx_hardware_interface/include)
+include_directories(${PROJECT_SOURCE_DIR}/api/arx_x5_src/include)
+include_directories(${PROJECT_SOURCE_DIR}/api/arx_hardware_interface/include)
 
 pybind11_add_module(${PROJECT_NAME} src/single_arm_interface.cpp)
 
