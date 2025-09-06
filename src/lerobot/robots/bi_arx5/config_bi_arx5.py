@@ -35,9 +35,6 @@ class BiARX5Config(RobotConfig):
     disable_torque_on_disconnect: bool = True
     max_relative_target: int | None = None
     use_degrees: bool = False
-    disable_torque_on_disconnect: bool = True
-    max_relative_target: int | None = None
-    use_degrees: bool = False
 
     # cameras
     cameras: dict[str, CameraConfig] = field(

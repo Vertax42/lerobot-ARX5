@@ -96,13 +96,16 @@ EEFState Arx5ControllerBase::get_eef_state()
 void Arx5ControllerBase::set_gain(Gain new_gain)
 {
     // Make sure the robot doesn't jump when setting kp to non-zero
-    if (gain_.kp.isZero() && !new_gain.kp.isZero())
+    if (gain_.kp.isZero() && !new_gain.kp.isZero()) // current kp==zero & new_gain != 0 
+    // damping -> joint_control
     {
-        JointState joint_state = get_joint_state();
-        JointState joint_cmd = get_joint_cmd();
-        double max_pos_error = (joint_state.pos - joint_cmd.pos).cwiseAbs().maxCoeff();
-        double pos_error_threshold = 0.2;
+        JointState joint_state = get_joint_state(); // current pos
+        JointState joint_cmd = get_joint_cmd(); // target pos
+        double max_pos_error = (joint_state.pos - joint_cmd.pos).cwiseAbs().maxCoeff(); // max error in all joints
+        double pos_error_threshold = 0.2;  // threhold: 0.2 rad = 11.5 degree
         double kp_threshold = 1;
+
+        // pos_error > 0.2 && new_kp > 1, danger!
         if (max_pos_error > pos_error_threshold && new_gain.kp.maxCoeff() > kp_threshold)
         {
             logger_->error("Cannot set kp too large when the joint pos cmd is far from current pos.");
@@ -145,40 +148,44 @@ void Arx5ControllerBase::set_log_level(spdlog::level::level_enum level)
 
 void Arx5ControllerBase::reset_to_home()
 {
-    JointState init_state = get_joint_state();
-    Gain init_gain = get_gain();
-    double init_gripper_kp = gain_.gripper_kp;
-    double init_gripper_kd = gain_.gripper_kd;
-    Gain target_gain{robot_config_.joint_dof};
+    JointState init_state = get_joint_state(); // current joint state
+    Gain init_gain = get_gain(); // current gain
+
+    double init_gripper_kp = gain_.gripper_kp; // current gripper kp
+    double init_gripper_kd = gain_.gripper_kd; // current gripper kd
+    Gain target_gain{robot_config_.joint_dof}; // init target gain
     if (init_gain.kp.isZero())
     {
-        logger_->info("Current kp is zero. Setting to default kp kd");
+        logger_->info("Current kp is zero. Setting to default kp kd"); // damping mode, set to default gain
         target_gain = Gain(controller_config_.default_kp, controller_config_.default_kd,
                            controller_config_.default_gripper_kp, controller_config_.default_gripper_kd);
     }
     else
     {
-        target_gain = init_gain;
+        target_gain = init_gain; // keep origin gain
     }
 
-    JointState target_state{robot_config_.joint_dof};
+    JointState target_state{robot_config_.joint_dof}; // init target state
 
     // calculate the maximum joint position error
     double max_pos_error = (init_state.pos - VecDoF::Zero(robot_config_.joint_dof)).cwiseAbs().maxCoeff();
+    
+    // default gripper_pos = 0.044 which is the widest
+    // max pos error = max(joint_error, gripper_error)
     max_pos_error = std::max(max_pos_error, init_state.gripper_pos * 2 / robot_config_.gripper_width);
     // interpolate from current kp kd to default kp kd in max(max_pos_error, 0.5)s
     // and keep the target for max(max_pos_error, 0.5)s
-    double wait_time = std::max(max_pos_error, 0.5);
-    int step_num = int(wait_time / controller_config_.controller_dt);
+    double wait_time = std::max(max_pos_error, 0.5);    
+    int step_num = int(wait_time / controller_config_.controller_dt); // controller_dt default to 0.002 / 500hz
     logger_->info("Start reset to home in {:.3f}s, max_pos_error: {:.3f}", std::max(max_pos_error, double(0.5)) + 0.5,
                   max_pos_error);
 
     bool prev_running = background_send_recv_running_;
     background_send_recv_running_ = true;
-    target_state.timestamp = get_timestamp() + wait_time;
+    target_state.timestamp = get_timestamp() + wait_time;   
     target_state.pos[2] = 0.03; // avoiding clash
 
-    {
+    {   // set start state
         std::lock_guard<std::mutex> guard(cmd_mutex_);
         JointState start_state{robot_config_.joint_dof};
         start_state.pos = init_state.pos;

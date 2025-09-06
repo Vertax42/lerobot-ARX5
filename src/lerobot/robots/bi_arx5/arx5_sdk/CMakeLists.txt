@@ -43,9 +43,9 @@ target_link_libraries(ArxJointController
     Eigen3::Eigen
     Threads::Threads
     spdlog::spdlog
-    kdl_parser
+    $ENV{CONDA_PREFIX}/lib/libkdl_parser.so
     orocos-kdl
-    soem
+    $ENV{CONDA_PREFIX}/lib/libsoem.so
 )
 add_library(ArxCartesianController SHARED
     src/app/cartesian_controller.cpp
@@ -58,9 +58,9 @@ target_link_libraries(ArxCartesianController
     Eigen3::Eigen
     Threads::Threads
     spdlog::spdlog
-    kdl_parser
+    $ENV{CONDA_PREFIX}/lib/libkdl_parser.so
     orocos-kdl
-    soem
+    $ENV{CONDA_PREFIX}/lib/libsoem.so
 )
 
 # Hack for py310 (conda environment is slightly different from other python versions)
@@ -76,9 +76,9 @@ target_link_libraries(test_joint_controller
     Eigen3::Eigen
     Threads::Threads
     spdlog::spdlog
-    kdl_parser
+    $ENV{CONDA_PREFIX}/lib/libkdl_parser.so
     orocos-kdl
-    soem
+    $ENV{CONDA_PREFIX}/lib/libsoem.so
 )
 
 add_executable(test_cartesian_controller examples/test_cartesian_controller.cpp)
@@ -89,9 +89,9 @@ target_link_libraries(test_cartesian_controller
     spdlog::spdlog
     Eigen3::Eigen
     Threads::Threads
-    kdl_parser
+    $ENV{CONDA_PREFIX}/lib/libkdl_parser.so
     orocos-kdl
-    soem
+    $ENV{CONDA_PREFIX}/lib/libsoem.so
 )
 
 add_subdirectory(python)

@@ -23,9 +23,9 @@ Arx5JointController::Arx5JointController(std::string model, std::string interfac
 
 void Arx5JointController::set_joint_cmd(JointState new_cmd)
 {
-    JointState current_joint_state = get_joint_state();
-    double current_time = get_timestamp();
-    if (new_cmd.timestamp == 0)
+    JointState current_joint_state = get_joint_state(); // current joint state
+    double current_time = get_timestamp(); // current timestamp
+    if (new_cmd.timestamp == 0) // default time set to current_time + default_preview_time(default:0)
         new_cmd.timestamp = current_time + controller_config_.default_preview_time;
 
     std::lock_guard<std::mutex> guard(cmd_mutex_);
@@ -86,6 +86,14 @@ void Arx5JointController::send_recv_once()
     send_recv_();
 }
 
+//   1. 停止后台发送接收线程
+//   2. 发送多次零扭矩命令给夹爪电机
+//   3. 提示用户完全关闭夹爪并按回车
+//   4. 重置零点读数 (reset_zero_readout)
+//   5. 再次发送零扭矩命令
+//   6. 提示用户完全打开夹爪并按回车
+//   7. 读取电机消息并输出完全打开时的位置读数
+//   8. 提示需要手动更新配置文件中的 gripper_open_readout 值
 void Arx5JointController::calibrate_gripper()
 {
     bool prev_running = background_send_recv_running_;
@@ -128,6 +136,14 @@ void Arx5JointController::calibrate_gripper()
     }
 }
 
+//   1. 停止后台发送接收线程
+//   2. 根据电机类型发送零扭矩命令
+//   3. 提示用户将关节移动到home位置并按回车
+//   4. 根据电机类型重置零点：
+//     - EC_A4310电机：使用can_cmd_init(motor_id, 0x03)
+//     - DM电机：使用reset_zero_readout(motor_id)
+//   5. 再次发送零扭矩命令
+//   6. 恢复后台发送接收线程
 void Arx5JointController::calibrate_joint(int joint_id)
 {
     bool prev_running = background_send_recv_running_;

@@ -35,10 +35,10 @@ ${LIB_DIR}/libsolver.so
     spdlog::spdlog
     Eigen3::Eigen
     Threads::Threads
-    kdl_parser
+    $ENV{CONDA_PREFIX}/lib/libkdl_parser.so
     orocos-kdl
     pthread
-    soem
+    $ENV{CONDA_PREFIX}/lib/libsoem.so
 )
 target_include_directories(arx5_interface PUBLIC ${EIGEN3_INCLUDE_DIRS})
 

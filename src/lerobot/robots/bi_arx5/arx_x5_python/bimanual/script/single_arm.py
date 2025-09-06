@@ -92,7 +92,7 @@ class SingleArm:
         else:
             urdf_path = os.path.join(current_dir, "x5_2025.urdf")
         self.arm = arx.InterfacesPy(urdf_path, config.get("can_port", "can0"), type)
-        self.arm.arx_x(500, 2000, 10)
+        self.arm.arx_x(150, 600, 10)
 
     def get_joint_names(self) -> List[str]:
         """
@@ -124,7 +124,7 @@ class SingleArm:
     def set_joint_positions(
         self,
         positions: Union[float, List[float], np.ndarray],  # Shape: (num_joints,)
-        **kwargs
+        **kwargs,
     ) -> bool:
         """
         Move the arm to the given joint position(s).
@@ -141,7 +141,7 @@ class SingleArm:
         self,
         pos: Optional[Union[List[float], np.ndarray]] = None,  # Shape: (3,)
         quat: Optional[Union[List[float], np.ndarray]] = None,  # Shape: (4,)
-        **kwargs
+        **kwargs,
     ) -> bool:
         """
         Move the end effector to the given pose.
@@ -162,7 +162,7 @@ class SingleArm:
     def set_ee_pose_xyzrpy(
         self,
         xyzrpy: Optional[Union[List[float], np.ndarray]] = None,  # Shape: (6,)
-        **kwargs
+        **kwargs,
     ) -> bool:
         """
         Move the end effector to the given pose.
