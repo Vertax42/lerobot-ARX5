@@ -46,7 +46,7 @@ develop-eggs/
 *.egg
 MANIFEST
 # lib/
-lib64/
+# lib64/
 
 # PyInstaller
 *.manifest
@@ -56,7 +56,6 @@ lib64/
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
 *.sage.py
 .cache/
 .ruff_cache/
