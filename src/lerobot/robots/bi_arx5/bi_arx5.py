@@ -199,14 +199,16 @@ class BiARX5(Robot):
         return
 
     def get_observation(self) -> dict[str, Any]:
-        if self.left_arm is None or self.right_arm is None:
+        if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         obs_dict = {}
 
         # Add "left_" prefix - get joint state from left arm
         left_joint_state = self.left_arm.get_joint_state()
-        left_pos = left_joint_state.pos().copy()  # numpy array of joint positions (deep copy)
+        left_pos = (
+            left_joint_state.pos().copy()
+        )  # numpy array of joint positions (deep copy)
 
         # Create left arm observations with joint names matching _motors_ft
         for i in range(6):  # 6 joints
@@ -215,7 +217,9 @@ class BiARX5(Robot):
 
         # Add "right_" prefix - get joint state from right arm
         right_joint_state = self.right_arm.get_joint_state()
-        right_pos = right_joint_state.pos().copy()  # numpy array of joint positions (deep copy)
+        right_pos = (
+            right_joint_state.pos().copy()
+        )  # numpy array of joint positions (deep copy)
 
         # Create right arm observations with joint names matching _motors_ft
         for i in range(6):  # 6 joints
@@ -232,7 +236,7 @@ class BiARX5(Robot):
         return obs_dict
 
     def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
-        if self.left_arm is None or self.right_arm is None:
+        if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         # Create JointState objects for both arms
@@ -288,9 +292,12 @@ class BiARX5(Robot):
         # Set arms to damping mode for safety before destroying objects
         try:
             if self.left_arm is not None:
+                self.left_arm.reset_to_home()
                 self.left_arm.set_to_damping()
             if self.right_arm is not None:
+                self.right_arm.reset_to_home()
                 self.right_arm.set_to_damping()
+            logger.info(f"{self} disconnected and reset to home.")
         except Exception as e:
             logger.warning(f"Failed to set arms to damping mode: {e}")
 

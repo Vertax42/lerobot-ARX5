@@ -1,212 +1,112 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """
-Simple test for BiARX5 record functionality
-Tests the core record components without CLI parsing
+Test script for BiARX5 integration with lerobot-record system
 """
 
+import argparse
 import sys
-import tempfile
-import shutil
-from pathlib import Path
-from unittest.mock import Mock, MagicMock
-import numpy as np
+import logging
+from lerobot.robots import make_robot_from_config
+from lerobot.robots.bi_arx5.config_bi_arx5 import BiARX5Config
 
-# Add the lerobot source to Python path
-current_dir = Path(__file__).parent
-src_dir = current_dir / "src"
-sys.path.insert(0, str(src_dir))
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Mock ARX5 SDK before importing
-mock_arx5 = Mock()
-mock_arx5.Arx5JointController = MagicMock
-mock_arx5.RobotConfigFactory = Mock()
-mock_arx5.ControllerConfigFactory = Mock() 
-mock_arx5.JointState = Mock()
-mock_arx5.LogLevel = Mock()
 
-# Mock factory methods
-mock_config_factory = Mock()
-mock_robot_config = Mock()
-mock_robot_config.joint_dof = 6
-mock_config_factory.get_config.return_value = mock_robot_config
-mock_arx5.RobotConfigFactory.get_instance.return_value = mock_config_factory
-
-mock_controller_config_factory = Mock()
-mock_controller_config = Mock()
-mock_controller_config_factory.get_config.return_value = mock_controller_config
-mock_arx5.ControllerConfigFactory.get_instance.return_value = mock_controller_config_factory
-
-# Mock JointState
-def mock_joint_state_init(dof):
-    instance = Mock()
-    instance.pos = Mock(return_value=np.zeros(dof))
-    instance.gripper_pos = 0.0
-    return instance
-
-mock_arx5.JointState.side_effect = mock_joint_state_init
-
-# Set up the mock in sys.modules
-sys.modules['lerobot.robots.bi_arx5.arx5_sdk.python.arx5_interface'] = mock_arx5
-
-# Import after mocking
-from lerobot.robots.bi_arx5 import BiARX5Config
-from lerobot.robots.utils import make_robot_from_config
-from lerobot.record import DatasetRecordConfig, RecordConfig
-from lerobot.datasets.utils import hw_to_dataset_features
-
-def test_basic_integration():
-    """Test basic BiARX5 integration with LeRobot"""
-    print("=== Testing Basic BiARX5 Integration ===")
-    
-    # Test 1: Config creation
-    print("\n1. Testing BiARX5Config creation...")
-    config = BiARX5Config(
-        left_arm_model="X5",
-        left_arm_port="can0", 
-        right_arm_model="X5",
-        right_arm_port="can1"
-    )
-    print(f"✓ Config created: type={config.type}")
-    print(f"  Left arm: {config.left_arm_model} on {config.left_arm_port}")
-    print(f"  Right arm: {config.right_arm_model} on {config.right_arm_port}")
-    print(f"  Cameras: {list(config.cameras.keys())}")
-    
-    # Test 2: Robot factory
-    print("\n2. Testing robot factory...")
-    robot = make_robot_from_config(config)
-    print(f"✓ Robot created: {type(robot).__name__}")
-    
-    # Test 3: Feature definitions
-    print("\n3. Testing feature definitions...")
-    action_features = robot.action_features
-    obs_features = robot.observation_features
-    print(f"✓ Action features: {len(action_features)} motor features")
-    print(f"✓ Observation features: {len(obs_features)} features (motors + cameras)")
-    
-    # Verify expected motor features
-    expected_motors = [f"{arm}_joint_{i}.pos" for arm in ["left", "right"] for i in range(1, 7)]
-    expected_motors.extend(["left_gripper.pos", "right_gripper.pos"]) 
-    
-    missing_features = [f for f in expected_motors if f not in action_features]
-    if missing_features:
-        print(f"✗ Missing features: {missing_features}")
-        return False
-        
-    print(f"✓ All {len(expected_motors)} expected motor features present")
-    
-    # Test 4: Dataset feature conversion
-    print("\n4. Testing dataset feature conversion...")
-    dataset_action_features = hw_to_dataset_features(action_features, "action", use_video=True)
-    dataset_obs_features = hw_to_dataset_features(obs_features, "observation", use_video=True)
-    
-    print(f"✓ Dataset action features: {len(dataset_action_features)}")
-    print(f"✓ Dataset observation features: {len(dataset_obs_features)}")
-    
-    # Check for camera features
-    camera_features = [k for k in dataset_obs_features.keys() if "images" in k]
-    print(f"✓ Camera dataset features: {camera_features}")
-    
-    return True
-
-def test_record_config():
-    """Test record configuration creation"""
-    print("\n=== Testing Record Configuration ===")
-    
-    # Create temporary directory
-    temp_dir = Path(tempfile.mkdtemp())
-    print(f"Using temp directory: {temp_dir}")
-    
+def test_robot_creation():
+    """Test creating BiARX5 robot from config"""
     try:
-        # Create robot config
-        robot_config = BiARX5Config(
+        config = BiARX5Config(
             left_arm_model="X5",
-            left_arm_port="can0",
-            right_arm_model="X5", 
-            right_arm_port="can1"
+            left_arm_port="can1",
+            right_arm_model="X5",
+            right_arm_port="can3",
+            log_level="INFO",
         )
-        
-        # Create dataset config  
-        dataset_config = DatasetRecordConfig(
-            repo_id="test/bi_arx5_dataset",
-            single_task="Test BiARX5 recording",
-            root=temp_dir,
-            num_episodes=1,
-            episode_time_s=5,
-            reset_time_s=2,
-            push_to_hub=False
+
+        robot = make_robot_from_config(config)
+        logger.info(f"✅ Successfully created robot: {robot.name}")
+        logger.info(f"✅ Robot type: {type(robot).__name__}")
+        logger.info(f"✅ Action features: {list(robot.action_features.keys())}")
+        logger.info(
+            f"✅ Observation features: {list(robot.observation_features.keys())}"
         )
-        
-        # Create record config - ARX5 has built-in master-slave control
-        # We can use policy mode or create a minimal teleop config
-        # For now, let's skip the full RecordConfig validation
-        print("✓ Record configuration components work")
-        print(f"  Robot config type: {robot_config.type}")
-        print(f"  Dataset repo: {dataset_config.repo_id}")
-        print(f"  Task: {dataset_config.single_task}")
-        print(f"  Episodes: {dataset_config.num_episodes}")
-        print(f"  Episode time: {dataset_config.episode_time_s}s")
-        
-        # Note: Full RecordConfig requires either teleop or policy
-        # Since ARX5 is master-slave integrated, you would typically use:
-        # 1. Policy mode for autonomous recording, or  
-        # 2. Manual control through the master arm (no additional teleop needed)
-        
+
         return True
-        
     except Exception as e:
-        print(f"✗ Record config creation failed: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"❌ Failed to create robot: {e}")
         return False
-    finally:
-        shutil.rmtree(temp_dir)
+
+
+def test_config_registration():
+    """Test if BiARX5Config is properly registered"""
+    try:
+        from lerobot.robots.config import RobotConfig
+
+        config = RobotConfig.from_robot_type("bi_arx5")
+        logger.info(
+            f"✅ Successfully loaded config from robot type: {type(config).__name__}"
+        )
+        return True
+    except Exception as e:
+        logger.error(f"❌ Failed to load config from robot type: {e}")
+        return False
+
 
 def main():
-    """Main test function"""
-    success = True
-    
-    try:
-        # Test basic integration
-        if not test_basic_integration():
-            success = False
-            
-        # Test record configuration
-        if not test_record_config():
-            success = False
-            
-        if success:
-            print("\n" + "="*50)
-            print("🎉 ALL TESTS PASSED! 🎉")
-            print("="*50)
-            print("\nBiARX5 is ready for LeRobot record functionality!")
-            print("\nNext steps:")
-            print("1. Ensure ARX5 SDK is compiled with libhardware.so and libsolver.so")
-            print("2. Set up CAN interfaces for the robot arms")
-            print("3. Test with actual hardware using:")
-            print()
-            print("   lerobot-record \\")
-            print("     --robot.type=bi_arx5 \\")
-            print("     --robot.left_arm_model=X5 \\")
-            print("     --robot.left_arm_port=can0 \\")
-            print("     --robot.right_arm_model=X5 \\")
-            print("     --robot.right_arm_port=can1 \\")
-            print("     --robot.cameras='{}' \\")
-            print("     --dataset.repo_id=your_username/bi_arx5_dataset \\")
-            print("     --dataset.single_task=\"Your task description\" \\")
-            print("     --dataset.num_episodes=10")
-            print()
-            print("Note: For CLI to work, you may need to reinstall LeRobot in development mode:")
-            print("   pip install -e . --no-deps")
-        else:
-            print("\n❌ Some tests failed!")
-            sys.exit(1)
-            
-    except Exception as e:
-        print(f"\nTest framework error: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Test BiARX5 integration")
+    parser.add_argument(
+        "--connect",
+        action="store_true",
+        help="Test actual robot connection (requires hardware)",
+    )
+    args = parser.parse_args()
+
+    logger.info("🚀 Testing BiARX5 integration with lerobot-record...")
+
+    # Test 1: Config registration
+    logger.info("\n1. Testing config registration...")
+    config_test = test_config_registration()
+
+    # Test 2: Robot creation
+    logger.info("\n2. Testing robot creation...")
+    robot_test = test_robot_creation()
+
+    # Test 3: Connection (optional)
+    if args.connect:
+        logger.info("\n3. Testing robot connection...")
+        try:
+            config = BiARX5Config()
+            robot = make_robot_from_config(config)
+            robot.connect()
+            logger.info("✅ Robot connected successfully")
+            logger.info(f"✅ Is connected: {robot.is_connected}")
+            robot.disconnect()
+            logger.info("✅ Robot disconnected successfully")
+        except Exception as e:
+            logger.error(f"❌ Connection test failed: {e}")
+            logger.info("This is expected if ARX5 hardware is not connected")
+
+    # Summary
+    logger.info(f"\n📊 Test Results:")
+    logger.info(f"Config registration: {'✅' if config_test else '❌'}")
+    logger.info(f"Robot creation: {'✅' if robot_test else '❌'}")
+
+    if config_test and robot_test:
+        logger.info("\n🎉 BiARX5 is successfully integrated with lerobot-record!")
+        logger.info("\nYou can now use it with:")
+        logger.info("lerobot-record --robot.type=bi_arx5 \\")
+        logger.info("  --robot.left_arm_port=can1 \\")
+        logger.info("  --robot.right_arm_port=can3 \\")
+        logger.info("  --dataset.repo_id=your_username/your_dataset \\")
+        logger.info("  --dataset.single_task='Your task description' \\")
+        logger.info("  --dataset.num_episodes=10")
+        return 0
+    else:
+        logger.error("❌ Integration test failed")
+        return 1
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

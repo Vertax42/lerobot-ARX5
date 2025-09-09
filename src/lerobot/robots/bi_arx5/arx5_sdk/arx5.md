@@ -62,5 +62,19 @@ ControllerConfigFactory()
             "linear",                                                     // interpolation_method
             0.0                                                           // default_preview_time
         );
+        configurations["joint_controller_6_native"] = std::make_shared<ControllerConfig>(
+            "joint_controller",                                           // controller_type
+            (VecDoF(6) << 150.0, 150.0, 150.0, 50.0, 25.0, 10.0).finished(), // default_kp
+            (VecDoF(6) << 1.0, 1.0, 1.0, 0.8, 0.8, 1.0).finished(),       // default_kd
+            5.0,                                                          // default_gripper_kp
+            0.2,                                                          // default_gripper_kd
+            20,                                                           // over_current_cnt_max
+            0.002,                                                        // controller_dt
+            true,                                                         // gravity_compensation
+            true,                                                         // background_send_recv
+            true,                                                         // shutdown_to_passive
+            "linear",                                                     // interpolation_method
+            0.0                                                           // default_preview_time
+        );
     }
 ```
