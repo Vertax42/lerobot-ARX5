@@ -22,16 +22,14 @@ from typing import Any
 import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
-from lerobot.errors import DeviceNotConnectedError
+from lerobot.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 
 from ..robot import Robot
 from .config_bi_arx5 import BiARX5Config
 
 # 导入ARX5接口 Stanford-Real-Robot
-from .arx5_sdk.python import arx5_interface as arx5
+from .ARX5_SDK.python import arx5_interface as arx5
 
-# Native ARX5 python SDK
-# from .arx_x5_python.bimanual import BimanualArm as arx5_bimanual
 
 logger = logging.getLogger(__name__)
 
@@ -53,32 +51,38 @@ class BiARX5(Robot):
         self.right_arm = None
         self._is_connected = False
 
-        # 预先配置arm配置，但不创建实例
-        self.left_config = arx5.RobotConfigFactory.get_instance().get_config(
-            config.left_arm_model
-        )
-        self.left_controller_config = (
-            arx5.ControllerConfigFactory.get_instance().get_config(
-                "joint_controller", self.left_config.joint_dof
-            )
-        )
+        # Action shifting for trajectory recording
+        self.enable_action_shift = getattr(config, "enable_action_shift", False)
+        self.shift_delay_frames = getattr(config, "shift_delay_frames", 1)
+        self.position_buffer = []
+        self.last_timestamp = None
 
-        self.right_config = arx5.RobotConfigFactory.get_instance().get_config(
-            config.right_arm_model
-        )
-        self.right_controller_config = (
-            arx5.ControllerConfigFactory.get_instance().get_config(
-                "joint_controller", self.right_config.joint_dof
-            )
-        )
+        # 使用字典存储左右臂配置
+        self.robot_configs = {
+            "left_config": arx5.RobotConfigFactory.get_instance().get_config(
+                config.left_arm_model
+            ),
+            "right_config": arx5.RobotConfigFactory.get_instance().get_config(
+                config.right_arm_model
+            ),
+        }
+
+        self.controller_configs = {
+            "left_config": arx5.ControllerConfigFactory.get_instance().get_config(
+                "joint_controller", self.robot_configs["left_config"].joint_dof
+            ),
+            "right_config": arx5.ControllerConfigFactory.get_instance().get_config(
+                "joint_controller", self.robot_configs["right_config"].joint_dof
+            ),
+        }
 
         # use multithreading by default
         if config.use_multithreading:
-            self.left_controller_config.background_send_recv = True
-            self.right_controller_config.background_send_recv = True
+            self.controller_configs["left_config"].background_send_recv = True
+            self.controller_configs["right_config"].background_send_recv = True
         else:
-            self.left_controller_config.background_send_recv = False
-            self.right_controller_config.background_send_recv = False
+            self.controller_configs["left_config"].background_send_recv = False
+            self.controller_configs["right_config"].background_send_recv = False
 
         self.cameras = make_cameras_from_configs(config.cameras)
         np.set_printoptions(precision=3, suppress=True)
@@ -108,36 +112,61 @@ class BiARX5(Robot):
 
     @property
     def is_connected(self) -> bool:
-        try:
-            # try to get joint state
-            self.left_arm.get_joint_state()
-            self.right_arm.get_joint_state()
+        return (
+            self._is_connected
+            and self.left_arm is not None
+            and self.right_arm is not None
+            and all(cam.is_connected for cam in self.cameras.values())
+        )
 
-            return (
-                self._is_connected
-                and self.left_arm is not None
-                and self.right_arm is not None
-                and all(cam.is_connected for cam in self.cameras.values())
+    def connect(self, calibrate: bool = False, go_to_home: bool = True) -> None:
+        if self.is_connected:
+            raise DeviceAlreadyConnectedError(
+                f"{self} already connected, do not run `robot.connect()` twice."
             )
-        except Exception:
-            return False
 
-    def connect(self, calibrate: bool = True) -> None:
-        # create arm instance
-        self.left_arm = arx5.Arx5JointController(
-            self.left_config, self.left_controller_config, self.config.left_arm_port
-        )
-        self.right_arm = arx5.Arx5JointController(
-            self.right_config, self.right_controller_config, self.config.right_arm_port
-        )
+        try:
+            logger.info("正在创建左臂控制器...")
+            self.left_arm = arx5.Arx5JointController(
+                self.robot_configs["left_config"],
+                self.controller_configs["left_config"],
+                self.config.left_arm_port,
+            )
+            logger.info("✓ 左臂控制器创建成功")
+
+            logger.info("正在创建右臂控制器...")
+            self.right_arm = arx5.Arx5JointController(
+                self.robot_configs["right_config"],
+                self.controller_configs["right_config"],
+                self.config.right_arm_port,
+            )
+            logger.info("✓ 右臂控制器创建成功")
+        except Exception as e:
+            logger.error(f"创建机器人控制器失败: {e}")
+            # 清理已创建的实例
+            self.left_arm = None
+            self.right_arm = None
+            raise e
 
         # set log lever
         self.set_log_level(self.config.log_level)
 
         # 如果需要校准，执行回零
-        if calibrate:
+        if go_to_home:
             self.reset_to_home()
 
+        # 设置重力补偿模式：所有增益设为0，只保留重力补偿
+        logger.info("Setting both arms to gravity compensation mode...")
+
+        zero_gain = arx5.Gain(self.robot_configs["left_config"].joint_dof)
+        zero_gain.kp()[:] = 0.0
+        zero_gain.kd()[:] = 0.0
+        zero_gain.gripper_kp = 0.0
+        zero_gain.gripper_kd = 0.0
+        self.left_arm.set_gain(zero_gain)
+        self.right_arm.set_gain(zero_gain)
+
+        logger.info("✓ Both arms are now in gravity compensation mode")
         # 连接摄像头
         for cam in self.cameras.values():
             cam.connect()
@@ -240,26 +269,24 @@ class BiARX5(Robot):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         # Create JointState objects for both arms
-        left_cmd = arx5.JointState(self.left_config.joint_dof)
-        right_cmd = arx5.JointState(self.right_config.joint_dof)
+        left_cmd = arx5.JointState(self.robot_configs["left_config"].joint_dof)
+        right_cmd = arx5.JointState(self.robot_configs["right_config"].joint_dof)
 
         # Extract left arm joint positions
-        left_positions = left_cmd.pos()
         for i in range(6):
             joint_key = f"left_joint_{i+1}.pos"
             if joint_key in action:
-                left_positions[i] = action[joint_key]
+                left_cmd.pos()[i] = action[joint_key]
 
         # Extract left arm gripper position
         if "left_gripper.pos" in action:
             left_cmd.gripper_pos = action["left_gripper.pos"]
 
         # Extract right arm joint positions
-        right_positions = right_cmd.pos()
         for i in range(6):
             joint_key = f"right_joint_{i+1}.pos"
             if joint_key in action:
-                right_positions[i] = action[joint_key]
+                right_cmd.pos()[i] = action[joint_key]
 
         # Extract right arm gripper position
         if "right_gripper.pos" in action:
@@ -274,12 +301,12 @@ class BiARX5(Robot):
 
         # Add left arm commands to return dict
         for i in range(6):
-            sent_action[f"left_joint_{i+1}.pos"] = float(left_positions[i])
+            sent_action[f"left_joint_{i+1}.pos"] = float(left_cmd.pos()[i])
         sent_action["left_gripper.pos"] = float(left_cmd.gripper_pos)
 
         # Add right arm commands to return dict
         for i in range(6):
-            sent_action[f"right_joint_{i+1}.pos"] = float(right_positions[i])
+            sent_action[f"right_joint_{i+1}.pos"] = float(right_cmd.pos()[i])
         sent_action["right_gripper.pos"] = float(right_cmd.gripper_pos)
 
         return sent_action
@@ -354,3 +381,63 @@ class BiARX5(Robot):
         except Exception as e:
             logger.error(f"Failed to reset to home: {e}")
             raise e
+
+    def is_gravity_compensation_mode(self) -> bool:
+        """Check if both arms are in gravity compensation mode"""
+        if not self.is_connected:
+            return False
+
+        try:
+            left_gain = self.left_arm.get_gain()
+            right_gain = self.right_arm.get_gain()
+
+            # 检查所有增益是否为0
+            left_zero = (
+                (left_gain.kp() == 0).all()
+                and (left_gain.kd() == 0).all()
+                and left_gain.gripper_kp == 0.0
+                and left_gain.gripper_kd == 0.0
+            )
+            right_zero = (
+                (right_gain.kp() == 0).all()
+                and (right_gain.kd() == 0).all()
+                and right_gain.gripper_kp == 0.0
+                and right_gain.gripper_kd == 0.0
+            )
+
+            return left_zero and right_zero
+        except Exception:
+            return False
+
+    def set_to_normal_control(self):
+        """Switch from gravity compensation to normal control mode"""
+        if not self.is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        logger.info("Switching to normal control mode...")
+
+        # 恢复默认增益（这些值来自控制器配置）
+        # 注意：这里需要从控制器配置中获取默认值
+        # 由于ARX5 SDK的限制，我们使用一个合理的默认值
+        default_kp = [80.0, 70.0, 70.0, 70.0, 30.0, 30.0, 20.0]  # 默认kp值
+        default_kd = [2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 0.7]  # 默认kd值
+        default_gripper_kp = 5.0
+        default_gripper_kd = 0.2
+
+        # 设置左臂增益
+        left_gain = self.left_arm.get_gain()
+        left_gain.kp()[:] = default_kp
+        left_gain.kd()[:] = default_kd
+        left_gain.gripper_kp = default_gripper_kp
+        left_gain.gripper_kd = default_gripper_kd
+        self.left_arm.set_gain(left_gain)
+
+        # 设置右臂增益
+        right_gain = self.right_arm.get_gain()
+        right_gain.kp()[:] = default_kp
+        right_gain.kd()[:] = default_kd
+        right_gain.gripper_kp = default_gripper_kp
+        right_gain.gripper_kd = default_gripper_kd
+        self.right_arm.set_gain(right_gain)
+
+        logger.info("✓ Both arms are now in normal control mode")

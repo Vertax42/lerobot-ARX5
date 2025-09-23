@@ -1,1 +1,0 @@
-cd bimanual && ./build.sh

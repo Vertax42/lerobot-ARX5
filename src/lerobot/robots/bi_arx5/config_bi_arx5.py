@@ -31,28 +31,23 @@ class BiARX5Config(RobotConfig):
     log_level: str = "DEBUG"
     use_multithreading: bool = True
 
-    # Optional
-    disable_torque_on_disconnect: bool = True
-    max_relative_target: int | None = None
-    use_degrees: bool = False
-
     # cameras
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
             "head": OpenCVCameraConfig(
-                index_or_path="/dev/video0",
-                fps=10,
+                index_or_path="/dev/video16",
+                fps=30,
                 width=640,
                 height=480,
             ),
             "left_wrist": OpenCVCameraConfig(
-                index_or_path="/dev/video1",
+                index_or_path="/dev/video10",
                 fps=30,
                 width=640,
                 height=480,
             ),
             "right_wrist": OpenCVCameraConfig(
-                index_or_path="/dev/video2",
+                index_or_path="/dev/video4",
                 fps=30,
                 width=640,
                 height=480,

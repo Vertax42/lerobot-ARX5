@@ -47,7 +47,9 @@ class Robot(abc.ABC):
         self.robot_type = self.name
         self.id = config.id
         self.calibration_dir = (
-            config.calibration_dir if config.calibration_dir else HF_LEROBOT_CALIBRATION / ROBOTS / self.name
+            config.calibration_dir
+            if config.calibration_dir
+            else HF_LEROBOT_CALIBRATION / ROBOTS / self.name
         )
         self.calibration_dir.mkdir(parents=True, exist_ok=True)
         self.calibration_fpath = self.calibration_dir / f"{self.id}.json"
@@ -96,7 +98,7 @@ class Robot(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def connect(self, calibrate: bool = True) -> None:
+    def connect(self, calibrate: bool = True, go_to_home: bool = False) -> None:
         """
         Establish communication with the robot.
 

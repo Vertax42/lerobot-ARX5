@@ -60,7 +60,6 @@ import draccus
 import rerun as rr
 
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
-from lerobot.cameras.realsense.configuration_realsense import RealSenseCameraConfig  # noqa: F401
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
@@ -82,6 +81,21 @@ from lerobot.teleoperators import (  # noqa: F401
     so100_leader,
     so101_leader,
 )
+
+# Import mock_teleop to make it available for CLI
+try:
+    from tests.mocks.mock_teleop import MockTeleopConfig  # noqa: F401
+except ImportError:
+    # If tests module is not available, create a minimal mock config
+    @TeleoperatorConfig.register_subclass("mock_teleop")
+    @dataclass
+    class MockTeleopConfig(TeleoperatorConfig):
+        n_motors: int = 3
+        random_values: bool = True
+        static_values: list[float] | None = None
+        calibrated: bool = True
+
+
 from lerobot.utils.robot_utils import busy_wait
 from lerobot.utils.utils import init_logging, move_cursor_up
 from lerobot.utils.visualization_utils import _init_rerun, log_rerun_data
@@ -89,7 +103,7 @@ from lerobot.utils.visualization_utils import _init_rerun, log_rerun_data
 
 @dataclass
 class TeleoperateConfig:
-    # TODO: pepijn, steven: if more robots require multiple teleoperators (like lekiwi) its good to make this possibele in teleop.py and record.py with List[Teleoperator]
+    # TODO: pepijn, steven: if more robots require multiple teleoperators (like lekiwi) its good to make this possible in teleop.py and record.py with List[Teleoperator]  # noqa: E501
     teleop: TeleoperatorConfig
     robot: RobotConfig
     # Limit the maximum frames per second.
@@ -100,7 +114,11 @@ class TeleoperateConfig:
 
 
 def teleop_loop(
-    teleop: Teleoperator, robot: Robot, fps: int, display_data: bool = False, duration: float | None = None
+    teleop: Teleoperator,
+    robot: Robot,
+    fps: int,
+    display_data: bool = False,
+    duration: float | None = None,
 ):
     display_len = max(len(key) for key in robot.action_features)
     start = time.perf_counter()
@@ -129,6 +147,80 @@ def teleop_loop(
         move_cursor_up(len(action) + 5)
 
 
+def bi_arx5_teleop_loop(
+    robot: Robot, fps: int, display_data: bool = False, duration: float | None = None
+):
+    """
+    Specialized teleop loop for BiARX5 robot in gravity compensation mode.
+
+    This loop is designed for manual demonstration where the robot follows human hand movements.
+    It reads joint positions from the robot's observation and displays them as actions,
+    but does not send commands back to the robot (manual demonstration mode).
+
+    Args:
+        robot: BiARX5 robot instance
+        fps: Control frequency
+        display_data: Whether to display data
+        duration: Maximum duration in seconds
+    """
+    display_len = max(len(key) for key in robot.action_features)
+    start = time.perf_counter()
+
+    logging.info("Starting BiARX5 teleop loop")
+
+    while True:
+        loop_start = time.perf_counter()
+
+        # Get current observation
+        observation = robot.get_observation()
+
+        # Extract joint positions as action
+        action = {}
+        for key, value in observation.items():
+            if (
+                key.endswith(".pos")
+                and not key.startswith("head")
+                and not key.startswith("left_wrist")
+                and not key.startswith("right_wrist")
+            ):
+                action[key] = value
+
+        # Display data if requested
+        if display_data:
+            log_rerun_data(observation, action)
+
+        # Note: No send_action needed for manual demonstration
+
+        dt_s = time.perf_counter() - loop_start
+        busy_wait(1 / fps - dt_s)
+
+        loop_s = time.perf_counter() - loop_start
+
+        # Display current state with specific observation values
+        print("\n" + "-" * (display_len + 15))
+        print(f"{'NAME':<{display_len}} | {'VALUE':>10}")
+        for motor, value in action.items():
+            print(f"{motor:<{display_len}} | {value:>10.4f}")
+
+        # Display additional observation info
+        left_joints = [
+            f"{observation.get(f'left_joint_{i+1}.pos', 0):.3f}" for i in range(6)
+        ]
+        right_joints = [
+            f"{observation.get(f'right_joint_{i+1}.pos', 0):.3f}" for i in range(6)
+        ]
+        print(f"\nLeft arm joints: {left_joints}")
+        print(f"Right arm joints: {right_joints}")
+        print(f"Left gripper: {observation.get('left_gripper.pos', 0):.3f}")
+        print(f"Right gripper: {observation.get('right_gripper.pos', 0):.3f}")
+        print(f"time: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz)")
+
+        if duration is not None and time.perf_counter() - start >= duration:
+            return
+
+        move_cursor_up(len(action) + 5)
+
+
 @draccus.wrap()
 def teleoperate(cfg: TeleoperateConfig):
     init_logging()
@@ -136,21 +228,50 @@ def teleoperate(cfg: TeleoperateConfig):
     if cfg.display_data:
         _init_rerun(session_name="teleoperation")
 
-    teleop = make_teleoperator_from_config(cfg.teleop)
-    robot = make_robot_from_config(cfg.robot)
+    # Check if this is BiARX5 robot
+    if cfg.robot.type == "bi_arx5":
+        logging.info("Detected BiARX5 robot, using specialized teleop loop")
 
-    teleop.connect()
-    robot.connect()
+        # Create robot instance
+        robot = make_robot_from_config(cfg.robot)
+        robot.connect()
 
-    try:
-        teleop_loop(teleop, robot, cfg.fps, display_data=cfg.display_data, duration=cfg.teleop_time_s)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        if cfg.display_data:
-            rr.rerun_shutdown()
-        teleop.disconnect()
-        robot.disconnect()
+        try:
+            bi_arx5_teleop_loop(
+                robot,
+                cfg.fps,
+                display_data=cfg.display_data,
+                duration=cfg.teleop_time_s,
+            )
+        except KeyboardInterrupt:
+            pass
+        finally:
+            if cfg.display_data:
+                rr.rerun_shutdown()
+            robot.disconnect()
+    else:
+        # Standard teleoperation flow
+        teleop = make_teleoperator_from_config(cfg.teleop)
+        robot = make_robot_from_config(cfg.robot)
+
+        teleop.connect()
+        robot.connect()
+
+        try:
+            teleop_loop(
+                teleop,
+                robot,
+                cfg.fps,
+                display_data=cfg.display_data,
+                duration=cfg.teleop_time_s,
+            )
+        except KeyboardInterrupt:
+            pass
+        finally:
+            if cfg.display_data:
+                rr.rerun_shutdown()
+            teleop.disconnect()
+            robot.disconnect()
 
 
 def main():
