@@ -72,7 +72,7 @@ ControllerConfigFactory()
 lerobot-teleoperate \
     --robot.type=bi_arx5 \
     --teleop.type=mock_teleop \
-    --robot.cameras='{"head": {"type": "opencv", "index_or_path": "/dev/video16", "fps": 30, "width": 640, "height": 480}, "left_wrist": {"type": "opencv", "index_or_path": "/dev/video4", "fps": 30, "width": 640, "height": 480}, "right_wrist": {"type": "opencv", "index_or_path": "/dev/video10", "fps": 30, "width": 640, "height": 480}}' \
+    --robot.cameras='{"head": {"type": "intelrealsense", "serial_number_or_name": "230322271365", "fps": 30, "width": 640, "height": 480}, "left_wrist": {"type": "intelrealsense", "serial_number_or_name": "230422271416", "fps": 30, "width": 640, "height": 480}, "right_wrist": {"type": "intelrealsense", "serial_number_or_name": "230322274234", "fps": 30, "width": 640, "height": 480}}' \
     --fps=30 \
     --display_data=true
 
@@ -80,15 +80,16 @@ lerobot-teleoperate \
 lerobot-record \
     --robot.type=bi_arx5 \
     --teleop.type=mock_teleop \
-    --robot.cameras='{"head": {"type": "opencv", "index_or_path": "/dev/video16", "fps": 30, "width": 640, "height": 480}, "left_wrist": {"type": "opencv", "index_or_path": "/dev/video4", "fps": 30, "width": 640, "height": 480}, "right_wrist": {"type": "opencv", "index_or_path": "/dev/video10", "fps": 30, "width": 640, "height": 480}}' \
-    --dataset.repo_id=Vertax/bi_arx5_demo \
-    --dataset.num_episodes=2 \
-    --dataset.single_task="test arx5 recording" \
+    --robot.cameras='{"head": {"type": "intelrealsense", "serial_number_or_name": "230322271365", "fps": 30, "width": 640, "height": 480}, "left_wrist": {"type": "intelrealsense", "serial_number_or_name": "230422271416", "fps": 30, "width": 640, "height": 480}, "right_wrist": {"type": "intelrealsense", "serial_number_or_name": "230322274234", "fps": 30, "width": 640, "height": 480}}' \
+    --dataset.repo_id=Vertax/bi_arx5_pick_and_place_cube \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="pick and place cube" \
     --dataset.fps=30 \
-    --display_data=true
+    --display_data=false \
+    --resume
 
 ## BiARX5 Robot lerobot-replay command
 lerobot-replay \
     --robot.type=bi_arx5 \
-    --dataset.repo_id=Vertax/bi_arx5_demo \
+    --dataset.repo_id=Vertax/bi_arx5_pick_and_place_cube \
     --dataset.episode=0

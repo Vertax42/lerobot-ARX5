@@ -381,7 +381,7 @@ def bi_arx5_record_loop(
             f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
         )
 
-    logging.info("Starting BiARX5 record loop for manual demonstration")
+    # logging.info("Starting BiARX5 record loop for manual demonstration")
 
     # if policy is given it needs cleaning up
     if policy is not None:
@@ -400,6 +400,26 @@ def bi_arx5_record_loop(
         if events["exit_early"]:
             events["exit_early"] = False
             break
+
+        # Handle go_home event for BiARX5 robot (non-blocking)
+        if events["go_home"]:
+            events["go_home"] = False
+            logging.info(
+                "Starting smooth_go_home in background while recording continues..."
+            )
+
+            # Execute smooth_go_home in a separate thread to avoid blocking
+            import threading
+
+            def go_home_thread():
+                try:
+                    robot.smooth_go_home(duration=2.0)
+                    logging.info("✓ smooth_go_home completed successfully")
+                except Exception as e:
+                    logging.error(f"Error during smooth_go_home: {e}")
+
+            thread = threading.Thread(target=go_home_thread, daemon=True)
+            thread.start()
 
         # Get current observation from robot
         current_observation = robot.get_observation()
@@ -531,57 +551,26 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
     listener, events = init_keyboard_listener()
 
-    with VideoEncodingManager(dataset):
-        recorded_episodes = 0
-        while (
-            recorded_episodes < cfg.dataset.num_episodes
-            and not events["stop_recording"]
-        ):
-            log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
-
-            # Use specialized record loop for BiARX5 robot
-            if cfg.robot.type == "bi_arx5":
-                logging.info("Detected BiARX5 robot, using specialized record loop")
-                bi_arx5_record_loop(
-                    robot=robot,
-                    events=events,
-                    fps=cfg.dataset.fps,
-                    teleop=teleop,
-                    policy=policy,
-                    dataset=dataset,
-                    control_time_s=cfg.dataset.episode_time_s,
-                    single_task=cfg.dataset.single_task,
-                    display_data=cfg.display_data,
-                )
-            else:
-                record_loop(
-                    robot=robot,
-                    events=events,
-                    fps=cfg.dataset.fps,
-                    teleop=teleop,
-                    policy=policy,
-                    dataset=dataset,
-                    control_time_s=cfg.dataset.episode_time_s,
-                    single_task=cfg.dataset.single_task,
-                    display_data=cfg.display_data,
-                )
-
-            # Execute a few seconds without recording to give time to manually reset the environment
-            # Skip reset for the last episode to be recorded
-            if not events["stop_recording"] and (
-                (recorded_episodes < cfg.dataset.num_episodes - 1)
-                or events["rerecord_episode"]
+    try:
+        with VideoEncodingManager(dataset):
+            recorded_episodes = 0
+            while (
+                recorded_episodes < cfg.dataset.num_episodes
+                and not events["stop_recording"]
             ):
-                log_say("Reset the environment", cfg.play_sounds)
+                log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
 
-                # Use specialized record loop for BiARX5 robot during reset
+                # Use specialized record loop for BiARX5 robot
                 if cfg.robot.type == "bi_arx5":
+                    logging.info("Detected BiARX5 robot, using specialized record loop")
                     bi_arx5_record_loop(
                         robot=robot,
                         events=events,
                         fps=cfg.dataset.fps,
                         teleop=teleop,
-                        control_time_s=cfg.dataset.reset_time_s,
+                        policy=policy,
+                        dataset=dataset,
+                        control_time_s=cfg.dataset.episode_time_s,
                         single_task=cfg.dataset.single_task,
                         display_data=cfg.display_data,
                     )
@@ -591,32 +580,92 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         events=events,
                         fps=cfg.dataset.fps,
                         teleop=teleop,
-                        control_time_s=cfg.dataset.reset_time_s,
+                        policy=policy,
+                        dataset=dataset,
+                        control_time_s=cfg.dataset.episode_time_s,
                         single_task=cfg.dataset.single_task,
                         display_data=cfg.display_data,
                     )
 
-            if events["rerecord_episode"]:
-                log_say("Re-record episode", cfg.play_sounds)
-                events["rerecord_episode"] = False
-                events["exit_early"] = False
-                dataset.clear_episode_buffer()
-                continue
+                # Execute a few seconds without recording to give time to manually reset the environment
+                # Skip reset for the last episode to be recorded
+                if not events["stop_recording"] and (
+                    (recorded_episodes < cfg.dataset.num_episodes - 1)
+                    or events["rerecord_episode"]
+                ):
+                    log_say("Reset the environment", cfg.play_sounds)
 
-            dataset.save_episode()
-            recorded_episodes += 1
+                    # Use specialized record loop for BiARX5 robot during reset
+                    if cfg.robot.type == "bi_arx5":
+                        bi_arx5_record_loop(
+                            robot=robot,
+                            events=events,
+                            fps=cfg.dataset.fps,
+                            teleop=teleop,
+                            control_time_s=cfg.dataset.reset_time_s,
+                            single_task=cfg.dataset.single_task,
+                            display_data=cfg.display_data,
+                        )
+                    else:
+                        record_loop(
+                            robot=robot,
+                            events=events,
+                            fps=cfg.dataset.fps,
+                            teleop=teleop,
+                            control_time_s=cfg.dataset.reset_time_s,
+                            single_task=cfg.dataset.single_task,
+                            display_data=cfg.display_data,
+                        )
 
-    log_say("Stop recording", cfg.play_sounds, blocking=True)
+                if events["rerecord_episode"]:
+                    log_say("Re-record episode", cfg.play_sounds)
+                    events["rerecord_episode"] = False
+                    events["exit_early"] = False
+                    dataset.clear_episode_buffer()
+                    continue
 
-    robot.disconnect()
-    if teleop is not None:
-        teleop.disconnect()
+                dataset.save_episode()
+                recorded_episodes += 1
 
-    if not is_headless() and listener is not None:
-        listener.stop()
+        log_say("Stop recording", cfg.play_sounds, blocking=True)
 
-    if cfg.dataset.push_to_hub:
-        dataset.push_to_hub(tags=cfg.dataset.tags, private=cfg.dataset.private)
+    except KeyboardInterrupt:
+        logging.info("\nKeyboardInterrupt received. Stopping recording...")
+    except Exception as e:
+        logging.error(f"Error during recording: {e}")
+    finally:
+        # Always disconnect robot and teleop safely
+        try:
+            if robot.is_connected:
+                logging.info("Disconnecting robot...")
+                robot.disconnect()
+                logging.info("✓ Robot disconnected safely")
+        except Exception as e:
+            logging.error(f"Error during robot disconnect: {e}")
+
+        try:
+            if (
+                teleop is not None
+                and hasattr(teleop, "is_connected")
+                and teleop.is_connected
+            ):
+                logging.info("Disconnecting teleop...")
+                teleop.disconnect()
+                logging.info("✓ Teleop disconnected safely")
+        except Exception as e:
+            logging.error(f"Error during teleop disconnect: {e}")
+
+        try:
+            if not is_headless() and listener is not None:
+                listener.stop()
+        except Exception as e:
+            logging.error(f"Error stopping listener: {e}")
+
+        try:
+            if cfg.dataset.push_to_hub:
+                dataset.push_to_hub(tags=cfg.dataset.tags, private=cfg.dataset.private)
+        except Exception as e:
+            logging.error(f"Error pushing to hub: {e}")
 
     log_say("Exiting", cfg.play_sounds)
     return dataset

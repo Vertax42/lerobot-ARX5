@@ -34,7 +34,9 @@ from lerobot.policies.pretrained import PreTrainedPolicy
 from lerobot.robots import Robot
 
 
-def log_control_info(robot: Robot, dt_s, episode_index=None, frame_index=None, fps=None):
+def log_control_info(
+    robot: Robot, dt_s, episode_index=None, frame_index=None, fps=None
+):
     log_items = []
     if episode_index is not None:
         log_items.append(f"ep:{episode_index}")
@@ -108,7 +110,11 @@ def predict_action(
     observation = copy(observation)
     with (
         torch.inference_mode(),
-        torch.autocast(device_type=device.type) if device.type == "cuda" and use_amp else nullcontext(),
+        (
+            torch.autocast(device_type=device.type)
+            if device.type == "cuda" and use_amp
+            else nullcontext()
+        ),
     ):
         # Convert to pytorch format: channel first and float32 in [0,1] with batch dimension
         for name in observation:
@@ -143,6 +149,7 @@ def init_keyboard_listener():
     events["exit_early"] = False
     events["rerecord_episode"] = False
     events["stop_recording"] = False
+    events["go_home"] = False
 
     if is_headless():
         logging.warning(
@@ -160,13 +167,20 @@ def init_keyboard_listener():
                 print("Right arrow key pressed. Exiting loop...")
                 events["exit_early"] = True
             elif key == keyboard.Key.left:
-                print("Left arrow key pressed. Exiting loop and rerecord the last episode...")
+                print(
+                    "Left arrow key pressed. Exiting loop and rerecord the last episode..."
+                )
                 events["rerecord_episode"] = True
                 events["exit_early"] = True
             elif key == keyboard.Key.esc:
                 print("Escape key pressed. Stopping data recording...")
                 events["stop_recording"] = True
                 events["exit_early"] = True
+            elif key == keyboard.Key.space:
+                print(
+                    "Space key pressed. Robot will go home while recording continues..."
+                )
+                events["go_home"] = True
         except Exception as e:
             print(f"Error handling key press: {e}")
 
@@ -205,11 +219,14 @@ def sanity_check_dataset_robot_compatibility(
 
     mismatches = []
     for field, dataset_value, present_value in fields:
-        diff = DeepDiff(dataset_value, present_value, exclude_regex_paths=[r".*\['info'\]$"])
+        diff = DeepDiff(
+            dataset_value, present_value, exclude_regex_paths=[r".*\['info'\]$"]
+        )
         if diff:
             mismatches.append(f"{field}: expected {present_value}, got {dataset_value}")
 
     if mismatches:
         raise ValueError(
-            "Dataset metadata compatibility check failed with mismatches:\n" + "\n".join(mismatches)
+            "Dataset metadata compatibility check failed with mismatches:\n"
+            + "\n".join(mismatches)
         )

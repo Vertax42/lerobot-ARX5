@@ -85,6 +85,9 @@ class BiARX5(Robot):
         self._left_cmd_buffer = None
         self._right_cmd_buffer = None
 
+        # Define home position (all joints at 0, gripper closed)
+        self._home_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
         # use dict to store left and right arm configs
         self.robot_configs = {
             "left_config": arx5.RobotConfigFactory.get_instance().get_config(
@@ -687,6 +690,25 @@ class BiARX5(Robot):
         except Exception:
             return False
 
+    def set_to_gravity_compensation_mode(self):
+        """Switch from normal position control to gravity compensation mode"""
+        if not self.is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        logger.info("Switching to gravity compensation mode...")
+
+        # reset to default gain
+        zero_gain = arx5.Gain(self.robot_configs["left_config"].joint_dof)
+        zero_gain.kp()[:] = 0.0
+        zero_gain.kd()[:] = 0.0
+        zero_gain.gripper_kp = 0.0
+        zero_gain.gripper_kd = 0.0
+
+        self.left_arm.set_gain(zero_gain)
+        self.right_arm.set_gain(zero_gain)
+
+        logger.info("✓ Both arms are now in gravity compensation mode")
+
     def set_to_normal_position_control(self):
         """Switch from gravity compensation to normal position control mode"""
         if not self.is_connected:
@@ -713,3 +735,49 @@ class BiARX5(Robot):
         self.right_arm.set_gain(right_gain)
 
         logger.info("✓ Both arms are now in normal position control mode")
+
+    def smooth_go_home(
+        self, duration: float = 2.0, easing: str = "ease_in_out_quad"
+    ) -> None:
+        """
+        Smoothly move both arms to the home position using trajectory interpolation.
+
+        This method automatically:
+        1. Switches to normal position control mode
+        2. Moves both arms to home position ([0,0,0,0,0,0,0]) over the specified duration
+        3. Switches back to gravity compensation mode
+
+        Args:
+            duration: Duration in seconds for the movement (default: 2.0)
+            easing: Easing profile to apply ("ease_in_out_quad" or "linear")
+
+        Raises:
+            DeviceNotConnectedError: If the robot is not connected.
+        """
+        if not self.is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        logger.info(
+            f"Smoothly returning to home position over {duration:.1f} seconds..."
+        )
+
+        # Switch to normal position control for precise movement
+        self.set_to_normal_position_control()
+
+        # Prepare home poses for both arms
+        home_poses = {
+            "left": self._home_position.copy(),
+            "right": self._home_position.copy(),
+        }
+
+        # Execute smooth trajectory to home position
+        self.move_joint_trajectory(
+            target_joint_poses=home_poses, durations=duration, easing=easing
+        )
+
+        # Switch back to gravity compensation mode
+        self.set_to_gravity_compensation_mode()
+
+        logger.info(
+            "✓ Successfully returned to home position and switched to gravity compensation mode"
+        )

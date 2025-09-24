@@ -17,7 +17,7 @@
 from dataclasses import dataclass, field
 
 from lerobot.cameras import CameraConfig
-from lerobot.cameras.opencv import OpenCVCameraConfig
+from lerobot.cameras.realsense import RealSenseCameraConfig
 from ..config import RobotConfig
 
 
@@ -35,23 +35,8 @@ class BiARX5Config(RobotConfig):
     # cameras
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
-            "head": OpenCVCameraConfig(
-                index_or_path="/dev/video16",
-                fps=30,
-                width=640,
-                height=480,
-            ),
-            "left_wrist": OpenCVCameraConfig(
-                index_or_path="/dev/video4",
-                fps=30,
-                width=640,
-                height=480,
-            ),
-            "right_wrist": OpenCVCameraConfig(
-                index_or_path="/dev/video10",
-                fps=30,
-                width=640,
-                height=480,
-            ),
+            "head": RealSenseCameraConfig("230322271365", fps=30, width=640, height=480),
+            "left_wrist": RealSenseCameraConfig("230422271416", fps=30, width=640, height=480),
+            "right_wrist": RealSenseCameraConfig("230322274234", fps=30, width=640, height=480),
         }
     )
