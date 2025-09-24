@@ -28,9 +28,10 @@ class BiARX5Config(RobotConfig):
     left_arm_port: str = "can1"
     right_arm_model: str = "X5"
     right_arm_port: str = "can3"
-    log_level: str = "DEBUG"
+    log_level: str = "INFO"
     use_multithreading: bool = True
-
+    rpc_timeout: float = 10.0
+    interpolation_controller_dt: float = 0.01
     # cameras
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
@@ -41,13 +42,13 @@ class BiARX5Config(RobotConfig):
                 height=480,
             ),
             "left_wrist": OpenCVCameraConfig(
-                index_or_path="/dev/video10",
+                index_or_path="/dev/video4",
                 fps=30,
                 width=640,
                 height=480,
             ),
             "right_wrist": OpenCVCameraConfig(
-                index_or_path="/dev/video4",
+                index_or_path="/dev/video10",
                 fps=30,
                 width=640,
                 height=480,

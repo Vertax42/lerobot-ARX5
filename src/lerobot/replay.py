@@ -58,11 +58,9 @@ from lerobot.robots import (  # noqa: F401
     so100_follower,
     so101_follower,
 )
+
 from lerobot.utils.robot_utils import busy_wait
-from lerobot.utils.utils import (
-    init_logging,
-    log_say,
-)
+from lerobot.utils.utils import init_logging, log_say
 
 
 @dataclass
@@ -91,25 +89,62 @@ def replay(cfg: ReplayConfig):
     logging.info(pformat(asdict(cfg)))
 
     robot = make_robot_from_config(cfg.robot)
-    dataset = LeRobotDataset(cfg.dataset.repo_id, root=cfg.dataset.root, episodes=[cfg.dataset.episode])
+
+    # Add timing for dataset loading
+    logging.info("Loading dataset...")
+    start_dataset_t = time.perf_counter()
+    dataset = LeRobotDataset(
+        cfg.dataset.repo_id, root=cfg.dataset.root, episodes=[cfg.dataset.episode]
+    )
+    dataset_load_time = time.perf_counter() - start_dataset_t
+    logging.info(f"✓ Dataset loaded in {dataset_load_time:.2f}s")
+
+    logging.info("Selecting action columns...")
+    start_actions_t = time.perf_counter()
     actions = dataset.hf_dataset.select_columns("action")
-    robot.connect()
+    actions_time = time.perf_counter() - start_actions_t
+    logging.info(f"✓ Actions selected in {actions_time:.2f}s")
 
-    log_say("Replaying episode", cfg.play_sounds, blocking=True)
-    for idx in range(dataset.num_frames):
-        start_episode_t = time.perf_counter()
+    try:
+        robot.connect()
 
-        action_array = actions[idx]["action"]
-        action = {}
-        for i, name in enumerate(dataset.features["action"]["names"]):
-            action[name] = action_array[i]
+        # Switch to normal position control if supported (for BiARX5)
+        if hasattr(robot, "set_to_normal_position_control") and callable(
+            getattr(robot, "set_to_normal_position_control")
+        ):
+            logging.info("Switching robot to normal position control mode for replay")
+            robot.set_to_normal_position_control()
 
-        robot.send_action(action)
+        log_say("Replaying episode", cfg.play_sounds, blocking=True)
 
-        dt_s = time.perf_counter() - start_episode_t
-        busy_wait(1 / dataset.fps - dt_s)
+        # Pre-compute action names for faster access
+        action_names = dataset.features["action"]["names"]
+        num_frames = dataset.num_frames
 
-    robot.disconnect()
+        logging.info(f"Starting replay of {num_frames} frames at {dataset.fps} FPS")
+
+        for idx in range(num_frames):
+            start_episode_t = time.perf_counter()
+
+            action_array = actions[idx]["action"]
+            action = {}
+            for i, name in enumerate(action_names):
+                action[name] = action_array[i]
+
+            # Debug: Print action instead of sending to robot
+            # print(f"Frame {idx}: {action}")
+            robot.send_action(action)
+
+            dt_s = time.perf_counter() - start_episode_t
+            busy_wait(1 / dataset.fps - dt_s)
+
+    except KeyboardInterrupt:
+        logging.info("\nKeyboardInterrupt received. Stopping replay...")
+    finally:
+        if robot.is_connected:
+            logging.info("Disconnecting robot...")
+            robot.disconnect()
+            logging.info("✓ Robot disconnected safely")
 
 
 def main():

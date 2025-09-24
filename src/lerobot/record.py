@@ -67,7 +67,9 @@ from lerobot.cameras import (  # noqa: F401
     CameraConfig,  # noqa: F401
 )
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
-from lerobot.cameras.realsense.configuration_realsense import RealSenseCameraConfig  # noqa: F401
+from lerobot.cameras.realsense.configuration_realsense import (
+    RealSenseCameraConfig,
+)  # noqa: F401
 from lerobot.configs import parser
 from lerobot.configs.policies import PreTrainedConfig
 from lerobot.datasets.image_writer import safe_stop_image_writer
@@ -112,6 +114,17 @@ from lerobot.utils.utils import (
     log_say,
 )
 from lerobot.utils.visualization_utils import _init_rerun, log_rerun_data
+
+# Import mock_teleop to make it available for CLI
+import sys
+import os
+
+# Add project root to Python path to find tests module
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from tests.mocks.mock_teleop import MockTeleopConfig  # noqa: F401
 
 
 @dataclass
@@ -176,11 +189,21 @@ class RecordConfig:
         policy_path = parser.get_path_arg("policy")
         if policy_path:
             cli_overrides = parser.get_cli_overrides("policy")
-            self.policy = PreTrainedConfig.from_pretrained(policy_path, cli_overrides=cli_overrides)
+            self.policy = PreTrainedConfig.from_pretrained(
+                policy_path, cli_overrides=cli_overrides
+            )
             self.policy.pretrained_path = policy_path
 
         if self.teleop is None and self.policy is None:
-            raise ValueError("Choose a policy, a teleoperator or both to control the robot")
+            if self.robot.type == "bi_arx5":
+                raise ValueError(
+                    "For BiARX5 robot, please specify --teleop.type=mock_teleop for manual demonstration recording, "
+                    "or provide a policy for inference-based recording"
+                )
+            else:
+                raise ValueError(
+                    "Choose a policy, a teleoperator or both to control the robot"
+                )
 
     @classmethod
     def __get_path_fields__(cls) -> list[str]:
@@ -201,21 +224,37 @@ def record_loop(
     display_data: bool = False,
 ):
     if dataset is not None and dataset.fps != fps:
-        raise ValueError(f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps}).")
+        raise ValueError(
+            f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
+        )
 
     teleop_arm = teleop_keyboard = None
     if isinstance(teleop, list):
-        teleop_keyboard = next((t for t in teleop if isinstance(t, KeyboardTeleop)), None)
+        teleop_keyboard = next(
+            (t for t in teleop if isinstance(t, KeyboardTeleop)), None
+        )
         teleop_arm = next(
             (
                 t
                 for t in teleop
-                if isinstance(t, (so100_leader.SO100Leader, so101_leader.SO101Leader, koch_leader.KochLeader))
+                if isinstance(
+                    t,
+                    (
+                        so100_leader.SO100Leader,
+                        so101_leader.SO101Leader,
+                        koch_leader.KochLeader,
+                    ),
+                )
             ),
             None,
         )
 
-        if not (teleop_arm and teleop_keyboard and len(teleop) == 2 and robot.name == "lekiwi_client"):
+        if not (
+            teleop_arm
+            and teleop_keyboard
+            and len(teleop) == 2
+            and robot.name == "lekiwi_client"
+        ):
             raise ValueError(
                 "For multi-teleop, the list must contain exactly one KeyboardTeleop and one arm teleoperator. Currently only supported for LeKiwi robot."
             )
@@ -236,7 +275,9 @@ def record_loop(
         observation = robot.get_observation()
 
         if policy is not None or dataset is not None:
-            observation_frame = build_dataset_frame(dataset.features, observation, prefix="observation")
+            observation_frame = build_dataset_frame(
+                dataset.features, observation, prefix="observation"
+            )
 
         if policy is not None:
             action_values = predict_action(
@@ -247,7 +288,10 @@ def record_loop(
                 task=single_task,
                 robot_type=robot.robot_type,
             )
-            action = {key: action_values[i].item() for i, key in enumerate(robot.action_features)}
+            action = {
+                key: action_values[i].item()
+                for i, key in enumerate(robot.action_features)
+            }
         elif policy is None and isinstance(teleop, Teleoperator):
             action = teleop.get_action()
         elif policy is None and isinstance(teleop, list):
@@ -258,7 +302,9 @@ def record_loop(
             keyboard_action = teleop_keyboard.get_action()
             base_action = robot._from_keyboard_to_base_action(keyboard_action)
 
-            action = {**arm_action, **base_action} if len(base_action) > 0 else arm_action
+            action = (
+                {**arm_action, **base_action} if len(base_action) > 0 else arm_action
+            )
         else:
             logging.info(
                 "No policy or teleoperator provided, skipping action generation."
@@ -272,7 +318,9 @@ def record_loop(
         sent_action = robot.send_action(action)
 
         if dataset is not None:
-            action_frame = build_dataset_frame(dataset.features, sent_action, prefix="action")
+            action_frame = build_dataset_frame(
+                dataset.features, sent_action, prefix="action"
+            )
             frame = {**observation_frame, **action_frame}
             dataset.add_frame(frame, task=single_task)
 
@@ -285,6 +333,141 @@ def record_loop(
         timestamp = time.perf_counter() - start_episode_t
 
 
+def extract_joint_positions(obs):
+    """提取关节位置，排除摄像头数据"""
+    joint_positions = {}
+    for key, value in obs.items():
+        if (
+            key.endswith(".pos")
+            and not key.startswith("head")
+            and not key.startswith("left_wrist")
+            and not key.startswith("right_wrist")
+        ):
+            joint_positions[key] = value
+    return joint_positions
+
+
+def bi_arx5_record_loop(
+    robot: Robot,
+    events: dict,
+    fps: int,
+    dataset: LeRobotDataset | None = None,
+    teleop: Teleoperator | list[Teleoperator] | None = None,
+    policy: PreTrainedPolicy | None = None,
+    control_time_s: int | None = None,
+    single_task: str | None = None,
+    display_data: bool = False,
+):
+    """
+    Specialized record loop for BiARX5 robot supporting both policy and manual demonstration modes.
+
+    Policy mode:
+    - Uses current observation for policy inference
+    - Saves current observation with actually sent action (no shifting)
+    - All frames are saved to dataset
+
+    Manual demonstration mode with action shifting:
+    - Frame 0: Only records observation, no dataset entry created
+    - Frame 1+: Creates dataset entry using prev_observation and current joint positions as action
+    - Last frame: Gets discarded (no dataset entry)
+
+    This is optimized for dual-arm robots where the human manually moves the robot arms
+    while in gravity compensation mode, and the system records the joint positions as demonstrations.
+
+    Action shifting in manual mode ensures that action[t] corresponds to the state that will be reached at time t+1.
+    """
+    if dataset is not None and dataset.fps != fps:
+        raise ValueError(
+            f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
+        )
+
+    logging.info("Starting BiARX5 record loop for manual demonstration")
+
+    # if policy is given it needs cleaning up
+    if policy is not None:
+        policy.reset()
+
+    timestamp = 0
+    start_episode_t = time.perf_counter()
+
+    # Variables for action shifting (only used in manual demonstration mode)
+    prev_observation = None
+    prev_observation_frame = None
+
+    while timestamp < control_time_s:
+        start_loop_t = time.perf_counter()
+
+        if events["exit_early"]:
+            events["exit_early"] = False
+            break
+
+        # Get current observation from robot
+        current_observation = robot.get_observation()
+
+        current_observation_frame = None
+        if dataset is not None:
+            current_observation_frame = build_dataset_frame(
+                dataset.features, current_observation, prefix="observation"
+            )
+
+        # Generate action and save to dataset based on mode
+        if policy is not None:
+            # Policy mode - use current observation for policy inference
+            action_values = predict_action(
+                current_observation_frame,
+                policy,
+                get_safe_torch_device(policy.config.device),
+                policy.config.use_amp,
+                task=single_task,
+                robot_type=robot.robot_type,
+            )
+            current_action = {
+                key: action_values[i].item()
+                for i, key in enumerate(robot.action_features)
+            }
+            # Send action to robot and get the actually sent action
+            sent_action = robot.send_action(current_action)
+
+            # Policy mode: save current observation with sent action (no shifting)
+            if dataset is not None:
+                action_frame = build_dataset_frame(
+                    dataset.features, sent_action, prefix="action"
+                )
+                frame = {**current_observation_frame, **action_frame}
+                dataset.add_frame(frame, task=single_task)
+        else:
+            # Manual demonstration mode - extract current joint positions
+            current_action = extract_joint_positions(current_observation)
+
+            # Action shifting logic: from second frame onwards, create dataset entries
+            if prev_observation is not None and dataset is not None:
+                # Manual demonstration mode with action shifting
+                # Use current frame's joint positions as previous frame's action
+                action_frame = build_dataset_frame(
+                    dataset.features, current_action, prefix="action"
+                )
+                frame = {**prev_observation_frame, **action_frame}
+                dataset.add_frame(frame, task=single_task)
+
+        # Visualization (show current observation)
+        if display_data:
+            display_action = (
+                extract_joint_positions(current_observation) if policy is None else {}
+            )
+            log_rerun_data(current_observation, display_action)
+
+        # Update for next iteration
+        prev_observation = current_observation
+        prev_observation_frame = current_observation_frame
+
+        dt_s = time.perf_counter() - start_loop_t
+        busy_wait(1 / fps - dt_s)
+
+        timestamp = time.perf_counter() - start_episode_t
+
+    # No processing of last frame - it gets discarded as requested
+
+
 @parser.wrap()
 def record(cfg: RecordConfig) -> LeRobotDataset:
     init_logging()
@@ -293,10 +476,16 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         _init_rerun(session_name="recording")
 
     robot = make_robot_from_config(cfg.robot)
-    teleop = make_teleoperator_from_config(cfg.teleop) if cfg.teleop is not None else None
+    teleop = (
+        make_teleoperator_from_config(cfg.teleop) if cfg.teleop is not None else None
+    )
 
-    action_features = hw_to_dataset_features(robot.action_features, "action", cfg.dataset.video)
-    obs_features = hw_to_dataset_features(robot.observation_features, "observation", cfg.dataset.video)
+    action_features = hw_to_dataset_features(
+        robot.action_features, "action", cfg.dataset.video
+    )
+    obs_features = hw_to_dataset_features(
+        robot.observation_features, "observation", cfg.dataset.video
+    )
     dataset_features = {**action_features, **obs_features}
 
     if cfg.resume:
@@ -309,9 +498,12 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         if hasattr(robot, "cameras") and len(robot.cameras) > 0:
             dataset.start_image_writer(
                 num_processes=cfg.dataset.num_image_writer_processes,
-                num_threads=cfg.dataset.num_image_writer_threads_per_camera * len(robot.cameras),
+                num_threads=cfg.dataset.num_image_writer_threads_per_camera
+                * len(robot.cameras),
             )
-        sanity_check_dataset_robot_compatibility(dataset, robot, cfg.dataset.fps, dataset_features)
+        sanity_check_dataset_robot_compatibility(
+            dataset, robot, cfg.dataset.fps, dataset_features
+        )
     else:
         # Create empty dataset or load existing saved episodes
         sanity_check_dataset_name(cfg.dataset.repo_id, cfg.policy)
@@ -323,12 +515,15 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             features=dataset_features,
             use_videos=cfg.dataset.video,
             image_writer_processes=cfg.dataset.num_image_writer_processes,
-            image_writer_threads=cfg.dataset.num_image_writer_threads_per_camera * len(robot.cameras),
+            image_writer_threads=cfg.dataset.num_image_writer_threads_per_camera
+            * len(robot.cameras),
             batch_encoding_size=cfg.dataset.video_encoding_batch_size,
         )
 
     # Load pretrained policy
-    policy = None if cfg.policy is None else make_policy(cfg.policy, ds_meta=dataset.meta)
+    policy = (
+        None if cfg.policy is None else make_policy(cfg.policy, ds_meta=dataset.meta)
+    )
 
     robot.connect()
     if teleop is not None:
@@ -338,35 +533,68 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
     with VideoEncodingManager(dataset):
         recorded_episodes = 0
-        while recorded_episodes < cfg.dataset.num_episodes and not events["stop_recording"]:
+        while (
+            recorded_episodes < cfg.dataset.num_episodes
+            and not events["stop_recording"]
+        ):
             log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
-            record_loop(
-                robot=robot,
-                events=events,
-                fps=cfg.dataset.fps,
-                teleop=teleop,
-                policy=policy,
-                dataset=dataset,
-                control_time_s=cfg.dataset.episode_time_s,
-                single_task=cfg.dataset.single_task,
-                display_data=cfg.display_data,
-            )
 
-            # Execute a few seconds without recording to give time to manually reset the environment
-            # Skip reset for the last episode to be recorded
-            if not events["stop_recording"] and (
-                (recorded_episodes < cfg.dataset.num_episodes - 1) or events["rerecord_episode"]
-            ):
-                log_say("Reset the environment", cfg.play_sounds)
+            # Use specialized record loop for BiARX5 robot
+            if cfg.robot.type == "bi_arx5":
+                logging.info("Detected BiARX5 robot, using specialized record loop")
+                bi_arx5_record_loop(
+                    robot=robot,
+                    events=events,
+                    fps=cfg.dataset.fps,
+                    teleop=teleop,
+                    policy=policy,
+                    dataset=dataset,
+                    control_time_s=cfg.dataset.episode_time_s,
+                    single_task=cfg.dataset.single_task,
+                    display_data=cfg.display_data,
+                )
+            else:
                 record_loop(
                     robot=robot,
                     events=events,
                     fps=cfg.dataset.fps,
                     teleop=teleop,
-                    control_time_s=cfg.dataset.reset_time_s,
+                    policy=policy,
+                    dataset=dataset,
+                    control_time_s=cfg.dataset.episode_time_s,
                     single_task=cfg.dataset.single_task,
                     display_data=cfg.display_data,
                 )
+
+            # Execute a few seconds without recording to give time to manually reset the environment
+            # Skip reset for the last episode to be recorded
+            if not events["stop_recording"] and (
+                (recorded_episodes < cfg.dataset.num_episodes - 1)
+                or events["rerecord_episode"]
+            ):
+                log_say("Reset the environment", cfg.play_sounds)
+
+                # Use specialized record loop for BiARX5 robot during reset
+                if cfg.robot.type == "bi_arx5":
+                    bi_arx5_record_loop(
+                        robot=robot,
+                        events=events,
+                        fps=cfg.dataset.fps,
+                        teleop=teleop,
+                        control_time_s=cfg.dataset.reset_time_s,
+                        single_task=cfg.dataset.single_task,
+                        display_data=cfg.display_data,
+                    )
+                else:
+                    record_loop(
+                        robot=robot,
+                        events=events,
+                        fps=cfg.dataset.fps,
+                        teleop=teleop,
+                        control_time_s=cfg.dataset.reset_time_s,
+                        single_task=cfg.dataset.single_task,
+                        display_data=cfg.display_data,
+                    )
 
             if events["rerecord_episode"]:
                 log_say("Re-record episode", cfg.play_sounds)

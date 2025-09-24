@@ -42,6 +42,16 @@ def make_teleoperator_from_config(config: TeleoperatorConfig) -> Teleoperator:
 
         return WidowX(config)
     elif config.type == "mock_teleop":
+        import sys
+        import os
+
+        # Add project root to Python path to find tests module
+        project_root = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        )
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
+
         from tests.mocks.mock_teleop import MockTeleop
 
         return MockTeleop(config)

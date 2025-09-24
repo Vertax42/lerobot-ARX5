@@ -163,16 +163,76 @@ def bi_arx5_teleop_loop(
         display_data: Whether to display data
         duration: Maximum duration in seconds
     """
-    display_len = max(len(key) for key in robot.action_features)
+    # display_len = max(len(key) for key in robot.action_features)  # Commented out since not used
     start = time.perf_counter()
 
-    logging.info("Starting BiARX5 teleop loop")
+    logging.info("Starting BiARX5 teleop loop with timing analysis")
+
+    # Initialize timing statistics
+    timing_stats = {
+        "robot_obs_times": [],
+        "camera_obs_times": {},
+        "total_obs_times": [],
+        "loop_times": [],
+    }
+
+    # Identify camera keys
+    camera_keys = [
+        key for key in robot.observation_features.keys() if not key.endswith(".pos")
+    ]
+    for cam_key in camera_keys:
+        timing_stats["camera_obs_times"][cam_key] = []
 
     while True:
         loop_start = time.perf_counter()
 
-        # Get current observation
-        observation = robot.get_observation()
+        # Time the complete observation acquisition
+        obs_start = time.perf_counter()
+
+        # Get robot state (joints) timing
+        robot_state_start = time.perf_counter()
+
+        # We need to call the robot's internal method to separate timing
+        # Get joint states from both arms
+        if hasattr(robot, "left_arm") and hasattr(robot, "right_arm"):
+            left_joint_state = robot.left_arm.get_joint_state()
+            right_joint_state = robot.right_arm.get_joint_state()
+
+        robot_obs_time = time.perf_counter() - robot_state_start
+        timing_stats["robot_obs_times"].append(robot_obs_time * 1000)  # Convert to ms
+
+        # Get camera observations timing
+        camera_obs_start = time.perf_counter()
+        camera_observations = {}
+        for cam_key, cam in robot.cameras.items():
+            cam_start = time.perf_counter()
+            camera_observations[cam_key] = cam.async_read()
+            cam_time = time.perf_counter() - cam_start
+            timing_stats["camera_obs_times"][cam_key].append(
+                cam_time * 1000
+            )  # Convert to ms
+
+        total_camera_time = time.perf_counter() - camera_obs_start
+
+        # Build complete observation dict (similar to robot.get_observation())
+        observation = {}
+
+        # Add robot joint observations
+        left_pos = left_joint_state.pos().copy()
+        for i in range(6):
+            observation[f"left_joint_{i+1}.pos"] = float(left_pos[i])
+        observation["left_gripper.pos"] = float(left_joint_state.gripper_pos)
+
+        right_pos = right_joint_state.pos().copy()
+        for i in range(6):
+            observation[f"right_joint_{i+1}.pos"] = float(right_pos[i])
+        observation["right_gripper.pos"] = float(right_joint_state.gripper_pos)
+
+        # Add camera observations
+        observation.update(camera_observations)
+
+        total_obs_time = time.perf_counter() - obs_start
+        timing_stats["total_obs_times"].append(total_obs_time * 1000)  # Convert to ms
 
         # Extract joint positions as action
         action = {}
@@ -195,30 +255,100 @@ def bi_arx5_teleop_loop(
         busy_wait(1 / fps - dt_s)
 
         loop_s = time.perf_counter() - loop_start
+        timing_stats["loop_times"].append(loop_s * 1000)  # Convert to ms
 
-        # Display current state with specific observation values
-        print("\n" + "-" * (display_len + 15))
-        print(f"{'NAME':<{display_len}} | {'VALUE':>10}")
-        for motor, value in action.items():
-            print(f"{motor:<{display_len}} | {value:>10.4f}")
+        # Display current state with specific observation values (commented out for timing focus)
+        # print("\n" + "-" * (display_len + 15))
+        # print(f"{'NAME':<{display_len}} | {'VALUE':>10}")
+        # for motor, value in action.items():
+        #     print(f"{motor:<{display_len}} | {value:>10.4f}")
 
-        # Display additional observation info
-        left_joints = [
-            f"{observation.get(f'left_joint_{i+1}.pos', 0):.3f}" for i in range(6)
-        ]
-        right_joints = [
-            f"{observation.get(f'right_joint_{i+1}.pos', 0):.3f}" for i in range(6)
-        ]
-        print(f"\nLeft arm joints: {left_joints}")
-        print(f"Right arm joints: {right_joints}")
-        print(f"Left gripper: {observation.get('left_gripper.pos', 0):.3f}")
-        print(f"Right gripper: {observation.get('right_gripper.pos', 0):.3f}")
-        print(f"time: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz)")
+        # Display additional observation info (commented out for timing focus)
+        # left_joints = [
+        #     f"{observation.get(f'left_joint_{i+1}.pos', 0):.3f}" for i in range(6)
+        # ]
+        # right_joints = [
+        #     f"{observation.get(f'right_joint_{i+1}.pos', 0):.3f}" for i in range(6)
+        # ]
+        # print(f"\nLeft arm joints: {left_joints}")
+        # print(f"Right arm joints: {right_joints}")
+        # print(f"Left gripper: {observation.get('left_gripper.pos', 0):.3f}")
+        # print(f"Right gripper: {observation.get('right_gripper.pos', 0):.3f}")
+
+        # Display detailed timing analysis
+        print("\n=== TIMING ANALYSIS ===")
+        print(f"Robot state: {robot_obs_time * 1000:.2f}ms")
+        print(f"Total cameras: {total_camera_time * 1000:.2f}ms")
+
+        # Display individual camera timings
+        for cam_key, cam_times in timing_stats["camera_obs_times"].items():
+            if cam_times:
+                latest_time = cam_times[-1]
+                print(f"  {cam_key}: {latest_time:.2f}ms")
+
+        print(f"Total observation: {total_obs_time * 1000:.2f}ms")
+        print(f"Loop time: {loop_s * 1000:.2f}ms ({1 / loop_s:.0f} Hz)")
+
+        # Calculate and display statistics every 30 loops
+        if (
+            len(timing_stats["robot_obs_times"]) > 0
+            and len(timing_stats["robot_obs_times"]) % 30 == 0
+        ):
+            print("\n=== TIMING STATISTICS (last 30 loops) ===")
+            recent_robot = timing_stats["robot_obs_times"][-30:]
+            recent_total = timing_stats["total_obs_times"][-30:]
+            recent_loops = timing_stats["loop_times"][-30:]
+
+            print(
+                f"Robot obs - avg: {sum(recent_robot)/len(recent_robot):.2f}ms, "
+                f"min: {min(recent_robot):.2f}ms, max: {max(recent_robot):.2f}ms"
+            )
+            print(
+                f"Total obs - avg: {sum(recent_total)/len(recent_total):.2f}ms, "
+                f"min: {min(recent_total):.2f}ms, max: {max(recent_total):.2f}ms"
+            )
+            print(
+                f"Loop time - avg: {sum(recent_loops)/len(recent_loops):.2f}ms, "
+                f"min: {min(recent_loops):.2f}ms, max: {max(recent_loops):.2f}ms"
+            )
+
+            # Calculate synchronization metrics
+            robot_camera_delay = []
+            for i in range(len(recent_robot)):
+                if i < len(recent_total):
+                    delay = (
+                        recent_total[i] - recent_robot[i]
+                    )  # Camera delay relative to robot
+                    robot_camera_delay.append(delay)
+
+            if robot_camera_delay:
+                avg_delay = sum(robot_camera_delay) / len(robot_camera_delay)
+                print(f"Avg camera delay: {avg_delay:.2f}ms")
+                if abs(avg_delay) > 5:  # If delay > 5ms, warn user
+                    print("⚠️  WARNING: Significant timing difference detected!")
 
         if duration is not None and time.perf_counter() - start >= duration:
+            # Print final statistics before exiting
+            if len(timing_stats["robot_obs_times"]) > 10:
+                print("\n=== FINAL TIMING REPORT ===")
+                all_robot = timing_stats["robot_obs_times"]
+                all_total = timing_stats["total_obs_times"]
+                all_loops = timing_stats["loop_times"]
+
+                print(f"Total samples: {len(all_robot)}")
+                print(f"Robot obs - avg: {sum(all_robot)/len(all_robot):.2f}ms")
+                print(f"Total obs - avg: {sum(all_total)/len(all_total):.2f}ms")
+                print(f"Loop time - avg: {sum(all_loops)/len(all_loops):.2f}ms")
+
+                # Final camera analysis
+                for cam_key, cam_times in timing_stats["camera_obs_times"].items():
+                    if cam_times:
+                        avg_cam_time = sum(cam_times) / len(cam_times)
+                        print(f"{cam_key} - avg: {avg_cam_time:.2f}ms")
             return
 
-        move_cursor_up(len(action) + 5)
+        # Adjust move_cursor_up for additional lines
+        move_cursor_up(len(action) + 15)  # Increased for timing info
 
 
 @draccus.wrap()
