@@ -68,13 +68,13 @@ ControllerConfigFactory()
 
 # Lerobot-integration with ARX_X5
 ## BiARX5 Robot lerobot-teleoperate command
-
 lerobot-teleoperate \
     --robot.type=bi_arx5 \
     --teleop.type=mock_teleop \
     --robot.cameras='{"head": {"type": "intelrealsense", "serial_number_or_name": "230322271365", "fps": 30, "width": 640, "height": 480}, "left_wrist": {"type": "intelrealsense", "serial_number_or_name": "230422271416", "fps": 30, "width": 640, "height": 480}, "right_wrist": {"type": "intelrealsense", "serial_number_or_name": "230322274234", "fps": 30, "width": 640, "height": 480}}' \
     --fps=30 \
     --display_data=true
+
 
 ## BiARX5 Robot lerobot-record command
 lerobot-record \
@@ -86,10 +86,64 @@ lerobot-record \
     --dataset.single_task="pick and place cube" \
     --dataset.fps=30 \
     --display_data=false \
-    --resume
+    --resume=true
 
 ## BiARX5 Robot lerobot-replay command
 lerobot-replay \
     --robot.type=bi_arx5 \
     --dataset.repo_id=Vertax/bi_arx5_pick_and_place_cube \
     --dataset.episode=0
+
+## BiARX5 Robot lerobot-train command act
+lerobot-train \
+  --dataset.repo_id=Vertax/bi_arx5_pick_and_place_cube \
+  --policy.type=act \
+  --output_dir=outputs/train/act_bi_arx5_pick_and_place_cube \
+  --job_name=act_bi_arx5_pick_and_place_cube \
+  --policy.device=cuda \
+  --wandb.enable=true \
+  --policy.repo_id=Vertax/act_bi_arx5_pick_and_place_cube \
+  --batch_size=64 \
+  --steps=200000 \
+  --policy.push_to_hub=true \
+  --wandb.disable_artifact=true 
+
+## BiARX5 Robot lerobot-train command diffusion
+lerobot-train \
+  --dataset.repo_id=Vertax/bi_arx5_pick_and_place_cube \
+  --policy.type=diffusion \
+  --output_dir=outputs/train/diffusion_bi_arx5_pick_and_place_cube \
+  --job_name=diffusion_bi_arx5_pick_and_place_cube \
+  --policy.device=cuda \
+  --wandb.enable=true \
+  --policy.repo_id=Vertax/diffusion_bi_arx5_pick_and_place_cube \
+  --policy.push_to_hub=true \
+  --wandb.disable_artifact=true
+
+## resume
+lerobot-train \
+  --policy.path=outputs/train/act_bi_arx5_pick_and_place_cube/checkpoints/last/pretrained_model \
+  --resume=true
+
+## BiARX5 act policy lerobot-eval command
+lerobot-record  \
+  --robot.type=bi_arx5 \
+  --robot.cameras='{"head": {"type": "intelrealsense", "serial_number_or_name": "230322271365", "fps": 30, "width": 640, "height": 480}, "left_wrist": {"type": "intelrealsense", "serial_number_or_name": "230422271416", "fps": 30, "width": 640, "height": 480}, "right_wrist": {"type": "intelrealsense", "serial_number_or_name": "230322274234", "fps": 30, "width": 640, "height": 480}}' \
+  --robot.id=bi_arx5 \
+  --display_data=false \
+  --dataset.repo_id=Vertax/eval_bi_arx5_pick_and_place_cube \
+  --dataset.single_task="pick and place cube" \
+  --policy.path=Vertax/act_bi_arx5_pick_and_place_cube
+  <!-- --policy.path=outputs/act_bi_arx5_pick_and_place_cube/checkpoints/last/pretrained_model -->
+  
+
+
+## BiARX5 diffusion policy lerobot-eval command
+lerobot-record  \
+  --robot.type=bi_arx5 \
+  --robot.cameras='{"head": {"type": "intelrealsense", "serial_number_or_name": "230322271365", "fps": 30, "width": 640, "height": 480}, "left_wrist": {"type": "intelrealsense", "serial_number_or_name": "230422271416", "fps": 30, "width": 640, "height": 480}, "right_wrist": {"type": "intelrealsense", "serial_number_or_name": "230322274234", "fps": 30, "width": 640, "height": 480}}' \
+  --robot.id=bi_arx5 \
+  --display_data=false \
+  --dataset.repo_id=Vertax/eval_bi_arx5_pick_and_place_cube \
+  --dataset.single_task="pick and place cube" \
+  --policy.path=Vertax/diffusion_bi_arx5_pick_and_place_cube

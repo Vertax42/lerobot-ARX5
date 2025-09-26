@@ -86,7 +86,8 @@ class BiARX5(Robot):
         self._right_cmd_buffer = None
 
         # Define home position (all joints at 0, gripper closed)
-        self._home_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self._home_position = self.config.home_position
+        self._start_position = self.config.start_position
 
         # use dict to store left and right arm configs
         self.robot_configs = {
@@ -106,6 +107,20 @@ class BiARX5(Robot):
                 "joint_controller", self.robot_configs["right_config"].joint_dof
             ),
         }
+
+        self.controller_configs["left_config"].controller_dt = (
+            config.controller_dt
+        )  # set controller_dt to 5ms
+        self.controller_configs["right_config"].controller_dt = (
+            config.controller_dt
+        )  # set controller_dt to 5ms
+
+        self.controller_configs["left_config"].default_preview_time = (
+            config.default_preview_time
+        )  # set default_preview_time to 15ms
+        self.controller_configs["right_config"].default_preview_time = (
+            config.default_preview_time
+        )  # set default_preview_time to 15ms
 
         # use multithreading by default
         if config.use_multithreading:
@@ -163,6 +178,7 @@ class BiARX5(Robot):
                 self.controller_configs["left_config"],
                 self.config.left_arm_port,
             )
+            time.sleep(0.5)
             logger.info("✓ 左臂控制器创建成功")
 
             logger.info("正在创建右臂控制器...")
@@ -171,6 +187,7 @@ class BiARX5(Robot):
                 self.controller_configs["right_config"],
                 self.config.right_arm_port,
             )
+            time.sleep(0.5)
             logger.info("✓ 右臂控制器创建成功")
         except Exception as e:
             logger.error(f"创建机器人控制器失败: {e}")
@@ -182,23 +199,23 @@ class BiARX5(Robot):
         # set log lever
         self.set_log_level(self.config.log_level)
 
-        # 如果需要校准，执行回零
+        # no need to go to home
         if go_to_home:
             self.reset_to_home()
 
-        # 设置重力补偿模式：所有增益设为0，只保留重力补偿
-        logger.info("Setting both arms to gravity compensation mode...")
+        zero_grav_gain = self.left_arm.get_gain()
+        zero_grav_gain.kp()[:] = 0.0
+        zero_grav_gain.kd()[:] = self.controller_configs["left_config"].default_kd
+        zero_grav_gain.gripper_kp = 0.0
+        zero_grav_gain.gripper_kd = self.controller_configs[
+            "left_config"
+        ].default_gripper_kd
 
-        zero_gain = arx5.Gain(self.robot_configs["left_config"].joint_dof)
-        zero_gain.kp()[:] = 0.0
-        zero_gain.kd()[:] = 0.0
-        zero_gain.gripper_kp = 0.0
-        zero_gain.gripper_kd = 0.0
-        self.left_arm.set_gain(zero_gain)
-        self.right_arm.set_gain(zero_gain)
+        self.left_arm.set_gain(zero_grav_gain)
+        self.right_arm.set_gain(zero_grav_gain)
 
-        logger.info("✓ Both arms are now in gravity compensation mode")
-        # 连接摄像头
+        logger.info("✓ Robot connected, both arms are now in gravity compensation mode")
+        # connect cameras
         for cam in self.cameras.values():
             cam.connect()
 
@@ -212,6 +229,14 @@ class BiARX5(Robot):
 
         self._is_connected = True
         logger.info("Dual-ARX5 connected.")
+        gain = self.left_arm.get_gain()
+        logger.info(
+            f"Left arm gain: {gain.kp()}, {gain.kd()}, {gain.gripper_kp}, {gain.gripper_kd}"
+        )
+        gain = self.right_arm.get_gain()
+        logger.info(
+            f"Right arm gain: {gain.kp()}, {gain.kd()}, {gain.gripper_kp}, {gain.gripper_kd}"
+        )
 
     @property
     def is_calibrated(self) -> bool:
@@ -223,37 +248,7 @@ class BiARX5(Robot):
         return
 
     def configure(self) -> None:
-        """配置ARX5双臂的控制增益"""
-        if self.left_arm is None or self.right_arm is None:
-            raise DeviceNotConnectedError(f"{self} is not connected.")
-
-        try:
-            # 获取默认增益
-            left_gain = self.left_arm.get_gain()
-            right_gain = self.right_arm.get_gain()
-
-            # 打印增益信息
-            logger.info("Left arm gains:")
-            logger.info(f"  kp: {left_gain.kp()}")
-            logger.info(f"  kd: {left_gain.kd()}")
-            logger.info(f"  gripper_kp: {left_gain.gripper_kp}")
-            logger.info(f"  gripper_kd: {left_gain.gripper_kd}")
-
-            logger.info("Right arm gains:")
-            logger.info(f"  kp: {right_gain.kp()}")
-            logger.info(f"  kd: {right_gain.kd()}")
-            logger.info(f"  gripper_kp: {right_gain.gripper_kp}")
-            logger.info(f"  gripper_kd: {right_gain.gripper_kd}")
-
-            # 设置增益（保持默认值）
-            self.left_arm.set_gain(left_gain)
-            self.right_arm.set_gain(right_gain)
-
-            logger.info(f"{self} configured with custom gains")
-
-        except Exception as e:
-            logger.error(f"Failed to configure {self}: {e}")
-            raise e
+        pass
 
     def setup_motors(self) -> None:
         """ARX5 motors use pre-configured IDs, no runtime setup needed"""
@@ -698,14 +693,16 @@ class BiARX5(Robot):
         logger.info("Switching to gravity compensation mode...")
 
         # reset to default gain
-        zero_gain = arx5.Gain(self.robot_configs["left_config"].joint_dof)
-        zero_gain.kp()[:] = 0.0
-        zero_gain.kd()[:] = 0.0
-        zero_gain.gripper_kp = 0.0
-        zero_gain.gripper_kd = 0.0
+        zero_grav_gain = arx5.Gain(self.robot_configs["left_config"].joint_dof)
+        zero_grav_gain.kp()[:] = 0.0
+        zero_grav_gain.kd()[:] = self.controller_configs["left_config"].default_kd
+        zero_grav_gain.gripper_kp = 0.0
+        zero_grav_gain.gripper_kd = self.controller_configs[
+            "left_config"
+        ].default_gripper_kd
 
-        self.left_arm.set_gain(zero_gain)
-        self.right_arm.set_gain(zero_gain)
+        self.left_arm.set_gain(zero_grav_gain)
+        self.right_arm.set_gain(zero_grav_gain)
 
         logger.info("✓ Both arms are now in gravity compensation mode")
 
@@ -735,6 +732,52 @@ class BiARX5(Robot):
         self.right_arm.set_gain(right_gain)
 
         logger.info("✓ Both arms are now in normal position control mode")
+
+    def smooth_go_start(
+        self, duration: float = 2.0, easing: str = "ease_in_out_quad"
+    ) -> None:
+        """
+        Smoothly move both arms to the start position using trajectory interpolation.
+
+        This method automatically:
+        1. Switches to normal position control mode
+        2. Moves both arms to start position ([0,0,0,0,0,0,0]) over the specified duration
+        3. Switches back to gravity compensation mode
+
+        Args:
+            duration: Duration in seconds for the movement (default: 2.0)
+            easing: Easing profile to apply ("ease_in_out_quad" or "linear")
+
+        Raises:
+            DeviceNotConnectedError: If the robot is not connected.
+        """
+        if not self.is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        logger.info(
+            f"Smoothly returning to start position over {duration:.1f} seconds..."
+        )
+
+        # Switch to normal position control for precise movement
+        self.set_to_normal_position_control()
+
+        # Prepare home poses for both arms
+        home_poses = {
+            "left": self._start_position.copy(),
+            "right": self._start_position.copy(),
+        }
+
+        # Execute smooth trajectory to home position
+        self.move_joint_trajectory(
+            target_joint_poses=home_poses, durations=duration, easing=easing
+        )
+
+        # Switch back to gravity compensation mode
+        self.set_to_gravity_compensation_mode()
+
+        logger.info(
+            "✓ Successfully returned to start position and switched to gravity compensation mode"
+        )
 
     def smooth_go_home(
         self, duration: float = 2.0, easing: str = "ease_in_out_quad"

@@ -62,6 +62,7 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from pprint import pformat
+import numpy as np
 
 from lerobot.cameras import (  # noqa: F401
     CameraConfig,  # noqa: F401
@@ -347,6 +348,86 @@ def extract_joint_positions(obs):
     return joint_positions
 
 
+def apply_velocity_limits(
+    current_action: dict, prev_action: dict, dt: float, robot=None
+) -> dict:
+    """Apply velocity limits to action to ensure consistency with inference-time clipping.
+
+    This ensures that recorded actions are physically executable during policy inference.
+
+    Args:
+        current_action: Current action dictionary with joint positions
+        prev_action: Previous action dictionary with joint positions
+        dt: Time step between actions (typically 1/fps)
+        robot: Robot instance to get velocity limits from robot_configs
+
+    Returns:
+        Velocity-limited action dictionary
+    """
+    if prev_action is None:
+        return current_action
+
+    # Get velocity limits from robot config to ensure consistency with C++ settings
+    if robot is not None and hasattr(robot, "robot_configs"):
+        # Read from robot config (same as C++ controller uses)
+        left_config = robot.robot_configs["left_config"]
+        joint_vel_limits = (
+            left_config.joint_vel_max.tolist()
+        )  # Convert numpy array to list
+        gripper_vel_limit = left_config.gripper_vel_max
+    else:
+        # Fallback to hardcoded values if robot config not available
+        # From config.h: [20.0, 20.0, 20.5, 20.5, 20.0, 20.0] rad/s, gripper: 0.3 m/s
+        joint_vel_limits = [10.0, 10.0, 5.5, 5.5, 5.0, 5.0]  # rad/s
+        gripper_vel_limit = 0.3  # m/s
+
+    limited_action = current_action.copy()
+    clip_count = 0
+
+    # Apply joint velocity limits
+    for i in range(6):
+        left_key = f"left_joint_{i+1}.pos"
+        right_key = f"right_joint_{i+1}.pos"
+
+        for key in [left_key, right_key]:
+            if key in current_action and key in prev_action:
+                current_pos = current_action[key]
+                prev_pos = prev_action[key]
+                delta_pos = current_pos - prev_pos
+                max_delta = joint_vel_limits[i] * dt
+
+                if abs(delta_pos) > max_delta:
+                    # Clip to maximum allowed change
+                    sign = 1 if delta_pos > 0 else -1
+                    limited_action[key] = prev_pos + sign * max_delta
+                    clip_count += 1
+                    logging.debug(
+                        f"Clipped {key}: {delta_pos:.3f} -> {sign * max_delta:.3f} rad"
+                    )
+
+    # Apply gripper velocity limits
+    for gripper_key in ["left_gripper.pos", "right_gripper.pos"]:
+        if gripper_key in current_action and gripper_key in prev_action:
+            current_pos = current_action[gripper_key]
+            prev_pos = prev_action[gripper_key]
+            delta_pos = current_pos - prev_pos
+            max_delta = gripper_vel_limit * dt
+
+            if abs(delta_pos) > max_delta:
+                # Clip to maximum allowed change
+                sign = 1 if delta_pos > 0 else -1
+                limited_action[gripper_key] = prev_pos + sign * max_delta
+                clip_count += 1
+                logging.debug(
+                    f"Clipped {gripper_key}: {delta_pos:.3f} -> {sign * max_delta:.3f} m"
+                )
+
+    if clip_count > 0:
+        logging.debug(f"Applied velocity limits: {clip_count} joints clipped")
+
+    return limited_action
+
+
 def bi_arx5_record_loop(
     robot: Robot,
     events: dict,
@@ -381,10 +462,11 @@ def bi_arx5_record_loop(
             f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
         )
 
-    # logging.info("Starting BiARX5 record loop for manual demonstration")
-
-    # if policy is given it needs cleaning up
+    # Set appropriate control mode based on operation type
     if policy is not None:
+        logging.info("Starting BiARX5 record loop for policy inference")
+        # Policy mode: switch to normal position control for precise action execution
+        robot.set_to_normal_position_control()
         policy.reset()
 
     timestamp = 0
@@ -394,11 +476,22 @@ def bi_arx5_record_loop(
     prev_observation = None
     prev_observation_frame = None
 
+    # Variables for send_action frequency monitoring
+    send_action_times = []
+    last_freq_print_time = time.perf_counter()
+    freq_print_interval = 2.0  # Print frequency every 2 seconds
+
     while timestamp < control_time_s:
         start_loop_t = time.perf_counter()
 
         if events["exit_early"]:
             events["exit_early"] = False
+            break
+
+        # Handle rerecord_episode event (same as standard record_loop)
+        if events["rerecord_episode"]:
+            # Don't reset the event here - let the main record() function handle it
+            logging.info("Rerecord episode requested, exiting record loop early")
             break
 
         # Handle go_home event for BiARX5 robot (non-blocking)
@@ -413,8 +506,8 @@ def bi_arx5_record_loop(
 
             def go_home_thread():
                 try:
-                    robot.smooth_go_home(duration=2.0)
-                    logging.info("✓ smooth_go_home completed successfully")
+                    robot.smooth_go_home(duration=3.0)
+                    logging.info("✓ smooth_go_home completed successfully in 3 seconds")
                 except Exception as e:
                     logging.error(f"Error during smooth_go_home: {e}")
 
@@ -447,6 +540,10 @@ def bi_arx5_record_loop(
             }
             # Send action to robot and get the actually sent action
             sent_action = robot.send_action(current_action)
+            send_action_end_time = time.perf_counter()
+
+            # Monitor send_action frequency
+            send_action_times.append(send_action_end_time)
 
             # Policy mode: save current observation with sent action (no shifting)
             if dataset is not None:
@@ -463,8 +560,15 @@ def bi_arx5_record_loop(
             if prev_observation is not None and dataset is not None:
                 # Manual demonstration mode with action shifting
                 # Use current frame's joint positions as previous frame's action
+
+                # Apply velocity limits to ensure consistency with inference-time clipping
+                prev_action = extract_joint_positions(prev_observation)
+                limited_action = apply_velocity_limits(
+                    current_action, prev_action, 1.0 / fps, robot
+                )
+
                 action_frame = build_dataset_frame(
-                    dataset.features, current_action, prefix="action"
+                    dataset.features, limited_action, prefix="action"
                 )
                 frame = {**prev_observation_frame, **action_frame}
                 dataset.add_frame(frame, task=single_task)
@@ -475,6 +579,29 @@ def bi_arx5_record_loop(
                 extract_joint_positions(current_observation) if policy is None else {}
             )
             log_rerun_data(current_observation, display_action)
+
+        # Print send_action frequency statistics
+        current_time = time.perf_counter()
+        if (
+            policy is not None
+            and current_time - last_freq_print_time >= freq_print_interval
+        ):
+            if len(send_action_times) >= 2:
+                # Calculate intervals between send_action calls
+                intervals = [
+                    send_action_times[i] - send_action_times[i - 1]
+                    for i in range(1, len(send_action_times))
+                ]
+                avg_interval = sum(intervals) / len(intervals)
+                send_action_freq = 1.0 / avg_interval if avg_interval > 0 else 0
+
+                logging.info(
+                    f"🎮 send_action Frequency: {send_action_freq:.1f} Hz (target: {fps} Hz)"
+                )
+
+                # Reset statistics for next interval
+                send_action_times.clear()
+                last_freq_print_time = current_time
 
         # Update for next iteration
         prev_observation = current_observation
@@ -562,7 +689,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
                 # Use specialized record loop for BiARX5 robot
                 if cfg.robot.type == "bi_arx5":
-                    logging.info("Detected BiARX5 robot, using specialized record loop")
+                    # logging.info("Detected BiARX5 robot, using specialized record loop")
                     bi_arx5_record_loop(
                         robot=robot,
                         events=events,

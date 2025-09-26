@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Test script for move_joint_trajectory function in BiARX5 robot.
+Test script for smooth_go_start function in BiARX5 robot.
 
 This script tests the complete workflow:
 1. Connect to robot
-2. Switch to normal position control mode
-3. Move both arms to target position in 2 seconds
-4. Switch back to gravity compensation mode
-5. Disconnect safely
+2. Use smooth_go_start() to move both arms to start position [0,0,0,0,0,0,0]
+   (This automatically handles mode switching and trajectory execution)
+3. Interactive mode for manual testing
+4. Disconnect safely
 """
 
 import sys
@@ -19,8 +19,8 @@ from pathlib import Path
 # Add src to path
 sys.path.append(str(Path(__file__).parent / "src"))
 
-from lerobot.robots.bi_arx5.bi_arx5 import BiARX5
-from lerobot.robots.bi_arx5.config_bi_arx5 import BiARX5Config
+from lerobot.robots.bi_arx5.bi_arx5 import BiARX5  # noqa: E402
+from lerobot.robots.bi_arx5.config_bi_arx5 import BiARX5Config  # noqa: E402
 
 # Configure logging
 logging.basicConfig(
@@ -30,12 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 def test_move_joint_trajectory():
-    """Test the move_joint_trajectory function with the specified workflow."""
-
-    # Target joint positions for both arms
-    # Format: [joint1, joint2, joint3, joint4, joint5, joint6, gripper]
-    # Note: gripper value 0.0 means fully closed, 1.0 means fully open
-    target_pose = [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.08]
+    """Test the smooth_go_start function with the specified workflow."""
 
     # Duration for the movement (2 seconds)
     duration = 2.0
@@ -48,7 +43,7 @@ def test_move_joint_trajectory():
 
     try:
         logger.info("=" * 60)
-        logger.info("Starting BiARX5 move_joint_trajectory test")
+        logger.info("Starting BiARX5 smooth_go_start test")
         logger.info("=" * 60)
 
         # Step 1: Connect to robot
@@ -56,37 +51,39 @@ def test_move_joint_trajectory():
         robot.connect()
         logger.info("✓ Robot connected successfully")
 
-        # Step 2: Switch to normal position control mode
-        logger.info("Step 2: Switching to normal position control mode...")
-        robot.set_to_normal_position_control()
-        logger.info("✓ Switched to normal position control mode")
-
-        # Step 3: Move both arms to target position
-        logger.info("Step 3: Moving both arms to target position...")
-        logger.info(f"Target pose: {target_pose}")
+        # Step 2: Wait for user command to start movement
+        logger.info("Step 2: Ready to move arms to start position")
         logger.info(f"Duration: {duration} seconds")
-        logger.info("Note: gripper value 0.0 = fully closed, 1.0 = fully open")
+        logger.info("This will automatically:")
+        logger.info("  - Switch to normal position control mode")
+        logger.info("  - Move both arms to start position [0,0,0,0,0,0,0]")
+        logger.info("  - Switch back to gravity compensation mode")
+        logger.info("")
+        logger.info("Press 's' + Enter to start the movement, or Ctrl+C to exit:")
 
-        # Prepare target poses for both arms
-        # You can set different gripper values for left and right arms if needed
-        target_poses = {"left": target_pose, "right": target_pose}
+        # Wait for user input to start movement
+        while True:
+            try:
+                user_input = input().strip().lower()
+                if user_input == "s":
+                    logger.info("Starting smooth_go_start() movement...")
+                    break
+                else:
+                    logger.info("Press 's' + Enter to start, or Ctrl+C to exit:")
+            except KeyboardInterrupt:
+                logger.info("Movement cancelled by user")
+                return
+            except EOFError:
+                logger.info("Input stream closed, exiting...")
+                return
 
-        # Execute the trajectory
+        # Step 3-4: Execute the smooth start movement
         start_time = time.time()
-        robot.move_joint_trajectory(
-            target_joint_poses=target_poses,
-            durations=duration,
-            easing="ease_in_out_quad",
-        )
+        robot.smooth_go_start(duration=duration, easing="ease_in_out_quad")
         end_time = time.time()
 
         actual_duration = end_time - start_time
-        logger.info(f"✓ Movement completed in {actual_duration:.2f} seconds")
-
-        # Step 4: Switch back to gravity compensation mode
-        logger.info("Step 4: Switching back to gravity compensation mode...")
-        robot.set_to_gravity_compensation_mode()
-        logger.info("✓ Switched back to gravity compensation mode")
+        logger.info(f"✓ smooth_go_start() completed in {actual_duration:.2f} seconds")
 
         # Step 5: Interactive mode - wait for user commands
         logger.info("Step 5: Robot is now in gravity compensation mode")
