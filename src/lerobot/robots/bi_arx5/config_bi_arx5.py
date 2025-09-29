@@ -33,12 +33,17 @@ class BiARX5Config(RobotConfig):
     rpc_timeout: float = 10.0
     controller_dt: float = 0.01  # 100Hz
     interpolation_controller_dt: float = 0.01
-    default_preview_time: float = 0.015  # 1.5 ~ 3 * controller_dt
+    inference_mode: bool = False
+    default_preview_time: float = (
+        0.015
+        if inference_mode
+        else 0.0  # For recording mode (0.0), for inference mode (0.015)
+    )
     home_position: list[float] = field(
         default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     )
     start_position: list[float] = field(
-        default_factory=lambda: [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.08]
+        default_factory=lambda: [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.002]
     )
     # cameras
     cameras: dict[str, CameraConfig] = field(

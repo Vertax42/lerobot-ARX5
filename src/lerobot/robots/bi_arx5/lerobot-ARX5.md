@@ -66,6 +66,10 @@ ControllerConfigFactory()
     }
 ```
 
+## for openpi-client compatibility
+<!-- pip install opencv-python==4.9.0.80
+pip install opencv-python-headless==4.9.0.80 -->
+
 # Lerobot-integration with ARX_X5
 ## BiARX5 Robot lerobot-teleoperate command
 lerobot-teleoperate \
@@ -117,6 +121,8 @@ lerobot-train \
   --policy.device=cuda \
   --wandb.enable=true \
   --policy.repo_id=Vertax/diffusion_bi_arx5_pick_and_place_cube \
+  --batch_size=64 \
+  --steps=200000 \
   --policy.push_to_hub=true \
   --wandb.disable_artifact=true
 

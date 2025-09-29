@@ -428,6 +428,7 @@ def apply_velocity_limits(
     return limited_action
 
 
+@safe_stop_image_writer
 def bi_arx5_record_loop(
     robot: Robot,
     events: dict,
@@ -498,20 +499,22 @@ def bi_arx5_record_loop(
         if events["go_home"]:
             events["go_home"] = False
             logging.info(
-                "Starting smooth_go_home in background while recording continues..."
+                "Starting smooth_go_start in background while recording continues..."
             )
 
-            # Execute smooth_go_home in a separate thread to avoid blocking
+            # Execute smooth_go_start in a separate thread to avoid blocking
             import threading
 
-            def go_home_thread():
+            def go_start_thread():
                 try:
-                    robot.smooth_go_home(duration=3.0)
-                    logging.info("✓ smooth_go_home completed successfully in 3 seconds")
+                    robot.smooth_go_start(duration=2.0)
+                    logging.info(
+                        "✓ smooth_go_start completed successfully in 2 seconds"
+                    )
                 except Exception as e:
-                    logging.error(f"Error during smooth_go_home: {e}")
+                    logging.error(f"Error during smooth_go_start: {e}")
 
-            thread = threading.Thread(target=go_home_thread, daemon=True)
+            thread = threading.Thread(target=go_start_thread, daemon=True)
             thread.start()
 
         # Get current observation from robot
@@ -621,6 +624,15 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     logging.info(pformat(asdict(cfg)))
     if cfg.display_data:
         _init_rerun(session_name="recording")
+
+    # Set inference_mode based on whether we have a policy
+    if cfg.robot.type == "bi_arx5" and hasattr(cfg.robot, "inference_mode"):
+        if cfg.policy is not None:
+            cfg.robot.inference_mode = True
+            logging.info("Set inference_mode=True for policy-based recording")
+        else:
+            cfg.robot.inference_mode = False
+            logging.info("Set inference_mode=False for manual demonstration recording")
 
     robot = make_robot_from_config(cfg.robot)
     teleop = (

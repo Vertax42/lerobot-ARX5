@@ -33,7 +33,9 @@ class DatasetConfig:
     # Root directory where the dataset will be stored (e.g. 'dataset/path').
     root: str | None = None
     episodes: list[int] | None = None
-    image_transforms: ImageTransformsConfig = field(default_factory=ImageTransformsConfig)
+    image_transforms: ImageTransformsConfig = field(
+        default_factory=ImageTransformsConfig
+    )
     revision: str | None = None
     use_imagenet_stats: bool = True
     video_backend: str = field(default_factory=get_safe_default_codec)
@@ -48,7 +50,9 @@ class WandBConfig:
     entity: str | None = None
     notes: str | None = None
     run_id: str | None = None
-    mode: str | None = None  # Allowed values: 'online', 'offline' 'disabled'. Defaults to 'online'
+    mode: str | None = (
+        None  # Allowed values: 'online', 'offline' 'disabled'. Defaults to 'online'
+    )
 
 
 @dataclass
