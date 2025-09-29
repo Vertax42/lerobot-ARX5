@@ -1,4 +1,4 @@
-name: arx-py
+name: lerobot 
 channels:
   - robostack-staging
   - conda-forge
@@ -25,7 +25,8 @@ dependencies:
   # `conda activate arx-py310`
   # `git clone https://github.com/OpenEtherCATsociety/SOEM.git && cd SOEM`
   # `mkdir build && cd build && cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX .. && make -j && make install`
-  # conda env update -n lerobot -f arx-py310.yaml
+  # conda install ros-humble-kdl-parser ros-humble-ament-cmake cxx-compiler cmake ninja orocos-kdl eigen boost spdlog pybind11 numpy click pyzmq pynput pip conda-forge::soem=1.4.0 -c robostack-staging -c conda-forge
+  # pip install atomics spnav@https://github.com/cheng-chi/spnav/archive/c1c938ebe3cc542db4685e0d13850ff1abfdb943.tar.gz
   - pip:
       - atomics
       - spnav @ https://github.com/cheng-chi/spnav/archive/c1c938ebe3cc542db4685e0d13850ff1abfdb943.tar.gz
