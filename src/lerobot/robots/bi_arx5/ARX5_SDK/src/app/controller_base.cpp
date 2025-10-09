@@ -319,12 +319,13 @@ void Arx5ControllerBase::check_joint_state_sanity_()
         }
     }
     // Gripper should be around 0~robot_config_.gripper_width
-    double gripper_width_tolerance = 0.005; // m
+    double gripper_width_tolerance = 0.05; // 0.002m, 0.05rad
+
     if (joint_state_.gripper_pos < -gripper_width_tolerance ||
         joint_state_.gripper_pos > robot_config_.gripper_width + gripper_width_tolerance)
     {
-        logger_->error("Gripper position error: got {:.3f} but should be in 0~{:.3f} (m). Please close the gripper "
-                       "before turning the arm on or recalibrate gripper home and width.",
+        logger_->warn("Gripper position out of range: got {:.3f} but should be in 0~{:.3f} (m). "
+                      "This is expected during calibration.",
                        joint_state_.gripper_pos, robot_config_.gripper_width);
         enter_emergency_state_();
     }
