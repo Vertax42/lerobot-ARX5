@@ -378,7 +378,7 @@ def apply_velocity_limits(
     else:
         # Fallback to hardcoded values if robot config not available
         # From config.h: [20.0, 20.0, 20.5, 20.5, 20.0, 20.0] rad/s, gripper: 0.3 m/s
-        joint_vel_limits = [10.0, 10.0, 5.5, 5.5, 5.0, 5.0]  # rad/s
+        joint_vel_limits = [20.0, 20.0, 20.5, 20.5, 20.0, 20.0]  # rad/s
         gripper_vel_limit = 0.3  # m/s
 
     limited_action = current_action.copy()
@@ -477,11 +477,6 @@ def bi_arx5_record_loop(
     prev_observation = None
     prev_observation_frame = None
 
-    # Variables for send_action frequency monitoring
-    send_action_times = []
-    last_freq_print_time = time.perf_counter()
-    freq_print_interval = 2.0  # Print frequency every 2 seconds
-
     while timestamp < control_time_s:
         start_loop_t = time.perf_counter()
 
@@ -495,9 +490,9 @@ def bi_arx5_record_loop(
             logging.info("Rerecord episode requested, exiting record loop early")
             break
 
-        # Handle go_home event for BiARX5 robot (non-blocking)
-        if events["go_home"]:
-            events["go_home"] = False
+        # Handle go_home event for BiARX5 robot when recording (non-blocking)
+        if events["go_start"] and policy is None:
+            events["go_start"] = False
             logging.info(
                 "Starting smooth_go_start in background while recording continues..."
             )
@@ -518,17 +513,24 @@ def bi_arx5_record_loop(
             thread.start()
 
         # Get current observation from robot
+        obs_start_time = time.perf_counter()
         current_observation = robot.get_observation()
+        obs_end_time = time.perf_counter()
+        obs_time = (obs_end_time - obs_start_time) * 1000  # Convert to ms
 
         current_observation_frame = None
         if dataset is not None:
+            frame_start_time = time.perf_counter()
             current_observation_frame = build_dataset_frame(
                 dataset.features, current_observation, prefix="observation"
             )
+            frame_end_time = time.perf_counter()
+            frame_time = (frame_end_time - frame_start_time) * 1000  # Convert to ms
 
         # Generate action and save to dataset based on mode
         if policy is not None:
             # Policy mode - use current observation for policy inference
+            policy_start_time = time.perf_counter()
             action_values = predict_action(
                 current_observation_frame,
                 policy,
@@ -537,16 +539,22 @@ def bi_arx5_record_loop(
                 task=single_task,
                 robot_type=robot.robot_type,
             )
+            policy_end_time = time.perf_counter()
+            policy_time = (policy_end_time - policy_start_time) * 1000  # Convert to ms
+
+            action_convert_start_time = time.perf_counter()
             current_action = {
                 key: action_values[i].item()
                 for i, key in enumerate(robot.action_features)
             }
+            action_convert_end_time = time.perf_counter()
+            action_convert_time = (action_convert_end_time - action_convert_start_time) * 1000  # Convert to ms
+
             # Send action to robot and get the actually sent action
+            send_action_start_time = time.perf_counter()
             sent_action = robot.send_action(current_action)
             send_action_end_time = time.perf_counter()
-
-            # Monitor send_action frequency
-            send_action_times.append(send_action_end_time)
+            send_action_time = (send_action_end_time - send_action_start_time) * 1000  # Convert to ms
 
             # Policy mode: save current observation with sent action (no shifting)
             if dataset is not None:
@@ -583,35 +591,35 @@ def bi_arx5_record_loop(
             )
             log_rerun_data(current_observation, display_action)
 
-        # Print send_action frequency statistics
-        current_time = time.perf_counter()
-        if (
-            policy is not None
-            and current_time - last_freq_print_time >= freq_print_interval
-        ):
-            if len(send_action_times) >= 2:
-                # Calculate intervals between send_action calls
-                intervals = [
-                    send_action_times[i] - send_action_times[i - 1]
-                    for i in range(1, len(send_action_times))
-                ]
-                avg_interval = sum(intervals) / len(intervals)
-                send_action_freq = 1.0 / avg_interval if avg_interval > 0 else 0
-
-                logging.info(
-                    f"🎮 send_action Frequency: {send_action_freq:.1f} Hz (target: {fps} Hz)"
-                )
-
-                # Reset statistics for next interval
-                send_action_times.clear()
-                last_freq_print_time = current_time
-
         # Update for next iteration
         prev_observation = current_observation
         prev_observation_frame = current_observation_frame
 
         dt_s = time.perf_counter() - start_loop_t
-        busy_wait(1 / fps - dt_s)
+
+        # Detailed timing debug for policy mode
+        if policy is not None:
+            print("🔍 TIMING DEBUG:")
+            print(f"  📷 Camera observation: {obs_time:.1f}ms")
+            if dataset is not None:
+                print(f"  📦 Frame building: {frame_time:.1f}ms")
+            print(f"  🧠 Policy inference: {policy_time:.1f}ms")
+            print(f"  🔄 Action conversion: {action_convert_time:.1f}ms")
+            print(f"  🤖 Robot send_action: {send_action_time:.1f}ms")
+            print(f"  ⏱️  Total loop time: {dt_s*1000:.1f}ms")
+            print(f"  🎯 Target period: {1000/fps:.1f}ms")
+            print(f"  📊 Loop efficiency: {(1000/fps)/(dt_s*1000)*100:.1f}%")
+
+            # # Display action values
+            # print("  🎮 SENT ACTION:")
+            # for key, value in sent_action.items():
+            #     print(f"    {key}: {value:.4f}")
+
+            print("  " + "="*50)
+
+        if 1 / fps - dt_s < 0:
+            print("⚠️  detected dt_s is too large, dt_s: ", dt_s)
+        busy_wait(max(0.01, 1 / fps - dt_s))
 
         timestamp = time.perf_counter() - start_episode_t
 
@@ -624,15 +632,6 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     logging.info(pformat(asdict(cfg)))
     if cfg.display_data:
         _init_rerun(session_name="recording")
-
-    # Set inference_mode based on whether we have a policy
-    if cfg.robot.type == "bi_arx5" and hasattr(cfg.robot, "inference_mode"):
-        if cfg.policy is not None:
-            cfg.robot.inference_mode = True
-            logging.info("Set inference_mode=True for policy-based recording")
-        else:
-            cfg.robot.inference_mode = False
-            logging.info("Set inference_mode=False for manual demonstration recording")
 
     robot = make_robot_from_config(cfg.robot)
     teleop = (

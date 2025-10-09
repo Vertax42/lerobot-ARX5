@@ -75,8 +75,8 @@ pip install opencv-python-headless==4.9.0.80 -->
 lerobot-teleoperate \
     --robot.type=bi_arx5 \
     --teleop.type=mock_teleop \
-    --robot.cameras='{"head": {"type": "intelrealsense", "serial_number_or_name": "230322271365", "fps": 30, "width": 640, "height": 480}, "left_wrist": {"type": "intelrealsense", "serial_number_or_name": "230422271416", "fps": 30, "width": 640, "height": 480}, "right_wrist": {"type": "intelrealsense", "serial_number_or_name": "230322274234", "fps": 30, "width": 640, "height": 480}}' \
     --fps=30 \
+    --debug_timing=true \
     --display_data=true
 
 
@@ -84,7 +84,6 @@ lerobot-teleoperate \
 lerobot-record \
     --robot.type=bi_arx5 \
     --teleop.type=mock_teleop \
-    --robot.cameras='{"head": {"type": "intelrealsense", "serial_number_or_name": "230322271365", "fps": 30, "width": 640, "height": 480}, "left_wrist": {"type": "intelrealsense", "serial_number_or_name": "230422271416", "fps": 30, "width": 640, "height": 480}, "right_wrist": {"type": "intelrealsense", "serial_number_or_name": "230322274234", "fps": 30, "width": 640, "height": 480}}' \
     --dataset.repo_id=Vertax/bi_arx5_pick_and_place_cube \
     --dataset.num_episodes=50 \
     --dataset.single_task="pick and place cube" \
@@ -107,7 +106,7 @@ lerobot-train \
   --policy.device=cuda \
   --wandb.enable=true \
   --policy.repo_id=Vertax/act_bi_arx5_pick_and_place_cube \
-  --batch_size=64 \
+  --batch_size=32 \
   --steps=200000 \
   --policy.push_to_hub=true \
   --wandb.disable_artifact=true 
@@ -121,8 +120,8 @@ lerobot-train \
   --policy.device=cuda \
   --wandb.enable=true \
   --policy.repo_id=Vertax/diffusion_bi_arx5_pick_and_place_cube \
-  --batch_size=64 \
-  --steps=200000 \
+  --batch_size=16 \
+  --steps=100000 \
   --policy.push_to_hub=true \
   --wandb.disable_artifact=true
 
@@ -134,22 +133,31 @@ lerobot-train \
 ## BiARX5 act policy lerobot-eval command
 lerobot-record  \
   --robot.type=bi_arx5 \
-  --robot.cameras='{"head": {"type": "intelrealsense", "serial_number_or_name": "230322271365", "fps": 30, "width": 640, "height": 480}, "left_wrist": {"type": "intelrealsense", "serial_number_or_name": "230422271416", "fps": 30, "width": 640, "height": 480}, "right_wrist": {"type": "intelrealsense", "serial_number_or_name": "230322274234", "fps": 30, "width": 640, "height": 480}}' \
+  --robot.inference_mode=true \
+  --robot.preview_time=0.01 \
   --robot.id=bi_arx5 \
+  --dataset.episode_time_s=600 \
   --display_data=false \
-  --dataset.repo_id=Vertax/eval_bi_arx5_pick_and_place_cube \
+  --dataset.repo_id=Vertax/eval_act_bi_arx5_pick_and_place_cube \
   --dataset.single_task="pick and place cube" \
-  --policy.path=Vertax/act_bi_arx5_pick_and_place_cube
-  <!-- --policy.path=outputs/act_bi_arx5_pick_and_place_cube/checkpoints/last/pretrained_model -->
-  
+  --policy.path=outputs/train/act_bi_arx5_pick_and_place_cube/checkpoints/last/pretrained_model
+  <!-- Local model path alternative: -->
+  <!-- --policy.path=outputs/train/act_bi_arx5_pick_and_place_cube/checkpoints/last/pretrained_model -->
 
+**Note on preview_time:** Adjust `--robot.preview_time` to reduce jittering:
+- 0.03-0.05s: Smoother motion, more delay (recommended for stable movements)
+- 0.01-0.02s: More responsive, but may cause jittering
+- 0.0: No preview (only for teleoperation/recording)
 
 ## BiARX5 diffusion policy lerobot-eval command
 lerobot-record  \
   --robot.type=bi_arx5 \
-  --robot.cameras='{"head": {"type": "intelrealsense", "serial_number_or_name": "230322271365", "fps": 30, "width": 640, "height": 480}, "left_wrist": {"type": "intelrealsense", "serial_number_or_name": "230422271416", "fps": 30, "width": 640, "height": 480}, "right_wrist": {"type": "intelrealsense", "serial_number_or_name": "230322274234", "fps": 30, "width": 640, "height": 480}}' \
+  --robot.inference_mode=true \
+  --robot.preview_time=0.0 \
   --robot.id=bi_arx5 \
+  --dataset.fps=30 \
+  --dataset.episode_time_s=600 \
   --display_data=false \
-  --dataset.repo_id=Vertax/eval_bi_arx5_pick_and_place_cube \
+  --dataset.repo_id=Vertax/eval_diffusion_bi_arx5_pick_and_place_cube \
   --dataset.single_task="pick and place cube" \
-  --policy.path=Vertax/diffusion_bi_arx5_pick_and_place_cube
+  --policy.path=outputs/train/diffusion_bi_arx5_pick_and_place_cube/checkpoints/last/pretrained_model

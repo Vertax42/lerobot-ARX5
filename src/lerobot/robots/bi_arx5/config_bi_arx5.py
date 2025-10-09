@@ -17,6 +17,7 @@
 from dataclasses import dataclass, field
 
 from lerobot.cameras import CameraConfig
+from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
 from ..config import RobotConfig
 
@@ -34,11 +35,11 @@ class BiARX5Config(RobotConfig):
     controller_dt: float = 0.01  # 100Hz
     interpolation_controller_dt: float = 0.01
     inference_mode: bool = False
-    default_preview_time: float = (
-        0.015
-        if inference_mode
-        else 0.0  # For recording mode (0.0), for inference mode (0.015)
-    )
+    # Preview time in seconds for action interpolation during inference
+    # Higher values (0.03-0.05) provide smoother motion but more delay
+    # Lower values (0.01-0.02) are more responsive but may cause jittering
+    preview_time: float = 0.03  # Default 30ms for smooth inference
+
     home_position: list[float] = field(
         default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     )
@@ -48,14 +49,25 @@ class BiARX5Config(RobotConfig):
     # cameras
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
-            "head": RealSenseCameraConfig(
-                "230322271365", fps=30, width=640, height=480
+            "head": OpenCVCameraConfig(
+                index_or_path="/dev/video16", fps=60, width=640, height=480
             ),
-            "left_wrist": RealSenseCameraConfig(
-                "230422271416", fps=30, width=640, height=480
+            "left_wrist": OpenCVCameraConfig(
+                index_or_path="/dev/video4", fps=60, width=640, height=480
             ),
-            "right_wrist": RealSenseCameraConfig(
-                "230322274234", fps=30, width=640, height=480
+            "right_wrist": OpenCVCameraConfig(
+                index_or_path="/dev/video10", fps=60, width=640, height=480
             ),
         }
+        # default_factory=lambda: {
+        #     "head": RealSenseCameraConfig(
+        #         "230322271365", fps=30, width=640, height=480
+        #     ),
+        #     "left_wrist": RealSenseCameraConfig(
+        #         "230422271416", fps=30, width=640, height=480
+        #     ),
+        #     "right_wrist": RealSenseCameraConfig(
+        #         "230322274234", fps=30, width=640, height=480
+        #     ),
+        # }
     )

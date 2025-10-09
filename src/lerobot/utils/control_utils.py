@@ -149,7 +149,7 @@ def init_keyboard_listener():
     events["exit_early"] = False
     events["rerecord_episode"] = False
     events["stop_recording"] = False
-    events["go_home"] = False
+    events["go_start"] = False
 
     if is_headless():
         logging.warning(
@@ -178,9 +178,9 @@ def init_keyboard_listener():
                 events["exit_early"] = True
             elif key == keyboard.Key.space:
                 print(
-                    "Space key pressed. Robot will go home while recording continues..."
+                    "Space key pressed. Robot will go start while recording continues..."
                 )
-                events["go_home"] = True
+                events["go_start"] = True
         except Exception as e:
             print(f"Error handling key press: {e}")
 

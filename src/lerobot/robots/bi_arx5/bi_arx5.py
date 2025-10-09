@@ -68,6 +68,10 @@ class BiARX5(Robot):
         # Control mode state variables
         self._is_gravity_compensation_mode = False
         self._is_position_control_mode = False
+        # Use configurable preview time for inference mode
+        # Higher values provide smoother motion but more delay
+        # Can be adjusted via --robot.preview_time parameter
+        self.default_preview_time = self.config.preview_time if self.config.inference_mode else 0.0
 
         # rpc timeout
         self.rpc_timeout: float = getattr(config, "rpc_timeout", 5.0)
@@ -119,10 +123,10 @@ class BiARX5(Robot):
         )  # set controller_dt to 5ms
 
         self.controller_configs["left_config"].default_preview_time = (
-            config.default_preview_time
+            self.default_preview_time
         )  # set default_preview_time to 15ms
         self.controller_configs["right_config"].default_preview_time = (
-            config.default_preview_time
+            self.default_preview_time
         )  # set default_preview_time to 15ms
 
         # use multithreading by default
@@ -195,6 +199,7 @@ class BiARX5(Robot):
             )
             time.sleep(0.5)
             logger.info("✓ 左臂控制器创建成功")
+            logger.info(f"preview_time: {self.controller_configs['left_config'].default_preview_time}")
 
             logger.info("正在创建右臂控制器...")
             self.right_arm = arx5.Arx5JointController(
@@ -204,6 +209,7 @@ class BiARX5(Robot):
             )
             time.sleep(0.5)
             logger.info("✓ 右臂控制器创建成功")
+            logger.info(f"preview_time: {self.controller_configs['right_config'].default_preview_time}")
         except Exception as e:
             logger.error(f"创建机器人控制器失败: {e}")
             # 清理已创建的实例
@@ -219,10 +225,10 @@ class BiARX5(Robot):
 
         zero_grav_gain = self.left_arm.get_gain()
         zero_grav_gain.kp()[:] = 0.0
-        zero_grav_gain.kd()[:] = self.controller_configs["left_config"].default_kd * 0.5
+        zero_grav_gain.kd()[:] = self.controller_configs["left_config"].default_kd
         zero_grav_gain.gripper_kp = 0.0
         zero_grav_gain.gripper_kd = (
-            self.controller_configs["left_config"].default_gripper_kd * 0.5
+            self.controller_configs["left_config"].default_gripper_kd
         )
 
         self.left_arm.set_gain(zero_grav_gain)
@@ -697,10 +703,10 @@ class BiARX5(Robot):
         # reset to zero pd with 0.5 kd
         zero_grav_gain = arx5.Gain(self.robot_configs["left_config"].joint_dof)
         zero_grav_gain.kp()[:] = 0.0
-        zero_grav_gain.kd()[:] = self.controller_configs["left_config"].default_kd * 0.5
+        zero_grav_gain.kd()[:] = self.controller_configs["left_config"].default_kd
         zero_grav_gain.gripper_kp = 0.0
         zero_grav_gain.gripper_kd = (
-            self.controller_configs["left_config"].default_gripper_kd * 0.5
+            self.controller_configs["left_config"].default_gripper_kd
         )
 
         self.left_arm.set_gain(zero_grav_gain)

@@ -16,8 +16,10 @@ import logging
 import select
 from pathlib import Path
 
-# Add src to path
-sys.path.append(str(Path(__file__).parent / "src"))
+# Add src to path and ensure it takes precedence
+src_path = str(Path(__file__).parent / "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
 from lerobot.robots.bi_arx5.bi_arx5 import BiARX5  # noqa: E402
 from lerobot.robots.bi_arx5.config_bi_arx5 import BiARX5Config  # noqa: E402

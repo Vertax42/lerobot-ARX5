@@ -111,6 +111,8 @@ class TeleoperateConfig:
     teleop_time_s: float | None = None
     # Display all cameras on screen
     display_data: bool = False
+    # Enable detailed timing debug output
+    debug_timing: bool = False
 
 
 def teleop_loop(
@@ -148,7 +150,7 @@ def teleop_loop(
 
 
 def bi_arx5_teleop_loop(
-    robot: Robot, fps: int, display_data: bool = False, duration: float | None = None
+    robot: Robot, fps: int, display_data: bool = False, duration: float | None = None, debug_timing: bool = True
 ):
     """
     Specialized teleop loop for BiARX5 robot in gravity compensation mode.
@@ -204,15 +206,17 @@ def bi_arx5_teleop_loop(
         # Get camera observations timing
         camera_obs_start = time.perf_counter()
         camera_observations = {}
+        camera_times = {}
         for cam_key, cam in robot.cameras.items():
             cam_start = time.perf_counter()
             camera_observations[cam_key] = cam.async_read()
             cam_time = time.perf_counter() - cam_start
-            timing_stats["camera_obs_times"][cam_key].append(
-                cam_time * 1000
-            )  # Convert to ms
+            cam_time_ms = cam_time * 1000
+            camera_times[cam_key] = cam_time_ms
+            timing_stats["camera_obs_times"][cam_key].append(cam_time_ms)
 
         total_camera_time = time.perf_counter() - camera_obs_start
+        total_camera_time_ms = total_camera_time * 1000
 
         # Build complete observation dict (similar to robot.get_observation())
         observation = {}
@@ -276,18 +280,45 @@ def bi_arx5_teleop_loop(
         # print(f"Right gripper: {observation.get('right_gripper.pos', 0):.3f}")
 
         # Display detailed timing analysis
-        print("\n=== TIMING ANALYSIS ===")
-        print(f"Robot state: {robot_obs_time * 1000:.2f}ms")
-        print(f"Total cameras: {total_camera_time * 1000:.2f}ms")
+        if debug_timing:
+            # Clear screen and display timing info
+            import os
+            os.system('clear' if os.name == 'posix' else 'cls')
 
-        # Display individual camera timings
-        for cam_key, cam_times in timing_stats["camera_obs_times"].items():
-            if cam_times:
-                latest_time = cam_times[-1]
-                print(f"  {cam_key}: {latest_time:.2f}ms")
+            print("🔍 TELEOP TIMING DEBUG")
+            print("=" * 50)
+            print(f"🤖 Robot state:     {robot_obs_time * 1000:.1f}ms")
+            print(f"📷 Total cameras:   {total_camera_time_ms:.1f}ms")
+            print()
 
-        print(f"Total observation: {total_obs_time * 1000:.2f}ms")
-        print(f"Loop time: {loop_s * 1000:.2f}ms ({1 / loop_s:.0f} Hz)")
+            # Display individual camera timings with stability indicators
+            for cam_key, cam_time_ms in camera_times.items():
+                if cam_time_ms > 10:  # Slow camera warning
+                    print(f"🐌 {cam_key:12}: {cam_time_ms:5.1f}ms ⚠️")
+                elif cam_time_ms > 5:  # Medium speed
+                    print(f"⚡ {cam_key:12}: {cam_time_ms:5.1f}ms")
+                else:  # Fast camera
+                    print(f"✅ {cam_key:12}: {cam_time_ms:5.1f}ms")
+
+            print()
+            print(f"📊 Total observation: {total_obs_time * 1000:.1f}ms")
+            print(f"⏱️  Loop time:        {loop_s * 1000:.1f}ms")
+            print(f"🎯 Target period:     {1000/fps:.1f}ms")
+            print(f"📈 Loop efficiency:   {(1000/fps)/(loop_s * 1000)*100:.1f}%")
+
+            # Camera stability warning
+            if total_camera_time_ms > 20:
+                print()
+                print(f"⚠️  SLOW CAMERAS DETECTED! Total: {total_camera_time_ms:.1f}ms")
+
+            print("=" * 50)
+        else:
+            # Simplified output - only show warnings
+            if total_camera_time_ms > 20:
+                print(f"⚠️  SLOW CAMERAS: {total_camera_time_ms:.1f}ms")
+                for cam_key, cam_time_ms in camera_times.items():
+                    if cam_time_ms > 10:
+                        print(f"  🐌 {cam_key}: {cam_time_ms:.1f}ms")
 
         # Calculate and display statistics every 30 loops
         if (
@@ -348,7 +379,7 @@ def bi_arx5_teleop_loop(
             return
 
         # Adjust move_cursor_up for additional lines
-        move_cursor_up(len(action) + 15)  # Increased for timing info
+        # move_cursor_up(len(action) + 15)  # Increased for timing info
 
 
 @draccus.wrap()
@@ -372,6 +403,7 @@ def teleoperate(cfg: TeleoperateConfig):
                 cfg.fps,
                 display_data=cfg.display_data,
                 duration=cfg.teleop_time_s,
+                debug_timing=cfg.debug_timing,  # Use command line parameter
             )
         except KeyboardInterrupt:
             pass

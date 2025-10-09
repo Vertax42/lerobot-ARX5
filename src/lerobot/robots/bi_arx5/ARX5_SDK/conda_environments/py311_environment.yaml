@@ -1,4 +1,4 @@
-name: arx-py311
+name: lerobot-openpi
 channels:
   - robostack-staging
   - conda-forge
