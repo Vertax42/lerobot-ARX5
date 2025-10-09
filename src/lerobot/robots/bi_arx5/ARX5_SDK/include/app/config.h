@@ -98,7 +98,7 @@ class RobotConfigFactory
             (Pose6d() << 0.6, 0.6, 0.6, 1.8, 1.8, 1.8).finished(),         // ee_vel_max
             0.3,                                                           // gripper_vel_max
             1.5,                                                           // gripper_torque_max
-            0.085,                                                         // gripper_width
+            1.57,                                                         // gripper_width 0.085m -> 1.57rad
             -3.4,                                                          // gripper_open_readout
             6,                                                             // joint_dof
             std::vector<int>{1, 2, 4, 5, 6, 7},                            // motor_id
