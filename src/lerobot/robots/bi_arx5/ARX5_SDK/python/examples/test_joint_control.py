@@ -243,7 +243,7 @@ def main(model: str, interface: str):
         target_poses=target_joint_poses,
         duration=3.0,  # 3秒
         control_dt=controller_config.controller_dt,
-        gripper_target=0.08,
+        gripper_target=robot_config.gripper_width,
         interpolation_func=linear_func,
         print_interval=100,
     )

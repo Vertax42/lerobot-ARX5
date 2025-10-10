@@ -76,7 +76,7 @@ lerobot-teleoperate \
     --robot.type=bi_arx5 \
     --teleop.type=mock_teleop \
     --fps=30 \
-    --debug_timing=true \
+    --debug_timing=false \
     --display_data=true
 
 
@@ -84,17 +84,18 @@ lerobot-teleoperate \
 lerobot-record \
     --robot.type=bi_arx5 \
     --teleop.type=mock_teleop \
-    --dataset.repo_id=Vertax/bi_arx5_pick_and_place_cube \
-    --dataset.num_episodes=50 \
-    --dataset.single_task="pick and place cube" \
-    --dataset.fps=30 \
+    --dataset.repo_id=Vertax/xense_bi_arx5_pick_and_place_cube \
+    --dataset.num_episodes=100 \
+    --dataset.single_task="pick rgb cubes and place them in the blue box" \
+    --dataset.fps=60 \
     --display_data=false \
-    --resume=true
+    --resume=false \
+    --dataset.push_to_hub=true
 
 ## BiARX5 Robot lerobot-replay command
 lerobot-replay \
     --robot.type=bi_arx5 \
-    --dataset.repo_id=Vertax/bi_arx5_pick_and_place_cube \
+    --dataset.repo_id=Vertax/xense_bi_arx5_pick_and_place_cube \
     --dataset.episode=0
 
 ## BiARX5 Robot lerobot-train command act

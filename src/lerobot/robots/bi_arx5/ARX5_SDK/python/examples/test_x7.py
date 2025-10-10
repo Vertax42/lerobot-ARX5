@@ -63,7 +63,7 @@ def main():
     #     cmd = arx5.JointState(robot_config.joint_dof)
     #     # i = 0
     #     cmd.pos()[0:4] = easeInOutQuad(float(i) / step_num) * target_joint_poses[0:4]
-    #     cmd.gripper_pos = easeInOutQuad((i / (step_num - 1))) * 0.08
+    #     cmd.gripper_pos = easeInOutQuad((i / (step_num - 1))) * robot_config.gripper_width
     #     arx5_0.set_joint_cmd(cmd)
     #     arx5_1.set_joint_cmd(cmd)
     #     if not USE_TIMER:
@@ -82,7 +82,7 @@ def main():
     #     cmd.pos()[0:4] = (
     #         easeInOutQuad((1 - float(i) / step_num)) * target_joint_poses[0:4]
     #     )
-    #     cmd.gripper_pos = easeInOutQuad((1 - i / (step_num - 1))) * 0.08
+    #     cmd.gripper_pos = easeInOutQuad((1 - i / (step_num - 1))) * robot_config.gripper_width
     #     arx5_0.set_joint_cmd(cmd)
     #     arx5_1.set_joint_cmd(cmd)
     #     if not USE_TIMER:

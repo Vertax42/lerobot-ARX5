@@ -78,7 +78,9 @@ class BiARX5(Robot):
         # Use configurable preview time for inference mode
         # Higher values provide smoother motion but more delay
         # Can be adjusted via --robot.preview_time parameter
-        self.default_preview_time = self.config.preview_time if self.config.inference_mode else 0.0
+        self.default_preview_time = (
+            self.config.preview_time if self.config.inference_mode else 0.0
+        )
 
         # rpc timeout
         self.rpc_timeout: float = getattr(config, "rpc_timeout", 5.0)
@@ -113,8 +115,12 @@ class BiARX5(Robot):
             ),
         }
         # set gripper_open_readout for left and right arm
-        self.robot_configs["left_config"].gripper_open_readout = config.gripper_open_readout[0]
-        self.robot_configs["right_config"].gripper_open_readout = config.gripper_open_readout[1]
+        self.robot_configs["left_config"].gripper_open_readout = (
+            config.gripper_open_readout[0]
+        )
+        self.robot_configs["right_config"].gripper_open_readout = (
+            config.gripper_open_readout[1]
+        )
 
         self.controller_configs = {
             "left_config": arx5.ControllerConfigFactory.get_instance().get_config(
@@ -209,7 +215,9 @@ class BiARX5(Robot):
             )
             time.sleep(0.5)
             logger.info("✓ 左臂控制器创建成功")
-            logger.info(f"preview_time: {self.controller_configs['left_config'].default_preview_time}")
+            logger.info(
+                f"preview_time: {self.controller_configs['left_config'].default_preview_time}"
+            )
 
             logger.info("正在创建右臂控制器...")
             self.right_arm = arx5.Arx5JointController(
@@ -219,7 +227,9 @@ class BiARX5(Robot):
             )
             time.sleep(0.5)
             logger.info("✓ 右臂控制器创建成功")
-            logger.info(f"preview_time: {self.controller_configs['right_config'].default_preview_time}")
+            logger.info(
+                f"preview_time: {self.controller_configs['right_config'].default_preview_time}"
+            )
         except Exception as e:
             logger.error(f"创建机器人控制器失败: {e}")
             # 清理已创建的实例
@@ -237,9 +247,9 @@ class BiARX5(Robot):
         zero_grav_gain.kp()[:] = 0.0
         zero_grav_gain.kd()[:] = self.controller_configs["left_config"].default_kd
         zero_grav_gain.gripper_kp = 0.0
-        zero_grav_gain.gripper_kd = (
-            self.controller_configs["left_config"].default_gripper_kd
-        )
+        zero_grav_gain.gripper_kd = self.controller_configs[
+            "left_config"
+        ].default_gripper_kd
 
         self.left_arm.set_gain(zero_grav_gain)
         self.right_arm.set_gain(zero_grav_gain)
@@ -715,9 +725,9 @@ class BiARX5(Robot):
         zero_grav_gain.kp()[:] = 0.0
         zero_grav_gain.kd()[:] = self.controller_configs["left_config"].default_kd
         zero_grav_gain.gripper_kp = 0.0
-        zero_grav_gain.gripper_kd = (
-            self.controller_configs["left_config"].default_gripper_kd
-        )
+        zero_grav_gain.gripper_kd = self.controller_configs[
+            "left_config"
+        ].default_gripper_kd
 
         self.left_arm.set_gain(zero_grav_gain)
         self.right_arm.set_gain(zero_grav_gain)

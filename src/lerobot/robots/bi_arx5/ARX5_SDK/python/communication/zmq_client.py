@@ -17,7 +17,7 @@ def echo_exception():
 
 
 CTRL_DT = 0.005
-GRIPPER_WIDTH = 0.08
+GRIPPER_WIDTH = 0.08  # meters
 
 
 def rotm2rotvec(R: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:

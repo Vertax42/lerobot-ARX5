@@ -4,7 +4,8 @@ channels:
   - conda-forge
 dependencies:
   - python=3.11
-  - ros-noetic-kdl-parser
+  - ros-humble-kdl-parser
+  - ros-humble-ament-cmake
   - cxx-compiler
   - cmake
   - ninja

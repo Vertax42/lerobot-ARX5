@@ -42,7 +42,7 @@ We set up a conda environment for all the cmake dependencies, so no system packa
 We recommend [mamba](https://github.com/conda-forge/miniforge?tab=readme-ov-file#install) for creating conda environments, which takes only about 1min. You can also use `conda`, but it takes significantly longer (~10min).
 
 ``` sh
-mamba env create -f conda_environments/py310_environment.yaml
+mamba env create -f conda_environments/py311_environment.yaml
 # if you do not have mamba, you can also use conda, which takes significantly longer
 # Currently available python versions: 3.8, 3.9, 3.10, 3.11 
 conda activate arx-py310

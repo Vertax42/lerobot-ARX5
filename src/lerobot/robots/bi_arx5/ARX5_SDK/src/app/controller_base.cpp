@@ -37,6 +37,8 @@ Arx5ControllerBase::~Arx5ControllerBase()
         logger_->info("Set to damping before exit");
         Gain damping_gain{robot_config_.joint_dof};
         damping_gain.kd = controller_config_.default_kd;
+        damping_gain.gripper_kp = 0.0f;  // 夹爪位置增益设为0
+        damping_gain.gripper_kd = controller_config_.default_gripper_kd;  // 夹爪阻尼增益
 
         // Increase damping if needed
         // damping_gain.kd[0] *= 3;
@@ -49,6 +51,8 @@ Arx5ControllerBase::~Arx5ControllerBase()
             std::lock_guard<std::mutex> guard(cmd_mutex_);
             output_joint_cmd_.vel = VecDoF::Zero(robot_config_.joint_dof);
             output_joint_cmd_.torque = VecDoF::Zero(robot_config_.joint_dof);
+            output_joint_cmd_.gripper_vel = 0.0f;  // 夹爪速度设为0
+            output_joint_cmd_.gripper_torque = 0.0f;  // 夹爪力矩设为0
             interpolator_.init_fixed(output_joint_cmd_);
         }
         background_send_recv_running_ = true;
@@ -231,6 +235,8 @@ void Arx5ControllerBase::set_to_damping()
 {
     Gain damping_gain{robot_config_.joint_dof};
     damping_gain.kd = controller_config_.default_kd;
+    damping_gain.gripper_kp = 0.0f;  // 夹爪位置增益设为0
+    damping_gain.gripper_kd = controller_config_.default_gripper_kd;  // 夹爪阻尼增益
     set_gain(damping_gain);
     sleep_ms(10);
     JointState joint_state = get_joint_state();
@@ -238,6 +244,8 @@ void Arx5ControllerBase::set_to_damping()
         std::lock_guard<std::mutex> guard(cmd_mutex_);
         joint_state.vel = VecDoF::Zero(robot_config_.joint_dof);
         joint_state.torque = VecDoF::Zero(robot_config_.joint_dof);
+        joint_state.gripper_vel = 0.0f;  // 夹爪速度设为0
+        joint_state.gripper_torque = 0.0f;  // 夹爪力矩设为0
         interpolator_.init_fixed(joint_state);
     }
 }
@@ -319,7 +327,7 @@ void Arx5ControllerBase::check_joint_state_sanity_()
         }
     }
     // Gripper should be around 0~robot_config_.gripper_width
-    double gripper_width_tolerance = 0.05; // 0.002m, 0.05rad
+    double gripper_width_tolerance = robot_config_.gripper_width * 0.02; // 2% of gripper width
 
     if (joint_state_.gripper_pos < -gripper_width_tolerance ||
         joint_state_.gripper_pos > robot_config_.gripper_width + gripper_width_tolerance)
@@ -327,7 +335,7 @@ void Arx5ControllerBase::check_joint_state_sanity_()
         logger_->warn("Gripper position out of range: got {:.3f} but should be in 0~{:.3f} (m). "
                       "This is expected during calibration.",
                        joint_state_.gripper_pos, robot_config_.gripper_width);
-        enter_emergency_state_();
+        // enter_emergency_state_();
     }
 }
 
@@ -498,9 +506,9 @@ void Arx5ControllerBase::update_output_cmd_()
                 double new_gripper_pos = prev_output_cmd.gripper_pos + robot_config_.gripper_vel_max * dt *
                                                                            gripper_delta_pos /
                                                                            std::abs(gripper_delta_pos);
-                if (std::abs(output_joint_cmd_.gripper_pos - output_joint_cmd_.gripper_pos) >= 0.001)
+                if (std::abs(output_joint_cmd_.gripper_pos - new_gripper_pos) >= 0.001)
                     logger_->debug("Gripper pos cmd clipped: {:.3f} to {:.3f}", output_joint_cmd_.gripper_pos,
-                                   output_joint_cmd_.gripper_pos);
+                                   new_gripper_pos);
                 output_joint_cmd_.gripper_pos = new_gripper_pos;
             }
         }
@@ -513,13 +521,14 @@ void Arx5ControllerBase::update_output_cmd_()
     // Gripper pos clipping
     if (output_joint_cmd_.gripper_pos < 0)
     {
-        if (output_joint_cmd_.gripper_pos < -0.005)
+        if (output_joint_cmd_.gripper_pos < robot_config_.gripper_width * 0.02)
             logger_->debug("Gripper pos cmd clipped from {:.3f} to min: {:.3f}", output_joint_cmd_.gripper_pos, 0.0);
         output_joint_cmd_.gripper_pos = 0;
     }
     else if (output_joint_cmd_.gripper_pos > robot_config_.gripper_width)
     {
-        if (output_joint_cmd_.gripper_pos > robot_config_.gripper_width + 0.005)
+        double clipping_threshold = robot_config_.gripper_width * 0.02; // 2% of gripper width
+        if (output_joint_cmd_.gripper_pos > robot_config_.gripper_width + clipping_threshold)
             logger_->debug("Gripper pos cmd clipped from {:.3f} to max: {:.3f}", output_joint_cmd_.gripper_pos,
                            robot_config_.gripper_width);
         output_joint_cmd_.gripper_pos = robot_config_.gripper_width;

@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 
 from lerobot.cameras import CameraConfig
 from lerobot.cameras.opencv import OpenCVCameraConfig
+from lerobot.cameras.realsense import RealSenseCameraConfig
+
 # from lerobot.cameras.realsense import RealSenseCameraConfig
 from ..config import RobotConfig
 
@@ -39,37 +41,52 @@ class BiARX5Config(RobotConfig):
     # Higher values (0.03-0.05) provide smoother motion but more delay
     # Lower values (0.01-0.02) are more responsive but may cause jittering
     preview_time: float = 0.03  # Default 30ms for smooth inference
-    gripper_open_readout: list[float] = field(
-        default_factory=lambda: [-3.26, -3.45]
-    )
+    gripper_open_readout: list[float] = field(default_factory=lambda: [-3.4, -3.4])
     home_position: list[float] = field(
         default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     )
     start_position: list[float] = field(
-        default_factory=lambda: [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.002]
+        default_factory=lambda: [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.0]
     )
     # cameras
+    # server_camera settings
+    # cameras: dict[str, CameraConfig] = field(
+    #     default_factory=lambda: {
+    #         "head": OpenCVCameraConfig(
+    #             index_or_path="/dev/video16", fps=60, width=640, height=480
+    #         ),
+    #         "left_wrist": OpenCVCameraConfig(
+    #             index_or_path="/dev/video4", fps=60, width=640, height=480
+    #         ),
+    #         "right_wrist": OpenCVCameraConfig(
+    #             index_or_path="/dev/video10", fps=60, width=640, height=480
+    #         ),
+    #     }
+    # )
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
-            "head": OpenCVCameraConfig(
-                index_or_path="/dev/video16", fps=60, width=640, height=480
+            "head": RealSenseCameraConfig(
+                serial_number_or_name="230322271365", fps=60, width=640, height=480
             ),
-            "left_wrist": OpenCVCameraConfig(
-                index_or_path="/dev/video4", fps=60, width=640, height=480
+            "left_wrist": RealSenseCameraConfig(
+                serial_number_or_name="230422271416", fps=60, width=640, height=480
             ),
-            "right_wrist": OpenCVCameraConfig(
-                index_or_path="/dev/video10", fps=60, width=640, height=480
+            "right_wrist": RealSenseCameraConfig(
+                serial_number_or_name="230322274234", fps=60, width=640, height=480
             ),
         }
-        # default_factory=lambda: {
-        #     "head": RealSenseCameraConfig(
-        #         "230322271365", fps=30, width=640, height=480
-        #     ),
-        #     "left_wrist": RealSenseCameraConfig(
-        #         "230422271416", fps=30, width=640, height=480
-        #     ),
-        #     "right_wrist": RealSenseCameraConfig(
-        #         "230322274234", fps=30, width=640, height=480
-        #     ),
-        # }
     )
+    # notebook_camera settings
+    # cameras: dict[str, CameraConfig] = field(
+    #     default_factory=lambda: {
+    #         "head": OpenCVCameraConfig(
+    #             index_or_path="/dev/video12", fps=60, width=640, height=480
+    #         ),
+    #         "left_wrist": OpenCVCameraConfig(
+    #             index_or_path="/dev/video18", fps=60, width=640, height=480
+    #         ),
+    #         "right_wrist": OpenCVCameraConfig(
+    #             index_or_path="/dev/video6", fps=60, width=640, height=480
+    #         ),
+    #     }
+    # )

@@ -82,7 +82,7 @@ def main(model: str, interface: str):
     # based on it
     robot_config = arx5.RobotConfigFactory.get_instance().get_config(model)
     # 保持夹爪正常工作，不修改gripper_motor_type
-    robot_config.gripper_open_readout = -3.45  # -3.26
+    # robot_config.gripper_open_readout = -3.45  # -3.26
     controller_config = arx5.ControllerConfigFactory.get_instance().get_config(
         "joint_controller", robot_config.joint_dof
     )
