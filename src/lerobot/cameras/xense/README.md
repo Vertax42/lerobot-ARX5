@@ -1,0 +1,226 @@
+# Xense Tactile Camera Integration
+
+This module integrates Xense tactile sensors into the LeRobot camera framework, providing a unified interface for reading force, depth, and marker data.
+
+## Overview
+
+The Xense tactile sensor provides rich tactile-visual information including:
+- **Force Distribution**: 3D force at each point (35×20×3)
+- **Force Resultant**: 6D force/torque vector (6,)
+- **Depth Maps**: Surface depth information (700×400)
+- **2D Markers**: Tangential displacement (35×20×2)
+- **3D Mesh**: Surface deformation data (35×20×3)
+
+## Installation
+
+### Prerequisites
+
+1. **Install xensesdk** (follow manufacturer instructions):
+   ```bash
+   conda activate lerobot-openpi
+   pip install xensesdk
+   ```
+
+2. **Install missing dependencies** (as noted in xensesdk README):
+   ```bash
+   pip install cypack cryptography pyudev assimp_py==1.0.7 qtpy PyQt5 h5py lz4
+   ```
+
+## Quick Start
+
+### 1. Find Available Sensors
+
+```python
+from lerobot.cameras.xense import XenseTactileCamera
+
+# Discover connected sensors
+sensors = XenseTactileCamera.find_cameras()
+for sensor in sensors:
+    print(f"Found: {sensor['serial_number']}, Cam ID: {sensor['cam_id']}")
+```
+
+### 2. Basic Usage
+
+```python
+from lerobot.cameras.xense import (
+    XenseTactileCamera,
+    XenseCameraConfig,
+    XenseOutputType,
+)
+
+# Configure sensor
+config = XenseCameraConfig(
+    serial_number="OG000344",
+    fps=60,
+    output_types=[
+        XenseOutputType.FORCE,
+        XenseOutputType.FORCE_RESULTANT,
+    ],
+)
+
+# Create and connect
+camera = XenseTactileCamera(config)
+camera.connect()
+
+# Read synchronously
+data = camera.read()
+force = data["force"]  # shape: (35, 20, 3)
+force_resultant = data["force_resultant"]  # shape: (6,)
+
+# Read asynchronously (with background thread)
+async_data = camera.async_read(timeout_ms=200)
+
+# Disconnect when done
+camera.disconnect()
+```
+
+## Available Output Types
+
+```python
+from lerobot.cameras.xense import XenseOutputType
+
+# Image outputs
+XenseOutputType.RECTIFY          # shape=(700, 400, 3), RGB
+XenseOutputType.DIFFERENCE       # shape=(700, 400, 3), RGB
+XenseOutputType.DEPTH            # shape=(700, 400), unit: mm
+
+# Force outputs
+XenseOutputType.FORCE            # shape=(35, 20, 3), 3D force distribution
+XenseOutputType.FORCE_NORM       # shape=(35, 20, 3), normal force component
+XenseOutputType.FORCE_RESULTANT  # shape=(6,), 6D force/torque
+
+# Marker outputs
+XenseOutputType.MARKER_2D        # shape=(35, 20, 2), tangential displacement
+
+# 3D mesh outputs
+XenseOutputType.MESH_3D          # shape=(35, 20, 3), current frame mesh
+XenseOutputType.MESH_3D_INIT     # shape=(35, 20, 3), initial mesh
+XenseOutputType.MESH_3D_FLOW     # shape=(35, 20, 3), deformation vector
+```
+
+## Testing
+
+### Simple Test
+```bash
+python test_xense_simple.py
+```
+
+This will:
+1. Find available sensors
+2. Connect to the first sensor
+3. Test synchronous reading (5 frames)
+4. Test asynchronous reading (10 frames)
+5. Measure FPS performance
+
+### Full Test Suite
+```bash
+python test_xense_camera.py
+```
+
+Choose from:
+1. Synchronous reading test
+2. Asynchronous reading test
+3. Dual sensor test (bimanual)
+4. Run all tests
+
+## Integration with BiARX5 Robot
+
+To add Xense sensors to your robot configuration:
+
+```python
+from lerobot.cameras.xense import XenseCameraConfig, XenseOutputType
+
+cameras = {
+    # ... existing cameras ...
+    "right_tactile": XenseCameraConfig(
+        serial_number="OG000344",
+        fps=60,
+        output_types=[
+            XenseOutputType.FORCE,
+            XenseOutputType.FORCE_RESULTANT,
+        ],
+    ),
+    "left_tactile": XenseCameraConfig(
+        serial_number="OG000352",
+        fps=60,
+        output_types=[
+            XenseOutputType.FORCE,
+            XenseOutputType.FORCE_RESULTANT,
+        ],
+    ),
+}
+```
+
+## Key Differences from Image Cameras
+
+1. **Output Format**: Returns `dict[str, np.ndarray]` instead of single image array
+2. **Data Types**: Multiple data modalities (force, depth, mesh) instead of just RGB/BGR
+3. **Shape Variety**: Different output types have different shapes:
+   - Images: (700, 400, 3)
+   - Force grid: (35, 20, 3)
+   - Force resultant: (6,)
+4. **No Color Mode**: Force data is numeric, not color-based
+
+## Performance Notes
+
+- **Recommended FPS**: 60 Hz for force sensing
+- **Warmup Time**: 0.5s default (adjustable via `warmup_s`)
+- **Async Reading**: Uses background thread for non-blocking reads
+- **Timeout**: 200ms default for async reads (adjustable)
+
+## Troubleshooting
+
+### Import Error: "No module named 'xensesdk'"
+```bash
+pip install xensesdk
+```
+
+### Missing Dependencies
+Install all required packages:
+```bash
+pip install cypack cryptography pyudev assimp_py==1.0.7 qtpy PyQt5 h5py lz4
+```
+
+### Sensor Not Found
+- Check USB connection
+- Run `Sensor.getXenseDeviceList()` to see available devices
+- Verify serial number matches your sensor
+
+### Qt Platform Plugin Issues
+See xensesdk documentation for Qt-related troubleshooting.
+
+## API Reference
+
+### XenseCameraConfig
+
+Configuration class for Xense sensors.
+
+**Parameters**:
+- `serial_number` (str): Sensor serial number (e.g., "OG000344")
+- `fps` (int, optional): Target frame rate (default: 60)
+- `output_types` (list[XenseOutputType], optional): Data types to read
+- `warmup_s` (float, optional): Warmup duration in seconds (default: 0.5)
+
+### XenseTactileCamera
+
+Main camera class implementing the Camera interface.
+
+**Methods**:
+- `connect(warmup=True)`: Connect to sensor
+- `read()`: Synchronous read, returns dict of arrays
+- `async_read(timeout_ms=200)`: Asynchronous read with timeout
+- `disconnect()`: Release sensor resources
+- `find_cameras()` (static): Discover available sensors
+
+## Examples
+
+See the test scripts for complete examples:
+- `test_xense_simple.py`: Basic functionality test
+- `test_xense_camera.py`: Comprehensive test suite
+
+## Support
+
+For Xense SDK issues, contact: qjrobot9966 (WeChat)
+
+For LeRobot integration issues, see the main LeRobot documentation.
+

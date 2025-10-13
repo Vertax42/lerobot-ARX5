@@ -24,7 +24,9 @@ from .configs import CameraConfig, Cv2Rotation
 IndexOrPath: TypeAlias = int | Path
 
 
-def make_cameras_from_configs(camera_configs: dict[str, CameraConfig]) -> dict[str, Camera]:
+def make_cameras_from_configs(
+    camera_configs: dict[str, CameraConfig],
+) -> dict[str, Camera]:
     cameras = {}
 
     for key, cfg in camera_configs.items():
@@ -37,8 +39,14 @@ def make_cameras_from_configs(camera_configs: dict[str, CameraConfig]) -> dict[s
             from .realsense.camera_realsense import RealSenseCamera
 
             cameras[key] = RealSenseCamera(cfg)
+
+        elif cfg.type == "xense":
+            from .xense import XenseTactileCamera
+
+            cameras[key] = XenseTactileCamera(cfg)
+
         else:
-            raise ValueError(f"The motor type '{cfg.type}' is not valid.")
+            raise ValueError(f"The camera type '{cfg.type}' is not valid.")
 
     return cameras
 

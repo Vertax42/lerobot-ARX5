@@ -521,7 +521,7 @@ void Arx5ControllerBase::update_output_cmd_()
     // Gripper pos clipping
     if (output_joint_cmd_.gripper_pos < 0)
     {
-        if (output_joint_cmd_.gripper_pos < robot_config_.gripper_width * 0.02)
+        if (output_joint_cmd_.gripper_pos < -robot_config_.gripper_width * 0.02)
             logger_->debug("Gripper pos cmd clipped from {:.3f} to min: {:.3f}", output_joint_cmd_.gripper_pos, 0.0);
         output_joint_cmd_.gripper_pos = 0;
     }

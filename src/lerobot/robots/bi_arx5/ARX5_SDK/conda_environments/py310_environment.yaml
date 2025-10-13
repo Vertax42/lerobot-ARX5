@@ -1,4 +1,4 @@
-name: lerobot 
+name: lerobot
 channels:
   - robostack-staging
   - conda-forge

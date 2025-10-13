@@ -67,8 +67,9 @@ ControllerConfigFactory()
 ```
 
 ## for openpi-client compatibility
-<!-- pip install opencv-python==4.9.0.80
+<!-- pip install opencv-python==4.9.0.80 4.10.0.84
 pip install opencv-python-headless==4.9.0.80 -->
+<!-- pip install numpy==2.2.6 -, 1.26.4 -->
 
 # Lerobot-integration with ARX_X5
 ## BiARX5 Robot lerobot-teleoperate command
@@ -87,7 +88,7 @@ lerobot-record \
     --dataset.repo_id=Vertax/xense_bi_arx5_pick_and_place_cube \
     --dataset.num_episodes=100 \
     --dataset.single_task="pick rgb cubes and place them in the blue box" \
-    --dataset.fps=60 \
+    --dataset.fps=30 \
     --display_data=false \
     --resume=false \
     --dataset.push_to_hub=true

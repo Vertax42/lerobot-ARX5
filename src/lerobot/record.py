@@ -521,8 +521,13 @@ def bi_arx5_record_loop(
         current_observation_frame = None
         if dataset is not None:
             frame_start_time = time.perf_counter()
+            # Filter out tactile sensor data for dataset recording (keep for visualization only)
+            # Remove keys containing "tactile" to exclude tactile sensors from dataset
+            observation_for_dataset = {
+                k: v for k, v in current_observation.items() if "tactile" not in k
+            }
             current_observation_frame = build_dataset_frame(
-                dataset.features, current_observation, prefix="observation"
+                dataset.features, observation_for_dataset, prefix="observation"
             )
             frame_end_time = time.perf_counter()
             frame_time = (frame_end_time - frame_start_time) * 1000  # Convert to ms
@@ -548,13 +553,17 @@ def bi_arx5_record_loop(
                 for i, key in enumerate(robot.action_features)
             }
             action_convert_end_time = time.perf_counter()
-            action_convert_time = (action_convert_end_time - action_convert_start_time) * 1000  # Convert to ms
+            action_convert_time = (
+                action_convert_end_time - action_convert_start_time
+            ) * 1000  # Convert to ms
 
             # Send action to robot and get the actually sent action
             send_action_start_time = time.perf_counter()
             sent_action = robot.send_action(current_action)
             send_action_end_time = time.perf_counter()
-            send_action_time = (send_action_end_time - send_action_start_time) * 1000  # Convert to ms
+            send_action_time = (
+                send_action_end_time - send_action_start_time
+            ) * 1000  # Convert to ms
 
             # Policy mode: save current observation with sent action (no shifting)
             if dataset is not None:
@@ -615,11 +624,11 @@ def bi_arx5_record_loop(
             # for key, value in sent_action.items():
             #     print(f"    {key}: {value:.4f}")
 
-            print("  " + "="*50)
+            print("  " + "=" * 50)
 
         if 1 / fps - dt_s < 0:
             print("⚠️  detected dt_s is too large, dt_s: ", dt_s)
-        busy_wait(max(0.01, 1 / fps - dt_s))
+        busy_wait(max(0.0001, 1 / fps - dt_s))
 
         timestamp = time.perf_counter() - start_episode_t
 
@@ -641,8 +650,13 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     action_features = hw_to_dataset_features(
         robot.action_features, "action", cfg.dataset.video
     )
+    # Filter out tactile sensor features from observation features for dataset
+    # Keep tactile sensors connected for visualization, but don't save to dataset
+    obs_features_filtered = {
+        k: v for k, v in robot.observation_features.items() if "tactile" not in k
+    }
     obs_features = hw_to_dataset_features(
-        robot.observation_features, "observation", cfg.dataset.video
+        obs_features_filtered, "observation", cfg.dataset.video
     )
     dataset_features = {**action_features, **obs_features}
 
