@@ -64,42 +64,42 @@ class BiARX5Config(RobotConfig):
     #         ),
     #     }
     # )
-    cameras: dict[str, CameraConfig] = field(
-        default_factory=lambda: {
-            "head": RealSenseCameraConfig(
-                serial_number_or_name="230322271365", fps=30, width=640, height=480
-            ),
-            "left_wrist": RealSenseCameraConfig(
-                serial_number_or_name="230422271416", fps=30, width=640, height=480
-            ),
-            "right_wrist": RealSenseCameraConfig(
-                serial_number_or_name="230322274234", fps=30, width=640, height=480
-            ),
-            # "right_tactile_0": XenseCameraConfig(
-            #     serial_number="OG000344",
-            #     fps=30,  # Reduced from 60 to reduce loop overhead
-            #     output_types=[XenseOutputType.DIFFERENCE],
-            #     warmup_s=1.0,  # Increased warmup time for stable initialization
-            # ),
-            # "right_tactile_1": XenseCameraConfig(
-            #     serial_number="OG000352",
-            #     fps=30,  # Reduced from 60 to reduce loop overhead
-            #     output_types=[XenseOutputType.DIFFERENCE],
-            #     warmup_s=1.0,  # Increased warmup time for stable initialization
-            # ),
-        }
-    )
-    # notebook_camera settings
     # cameras: dict[str, CameraConfig] = field(
     #     default_factory=lambda: {
-    #         "head": OpenCVCameraConfig(
-    #             index_or_path="/dev/video12", fps=60, width=640, height=480
+    #         "head": RealSenseCameraConfig(
+    #             serial_number_or_name="230322271365", fps=30, width=640, height=480
     #         ),
-    #         "left_wrist": OpenCVCameraConfig(
-    #             index_or_path="/dev/video18", fps=60, width=640, height=480
+    #         "left_wrist": RealSenseCameraConfig(
+    #             serial_number_or_name="230422271416", fps=30, width=640, height=480
     #         ),
-    #         "right_wrist": OpenCVCameraConfig(
-    #             index_or_path="/dev/video6", fps=60, width=640, height=480
+    #         "right_wrist": RealSenseCameraConfig(
+    #             serial_number_or_name="230322274234", fps=30, width=640, height=480
     #         ),
+    #         # "right_tactile_0": XenseCameraConfig(
+    #         #     serial_number="OG000344",
+    #         #     fps=30,  # Reduced from 60 to reduce loop overhead
+    #         #     output_types=[XenseOutputType.DIFFERENCE],
+    #         #     warmup_s=1.0,  # Increased warmup time for stable initialization
+    #         # ),
+    #         # "right_tactile_1": XenseCameraConfig(
+    #         #     serial_number="OG000352",
+    #         #     fps=30,  # Reduced from 60 to reduce loop overhead
+    #         #     output_types=[XenseOutputType.DIFFERENCE],
+    #         #     warmup_s=1.0,  # Increased warmup time for stable initialization
+    #         # ),
     #     }
     # )
+    # notebook_camera settings
+    cameras: dict[str, CameraConfig] = field(
+        default_factory=lambda: {
+            "head": OpenCVCameraConfig(
+                index_or_path="/dev/video12", fps=60, width=640, height=480
+            ),
+            "left_wrist": OpenCVCameraConfig(
+                index_or_path="/dev/video6", fps=60, width=640, height=480
+            ),
+            "right_wrist": OpenCVCameraConfig(
+                index_or_path="/dev/video18", fps=60, width=640, height=480
+            ),
+        }
+    )

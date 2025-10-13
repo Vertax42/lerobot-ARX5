@@ -58,7 +58,7 @@ logger = logging.getLogger(__name__)
 
 class BiARX5(Robot):
     """
-    [Bimanual ARX5 Arms](https://github.com/ARXroboticsX/ARX_X5) designed by ARXROBOTICS
+    [Bimanual ARX5 Arms]
     """
 
     config_class = BiARX5Config
@@ -245,11 +245,11 @@ class BiARX5(Robot):
 
         zero_grav_gain = self.left_arm.get_gain()
         zero_grav_gain.kp()[:] = 0.0
-        zero_grav_gain.kd()[:] = self.controller_configs["left_config"].default_kd
+        zero_grav_gain.kd()[:] = self.controller_configs["left_config"].default_kd * 0.5
         zero_grav_gain.gripper_kp = 0.0
-        zero_grav_gain.gripper_kd = self.controller_configs[
-            "left_config"
-        ].default_gripper_kd
+        zero_grav_gain.gripper_kd = (
+            self.controller_configs["left_config"].default_gripper_kd * 0.5
+        )
 
         self.left_arm.set_gain(zero_grav_gain)
         self.right_arm.set_gain(zero_grav_gain)
@@ -723,11 +723,11 @@ class BiARX5(Robot):
         # reset to zero pd with 0.5 kd
         zero_grav_gain = arx5.Gain(self.robot_configs["left_config"].joint_dof)
         zero_grav_gain.kp()[:] = 0.0
-        zero_grav_gain.kd()[:] = self.controller_configs["left_config"].default_kd
+        zero_grav_gain.kd()[:] = self.controller_configs["left_config"].default_kd * 0.5
         zero_grav_gain.gripper_kp = 0.0
-        zero_grav_gain.gripper_kd = self.controller_configs[
-            "left_config"
-        ].default_gripper_kd
+        zero_grav_gain.gripper_kd = (
+            self.controller_configs["left_config"].default_gripper_kd * 0.5
+        )
 
         self.left_arm.set_gain(zero_grav_gain)
         self.right_arm.set_gain(zero_grav_gain)
