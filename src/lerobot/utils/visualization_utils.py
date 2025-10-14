@@ -23,7 +23,11 @@ def _init_rerun(session_name: str = "lerobot_control_loop") -> None:
     """Initializes the Rerun SDK for visualizing the control loop."""
     batch_size = os.getenv("RERUN_FLUSH_NUM_BYTES", "8000")
     os.environ["RERUN_FLUSH_NUM_BYTES"] = batch_size
-    rr.init(session_name)
+    # Add timestamp to force new session
+    import time
+
+    unique_session = f"{session_name}_{int(time.time())}"
+    rr.init(unique_session)
     memory_limit = os.getenv("LEROBOT_RERUN_MEMORY_LIMIT", "10%")
     rr.spawn(memory_limit=memory_limit)
 
@@ -37,7 +41,7 @@ def log_rerun_data(observation: dict[str | Any], action: dict[str | Any]):
                 for i, v in enumerate(val):
                     rr.log(f"observation.{obs}_{i}", rr.Scalar(float(v)))
             else:
-                rr.log(f"observation.{obs}", rr.Image(val), static=True)
+                rr.log(f"observation.{obs}", rr.Image(val))
     for act, val in action.items():
         if isinstance(val, float):
             rr.log(f"action.{act}", rr.Scalar(val))

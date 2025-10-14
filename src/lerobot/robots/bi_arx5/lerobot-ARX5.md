@@ -85,9 +85,9 @@ lerobot-teleoperate \
 lerobot-record \
     --robot.type=bi_arx5 \
     --teleop.type=mock_teleop \
-    --dataset.repo_id=Vertax/xense_bi_arx5_pick_and_place_cube \
+    --dataset.repo_id=Vertax/xense_bi_arx5_tactile_sensor \
     --dataset.num_episodes=100 \
-    --dataset.single_task="pick rgb cubes and place them in the blue box" \
+    --dataset.single_task="test tactile sensor" \
     --dataset.fps=30 \
     --display_data=false \
     --resume=false \

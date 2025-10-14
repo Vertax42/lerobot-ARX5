@@ -150,7 +150,11 @@ def teleop_loop(
 
 
 def bi_arx5_teleop_loop(
-    robot: Robot, fps: int, display_data: bool = False, duration: float | None = None, debug_timing: bool = True
+    robot: Robot,
+    fps: int,
+    display_data: bool = False,
+    duration: float | None = None,
+    debug_timing: bool = True,
 ):
     """
     Specialized teleop loop for BiARX5 robot in gravity compensation mode.
@@ -283,7 +287,8 @@ def bi_arx5_teleop_loop(
         if debug_timing:
             # Clear screen and display timing info
             import os
-            os.system('clear' if os.name == 'posix' else 'cls')
+
+            os.system("clear" if os.name == "posix" else "cls")
 
             print("🔍 TELEOP TIMING DEBUG")
             print("=" * 50)

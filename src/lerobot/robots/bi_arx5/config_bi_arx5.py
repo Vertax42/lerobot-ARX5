@@ -93,13 +93,37 @@ class BiARX5Config(RobotConfig):
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
             "head": OpenCVCameraConfig(
-                index_or_path="/dev/video12", fps=60, width=640, height=480
+                index_or_path="/dev/video18", fps=30, width=640, height=480
             ),
             "left_wrist": OpenCVCameraConfig(
-                index_or_path="/dev/video6", fps=60, width=640, height=480
+                index_or_path="/dev/video4", fps=30, width=640, height=480
             ),
             "right_wrist": OpenCVCameraConfig(
-                index_or_path="/dev/video18", fps=60, width=640, height=480
+                index_or_path="/dev/video14", fps=30, width=640, height=480
             ),
+            # "right_tactile_left": XenseCameraConfig(
+            #     serial_number="OG000352",
+            #     fps=30,  # Reduced from 60 to reduce loop overhead
+            #     output_types=[XenseOutputType.DIFFERENCE],
+            #     warmup_s=0.5,  # Increased warmup time for stable initialization
+            # ),
+            # "right_tactile_right": XenseCameraConfig(
+            #     serial_number="OG000344",
+            #     fps=30,  # Reduced from 60 to reduce loop overhead
+            #     output_types=[XenseOutputType.DIFFERENCE],
+            #     warmup_s=0.5,  # Increased warmup time for stable initialization
+            # ),
+            # "left_tactile_left": XenseCameraConfig(
+            #     serial_number="OG000337",
+            #     fps=30,  # Reduced from 60 to reduce loop overhead
+            #     output_types=[XenseOutputType.DIFFERENCE],
+            #     warmup_s=0.5,  # Increased warmup time for stable initialization
+            # ),
+            # "left_tactile_right": XenseCameraConfig(
+            #     serial_number="OG000339",
+            #     fps=30,  # Reduced from 60 to reduce loop overhead
+            #     output_types=[XenseOutputType.DIFFERENCE],
+            #     warmup_s=0.5,  # Increased warmup time for stable initialization
+            # ),
         }
     )
