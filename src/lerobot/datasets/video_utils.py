@@ -271,13 +271,14 @@ def encode_video_frames(
     imgs_dir: Path | str,
     video_path: Path | str,
     fps: int,
-    vcodec: str = "libsvtav1",
+    vcodec: str = "libsvtav1",  # default libsvtav1
     pix_fmt: str = "yuv420p",
     g: int | None = 2,
     crf: int | None = 30,
     fast_decode: int = 0,
     log_level: int | None = av.logging.ERROR,
     overwrite: bool = False,
+    num_threads: int | None = None,
 ) -> None:
     """More info on ffmpeg arguments tuning on `benchmark/video/README.md`"""
     # Check encoder availability

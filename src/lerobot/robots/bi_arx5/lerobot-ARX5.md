@@ -85,10 +85,11 @@ lerobot-teleoperate \
 lerobot-record \
     --robot.type=bi_arx5 \
     --teleop.type=mock_teleop \
-    --dataset.repo_id=Vertax/xense_bi_arx5_tactile_sensor \
+    --dataset.repo_id=Vertax/xense_bi_arx5_tie_shoelaces \
     --dataset.num_episodes=100 \
-    --dataset.single_task="test tactile sensor" \
+    --dataset.single_task="tie shoelaces" \
     --dataset.fps=30 \
+    --dataset.episode_time_s=300 \
     --display_data=false \
     --resume=false \
     --dataset.push_to_hub=true

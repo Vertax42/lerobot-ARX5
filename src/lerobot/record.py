@@ -521,13 +521,11 @@ def bi_arx5_record_loop(
         current_observation_frame = None
         if dataset is not None:
             frame_start_time = time.perf_counter()
-            # Filter out tactile sensor data for dataset recording (keep for visualization only)
-            # Remove keys containing "tactile" to exclude tactile sensors from dataset
-            observation_for_dataset = {
-                k: v for k, v in current_observation.items() if "tactile" not in k
-            }
+            # Note: build_dataset_frame already filters based on dataset.features
+            # which excludes tactile sensors (filtered in line 655-656)
+            # So we can pass current_observation directly
             current_observation_frame = build_dataset_frame(
-                dataset.features, observation_for_dataset, prefix="observation"
+                dataset.features, current_observation, prefix="observation"
             )
             frame_end_time = time.perf_counter()
             frame_time = (frame_end_time - frame_start_time) * 1000  # Convert to ms
@@ -628,7 +626,8 @@ def bi_arx5_record_loop(
 
         if 1 / fps - dt_s < 0:
             print("⚠️  detected dt_s is too large, dt_s: ", dt_s)
-        busy_wait(max(0.0001, 1 / fps - dt_s))
+        else:
+            busy_wait(1 / fps - dt_s)
 
         timestamp = time.perf_counter() - start_episode_t
 
