@@ -502,7 +502,7 @@ def bi_arx5_record_loop(
 
             def go_start_thread():
                 try:
-                    robot.smooth_go_start(duration=2.0)
+                    robot.smooth_go_start(duration=3.0)
                     logging.info(
                         "✓ smooth_go_start completed successfully in 2 seconds"
                     )

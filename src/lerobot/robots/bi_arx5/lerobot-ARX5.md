@@ -73,12 +73,12 @@ pip install opencv-python-headless==4.9.0.80 -->
 
 # Lerobot-integration with ARX_X5
 ## BiARX5 Robot lerobot-teleoperate command
-lerobot-teleoperate \
-    --robot.type=bi_arx5 \
-    --teleop.type=mock_teleop \
-    --fps=30 \
-    --debug_timing=false \
-    --display_data=true
+  lerobot-teleoperate \
+      --robot.type=bi_arx5 \
+      --teleop.type=mock_teleop \
+      --fps=30 \
+      --debug_timing=false \
+      --display_data=true
 
 
 ## BiARX5 Robot lerobot-record command
@@ -91,7 +91,7 @@ lerobot-record \
     --dataset.fps=30 \
     --dataset.episode_time_s=300 \
     --display_data=false \
-    --resume=false \
+    --resume=true \
     --dataset.push_to_hub=true
 
 ## BiARX5 Robot lerobot-replay command

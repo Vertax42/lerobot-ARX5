@@ -41,7 +41,7 @@ class BiARX5Config(RobotConfig):
     # Preview time in seconds for action interpolation during inference
     # Higher values (0.03-0.05) provide smoother motion but more delay
     # Lower values (0.01-0.02) are more responsive but may cause jittering
-    preview_time: float = 0.03  # Default 30ms for smooth inference
+    preview_time: float = 0.0  # Default 30ms for smooth inference
     gripper_open_readout: list[float] = field(default_factory=lambda: [-3.4, -3.4])
     home_position: list[float] = field(
         default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -64,66 +64,78 @@ class BiARX5Config(RobotConfig):
     #         ),
     #     }
     # )
-    # cameras: dict[str, CameraConfig] = field(
-    # default_factory=lambda: {
-    #     "head": RealSenseCameraConfig(
-    #         serial_number_or_name="230322271365", fps=60, width=640, height=480
-    #     ),
-    #     "left_wrist": RealSenseCameraConfig(
-    #         serial_number_or_name="230422271416", fps=60, width=640, height=480
-    #     ),
-    #     "right_wrist": RealSenseCameraConfig(
-    #         serial_number_or_name="230322274234", fps=60, width=640, height=480
-    #     ),
-    # "right_tactile_0": XenseCameraConfig(
-    #     serial_number="OG000344",
-    #     fps=30,  # Reduced from 60 to reduce loop overhead
-    #     output_types=[XenseOutputType.DIFFERENCE],
-    #     warmup_s=1.0,  # Increased warmup time for stable initialization
-    # ),
-    # "right_tactile_1": XenseCameraConfig(
-    #     serial_number="OG000352",
-    #     fps=30,  # Reduced from 60 to reduce loop overhead
-    #     output_types=[XenseOutputType.DIFFERENCE],
-    #     warmup_s=1.0,  # Increased warmup time for stable initialization
-    # ),
-    #     }
-    # )
-    # notebook_camera settings
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
-            "head": OpenCVCameraConfig(
-                index_or_path="/dev/video19", fps=30, width=640, height=480
+            "head": RealSenseCameraConfig(
+                serial_number_or_name="230322271365", fps=60, width=640, height=480
             ),
-            "left_wrist": OpenCVCameraConfig(
-                index_or_path="/dev/video5", fps=30, width=640, height=480
+            "left_wrist": RealSenseCameraConfig(
+                serial_number_or_name="230422271416", fps=60, width=640, height=480
             ),
-            "right_wrist": OpenCVCameraConfig(
-                index_or_path="/dev/video20", fps=30, width=640, height=480
+            "right_wrist": RealSenseCameraConfig(
+                serial_number_or_name="230322274234", fps=60, width=640, height=480
             ),
-            # "right_tactile_left": XenseCameraConfig(
-            #     serial_number="OG000352",
-            #     fps=30,  # Reduced from 60 to reduce loop overhead
-            #     output_types=[XenseOutputType.DIFFERENCE],
-            #     warmup_s=0.5,  # Increased warmup time for stable initialization
-            # ),
-            # "right_tactile_right": XenseCameraConfig(
+            # "right_tactile_0": XenseCameraConfig(
             #     serial_number="OG000344",
             #     fps=30,  # Reduced from 60 to reduce loop overhead
             #     output_types=[XenseOutputType.DIFFERENCE],
-            #     warmup_s=0.5,  # Increased warmup time for stable initialization
+            #     warmup_s=1.0,  # Increased warmup time for stable initialization
             # ),
-            # "left_tactile_left": XenseCameraConfig(
-            #     serial_number="OG000337",
+            # "right_tactile_1": XenseCameraConfig(
+            #     serial_number="OG000352",
             #     fps=30,  # Reduced from 60 to reduce loop overhead
             #     output_types=[XenseOutputType.DIFFERENCE],
-            #     warmup_s=0.5,  # Increased warmup time for stable initialization
+            #     warmup_s=1.0,  # Increased warmup time for stable initialization
             # ),
-            # "left_tactile_right": XenseCameraConfig(
+            # "left_tactile_0": XenseCameraConfig(
             #     serial_number="OG000339",
             #     fps=30,  # Reduced from 60 to reduce loop overhead
             #     output_types=[XenseOutputType.DIFFERENCE],
-            #     warmup_s=0.5,  # Increased warmup time for stable initialization
+            #     warmup_s=1.0,  # Increased warmup time for stable initialization
+            # ),
+            # "left_tactile_1": XenseCameraConfig(
+            #     serial_number="OG000337",
+            #     fps=30,  # Reduced from 60 to reduce loop overhead
+            #     output_types=[XenseOutputType.DIFFERENCE],
+            #     warmup_s=1.0,  # Increased warmup time for stable initialization
             # ),
         }
     )
+    # notebook_camera settings
+    # cameras: dict[str, CameraConfig] = field(
+    #     default_factory=lambda: {
+    #         "head": OpenCVCameraConfig(
+    #             index_or_path="/dev/video21", fps=30, width=640, height=480
+    #         ),
+    #         "left_wrist": OpenCVCameraConfig(
+    #             index_or_path="/dev/video12", fps=30, width=640, height=480
+    #         ),
+    #         "right_wrist": OpenCVCameraConfig(
+    #             index_or_path="/dev/video4", fps=30, width=640, height=480
+    #         ),
+    # "right_tactile_left": XenseCameraConfig(
+    #     serial_number="OG000352",
+    #     fps=30,  # Reduced from 60 to reduce loop overhead
+    #     output_types=[XenseOutputType.DIFFERENCE],
+    #     warmup_s=0.5,  # Increased warmup time for stable initialization
+    # ),
+    # "right_tactile_right": XenseCameraConfig(
+    #     serial_number="OG000344",
+    #     fps=30,  # Reduced from 60 to reduce loop overhead
+    #     output_types=[XenseOutputType.DIFFERENCE],
+    #     warmup_s=0.5,  # Increased warmup time for stable initialization
+    # ),
+    # "left_tactile_left": XenseCameraConfig(
+    #     serial_number="OG000337",
+    #     fps=30,  # Reduced from 60 to reduce loop overhead
+    #     output_types=[XenseOutputType.DIFFERENCE],
+    #     warmup_s=0.5,  # Increased warmup time for stable initialization
+    # ),
+    # "left_tactile_right": XenseCameraConfig(
+    #     serial_number="OG000339",
+    #     fps=30,  # Reduced from 60 to reduce loop overhead
+    #     output_types=[XenseOutputType.DIFFERENCE],
+    #     warmup_s=0.5,  # Increased warmup time for stable initialization
+    # ),
+    #     }
+    # )

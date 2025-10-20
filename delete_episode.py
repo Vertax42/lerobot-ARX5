@@ -126,6 +126,7 @@ def main():
     parser.add_argument(
         "--dataset-path",
         type=str,
+        default="/home/vertax/.cache/huggingface/lerobot/Vertax/xense_bi_arx5_tie_shoelaces",
         required=True,
         help="数据集路径（例如: /home/vertax/.cache/huggingface/lerobot/Vertax/xense_bi_arx5_tie_shoelaces）",
     )

@@ -292,6 +292,9 @@ class BiARX5(Robot):
         logger.info(
             f"Right arm gain: {gain.kp()}, {gain.kd()}, {gain.gripper_kp}, {gain.gripper_kd}"
         )
+        if self.config.inference_mode:
+            self.set_to_normal_position_control()
+            logger.info("✓ Robot is now in normal position control mode for inference")
 
     @property
     def is_calibrated(self) -> bool:
@@ -758,11 +761,12 @@ class BiARX5(Robot):
 
         # reset to default gain
         default_gain = self.left_arm.get_gain()
-        default_gain.kp()[:] = self.controller_configs["left_config"].default_kp
-        default_gain.kd()[:] = self.controller_configs["left_config"].default_kd
+        default_gain.kp()[:] = self.controller_configs["left_config"].default_kp * 0.5
+        default_gain.kd()[:] = self.controller_configs["left_config"].default_kd * 2.0
         default_gain.gripper_kp = self.controller_configs[
             "left_config"
         ].default_gripper_kp
+
         default_gain.gripper_kd = self.controller_configs[
             "left_config"
         ].default_gripper_kd
