@@ -73,12 +73,12 @@ pip install opencv-python-headless==4.9.0.80 -->
 
 # Lerobot-integration with ARX_X5
 ## BiARX5 Robot lerobot-teleoperate command
-  lerobot-teleoperate \
-      --robot.type=bi_arx5 \
-      --teleop.type=mock_teleop \
-      --fps=30 \
-      --debug_timing=false \
-      --display_data=true
+lerobot-teleoperate \
+    --robot.type=bi_arx5 \
+    --teleop.type=mock_teleop \
+    --fps=30 \
+    --debug_timing=false \
+    --display_data=true
 
 
 ## BiARX5 Robot lerobot-record command
@@ -92,6 +92,18 @@ lerobot-record \
     --dataset.episode_time_s=300 \
     --display_data=false \
     --resume=true \
+    --dataset.push_to_hub=true
+
+lerobot-record \
+    --robot.type=bi_arx5 \
+    --teleop.type=mock_teleop \
+    --dataset.repo_id=Vertax/xense_bi_arx5_tie_shoelaces_tactile \
+    --dataset.num_episodes=100 \
+    --dataset.single_task="tie shoelaces with tactile sensors" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=300 \
+    --display_data=false \
+    --resume=false \
     --dataset.push_to_hub=true
 
 ## BiARX5 Robot lerobot-replay command
@@ -164,3 +176,31 @@ lerobot-record  \
   --dataset.repo_id=Vertax/eval_diffusion_bi_arx5_pick_and_place_cube \
   --dataset.single_task="pick and place cube" \
   --policy.path=outputs/train/diffusion_bi_arx5_pick_and_place_cube/checkpoints/last/pretrained_model
+
+
+## C++ ABI version issue
+/home/vertax/miniconda3/envs/lerobot-openpi/lib/python3.11/site-packages/sitecustomize.py
+```python
+"""
+Sitecustomize for lerobot-openpi environment.
+
+This file is automatically executed when Python starts.
+It preloads the conda environment's libstdc++.so.6 to ensure C++ extensions
+compiled with GCC 14.3.0 can find the required CXXABI_1.3.15 symbols.
+"""
+import os
+import ctypes
+
+conda_prefix = os.environ.get('CONDA_PREFIX')
+if conda_prefix:
+    libstdcxx_path = os.path.join(conda_prefix, 'lib', 'libstdc++.so.6')
+    if os.path.exists(libstdcxx_path):
+        try:
+            # Preload with RTLD_GLOBAL so all subsequently loaded modules can use it
+            ctypes.CDLL(libstdcxx_path, mode=ctypes.RTLD_GLOBAL)
+        except Exception:
+            # Silently fail if preloading doesn't work
+            pass
+```
+
+

@@ -5,6 +5,8 @@
 #include <stdexcept>
 #include <sys/syscall.h>
 #include <sys/types.h>
+#include <pthread.h>
+#include <sched.h>
 using namespace arx;
 
 Arx5ControllerBase::Arx5ControllerBase(RobotConfig robot_config, ControllerConfig controller_config,
@@ -28,6 +30,16 @@ Arx5ControllerBase::Arx5ControllerBase(RobotConfig robot_config, ControllerConfi
     background_send_recv_thread_ = std::thread(&Arx5ControllerBase::background_send_recv_, this);
     background_send_recv_running_ = controller_config_.background_send_recv;
     logger_->info("Background send_recv task is running at ID: {}", syscall(SYS_gettid));
+
+    // Set real-time priority for CAN communication thread
+    struct sched_param param;
+    param.sched_priority = 80;  // High priority (1-99, higher is more urgent)
+    int ret = pthread_setschedparam(background_send_recv_thread_.native_handle(), SCHED_FIFO, &param);
+    if (ret == 0) {
+        logger_->info("Successfully set CAN thread to real-time priority SCHED_FIFO:80");
+    } else {
+        logger_->warn("Failed to set real-time priority (error: {}). Need root or CAP_SYS_NICE capability. Using default priority.", ret);
+    }
 }
 
 Arx5ControllerBase::~Arx5ControllerBase()

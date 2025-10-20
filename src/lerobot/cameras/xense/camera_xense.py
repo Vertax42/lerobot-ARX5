@@ -82,6 +82,8 @@ class XenseTactileCamera(Camera):
         self.serial_number = config.serial_number
         self.output_types = config.output_types
         self.warmup_s = config.warmup_s
+        self.rectify_size = config.rectify_size
+        self.raw_size = config.raw_size
 
         self.sensor = None
 
@@ -102,6 +104,10 @@ class XenseTactileCamera(Camera):
                 "xensesdk is required for XenseTactileCamera. "
                 "Please install it according to the manufacturer's instructions."
             ) from e
+
+        # Pre-build sensor output types list for better performance
+        # This avoids reconstructing the mapping on every read() call
+        self._sensor_output_types_cache = None
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__}({self.serial_number})"
@@ -125,7 +131,11 @@ class XenseTactileCamera(Camera):
             raise DeviceAlreadyConnectedError(f"{self} is already connected.")
 
         try:
-            self.sensor = self._Sensor.create(self.serial_number)
+            self.sensor = self._Sensor.create(
+                self.serial_number,
+                rectify_size=self.rectify_size,
+                raw_size=self.raw_size,
+            )
         except Exception as e:
             raise ConnectionError(
                 f"Failed to connect to {self}. Error: {e}. "
@@ -200,29 +210,32 @@ class XenseTactileCamera(Camera):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         try:
-            # Map XenseOutputType to Sensor.OutputType
-            # Note: SDK uses CamelCase for OutputType attributes (e.g., Force, ForceResultant)
-            output_type_mapping = {
-                XenseOutputType.RECTIFY: self._Sensor.OutputType.Rectify,
-                XenseOutputType.DIFFERENCE: self._Sensor.OutputType.Difference,
-                XenseOutputType.DEPTH: self._Sensor.OutputType.Depth,
-                XenseOutputType.MARKER_2D: self._Sensor.OutputType.Marker2D,
-                XenseOutputType.FORCE: self._Sensor.OutputType.Force,
-                XenseOutputType.FORCE_NORM: self._Sensor.OutputType.ForceNorm,
-                XenseOutputType.FORCE_RESULTANT: self._Sensor.OutputType.ForceResultant,
-                XenseOutputType.MESH_3D: self._Sensor.OutputType.Mesh3D,
-                XenseOutputType.MESH_3D_INIT: self._Sensor.OutputType.Mesh3DInit,
-                XenseOutputType.MESH_3D_FLOW: self._Sensor.OutputType.Mesh3DFlow,
-            }
+            # Build sensor output types list (cached for performance)
+            if self._sensor_output_types_cache is None:
+                # Map XenseOutputType to Sensor.OutputType
+                # Note: SDK uses CamelCase for OutputType attributes (e.g., Force, ForceResultant)
+                output_type_mapping = {
+                    XenseOutputType.RECTIFY: self._Sensor.OutputType.Rectify,
+                    XenseOutputType.DIFFERENCE: self._Sensor.OutputType.Difference,
+                    XenseOutputType.DEPTH: self._Sensor.OutputType.Depth,
+                    XenseOutputType.MARKER_2D: self._Sensor.OutputType.Marker2D,
+                    XenseOutputType.FORCE: self._Sensor.OutputType.Force,
+                    XenseOutputType.FORCE_NORM: self._Sensor.OutputType.ForceNorm,
+                    XenseOutputType.FORCE_RESULTANT: self._Sensor.OutputType.ForceResultant,
+                    XenseOutputType.MESH_3D: self._Sensor.OutputType.Mesh3D,
+                    XenseOutputType.MESH_3D_INIT: self._Sensor.OutputType.Mesh3DInit,
+                    XenseOutputType.MESH_3D_FLOW: self._Sensor.OutputType.Mesh3DFlow,
+                }
 
-            # Build list of sensor output types to request
-            sensor_output_types = [
-                output_type_mapping[output_type] for output_type in self.output_types
-            ]
+                # Build list of sensor output types to request (cache it)
+                self._sensor_output_types_cache = [
+                    output_type_mapping[output_type]
+                    for output_type in self.output_types
+                ]
 
-            # Call selectSensorInfo with variable number of arguments
+            # Call selectSensorInfo with cached sensor output types
             # Returns: single np.ndarray if one arg, or tuple of np.ndarray if multiple args
-            results = self.sensor.selectSensorInfo(*sensor_output_types)
+            results = self.sensor.selectSensorInfo(*self._sensor_output_types_cache)
 
             # If only one output type, return single array directly
             # Otherwise return tuple

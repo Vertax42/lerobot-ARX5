@@ -7,9 +7,9 @@ from huggingface_hub import HfApi, create_repo
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
 # 配置
-REPO_ID = "Vertax/xense_bi_arx5_tie_shoelaces"
+REPO_ID = "Vertax/xense_bi_arx5_tie_shoelaces_tactile"
 LOCAL_PATH = (
-    "/home/vertax/.cache/huggingface/lerobot/Vertax/xense_bi_arx5_tie_shoelaces"
+    "/home/vertax/.cache/huggingface/lerobot/Vertax/xense_bi_arx5_tie_shoelaces_tactile"
 )
 
 print(f"🗑️  准备删除并重建远程仓库...")
@@ -54,10 +54,15 @@ print(f"      - total_frames: {dataset.meta.total_frames}")
 print(f"      - total_videos: {dataset.meta.info.get('total_videos', 'N/A')}")
 print()
 
-# 4. Push 到 Hub
-print("🚀 正在 push 到 Hub（这可能需要几分钟）...")
+# 4. Push 到 Hub（使用 upload_large_folder 处理大数据集）
+print("🚀 正在 push 到 Hub（大数据集上传，这可能需要较长时间）...")
+print("   使用 upload_large_folder 方法分批上传...")
+print("   ⚠️  首先清理远程仓库中的所有旧文件...")
 try:
-    dataset.push_to_hub()
+    # 使用 delete_patterns="*" 清理远程所有文件，然后重新上传
+    dataset.push_to_hub(
+        upload_large_folder=True, delete_patterns="*"  # 删除远程所有文件，强制重新上传
+    )
     print("\n✅ 数据集已成功 push 到全新的 Hub 仓库！")
     print(f"\n🔗 查看: https://huggingface.co/datasets/{REPO_ID}")
 except Exception as e:

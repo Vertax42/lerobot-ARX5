@@ -1,0 +1,9 @@
+#!/bin/bash
+# Wrapper for lerobot-teleoperate to ensure correct libstdc++ is loaded
+
+if [ -n "$CONDA_PREFIX" ]; then
+    export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
+    export LD_PRELOAD="$CONDA_PREFIX/lib/libstdc++.so.6"
+fi
+
+exec lerobot-teleoperate "$@"

@@ -62,27 +62,41 @@ class XenseCameraConfig(CameraConfig):
         fps=30,
         output_types=[XenseOutputType.FORCE, XenseOutputType.DEPTH]
     )
+
+    # High-performance configuration with reduced resolution
+    XenseCameraConfig(
+        serial_number="OG000344",
+        fps=30,
+        output_types=[XenseOutputType.DIFFERENCE],
+        rectify_size=(200, 350),  # Reduced from (400, 700) for better performance
+        raw_size=(320, 240)       # Raw sensor resolution
+    )
     ```
 
     Attributes:
         serial_number: Xense sensor serial number (e.g., "OG000344")
         fps: Requested frames per second for data acquisition (default: 60)
-        width: Frame width in pixels (auto-set based on output_types: 400 for images, 20 for force)
-        height: Frame height in pixels (auto-set based on output_types: 700 for images, 35 for force)
+        width: Frame width in pixels (auto-set based on output_types and rectify_size)
+        height: Frame height in pixels (auto-set based on output_types and rectify_size)
         output_types: List of output types to read from the sensor
         warmup_s: Time to wait before returning from connect (in seconds)
+        rectify_size: Rectified image size (width, height), default (400, 700)
+        raw_size: Raw sensor resolution (width, height), default (320, 240)
 
     Note:
-        - Image outputs (DIFFERENCE, RECTIFY) have shape (700, 400, 3)
-        - Depth output has shape (700, 400)
-        - Force distribution output has shape (35, 20, 3)
-        - Force resultant output has shape (6,) representing 6D force/torque
-        - Width and height are automatically set based on the first output type
+        - Image outputs (DIFFERENCE, RECTIFY) default shape: (700, 400, 3)
+        - Depth output default shape: (700, 400)
+        - Force distribution output shape: (35, 20, 3) [fixed]
+        - Force resultant output shape: (6,) [fixed]
+        - Reducing rectify_size improves performance (e.g., (200, 350) is 4x faster)
+        - Width and height are automatically set based on rectify_size if using image outputs
     """
 
     serial_number: str
     output_types: list[XenseOutputType] = None
     warmup_s: float = 0.5
+    rectify_size: tuple[int, int] | None = None  # (width, height) for rectified images
+    raw_size: tuple[int, int] | None = None  # (width, height) for raw sensor data
 
     def __post_init__(self):
         # Set default output types if not provided
@@ -100,9 +114,15 @@ class XenseCameraConfig(CameraConfig):
         if self.fps is None:
             self.fps = 30
 
+        # Set default rectify_size and raw_size if not provided
+        if self.rectify_size is None:
+            self.rectify_size = (400, 700)  # Default full resolution (width, height)
+        if self.raw_size is None:
+            self.raw_size = (640, 480)  # Default raw sensor resolution (width, height)
+
         # Set width and height based on the primary output type
-        # DIFFERENCE/RECTIFY/DEPTH images have shape (700, 400, 3) or (700, 400)
-        # Force/mesh data have shape (35, 20, 3)
+        # DIFFERENCE/RECTIFY/DEPTH images use rectify_size
+        # Force/mesh data have shape (35, 20, 3) [fixed by SDK]
         if self.width is None or self.height is None:
             # Check if using image outputs (DIFFERENCE, RECTIFY, or DEPTH)
             image_outputs = {
@@ -111,13 +131,13 @@ class XenseCameraConfig(CameraConfig):
                 XenseOutputType.DEPTH,
             }
             if any(ot in image_outputs for ot in self.output_types):
-                # Image outputs: height=700, width=400
+                # Image outputs: use rectify_size (width, height)
                 if self.width is None:
-                    self.width = 400
+                    self.width = self.rectify_size[0]
                 if self.height is None:
-                    self.height = 700
+                    self.height = self.rectify_size[1]
             else:
-                # Force/mesh outputs: height=35, width=20
+                # Force/mesh outputs: height=35, width=20 (fixed by SDK)
                 if self.width is None:
                     self.width = 20
                 if self.height is None:

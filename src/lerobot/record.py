@@ -487,7 +487,7 @@ def bi_arx5_record_loop(
         # Handle rerecord_episode event (same as standard record_loop)
         if events["rerecord_episode"]:
             # Don't reset the event here - let the main record() function handle it
-            logging.info("Rerecord episode requested, exiting record loop early")
+            logging.info("Re-record episode requested, exiting record loop early")
             break
 
         # Handle go_home event for BiARX5 robot when recording (non-blocking)
@@ -649,13 +649,9 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     action_features = hw_to_dataset_features(
         robot.action_features, "action", cfg.dataset.video
     )
-    # Filter out tactile sensor features from observation features for dataset
-    # Keep tactile sensors connected for visualization, but don't save to dataset
-    obs_features_filtered = {
-        k: v for k, v in robot.observation_features.items() if "tactile" not in k
-    }
+    # Include all observation features including tactile sensors
     obs_features = hw_to_dataset_features(
-        obs_features_filtered, "observation", cfg.dataset.video
+        robot.observation_features, "observation", cfg.dataset.video
     )
     dataset_features = {**action_features, **obs_features}
 
@@ -814,7 +810,11 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
         try:
             if cfg.dataset.push_to_hub:
-                dataset.push_to_hub(tags=cfg.dataset.tags, private=cfg.dataset.private)
+                dataset.push_to_hub(
+                    tags=cfg.dataset.tags,
+                    private=cfg.dataset.private,
+                    upload_large_folder=True,
+                )
         except Exception as e:
             logging.error(f"Error pushing to hub: {e}")
 

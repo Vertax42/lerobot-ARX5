@@ -75,27 +75,37 @@ class BiARX5Config(RobotConfig):
             "right_wrist": RealSenseCameraConfig(
                 serial_number_or_name="230322274234", fps=60, width=640, height=480
             ),
-            # "right_tactile_0": XenseCameraConfig(
-            #     serial_number="OG000344",
-            #     fps=30,  # Reduced from 60 to reduce loop overhead
-            #     output_types=[XenseOutputType.DIFFERENCE],
-            #     warmup_s=1.0,  # Increased warmup time for stable initialization
-            # ),
+            "right_tactile_0": XenseCameraConfig(
+                serial_number="OG000344",
+                fps=30,  # Reduced from 60 to reduce loop overhead
+                output_types=[XenseOutputType.DIFFERENCE],
+                warmup_s=1.0,  # Increased warmup time for stable initialization
+                rectify_size=(
+                    200,
+                    350,
+                ),  # Reduced from (400, 700) for 4x better performance
+                raw_size=(320, 240),  # Raw sensor resolution
+            ),
             # "right_tactile_1": XenseCameraConfig(
             #     serial_number="OG000352",
             #     fps=30,  # Reduced from 60 to reduce loop overhead
             #     output_types=[XenseOutputType.DIFFERENCE],
             #     warmup_s=1.0,  # Increased warmup time for stable initialization
             # ),
-            # "left_tactile_0": XenseCameraConfig(
-            #     serial_number="OG000339",
-            #     fps=30,  # Reduced from 60 to reduce loop overhead
-            #     output_types=[XenseOutputType.DIFFERENCE],
-            #     warmup_s=1.0,  # Increased warmup time for stable initialization
-            # ),
+            "left_tactile_0": XenseCameraConfig(
+                serial_number="OG000337",
+                fps=30,  # Reduced from 60 to reduce loop overhead
+                output_types=[XenseOutputType.DIFFERENCE],
+                warmup_s=1.0,  # Increased warmup time for stable initialization
+                rectify_size=(
+                    200,
+                    350,
+                ),  # Reduced from (400, 700) for 4x better performance
+                raw_size=(320, 240),  # Raw sensor resolution
+            ),
             # "left_tactile_1": XenseCameraConfig(
-            #     serial_number="OG000337",
-            #     fps=30,  # Reduced from 60 to reduce loop overhead
+            #     serial_number="OG000339",
+            #     fps=60,  # Reduced from 60 to reduce loop overhead
             #     output_types=[XenseOutputType.DIFFERENCE],
             #     warmup_s=1.0,  # Increased warmup time for stable initialization
             # ),
