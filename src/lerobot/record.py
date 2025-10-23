@@ -625,7 +625,19 @@ def bi_arx5_record_loop(
             print("  " + "=" * 50)
 
         if 1 / fps - dt_s < 0:
-            print("⚠️  detected dt_s is too large, dt_s: ", dt_s)
+            # Show which camera is causing the delay
+            camera_info = ""
+            if hasattr(robot, "last_camera_times"):
+                camera_times = robot.last_camera_times
+                slowest_cam = max(camera_times.items(), key=lambda x: x[1])
+                camera_summary = ", ".join(
+                    [f"{k}:{v:.1f}ms" for k, v in sorted(camera_times.items())]
+                )
+                camera_info = f" | 📷 Cameras: {camera_summary} | 🐌 Slowest: {slowest_cam[0]} ({slowest_cam[1]:.1f}ms)"
+
+            print(
+                f"⚠️  detected dt_s is too large, dt_s: {dt_s:.4f}s ({dt_s*1000:.1f}ms){camera_info}"
+            )
         else:
             busy_wait(1 / fps - dt_s)
 

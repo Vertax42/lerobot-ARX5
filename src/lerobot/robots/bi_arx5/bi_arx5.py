@@ -350,22 +350,36 @@ class BiARX5(Robot):
         obs_dict["right_gripper.pos"] = float(right_joint_state.gripper_pos)
 
         # Add camera observations - read all cameras in parallel for better performance
+        camera_times = {}
+
         def read_camera(cam_key, cam):
             start = time.perf_counter()
             image = cam.async_read()
             dt_ms = (time.perf_counter() - start) * 1e3
-            logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
-            return cam_key, image
+            return cam_key, image, dt_ms
 
         # Read all cameras in parallel (significantly faster with multiple cameras)
+        # parallel_start = time.perf_counter()
         with ThreadPoolExecutor(max_workers=len(self.cameras)) as executor:
             futures = [
                 executor.submit(read_camera, cam_key, cam)
                 for cam_key, cam in self.cameras.items()
             ]
             for future in futures:
-                cam_key, image = future.result()
+                cam_key, image, dt_ms = future.result()
                 obs_dict[cam_key] = image
+                camera_times[cam_key] = dt_ms
+
+        # parallel_total = (time.perf_counter() - parallel_start) * 1e3
+
+        # Store camera timing info for debugging
+        self.last_camera_times = camera_times
+
+        # Print camera read times
+        # camera_summary = ", ".join(
+        #     [f"{k}:{v:.1f}ms" for k, v in sorted(camera_times.items())]
+        # )
+        # logger.info(f"📷 Cameras [{parallel_total:.1f}ms total]: {camera_summary}")
 
         return obs_dict
 

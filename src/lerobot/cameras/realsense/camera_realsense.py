@@ -168,6 +168,7 @@ class RealSenseCamera(Camera):
 
         self.rs_pipeline = rs.pipeline()
         rs_config = rs.config()
+        
         self._configure_rs_pipeline_config(rs_config)
 
         try:
