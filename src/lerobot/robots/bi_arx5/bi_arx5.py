@@ -352,25 +352,12 @@ class BiARX5(Robot):
         # Add camera observations - read all cameras in parallel for better performance
         camera_times = {}
 
-        def read_camera(cam_key, cam):
+        for cam_key, cam in self.cameras.items():
             start = time.perf_counter()
             image = cam.async_read()
             dt_ms = (time.perf_counter() - start) * 1e3
-            return cam_key, image, dt_ms
-
-        # Read all cameras in parallel (significantly faster with multiple cameras)
-        # parallel_start = time.perf_counter()
-        with ThreadPoolExecutor(max_workers=len(self.cameras)) as executor:
-            futures = [
-                executor.submit(read_camera, cam_key, cam)
-                for cam_key, cam in self.cameras.items()
-            ]
-            for future in futures:
-                cam_key, image, dt_ms = future.result()
-                obs_dict[cam_key] = image
-                camera_times[cam_key] = dt_ms
-
-        # parallel_total = (time.perf_counter() - parallel_start) * 1e3
+            obs_dict[cam_key] = image
+            camera_times[cam_key] = dt_ms
 
         # Store camera timing info for debugging
         self.last_camera_times = camera_times

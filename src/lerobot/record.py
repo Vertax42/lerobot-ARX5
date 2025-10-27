@@ -139,7 +139,7 @@ class DatasetRecordConfig:
     # Limit the frames per second.
     fps: int = 30
     # Number of seconds for data recording for each episode.
-    episode_time_s: int | float = 60
+    episode_time_s: int | float = 300
     # Number of seconds for resetting the environment after each episode.
     reset_time_s: int | float = 60
     # Number of episodes to record.
@@ -513,27 +513,27 @@ def bi_arx5_record_loop(
             thread.start()
 
         # Get current observation from robot
-        obs_start_time = time.perf_counter()
+        # obs_start_time = time.perf_counter()
         current_observation = robot.get_observation()
-        obs_end_time = time.perf_counter()
-        obs_time = (obs_end_time - obs_start_time) * 1000  # Convert to ms
+        # obs_end_time = time.perf_counter()
+        # obs_time = (obs_end_time - obs_start_time) * 1000  # Convert to ms
 
         current_observation_frame = None
         if dataset is not None:
-            frame_start_time = time.perf_counter()
+            # frame_start_time = time.perf_counter()
             # Note: build_dataset_frame already filters based on dataset.features
             # which excludes tactile sensors (filtered in line 655-656)
             # So we can pass current_observation directly
             current_observation_frame = build_dataset_frame(
                 dataset.features, current_observation, prefix="observation"
             )
-            frame_end_time = time.perf_counter()
-            frame_time = (frame_end_time - frame_start_time) * 1000  # Convert to ms
+        # frame_end_time = time.perf_counter()
+        # frame_time = (frame_end_time - frame_start_time) * 1000  # Convert to ms
 
         # Generate action and save to dataset based on mode
         if policy is not None:
             # Policy mode - use current observation for policy inference
-            policy_start_time = time.perf_counter()
+            # policy_start_time = time.perf_counter()
             action_values = predict_action(
                 current_observation_frame,
                 policy,
@@ -542,26 +542,26 @@ def bi_arx5_record_loop(
                 task=single_task,
                 robot_type=robot.robot_type,
             )
-            policy_end_time = time.perf_counter()
-            policy_time = (policy_end_time - policy_start_time) * 1000  # Convert to ms
+            # policy_end_time = time.perf_counter()
+            # policy_time = (policy_end_time - policy_start_time) * 1000  # Convert to ms
 
-            action_convert_start_time = time.perf_counter()
+            # action_convert_start_time = time.perf_counter()
             current_action = {
                 key: action_values[i].item()
                 for i, key in enumerate(robot.action_features)
             }
-            action_convert_end_time = time.perf_counter()
-            action_convert_time = (
-                action_convert_end_time - action_convert_start_time
-            ) * 1000  # Convert to ms
+            # action_convert_end_time = time.perf_counter()
+            # action_convert_time = (
+            #     action_convert_end_time - action_convert_start_time
+            # ) * 1000  # Convert to ms
 
             # Send action to robot and get the actually sent action
-            send_action_start_time = time.perf_counter()
+            # send_action_start_time = time.perf_counter()
             sent_action = robot.send_action(current_action)
-            send_action_end_time = time.perf_counter()
-            send_action_time = (
-                send_action_end_time - send_action_start_time
-            ) * 1000  # Convert to ms
+            # send_action_end_time = time.perf_counter()
+            # send_action_time = (
+            #     send_action_end_time - send_action_start_time
+            # ) * 1000  # Convert to ms
 
             # Policy mode: save current observation with sent action (no shifting)
             if dataset is not None:
@@ -604,46 +604,9 @@ def bi_arx5_record_loop(
 
         dt_s = time.perf_counter() - start_loop_t
 
-        # Detailed timing debug for policy mode
-        if policy is not None:
-            print("🔍 TIMING DEBUG:")
-            print(f"  📷 Camera observation: {obs_time:.1f}ms")
-            if dataset is not None:
-                print(f"  📦 Frame building: {frame_time:.1f}ms")
-            print(f"  🧠 Policy inference: {policy_time:.1f}ms")
-            print(f"  🔄 Action conversion: {action_convert_time:.1f}ms")
-            print(f"  🤖 Robot send_action: {send_action_time:.1f}ms")
-            print(f"  ⏱️  Total loop time: {dt_s*1000:.1f}ms")
-            print(f"  🎯 Target period: {1000/fps:.1f}ms")
-            print(f"  📊 Loop efficiency: {(1000/fps)/(dt_s*1000)*100:.1f}%")
-
-            # # Display action values
-            # print("  🎮 SENT ACTION:")
-            # for key, value in sent_action.items():
-            #     print(f"    {key}: {value:.4f}")
-
-            print("  " + "=" * 50)
-
-        if 1 / fps - dt_s < 0:
-            # Show which camera is causing the delay
-            camera_info = ""
-            if hasattr(robot, "last_camera_times"):
-                camera_times = robot.last_camera_times
-                slowest_cam = max(camera_times.items(), key=lambda x: x[1])
-                camera_summary = ", ".join(
-                    [f"{k}:{v:.1f}ms" for k, v in sorted(camera_times.items())]
-                )
-                camera_info = f" | 📷 Cameras: {camera_summary} | 🐌 Slowest: {slowest_cam[0]} ({slowest_cam[1]:.1f}ms)"
-
-            print(
-                f"⚠️  detected dt_s is too large, dt_s: {dt_s:.4f}s ({dt_s*1000:.1f}ms){camera_info}"
-            )
-        else:
-            busy_wait(1 / fps - dt_s)
+        busy_wait(1 / fps - dt_s)
 
         timestamp = time.perf_counter() - start_episode_t
-
-    # No processing of last frame - it gets discarded as requested
 
 
 @parser.wrap()

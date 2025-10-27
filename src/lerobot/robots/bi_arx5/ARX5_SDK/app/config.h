@@ -96,7 +96,7 @@ class RobotConfigFactory
             (VecDoF(6) << 20.0, 20.0, 20.5, 20.5, 20.0, 20.0).finished(),        // joint_vel_max
             (VecDoF(6) << 30.0, 40.0, 30.0, 15.0, 10.0, 10.0).finished(),  // joint_torque_max
             (Pose6d() << 0.6, 0.6, 0.6, 1.8, 1.8, 1.8).finished(),         // ee_vel_max
-            5.6,                                                           // gripper_vel_max 0.3 m/s -> 5.6 rads/s (scaled with gripper_width)
+            20.0,                                                           // gripper_vel_max 0.3 m/s -> 5.6 rads/s (scaled with gripper_width)
             1.5,                                                           // gripper_torque_max
             1.57,                                                          // gripper_width (meters) 0.084m -> 1.57 rads
             -3.4,                                                          // gripper_open_readout

@@ -108,21 +108,34 @@ lerobot-record \
 
 lerobot-record \
     --robot.type=bi_arx5 \
+    --robot.enable_tactile_sensors=true \
     --teleop.type=mock_teleop \
-    --dataset.repo_id=Vertax/xense_bi_arx5_tie_shoelaces_tactile_test \
+    --dataset.repo_id=Vertax/xense_bi_arx5_tie_shoelaces_tactile \
     --dataset.num_episodes=100 \
-    --dataset.single_task="Insert the two black shoelaces into the four shoe holes respectively" \
+    --dataset.single_task="tie shoelaces"
     --dataset.fps=30 \
     --dataset.episode_time_s=300 \
     --display_data=false \
     --resume=false \
-    --dataset.push_to_hub=false
+    --dataset.push_to_hub=true
+
+lerobot-record \
+    --robot.type=bi_arx5 \
+    --teleop.type=mock_teleop \
+    --dataset.repo_id=Vertax/xense_bi_arx5_tie_shoelaces_high_quality \
+    --dataset.num_episodes=100 \
+    --dataset.single_task="tie shoelaces" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=300 \
+    --display_data=false \
+    --resume=true \
+    --dataset.push_to_hub=true
 
 ## BiARX5 Robot lerobot-replay command
-lerobot-replay \
-    --robot.type=bi_arx5 \
-    --dataset.repo_id=Vertax/xense_bi_arx5_pick_and_place_cube \
-    --dataset.episode=0
+    lerobot-replay \
+        --robot.type=bi_arx5 \
+        --dataset.repo_id=Vertax/xense_bi_arx5_pick_and_place_cube \
+        --dataset.episode=0
 
 ## BiARX5 Robot lerobot-train command act
 lerobot-train \

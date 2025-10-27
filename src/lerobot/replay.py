@@ -129,6 +129,10 @@ def replay(cfg: ReplayConfig):
             action_array = actions[idx]["action"]
             action = {}
             for i, name in enumerate(action_names):
+                if name == "right_gripper.pos" and action_array[i] < 0.08:
+                    action_array[i] = 0.0
+                if name == "left_gripper.pos" and action_array[i] < 0.08:
+                    action_array[i] = 0.0
                 action[name] = action_array[i]
 
             # Debug: Print action instead of sending to robot
