@@ -1,3 +1,53 @@
+# ARX5 SDK
+conda install ros-humble-kdl-parser ros-humble-ament-cmake cxx-compiler cmake ninja orocos-kdl eigen boost spdlog pybind11 numpy click pyzmq pynput pip conda-forge::soem=1.4.0 -c robostack-staging -c conda-forge
+
+pip install atomics spnav@https://github.com/cheng-chi/spnav/archive/c1c938ebe3cc542db4685e0d13850ff1abfdb943.tar.gz pyrealsense2
+
+sudo setcap cap_sys_nice=ep $(readlink -f $CONDA_PREFIX/bin/python)
+
+# for openpi-client compatibility
+<!-- pip install opencv-python==4.9.0.80 4.10.0.84
+pip install opencv-python-headless==4.9.0.80 -->
+<!-- pip install numpy==2.2.6 -, 1.26.4 -->
+
+# C++ ABI version issue
+/home/vertax/miniconda3/envs/lerobot-openpi/lib/python3.11/site-packages/sitecustomize.py
+```python
+"""
+Sitecustomize for lerobot-openpi environment.
+
+This file is automatically executed when Python starts.
+It preloads the conda environment's libstdc++.so.6 to ensure C++ extensions
+compiled with GCC 14.3.0 can find the required CXXABI_1.3.15 symbols.
+"""
+import os
+import ctypes
+
+conda_prefix = os.environ.get('CONDA_PREFIX')
+if conda_prefix:
+    libstdcxx_path = os.path.join(conda_prefix, 'lib', 'libstdc++.so.6')
+    if os.path.exists(libstdcxx_path):
+        try:
+            # Preload with RTLD_GLOBAL so all subsequently loaded modules can use it
+            ctypes.CDLL(libstdcxx_path, mode=ctypes.RTLD_GLOBAL)
+        except Exception:
+            # Silently fail if preloading doesn't work
+            pass
+```
+
+# Xense SDK
+2. **Install missing dependencies** (as noted in xensesdk README):
+   ```bash
+    pip install scipy cypack cryptography pyudev PyOpenGL PyOpenGL-accelerate assimp_py==1.0.7 qtpy PyQt5 h5py lz4 -i https://mirrors.huaweicloud.com/repository/pypi/simple
+    pip install cyclonedds-nightly==2025.7.29 -i https://mirrors.huaweicloud.com/repository/pypi/simple
+    pip install xensesdk==1.6.3 -i https://mirrors.huaweicloud.com/repository/pypi/simple
+    conda install cuda-toolkit=12.9 -c nvidia
+    conda install nvidia:cudnn cuda-version=12
+    pip install onnxruntime-gpu==1.19.2
+    mkdir -p $CONDA_PREFIX/etc/conda/activate.d && echo 'export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$CONDA_PREFIX/lib64:$LD_LIBRARY_PATH' > $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
+   ```
+
+
 # ARX_X5 CAN Bus Diagram
 
 ```
@@ -66,11 +116,6 @@ ControllerConfigFactory()
     }
 ```
 
-## for openpi-client compatibility
-<!-- pip install opencv-python==4.9.0.80 4.10.0.84
-pip install opencv-python-headless==4.9.0.80 -->
-<!-- pip install numpy==2.2.6 -, 1.26.4 -->
-
 # Lerobot-integration with ARX_X5
 ## BiARX5 Robot lerobot-teleoperate command
 lerobot-teleoperate \
@@ -131,11 +176,60 @@ lerobot-record \
     --resume=true \
     --dataset.push_to_hub=true
 
+lerobot-record \
+    --robot.type=bi_arx5 \
+    --teleop.type=mock_teleop \
+    --dataset.repo_id=Vertax/xense_bi_arx5_tie_shoelaces_1027 \
+    --dataset.num_episodes=100 \
+    --dataset.single_task="tie shoelaces" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=300 \
+    --display_data=false \
+    --resume=true \
+    --dataset.push_to_hub=true
+
+lerobot-record \
+    --robot.type=bi_arx5 \
+    --teleop.type=mock_teleop \
+    --dataset.repo_id=Vertax/xense_bi_arx5_tie_white_shoelaces_1028 \
+    --dataset.num_episodes=100 \
+    --dataset.single_task="tie shoelaces" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=300 \
+    --display_data=false \
+    --resume=true \
+    --dataset.push_to_hub=true
+
+lerobot-record \
+    --robot.type=bi_arx5 \
+    --teleop.type=mock_teleop \
+    --dataset.repo_id=Vertax/xense_bi_arx5_tie_white_shoelaces_1030_no_adjust \
+    --dataset.num_episodes=100 \
+    --dataset.single_task="tie shoelaces" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=300 \
+    --display_data=false \
+    --resume=true \
+    --dataset.push_to_hub=true
+
+lerobot-record \
+    --robot.type=bi_arx5 \
+    --robot.enable_tactile_sensors=true \
+    --teleop.type=mock_teleop \
+    --dataset.repo_id=Vertax/xense_bi_arx5_tie_white_shoelaces_tactile_1105 \
+    --dataset.num_episodes=5 \
+    --dataset.single_task="tie shoelaces" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=300 \
+    --display_data=false \
+    --resume=false \
+    --dataset.push_to_hub=true
+
 ## BiARX5 Robot lerobot-replay command
-    lerobot-replay \
-        --robot.type=bi_arx5 \
-        --dataset.repo_id=Vertax/xense_bi_arx5_pick_and_place_cube \
-        --dataset.episode=0
+lerobot-replay \
+    --robot.type=bi_arx5 \
+    --dataset.repo_id=Vertax/xense_bi_arx5_tie_shoelaces_1027 \
+    --dataset.episode=0
 
 ## BiARX5 Robot lerobot-train command act
 lerobot-train \
@@ -201,31 +295,3 @@ lerobot-record  \
   --dataset.repo_id=Vertax/eval_diffusion_bi_arx5_pick_and_place_cube \
   --dataset.single_task="pick and place cube" \
   --policy.path=outputs/train/diffusion_bi_arx5_pick_and_place_cube/checkpoints/last/pretrained_model
-
-
-## C++ ABI version issue
-/home/vertax/miniconda3/envs/lerobot-openpi/lib/python3.11/site-packages/sitecustomize.py
-```python
-"""
-Sitecustomize for lerobot-openpi environment.
-
-This file is automatically executed when Python starts.
-It preloads the conda environment's libstdc++.so.6 to ensure C++ extensions
-compiled with GCC 14.3.0 can find the required CXXABI_1.3.15 symbols.
-"""
-import os
-import ctypes
-
-conda_prefix = os.environ.get('CONDA_PREFIX')
-if conda_prefix:
-    libstdcxx_path = os.path.join(conda_prefix, 'lib', 'libstdc++.so.6')
-    if os.path.exists(libstdcxx_path):
-        try:
-            # Preload with RTLD_GLOBAL so all subsequently loaded modules can use it
-            ctypes.CDLL(libstdcxx_path, mode=ctypes.RTLD_GLOBAL)
-        except Exception:
-            # Silently fail if preloading doesn't work
-            pass
-```
-
-

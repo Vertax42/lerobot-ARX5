@@ -23,7 +23,13 @@ The Xense tactile sensor provides rich tactile-visual information including:
 
 2. **Install missing dependencies** (as noted in xensesdk README):
    ```bash
-   pip install cypack cryptography pyudev assimp_py==1.0.7 qtpy PyQt5 h5py lz4
+    pip install scipy cypack cryptography pyudev assimp_py==1.0.7 qtpy PyQt5 h5py lz4 -i https://mirrors.huaweicloud.com/repository/pypi/simple
+    pip install cyclonedds-nightly==2025.7.29 -i https://mirrors.huaweicloud.com/repository/pypi/simple
+    pip install xensesdk==1.6.3 -i https://mirrors.huaweicloud.com/repository/pypi/simple
+    conda install cuda-toolkit=12.9 -c nvidia
+    conda install cudnn -c conda-forge -y
+    pip install onnxruntime-gpu==1.19.2
+    export LD_LIBRARY_PATH=$CONDA_PREFIX/lib/:$LD_LIBRARY_PATH
    ```
 
 ## Quick Start
@@ -163,10 +169,97 @@ cameras = {
 
 ## Performance Notes
 
-- **Recommended FPS**: 60 Hz for force sensing
+- **Recommended FPS**: 60 Hz for force sensing (reduce to 30 Hz if experiencing V4L2 timeouts)
 - **Warmup Time**: 0.5s default (adjustable via `warmup_s`)
 - **Async Reading**: Uses background thread for non-blocking reads
 - **Timeout**: 200ms default for async reads (adjustable)
+
+## V4L2 High Load Handling
+
+Under high system load (multiple cameras, recording), V4L2 timeout warnings may occur:
+```
+[ WARN:35@48.719] global cap_v4l.cpp:1049 tryIoctl VIDEOIO(V4L2:/dev/video22): select() timeout.
+```
+
+### Automatic Handling
+
+The camera automatically handles V4L2 timeouts:
+- **Retry Logic**: Automatically retries up to 3 times on timeout errors
+- **Smart Error Suppression**: Only logs warnings after 10 consecutive failures
+- **Exponential Backoff**: Adds delays between retries to reduce system load
+- **Graceful Degradation**: Continues operation even with occasional timeouts
+
+### Optimization Strategies
+
+#### 1. Reduce FPS (Most Effective)
+```python
+# Lower FPS reduces V4L2 load significantly
+XenseCameraConfig(
+    serial_number="OG000344",
+    fps=30,  # Reduced from 60 to 30 Hz
+    output_types=[XenseOutputType.DIFFERENCE],
+)
+```
+
+#### 2. Reduce Resolution (High Impact)
+```python
+# Reducing rectify_size improves performance by 4x
+XenseCameraConfig(
+    serial_number="OG000344",
+    fps=60,
+    output_types=[XenseOutputType.DIFFERENCE],
+    rectify_size=(200, 350),  # Reduced from (400, 700)
+    raw_size=(320, 240),
+)
+```
+
+#### 3. Use Only Necessary Output Types
+```python
+# Request only needed data types to reduce processing
+XenseCameraConfig(
+    serial_number="OG000344",
+    fps=60,
+    output_types=[XenseOutputType.DIFFERENCE],  # Only difference, not force + depth
+)
+```
+
+#### 4. Increase Warmup Time
+```python
+# Longer warmup helps stabilize sensor under load
+XenseCameraConfig(
+    serial_number="OG000344",
+    fps=60,
+    warmup_s=1.5,  # Increased from 0.5s
+)
+```
+
+#### 5. Recommended High-Load Configuration
+```python
+# Optimized configuration for recording with multiple cameras
+XenseCameraConfig(
+    serial_number="OG000344",
+    fps=30,  # Reduced FPS
+    output_types=[XenseOutputType.DIFFERENCE],  # Minimal output
+    rectify_size=(200, 350),  # Reduced resolution
+    warmup_s=1.0,  # Longer warmup
+)
+```
+
+### System-Level Optimizations
+
+1. **Grant Real-Time Priority** (for CAN communication):
+   ```bash
+   sudo setcap cap_sys_nice=ep $(readlink -f $(which python))
+   ```
+
+2. **Reduce Other Camera FPS**: If using multiple cameras, reduce FPS across all:
+   ```python
+   # Reduce all camera FPS proportionally
+   RealSenseCameraConfig(fps=30, ...)  # Instead of 60
+   XenseCameraConfig(fps=30, ...)      # Instead of 60
+   ```
+
+3. **Monitor System Load**: Use `htop` to check CPU/memory usage during recording
 
 ## Troubleshooting
 

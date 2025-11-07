@@ -141,6 +141,9 @@ def replay(cfg: ReplayConfig):
 
             dt_s = time.perf_counter() - start_episode_t
             busy_wait(1 / dataset.fps - dt_s)
+            if idx % dataset.fps == 0:
+                logging.info(f"Replayed {idx} frames")
+                time.sleep(0.3)
 
     except KeyboardInterrupt:
         logging.info("\nKeyboardInterrupt received. Stopping replay...")

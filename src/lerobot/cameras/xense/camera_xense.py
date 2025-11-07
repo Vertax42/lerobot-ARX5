@@ -24,6 +24,7 @@ from typing import Any
 import numpy as np
 
 from lerobot.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
+from xensesdk import CameraSource
 
 from ..camera import Camera
 from .configuration_xense import XenseCameraConfig, XenseOutputType
@@ -131,8 +132,10 @@ class XenseTactileCamera(Camera):
             raise DeviceAlreadyConnectedError(f"{self} is already connected.")
 
         try:
+            # Use default OpenCV backend (no api parameter = CV2_V4L2)
             self.sensor = self._Sensor.create(
                 self.serial_number,
+                # api=CameraSource.AV_V4L2,
                 rectify_size=self.rectify_size,
                 raw_size=self.raw_size,
             )
@@ -143,9 +146,8 @@ class XenseTactileCamera(Camera):
             ) from e
 
         if warmup:
+            # time.sleep(2)
             # Start background thread first for async_read
-            self._start_read_thread()
-
             # Do warmup reads to stabilize the sensor
             start_time = time.time()
             while time.time() - start_time < self.warmup_s:
@@ -154,8 +156,9 @@ class XenseTactileCamera(Camera):
                 except Exception:
                     pass  # Ignore errors during warmup
                 time.sleep(0.1)
+            self._start_read_thread()
 
-        logger.info(f"{self} connected.")
+        logger.info(f"{self} connected with AV_V4L2 API (Fmpeg backend)")
 
     @staticmethod
     def find_cameras() -> list[dict[str, Any]]:

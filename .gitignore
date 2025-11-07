@@ -175,3 +175,5 @@ outputs/
 
 # Datasets
 datasets/
+
+arx5_interface*.so

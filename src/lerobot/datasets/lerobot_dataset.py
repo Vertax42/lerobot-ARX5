@@ -996,6 +996,11 @@ class LeRobotDataset(torch.utils.data.Dataset):
     def clear_episode_buffer(self) -> None:
         episode_index = self.episode_buffer["episode_index"]
 
+        # CRITICAL: Wait for async image writer to finish before deleting directories
+        # This prevents race conditions where background threads are still writing images
+        # while we try to delete the directory (which causes "Directory not empty" errors)
+        self._wait_image_writer()
+
         # Clean up image files for the current episode buffer
         if self.image_writer is not None:
             for cam_key in self.meta.camera_keys:

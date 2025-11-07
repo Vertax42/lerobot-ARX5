@@ -17,6 +17,7 @@
 from dataclasses import dataclass, field
 
 from lerobot.cameras import CameraConfig
+from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.cameras.xense import XenseCameraConfig, XenseOutputType
 
@@ -34,7 +35,7 @@ class BiARX5Config(RobotConfig):
     log_level: str = "DEBUG"
     use_multithreading: bool = True
     rpc_timeout: float = 10.0
-    controller_dt: float = 0.005  # 100Hz / 200Hz
+    controller_dt: float = 0.01  # 100Hz / 200Hz
     interpolation_controller_dt: float = 0.01
     inference_mode: bool = False
     enable_tactile_sensors: bool = False  # whether to enable tactile sensors
@@ -57,18 +58,45 @@ class BiARX5Config(RobotConfig):
         # if enable tactile sensors, add Xense configuration
         if self.enable_tactile_sensors:
             self.cameras = {
+                # "head": OpenCVCameraConfig(
+                #     index_or_path="/dev/video8",
+                #     fps=60,
+                #     width=640,
+                #     height=480,
+                # ),
+                # "left_wrist": OpenCVCameraConfig(
+                #     index_or_path="/dev/video2",
+                #     fps=60,
+                #     width=640,
+                #     height=480,
+                # ),
+                # "right_wrist": OpenCVCameraConfig(
+                #     index_or_path="/dev/video14",
+                #     fps=60,
+                #     width=640,
+                #     height=480,
+                # ),
                 "head": RealSenseCameraConfig(
-                    serial_number_or_name="230322271365", fps=60, width=640, height=480
+                    serial_number_or_name="230322271365",
+                    fps=60,
+                    width=640,
+                    height=480,
                 ),
                 "left_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230422271416", fps=60, width=640, height=480
+                    serial_number_or_name="230422271416",
+                    fps=60,
+                    width=640,
+                    height=480,
                 ),
                 "right_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230322274234", fps=60, width=640, height=480
+                    serial_number_or_name="230322274234",
+                    fps=60,
+                    width=640,
+                    height=480,
                 ),
                 "right_tactile_0": XenseCameraConfig(
                     serial_number="OG000344",
-                    fps=60,  # Reduced from 60 to reduce loop overhead
+                    fps=30,  # Reduced from 60 to reduce loop overhead
                     output_types=[XenseOutputType.DIFFERENCE],
                     warmup_s=1.0,  # Increased warmup time for stable initialization
                     # rectify_size=(
@@ -79,7 +107,7 @@ class BiARX5Config(RobotConfig):
                 ),
                 "left_tactile_0": XenseCameraConfig(
                     serial_number="OG000337",
-                    fps=60,  # Reduced from 60 to reduce loop overhead
+                    fps=30,  # Reduced from 60 to reduce loop overhead
                     output_types=[XenseOutputType.DIFFERENCE],
                     warmup_s=1.0,  # Increased warmup time for stable initialization
                     # rectify_size=(

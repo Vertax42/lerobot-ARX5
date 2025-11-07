@@ -245,20 +245,32 @@ class BiARX5(Robot):
 
         zero_grav_gain = self.left_arm.get_gain()
         zero_grav_gain.kp()[:] = 0.0
-        zero_grav_gain.kd()[:] = (
-            self.controller_configs["left_config"].default_kd * 0.15
-        )
+        zero_grav_gain.kd()[:] = self.controller_configs["left_config"].default_kd * 0.1
+
+        # Multiply the last three values by 0.2
+        # zero_grav_gain.kd()[-3:] *= 0.02
+
         zero_grav_gain.gripper_kp = 0.0
         zero_grav_gain.gripper_kd = (
-            self.controller_configs["left_config"].default_gripper_kd * 0.25
+            self.controller_configs["left_config"].default_gripper_kd * 0.1
         )
 
         self.left_arm.set_gain(zero_grav_gain)
         self.right_arm.set_gain(zero_grav_gain)
 
-        # connect cameras
-        for cam in self.cameras.values():
+        # connect cameras with delay between Xense cameras to avoid V4L2 timeout
+        xense_camera_count = 0
+        for cam_name, cam in self.cameras.items():
+            # Add delay before connecting Xense cameras (except the first one)
+            if "tactile" in cam_name and xense_camera_count > 0:
+                logger.info(f"Waiting 2s before connecting {cam_name} to avoid V4L2 timeout...")
+                time.sleep(2.0)
+            
             cam.connect()
+            
+            # Track Xense camera connections
+            if "tactile" in cam_name:
+                xense_camera_count += 1
 
         # Initialize command buffers for optimized send_action
         self._left_cmd_buffer = arx5.JointState(
@@ -740,12 +752,14 @@ class BiARX5(Robot):
         # reset to zero pd with 0.5 kd
         zero_grav_gain = arx5.Gain(self.robot_configs["left_config"].joint_dof)
         zero_grav_gain.kp()[:] = 0.0
-        zero_grav_gain.kd()[:] = (
-            self.controller_configs["left_config"].default_kd * 0.15
-        )
+        zero_grav_gain.kd()[:] = self.controller_configs["left_config"].default_kd * 0.1
+
+        # Multiply the last three values by 0.02
+        # zero_grav_gain.kd()[-3:] *= 0.02
+
         zero_grav_gain.gripper_kp = 0.0
         zero_grav_gain.gripper_kd = (
-            self.controller_configs["left_config"].default_gripper_kd * 0.25
+            self.controller_configs["left_config"].default_gripper_kd * 0.1
         )
 
         self.left_arm.set_gain(zero_grav_gain)
@@ -766,8 +780,13 @@ class BiARX5(Robot):
 
         # reset to default gain
         default_gain = self.left_arm.get_gain()
-        default_gain.kp()[:] = self.controller_configs["left_config"].default_kp * 0.5
-        default_gain.kd()[:] = self.controller_configs["left_config"].default_kd * 2.0
+        default_gain.kp()[:] = self.controller_configs["left_config"].default_kp * 0.4
+        default_gain.kd()[:] = self.controller_configs["left_config"].default_kd * 1.2
+
+        if self.config.inference_mode:
+            default_gain.kp()[-3:] *= 1.5
+            default_gain.kd()[-3:] *= 0.5
+
         default_gain.gripper_kp = self.controller_configs[
             "left_config"
         ].default_gripper_kp

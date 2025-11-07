@@ -265,25 +265,6 @@ def bi_arx5_teleop_loop(
         loop_s = time.perf_counter() - loop_start
         timing_stats["loop_times"].append(loop_s * 1000)  # Convert to ms
 
-        # Display current state with specific observation values (commented out for timing focus)
-        # print("\n" + "-" * (display_len + 15))
-        # print(f"{'NAME':<{display_len}} | {'VALUE':>10}")
-        # for motor, value in action.items():
-        #     print(f"{motor:<{display_len}} | {value:>10.4f}")
-
-        # Display additional observation info (commented out for timing focus)
-        # left_joints = [
-        #     f"{observation.get(f'left_joint_{i+1}.pos', 0):.3f}" for i in range(6)
-        # ]
-        # right_joints = [
-        #     f"{observation.get(f'right_joint_{i+1}.pos', 0):.3f}" for i in range(6)
-        # ]
-        # print(f"\nLeft arm joints: {left_joints}")
-        # print(f"Right arm joints: {right_joints}")
-        # print(f"Left gripper: {observation.get('left_gripper.pos', 0):.3f}")
-        # print(f"Right gripper: {observation.get('right_gripper.pos', 0):.3f}")
-
-        # Display detailed timing analysis
         if debug_timing:
             # Clear screen and display timing info
             import os
@@ -324,44 +305,6 @@ def bi_arx5_teleop_loop(
                 for cam_key, cam_time_ms in camera_times.items():
                     if cam_time_ms > 10:
                         print(f"  🐌 {cam_key}: {cam_time_ms:.1f}ms")
-
-            # # Calculate and display statistics every 30 loops
-            # if (
-            #     len(timing_stats["robot_obs_times"]) > 0
-            #     and len(timing_stats["robot_obs_times"]) % 30 == 0
-            # ):
-            #     print("\n=== TIMING STATISTICS (last 30 loops) ===")
-            #     recent_robot = timing_stats["robot_obs_times"][-30:]
-            #     recent_total = timing_stats["total_obs_times"][-30:]
-            #     recent_loops = timing_stats["loop_times"][-30:]
-
-            #     print(
-            #         f"Robot obs - avg: {sum(recent_robot)/len(recent_robot):.2f}ms, "
-            #         f"min: {min(recent_robot):.2f}ms, max: {max(recent_robot):.2f}ms"
-            #     )
-            #     print(
-            #         f"Total obs - avg: {sum(recent_total)/len(recent_total):.2f}ms, "
-            #         f"min: {min(recent_total):.2f}ms, max: {max(recent_total):.2f}ms"
-            #     )
-            #     print(
-            #         f"Loop time - avg: {sum(recent_loops)/len(recent_loops):.2f}ms, "
-            #         f"min: {min(recent_loops):.2f}ms, max: {max(recent_loops):.2f}ms"
-            #     )
-
-            # Calculate synchronization metrics
-            # robot_camera_delay = []
-            # for i in range(len(recent_robot)):
-            #     if i < len(recent_total):
-            #         delay = (
-            #             recent_total[i] - recent_robot[i]
-            #         )  # Camera delay relative to robot
-            #         robot_camera_delay.append(delay)
-
-            # if robot_camera_delay:
-            #     avg_delay = sum(robot_camera_delay) / len(robot_camera_delay)
-            #     print(f"Avg camera delay: {avg_delay:.2f}ms")
-            #     if abs(avg_delay) > 5:  # If delay > 5ms, warn user
-            #         print("⚠️  WARNING: Significant timing difference detected!")
 
         if duration is not None and time.perf_counter() - start >= duration:
             # Print final statistics before exiting
