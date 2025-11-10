@@ -63,6 +63,7 @@ from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # no
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
+    arx5_follower,
     bi_so100_follower,
     hope_jr,
     koch_follower,
@@ -73,6 +74,7 @@ from lerobot.robots import (  # noqa: F401
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
     TeleoperatorConfig,
+    arx5_leader,
     bi_so100_leader,
     gamepad,
     homunculus,

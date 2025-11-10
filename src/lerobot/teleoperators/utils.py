@@ -41,6 +41,10 @@ def make_teleoperator_from_config(config: TeleoperatorConfig) -> Teleoperator:
         from .widowx import WidowX
 
         return WidowX(config)
+    elif config.type == "arx5_leader":
+        from .arx5_leader import ARX5Leader
+
+        return ARX5Leader(config)
     elif config.type == "mock_teleop":
         import sys
         import os

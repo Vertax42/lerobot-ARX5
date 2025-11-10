@@ -47,6 +47,7 @@ from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
     TeleoperatorConfig,
     homunculus,
+    arx5_leader,
     koch_leader,
     make_teleoperator_from_config,
     so100_leader,
@@ -77,9 +78,25 @@ def calibrate(cfg: CalibrateConfig):
     elif isinstance(cfg.device, TeleoperatorConfig):
         device = make_teleoperator_from_config(cfg.device)
 
-    device.connect(calibrate=False)
-    device.calibrate()
-    device.disconnect()
+    try:
+        device.connect(calibrate=False)
+        device.calibrate()
+    except KeyboardInterrupt:
+        logging.info("\nKeyboardInterrupt received. Stopping calibration...")
+    except Exception as e:
+        logging.error(f"Error during calibration: {e}")
+        raise
+    finally:
+        # Always disconnect device safely
+        try:
+            if hasattr(device, "is_connected") and device.is_connected:
+                logging.info("Disconnecting device...")
+                device.disconnect()
+                logging.info("✓ Device disconnected safely")
+        except Exception as e:
+            logging.error(f"Error during device disconnect: {e}")
+
+    logging.info("Calibration completed.")
 
 
 def main():

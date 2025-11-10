@@ -65,6 +65,10 @@ def make_robot_from_config(config: RobotConfig) -> Robot:
         from .bi_arx5 import BiARX5
 
         return BiARX5(config)
+    elif config.type == "arx5_follower":
+        from .arx5_follower import ARX5Follower
+
+        return ARX5Follower(config)
     elif config.type == "mock_robot":
         from tests.mocks.mock_robot import MockRobot
 
