@@ -120,11 +120,11 @@ ControllerConfigFactory()
 ## BiARX5 Robot lerobot-teleoperate command
 lerobot-teleoperate \
     --robot.type=bi_arx5 \
+    --robot.enable_tactile_sensors=true \
     --teleop.type=mock_teleop \
     --fps=30 \
     --debug_timing=false \
     --display_data=true
-
 
 ## BiARX5 Robot lerobot-record command
 lerobot-record \
