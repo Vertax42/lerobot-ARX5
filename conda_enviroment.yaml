@@ -1,4 +1,4 @@
-name: tacxense
+name: lerobot-tacxense
 channels:
   - robostack-staging
   - conda-forge

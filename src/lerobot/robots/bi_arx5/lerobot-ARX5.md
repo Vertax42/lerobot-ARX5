@@ -10,6 +10,8 @@ pip install atomics spnav@https://github.com/cheng-chi/spnav/archive/c1c938ebe3c
 pip install opencv-python-headless==4.9.0.80 -->
 <!-- pip install numpy==2.2.6 -, 1.26.4 -->
 
+sudo setcap cap_sys_nice+ep $(readlink -f $(which python))
+
 # C++ ABI version issue
 /home/vertax/miniconda3/envs/lerobot-openpi/lib/python3.11/site-packages/sitecustomize.py
 ```python
