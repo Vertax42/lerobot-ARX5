@@ -240,9 +240,30 @@ class XenseTactileCamera(Camera):
             # Returns: single np.ndarray if one arg, or tuple of np.ndarray if multiple args
             results = self.sensor.selectSensorInfo(*self._sensor_output_types_cache)
 
-            # If only one output type, return single array directly
-            # Otherwise return tuple
-            return results
+            image_outputs = {
+                XenseOutputType.RECTIFY,
+                XenseOutputType.DIFFERENCE,
+                XenseOutputType.DEPTH,
+            }
+
+            if isinstance(results, tuple):
+                processed_results = []
+                for i, output_type in enumerate(self.output_types):
+                    data = results[i]
+                    if output_type in image_outputs and len(data.shape) >= 2:
+                        # Transpose to swap h and w dimensions
+                        data = np.transpose(
+                            data, (1, 0) + tuple(range(2, len(data.shape)))
+                        )
+                        processed_results.append(data)
+                return tuple(processed_results)
+            else:
+                # single output type
+                if self.output_types[0] in image_outputs and len(results.shape) >= 2:
+                    results = np.transpose(
+                        results, (1, 0) + tuple(range(2, len(results.shape)))
+                    )
+                return results
 
         except Exception as e:
             raise RuntimeError(f"{self} failed to read sensor data: {e}") from e
