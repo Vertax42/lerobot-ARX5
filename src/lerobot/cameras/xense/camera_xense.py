@@ -240,11 +240,15 @@ class XenseTactileCamera(Camera):
             # Returns: single np.ndarray if one arg, or tuple of np.ndarray if multiple args
             results = self.sensor.selectSensorInfo(*self._sensor_output_types_cache)
 
+            # image_outputs definition
             image_outputs = {
                 XenseOutputType.RECTIFY,
                 XenseOutputType.DIFFERENCE,
                 XenseOutputType.DEPTH,
             }
+
+            # DEBUG: Check if output type is in image_outputs
+            # print(f"DEBUG: output_type={self.output_types[0]}, in_image_outputs={self.output_types[0] in image_outputs}")
 
             if isinstance(results, tuple):
                 processed_results = []
@@ -260,9 +264,11 @@ class XenseTactileCamera(Camera):
             else:
                 # single output type
                 if self.output_types[0] in image_outputs and len(results.shape) >= 2:
+                    # print(f"DEBUG: Transposing shape {results.shape}")
                     results = np.transpose(
                         results, (1, 0) + tuple(range(2, len(results.shape)))
                     )
+                    # print(f"DEBUG: Transposed shape {results.shape}")
                 return results
 
         except Exception as e:

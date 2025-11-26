@@ -143,10 +143,11 @@ lerobot-record \
 
 lerobot-record \
     --robot.type=bi_arx5 \
+    --robot.enable_tactile_sensors=true \
     --teleop.type=mock_teleop \
-    --dataset.repo_id=Vertax/xense_bi_arx5_insert_shoelaces_high_quality \
-    --dataset.num_episodes=100 \
-    --dataset.single_task="Insert the two black shoelaces into the four shoe holes respectively" \
+    --dataset.repo_id=Xense/xense_bi_arx5_tie_shoelaces \
+    --dataset.num_episodes=5 \
+    --dataset.single_task="tie shoelaces" \
     --dataset.fps=30 \
     --dataset.episode_time_s=300 \
     --display_data=false \

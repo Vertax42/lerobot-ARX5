@@ -173,6 +173,7 @@ class BiARX5(Robot):
 
     @cached_property
     def observation_features(self) -> dict[str, type | tuple]:
+        print(f"camera_features: {self._cameras_ft}")
         return {**self._motors_ft, **self._cameras_ft}
 
     @cached_property

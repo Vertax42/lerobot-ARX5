@@ -42,7 +42,7 @@ class BiARX5Config(RobotConfig):
     # Higher values (0.03-0.05) provide smoother motion but more delay
     # Lower values (0.01-0.02) are more responsive but may cause jittering
     preview_time: float = 0.0  # Default 30ms for smooth inference
-    gripper_open_readout: list[float] = field(default_factory=lambda: [-3.46, -3.49])
+    gripper_open_readout: list[float] = field(default_factory=lambda: [-3.5, -3.49])
     home_position: list[float] = field(
         default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     )
@@ -71,22 +71,16 @@ class BiARX5Config(RobotConfig):
                     fps=60,  # Reduced from 60 to reduce loop overhead
                     output_types=[XenseOutputType.DIFFERENCE],
                     warmup_s=1.0,  # Increased warmup time for stable initialization
-                    # rectify_size=(
-                    #     200,
-                    #     350,
-                    # ),  # Reduced from (400, 700) for 4x better performance
-                    # raw_size=(320, 240),  # Raw sensor resolution
+                    # width=700,
+                    # height=400,
                 ),
                 "left_tactile_0": XenseCameraConfig(
                     serial_number="OG000337",
                     fps=60,  # Reduced from 60 to reduce loop overhead
                     output_types=[XenseOutputType.DIFFERENCE],
                     warmup_s=1.0,  # Increased warmup time for stable initialization
-                    # rectify_size=(
-                    #     200,
-                    #     350,
-                    # ),  # Reduced from (400, 700) for 4x better performance
-                    # raw_size=(320, 240),  # Raw sensor resolution
+                    # width=700,
+                    # height=400,
                 ),
             }
         else:

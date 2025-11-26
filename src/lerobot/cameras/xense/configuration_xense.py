@@ -116,7 +116,10 @@ class XenseCameraConfig(CameraConfig):
 
         # Set default rectify_size and raw_size if not provided
         if self.rectify_size is None:
-            self.rectify_size = (400, 700)  # Default full resolution (width, height)
+            self.rectify_size = (
+                400,
+                700,
+            )  # Default full resolution (width, height) before transpose
         if self.raw_size is None:
             self.raw_size = (640, 480)  # Default raw sensor resolution (width, height)
 
@@ -132,10 +135,10 @@ class XenseCameraConfig(CameraConfig):
             }
             if any(ot in image_outputs for ot in self.output_types):
                 # Image outputs: use rectify_size (width, height)
-                if self.width is None:
-                    self.width = self.rectify_size[0]
                 if self.height is None:
-                    self.height = self.rectify_size[1]
+                    self.height = self.rectify_size[0]
+                if self.width is None:
+                    self.width = self.rectify_size[1]
             else:
                 # Force/mesh outputs: height=35, width=20 (fixed by SDK)
                 if self.width is None:
