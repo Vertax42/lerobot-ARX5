@@ -388,8 +388,14 @@ class FlexivRizon4(Robot):
 
         elif self.config.control_mode == ControlMode.CARTESIAN_MOTION_FORCE:
             # Cartesian mode configuration
-            k_x_nom = robot_info.K_x_nom
-            self.logger.info(f"Cartesian mode - nominal Cartesian stiffness k_x_nom: {k_x_nom}")
+            if self.config.stiffness_ratio != 1.0:
+                K_x_nom = robot_info.K_x_nom
+                new_kx = np.multiply(K_x_nom, self.config.stiffness_ratio)
+                self._robot.SetCartesianImpedance(new_kx)
+                self.logger.info(f"Cartesian mode - set stiffness (ratio={self.config.stiffness_ratio}): {new_kx}")
+            else:
+                k_x_nom = robot_info.K_x_nom
+                self.logger.info(f"Cartesian mode - nominal Cartesian stiffness k_x_nom: {k_x_nom}")
 
             # Configure force control if use_force is enabled
             if self.config.use_force:
