@@ -391,7 +391,8 @@ class FlexivRizon4(Robot):
             if self.config.stiffness_ratio != 1.0:
                 K_x_nom = robot_info.K_x_nom
                 new_kx = np.multiply(K_x_nom, self.config.stiffness_ratio)
-                self._robot.SetCartesianImpedance(new_kx)
+                max_zx = np.array([0.8] * 6)
+                self._robot.SetCartesianImpedance(new_kx, max_zx)
                 self.logger.info(f"Cartesian mode - set stiffness (ratio={self.config.stiffness_ratio}): {new_kx}")
             else:
                 k_x_nom = robot_info.K_x_nom

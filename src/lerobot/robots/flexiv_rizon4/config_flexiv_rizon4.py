@@ -117,7 +117,7 @@ class FlexivRizon4Config(RobotConfig):
     # Stiffness ratio: multiplies nominal joint stiffness K_q_nom
     # Default 1.0 means no adjustment (100 percent nominal stiffness)
     # Example: 0.5 means 50 percent of nominal stiffness (more compliant)
-    stiffness_ratio: float = 1.0
+    stiffness_ratio: float = 0.2
 
     # Cartesian motion parameters (from example: SEARCH_VELOCITY = 0.02 m/s)
     cartesian_max_linear_vel: float = 0.2  # m/s
