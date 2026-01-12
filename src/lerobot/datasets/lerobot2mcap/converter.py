@@ -8,10 +8,10 @@ import pandas as pd
 import yaml
 from tqdm import tqdm
 
-from .config_generator import ConfigGenerator
-from .dataset_info import DatasetInfo
-from .logger import get_logger
-from .sorted_mcap_converter import SortedMcapConverter
+from lerobot.datasets.lerobot2mcap.config_generator import ConfigGenerator
+from lerobot.datasets.lerobot2mcap.dataset_info import DatasetInfo
+from lerobot.datasets.lerobot2mcap.logger import get_logger
+from lerobot.datasets.lerobot2mcap.sorted_mcap_converter import SortedMcapConverter
 
 logger = get_logger("converter")
 

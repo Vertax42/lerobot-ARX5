@@ -34,10 +34,9 @@ import tabular2mcap.converter.others
 import tabular2mcap.mcap_converter
 from tabular2mcap.converter.common import ConvertedRow
 
+from lerobot.datasets.lerobot2mcap.converter import LeRobotConverter
+from lerobot.datasets.lerobot2mcap.logger import get_logger
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
-
-from .converter import LeRobotConverter
-from .logger import get_logger
 
 __version__ = "0.1.0"
 

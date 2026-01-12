@@ -106,11 +106,15 @@ dependencies = [
     # for flexiv robot
     "flexivrdk",
     "spdlog",
-
     # for lerobot2mcap
     "tabular2mcap[protobuf]>=0.1.12",
     "mcap>=1.1.0",
     "mcap-ros2-support>=0.5.0",
+    # for lerobot-gui
+    "pyside6",
+    "pandas",
+    "pyqtgraph",
+    "tqdm",
 ]
 
 # Optional dependencies

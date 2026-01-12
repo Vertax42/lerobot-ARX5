@@ -1,6 +1,5 @@
 """Sorted MCAP converter that ensures messages are written in timestamp order."""
 
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +21,9 @@ from tabular2mcap.loader import (
 from tabular2mcap.mcap_converter import McapConverter
 from tqdm import tqdm
 
-logger = logging.getLogger(__name__)
+from lerobot.datasets.lerobot2mcap.logger import get_logger
+
+logger = get_logger("sorted_mcap_converter")
 
 
 class SortedMcapConverter(McapConverter):

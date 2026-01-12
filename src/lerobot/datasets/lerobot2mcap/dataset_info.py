@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .logger import get_logger
+from lerobot.datasets.lerobot2mcap.logger import get_logger
 
 logger = get_logger("dataset_info")
 

@@ -7,7 +7,7 @@ where multiple episodes are merged into single video files.
 import subprocess
 from pathlib import Path
 
-from .logger import get_logger
+from lerobot.datasets.lerobot2mcap.logger import get_logger
 
 logger = get_logger("video_loader")
 

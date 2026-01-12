@@ -8,8 +8,8 @@ from tabular2mcap.loader.models import (
     TabularMappingConfig,
 )
 
-from .dataset_info import DEFAULT_CODEC, DatasetInfo
-from .logger import get_logger
+from lerobot.datasets.lerobot2mcap.dataset_info import DEFAULT_CODEC, DatasetInfo
+from lerobot.datasets.lerobot2mcap.logger import get_logger
 
 logger = get_logger("config_generator")
 
