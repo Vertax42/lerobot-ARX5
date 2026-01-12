@@ -27,7 +27,7 @@ import numpy as np
 
 from lerobot.teleoperators.vive_tracker import ViveTrackerConfig, ViveTrackerTeleop
 from lerobot.teleoperators.vive_tracker.constants import EE_INIT_POS, EE_INIT_QUAT_WXYZ
-from lerobot.utils.robot_utils import get_logger
+from lerobot.utils.robot_utils import get_logger, rotation_6d_to_quaternion
 
 # Get logger for this module
 logger = get_logger("ViveTrackerTest")
@@ -159,7 +159,7 @@ class RerunVisualizer:
         Log pose data to Rerun.
 
         Args:
-            action: Action dictionary with tcp.x/y/z and tcp.qw/qx/qy/qz
+            action: Action dictionary with tcp.x/y/z and tcp.r1-r6 (6D rotation)
             device_name: Name of the device for logging
         """
         if not self._initialized:
@@ -171,11 +171,22 @@ class RerunVisualizer:
         z = action.get("tcp.z", 0.0)
         position = [x, y, z]
 
-        # Extract quaternion (Rerun uses [x, y, z, w] format)
-        qw = action.get("tcp.qw", 1.0)
-        qx = action.get("tcp.qx", 0.0)
-        qy = action.get("tcp.qy", 0.0)
-        qz = action.get("tcp.qz", 0.0)
+        # Support both 6D rotation (r1-r6) and quaternion (qw, qx, qy, qz) formats
+        if "tcp.r1" in action:
+            # 6D rotation format - convert to quaternion for visualization
+            r6d = np.array([
+                action["tcp.r1"], action["tcp.r2"], action["tcp.r3"],
+                action["tcp.r4"], action["tcp.r5"], action["tcp.r6"]
+            ])
+            quat_wxyz = rotation_6d_to_quaternion(r6d)  # Returns [qw, qx, qy, qz]
+            qw, qx, qy, qz = quat_wxyz[0], quat_wxyz[1], quat_wxyz[2], quat_wxyz[3]
+        else:
+            # Legacy quaternion format
+            qw = action.get("tcp.qw", 1.0)
+            qx = action.get("tcp.qx", 0.0)
+            qy = action.get("tcp.qy", 0.0)
+            qz = action.get("tcp.qz", 0.0)
+
         quaternion = rr.Quaternion(xyzw=[qx, qy, qz, qw])
 
         # Log transform (position and rotation)
@@ -307,15 +318,27 @@ def print_action_data(action: dict, update_count: int, fps: float = 0.0, timing:
     y = action.get("tcp.y", 0.0)
     z = action.get("tcp.z", 0.0)
 
-    # Quaternion
-    qw = action.get("tcp.qw", 1.0)
-    qx = action.get("tcp.qx", 0.0)
-    qy = action.get("tcp.qy", 0.0)
-    qz = action.get("tcp.qz", 0.0)
-
     print(f"\n  [Action Output]")
     print(f"    Position (m):    X={x:+9.5f}  Y={y:+9.5f}  Z={z:+9.5f}")
-    print(f"    Rotation (quat): W={qw:+9.5f}  X={qx:+9.5f}  Y={qy:+9.5f}  Z={qz:+9.5f}")
+
+    # Support both 6D rotation (r1-r6) and quaternion (qw, qx, qy, qz) formats
+    if "tcp.r1" in action:
+        # 6D rotation format
+        r1 = action.get("tcp.r1", 0.0)
+        r2 = action.get("tcp.r2", 0.0)
+        r3 = action.get("tcp.r3", 0.0)
+        r4 = action.get("tcp.r4", 0.0)
+        r5 = action.get("tcp.r5", 0.0)
+        r6 = action.get("tcp.r6", 0.0)
+        print(f"    Rotation (6D):   R1={r1:+8.5f}  R2={r2:+8.5f}  R3={r3:+8.5f}")
+        print(f"                     R4={r4:+8.5f}  R5={r5:+8.5f}  R6={r6:+8.5f}")
+    else:
+        # Legacy quaternion format
+        qw = action.get("tcp.qw", 1.0)
+        qx = action.get("tcp.qx", 0.0)
+        qy = action.get("tcp.qy", 0.0)
+        qz = action.get("tcp.qz", 0.0)
+        print(f"    Rotation (quat): W={qw:+9.5f}  X={qx:+9.5f}  Y={qy:+9.5f}  Z={qz:+9.5f}")
 
     print(f"\n{'='*75}")
     print("  Press Ctrl+C to stop")

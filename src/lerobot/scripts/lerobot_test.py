@@ -53,6 +53,7 @@ from lerobot.cameras.configs import CameraConfig
 from lerobot.configs import parser
 from lerobot.robots.config import RobotConfig
 from lerobot.teleoperators.config import TeleoperatorConfig
+from lerobot.utils.robot_utils import quaternion_to_rotation_6d
 from lerobot.utils.utils import init_logging
 # Delay import of rerun and visualization utils - only needed for camera tests
 # import rerun as rr
@@ -114,15 +115,20 @@ def _test_robot(
             from lerobot.robots.flexiv_rizon4.config_flexiv_rizon4 import ControlMode
             if hasattr(robot.config, 'control_mode') and robot.config.control_mode == ControlMode.CARTESIAN_MOTION_FORCE:
                 target_tcp_pose = [0.68783, -0.115326, 0.328386, 0.004519, 0.003284, 0.999984, 0.001275]
-                # Format: [x, y, z, qw, qx, qy, qz]
+                # Format: [x, y, z, qw, qx, qy, qz] -> convert to 6D rotation
+                r6d = quaternion_to_rotation_6d(
+                    target_tcp_pose[3], target_tcp_pose[4], target_tcp_pose[5], target_tcp_pose[6]
+                )
                 action = {
                     "tcp.x": target_tcp_pose[0],
                     "tcp.y": target_tcp_pose[1],
                     "tcp.z": target_tcp_pose[2],
-                    "tcp.qw": target_tcp_pose[3],
-                    "tcp.qx": target_tcp_pose[4],
-                    "tcp.qy": target_tcp_pose[5],
-                    "tcp.qz": target_tcp_pose[6],
+                    "tcp.r1": r6d[0],
+                    "tcp.r2": r6d[1],
+                    "tcp.r3": r6d[2],
+                    "tcp.r4": r6d[3],
+                    "tcp.r5": r6d[4],
+                    "tcp.r6": r6d[5],
                     "gripper.pos": 0.0,  # Keep gripper at current position or set to 0
                 }
                 logger.info(f"Sending initial TCP pose action: {target_tcp_pose}")

@@ -61,7 +61,7 @@ from lerobot.teleoperators import (  # noqa: F401
     xense_flare,
 )
 from lerobot.utils.import_utils import register_third_party_devices
-from lerobot.utils.robot_utils import busy_wait, get_logger
+from lerobot.utils.robot_utils import busy_wait, get_logger, rotation_6d_to_quaternion
 from lerobot.utils.utils import move_cursor_up
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
@@ -566,7 +566,7 @@ def pico4_teleop_loop(
 
     Pico4 outputs actions directly in Flexiv format:
     - tcp.x, tcp.y, tcp.z: absolute TCP position (meters)
-    - tcp.qw, tcp.qx, tcp.qy, tcp.qz: absolute TCP orientation (quaternion)
+    - tcp.r1, tcp.r2, tcp.r3, tcp.r4, tcp.r5, tcp.r6: absolute TCP orientation (6D rotation)
     - gripper.pos: absolute gripper position (meters)
 
     Control scheme:
@@ -677,7 +677,7 @@ def vive_tracker_teleop_loop(
 
     Vive Tracker outputs actions directly in Flexiv format:
     - tcp.x, tcp.y, tcp.z: absolute TCP position (meters)
-    - tcp.qw, tcp.qx, tcp.qy, tcp.qz: absolute TCP orientation (quaternion)
+    - tcp.r1, tcp.r2, tcp.r3, tcp.r4, tcp.r5, tcp.r6: absolute TCP orientation (6D rotation)
 
     Control scheme:
     - Vive Tracker provides absolute 6-DoF pose tracking
@@ -947,12 +947,24 @@ def xense_flare_teleop_loop(
             # Log tracker pose and trajectory visualization
             if "tcp.x" in obs and "tcp.y" in obs and "tcp.z" in obs:
                 pos = np.array([obs["tcp.x"], obs["tcp.y"], obs["tcp.z"]])
-                rot_xyzw = [
-                    obs.get("tcp.qx", 0.0),
-                    obs.get("tcp.qy", 0.0),
-                    obs.get("tcp.qz", 0.0),
-                    obs.get("tcp.qw", 1.0),
-                ]
+
+                # Support both 6D rotation (r1-r6) and quaternion (qw, qx, qy, qz) formats
+                if "tcp.r1" in obs:
+                    # 6D rotation format - convert to quaternion for visualization
+                    r6d = np.array([
+                        obs["tcp.r1"], obs["tcp.r2"], obs["tcp.r3"],
+                        obs["tcp.r4"], obs["tcp.r5"], obs["tcp.r6"]
+                    ])
+                    quat_wxyz = rotation_6d_to_quaternion(r6d)  # Returns [qw, qx, qy, qz]
+                    rot_xyzw = [quat_wxyz[1], quat_wxyz[2], quat_wxyz[3], quat_wxyz[0]]
+                else:
+                    # Legacy quaternion format
+                    rot_xyzw = [
+                        obs.get("tcp.qx", 0.0),
+                        obs.get("tcp.qy", 0.0),
+                        obs.get("tcp.qz", 0.0),
+                        obs.get("tcp.qw", 1.0),
+                    ]
 
                 # Log 3D transform
                 rr.log(

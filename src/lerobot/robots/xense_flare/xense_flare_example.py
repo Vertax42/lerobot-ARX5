@@ -38,7 +38,7 @@ from collections import defaultdict
 import numpy as np
 
 from lerobot.robots import make_robot_from_config
-from lerobot.utils.robot_utils import get_logger
+from lerobot.utils.robot_utils import get_logger, rotation_6d_to_quaternion
 
 # Check Rerun availability
 try:
@@ -458,9 +458,14 @@ def format_live_data(robot, obs: dict, frame_count: int, fps: float, timing: dic
     lines.append("┌─ 🎯 Vive Tracker ─────────────────────────────────────────────────")
     if "tcp.x" in obs:
         pos = [obs.get("tcp.x", 0), obs.get("tcp.y", 0), obs.get("tcp.z", 0)]
-        rot = [obs.get("tcp.qw", 1), obs.get("tcp.qx", 0), obs.get("tcp.qy", 0), obs.get("tcp.qz", 0)]
         lines.append(f"│  📡 Tracker Pos: [{pos[0]:+7.3f}, {pos[1]:+7.3f}, {pos[2]:+7.3f}]")
-        lines.append(f"│            Rot: [{rot[0]:+6.3f}, {rot[1]:+6.3f}, {rot[2]:+6.3f}, {rot[3]:+6.3f}]")
+        # Support both 6D rotation (r1-r6) and quaternion (qw, qx, qy, qz) formats
+        if "tcp.r1" in obs:
+            r6d = [obs.get(f"tcp.r{i}", 0) for i in range(1, 7)]
+            lines.append(f"│         Rot 6D: [{r6d[0]:+6.3f}, {r6d[1]:+6.3f}, {r6d[2]:+6.3f}, {r6d[3]:+6.3f}, {r6d[4]:+6.3f}, {r6d[5]:+6.3f}]")
+        else:
+            rot = [obs.get("tcp.qw", 1), obs.get("tcp.qx", 0), obs.get("tcp.qy", 0), obs.get("tcp.qz", 0)]
+            lines.append(f"│            Rot: [{rot[0]:+6.3f}, {rot[1]:+6.3f}, {rot[2]:+6.3f}, {rot[3]:+6.3f}]")
     else:
         lines.append("│  (No Vive data)")
     lines.append("└" + "─" * 69)
@@ -522,7 +527,7 @@ def log_to_rerun(obs: dict, frame_count: int, robot=None):
     Log observation data to Rerun.
 
     Data sources (from robot.get_observation()):
-    - Vive Tracker pose: via vive_tracker.get_action() -> tcp.x/y/z/qw/qx/qy/qz
+    - Vive Tracker pose: via vive_tracker.get_action() -> tcp.x/y/z/r1-r6 (6D rotation)
     - Gripper state: via gripper.get_gripper_status() -> gripper.pos
     - Camera image: via camera.read() -> wrist_cam (BGR format)
     - Tactile sensors: via sensor.selectSensorInfo() -> sensor_<sn> (BGR format)
@@ -539,16 +544,27 @@ def log_to_rerun(obs: dict, frame_count: int, robot=None):
         robot: Optional robot instance to access vive_tracker for lighthouse poses
     """
     # Log Vive Tracker pose with trajectory and coordinate axes
-    # Data from: vive_tracker.get_action() -> tcp.x/y/z/qw/qx/qy/qz
+    # Data from: vive_tracker.get_action() -> tcp.x/y/z/r1-r6 (6D rotation)
     if "tcp.x" in obs:
         pos = [obs.get("tcp.x", 0), obs.get("tcp.y", 0), obs.get("tcp.z", 0)]
-        # xyzw format for Rerun
-        rot_xyzw = [
-            obs.get("tcp.qx", 0),
-            obs.get("tcp.qy", 0),
-            obs.get("tcp.qz", 0),
-            obs.get("tcp.qw", 1),
-        ]
+
+        # Support both 6D rotation (r1-r6) and quaternion (qw, qx, qy, qz) formats
+        if "tcp.r1" in obs:
+            # 6D rotation format - convert to quaternion for visualization
+            r6d = np.array([
+                obs["tcp.r1"], obs["tcp.r2"], obs["tcp.r3"],
+                obs["tcp.r4"], obs["tcp.r5"], obs["tcp.r6"]
+            ])
+            quat_wxyz = rotation_6d_to_quaternion(r6d)  # Returns [qw, qx, qy, qz]
+            rot_xyzw = [quat_wxyz[1], quat_wxyz[2], quat_wxyz[3], quat_wxyz[0]]
+        else:
+            # Legacy quaternion format (xyzw for Rerun)
+            rot_xyzw = [
+                obs.get("tcp.qx", 0),
+                obs.get("tcp.qy", 0),
+                obs.get("tcp.qz", 0),
+                obs.get("tcp.qw", 1),
+            ]
 
         # Log pose with coordinate axes
         log_vive_pose(

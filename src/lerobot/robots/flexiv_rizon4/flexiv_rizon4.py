@@ -698,6 +698,7 @@ class FlexivRizon4(Robot):
 
             # Convert quaternion to 6D rotation representation
             r6d = quaternion_to_rotation_6d(tcp_pose[3], tcp_pose[4], tcp_pose[5], tcp_pose[6])
+
             obs_dict["tcp.r1"] = r6d[0]
             obs_dict["tcp.r2"] = r6d[1]
             obs_dict["tcp.r3"] = r6d[2]
