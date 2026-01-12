@@ -1,0 +1,11 @@
+functions:
+  row_to_message_with_timestamp:
+    schema_name: null
+    log_time_template: "{{ (timestamp * 1_000_000_000) | int }}"
+    template: |
+      {
+        "timestamp": {
+          "sec": {{ (timestamp) | int }},
+          "nanosec": {{ ((timestamp % 1) * 1_000_000_000) | int }}
+        }
+      }
