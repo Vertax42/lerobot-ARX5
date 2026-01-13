@@ -102,6 +102,13 @@ class CameraCapabilities:
     supported_resolutions: list[tuple[int, int]] = field(default_factory=list)
     supported_fps: list[float] = field(default_factory=list)
     supported_fourcc: list[str] = field(default_factory=list)
+    # Resolution -> FPS combinations: {(width, height): [fps1, fps2, ...]}
+    resolution_fps_map: dict[tuple[int, int], list[float]] = field(default_factory=dict)
+    # Resolution -> max FPS: {(width, height): max_fps}
+    resolution_max_fps_map: dict[tuple[int, int], float] = field(default_factory=dict)
+    # USB connection info
+    usb_speed_mbps: int = 0  # USB speed in Mbps (e.g., 480 for USB 2.0, 5000 for USB 3.0)
+    usb_version: str = ""  # USB version string (e.g., "USB 2.0", "USB 3.0")
 
 
 @dataclass
@@ -333,6 +340,63 @@ def get_device_info_from_sysfs(index: int) -> dict[str, str]:
         pass
 
     return info
+
+
+def get_usb_speed(index: int) -> tuple[int, str]:
+    """Get USB connection speed for a video device.
+
+    Args:
+        index: Video device index (0 for /dev/video0)
+
+    Returns:
+        Tuple of (speed_mbps, version_string)
+        speed_mbps: USB speed in Mbps (12=USB 1.1, 480=USB 2.0, 5000=USB 3.0, etc.)
+        version_string: Human readable USB version
+    """
+    video_path = Path(f"/sys/class/video4linux/video{index}")
+    if not video_path.exists():
+        return 0, "Unknown"
+
+    try:
+        device_link = video_path / "device"
+        if not device_link.exists():
+            return 0, "Unknown"
+
+        real_path = device_link.resolve()
+
+        # Walk up the directory tree to find USB device with 'speed' attribute
+        usb_path = real_path
+        for _ in range(8):
+            usb_path = usb_path.parent
+            speed_file = usb_path / "speed"
+
+            if speed_file.exists():
+                speed_str = speed_file.read_text().strip()
+                try:
+                    speed_mbps = int(float(speed_str))
+
+                    # Map speed to USB version
+                    if speed_mbps >= 20000:
+                        version = "USB 3.2 Gen 2x2"
+                    elif speed_mbps >= 10000:
+                        version = "USB 3.1/3.2 Gen 2"
+                    elif speed_mbps >= 5000:
+                        version = "USB 3.0/3.1 Gen 1"
+                    elif speed_mbps >= 480:
+                        version = "USB 2.0 High Speed"
+                    elif speed_mbps >= 12:
+                        version = "USB 1.1 Full Speed"
+                    else:
+                        version = "USB 1.0 Low Speed"
+
+                    return speed_mbps, version
+                except ValueError:
+                    pass
+
+    except Exception:
+        pass
+
+    return 0, "Unknown"
 
 
 def list_cameras(max_index: int = 10) -> list[CameraDeviceInfo]:
@@ -788,7 +852,7 @@ def benchmark_camera(
     fps: float = 30,
     width: int = 1280,
     height: int = 720,
-    fourcc: str | None = None,
+    fourcc: str | None = "MJPG",
     duration_s: float = 10.0,
     warmup_s: float = 1.0,
     verbose: bool = True,
@@ -801,7 +865,7 @@ def benchmark_camera(
         fps: Requested FPS
         width: Requested width
         height: Requested height
-        fourcc: FOURCC codec (e.g., 'MJPG'). None for auto.
+        fourcc: FOURCC codec (e.g., 'MJPG'). Default: MJPG.
         duration_s: Benchmark duration in seconds
         warmup_s: Warmup time before measuring
         verbose: Print progress
@@ -812,7 +876,7 @@ def benchmark_camera(
     if verbose:
         logger.info("=" * 60)
         logger.info(f"Benchmarking camera {camera_index}")
-        logger.info(f"Requested: {width}x{height} @ {fps} FPS, FOURCC: {fourcc or 'auto'}")
+        logger.info(f"Requested: {width}x{height} @ {fps} FPS, FOURCC: {fourcc or 'MJPG'}")
         logger.info("=" * 60)
 
     cap = None
@@ -1020,35 +1084,75 @@ def scan_camera_capabilities(
         )
 
     info = get_camera_info(cap)
+    
+    # Get USB speed if camera index is an integer
+    usb_speed_mbps = 0
+    usb_version = "Unknown"
+    if isinstance(camera_index, int):
+        usb_speed_mbps, usb_version = get_usb_speed(camera_index)
+    
     capabilities = CameraCapabilities(
         camera_index=camera_index,
         name=f"Camera {camera_index}",
         backend=info["backend"],
+        usb_speed_mbps=usb_speed_mbps,
+        usb_version=usb_version,
     )
     cap.release()
 
-    # Test resolutions
+    # Test resolutions and measure actual FPS (using MJPG for best performance)
     if verbose:
-        logger.info("Testing resolutions...")
+        logger.info("Testing resolutions and measuring actual FPS (using MJPG)...")
     for width, height in COMMON_RESOLUTIONS:
         cap = cv2.VideoCapture(camera_index)
         if not cap.isOpened():
             continue
 
+        # Use MJPG for best FPS performance
+        cap.set(cv2.CAP_PROP_FOURCC, string_to_fourcc("MJPG"))
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        
+        # Request high FPS to measure maximum achievable
+        cap.set(cv2.CAP_PROP_FPS, 120)
 
         actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
         # Check if camera accepted this resolution
         if actual_w == width and actual_h == height:
-            # Verify we can actually read a frame
+            # Measure actual FPS by reading frames
             ret, _ = cap.read()
             if ret:
+                # Warm up
+                for _ in range(5):
+                    cap.read()
+                
+                # Measure actual FPS over ~1 second
+                frame_count = 0
+                start_time = time.perf_counter()
+                measure_duration = 1.0  # seconds
+                
+                while time.perf_counter() - start_time < measure_duration:
+                    ret, _ = cap.read()
+                    if ret:
+                        frame_count += 1
+                    else:
+                        break
+                
+                elapsed = time.perf_counter() - start_time
+                measured_fps = frame_count / elapsed if elapsed > 0 else 0
+                
                 capabilities.supported_resolutions.append((width, height))
+                capabilities.resolution_fps_map[(width, height)] = [measured_fps]
+                
+                # Track max FPS globally
+                if measured_fps not in capabilities.supported_fps:
+                    capabilities.supported_fps.append(measured_fps)
+                
                 if verbose:
-                    logger.info(f"  ✓ {width}x{height}")
+                    marker = "🚀" if measured_fps >= 90 else ("⚡" if measured_fps >= 60 else "✓")
+                    logger.info(f"  {marker} {width}x{height} @ {measured_fps:.1f} FPS (measured)")
             else:
                 if verbose:
                     logger.warning(f"  ✗ {width}x{height} (cannot read frame)")
@@ -1057,27 +1161,9 @@ def scan_camera_capabilities(
                 logger.debug(f"  ✗ {width}x{height} (got {actual_w}x{actual_h})")
 
         cap.release()
-
-    # Test FPS at default resolution
-    if verbose:
-        logger.info("Testing FPS values...")
-    for target_fps in COMMON_FPS:
-        cap = cv2.VideoCapture(camera_index)
-        if not cap.isOpened():
-            continue
-
-        cap.set(cv2.CAP_PROP_FPS, target_fps)
-        actual_fps = cap.get(cv2.CAP_PROP_FPS)
-
-        if abs(actual_fps - target_fps) < 1:
-            capabilities.supported_fps.append(target_fps)
-            if verbose:
-                logger.info(f"  ✓ {target_fps} FPS")
-        else:
-            if verbose:
-                logger.debug(f"  ✗ {target_fps} FPS (got {actual_fps:.1f})")
-
-        cap.release()
+    
+    # Sort supported_fps
+    capabilities.supported_fps.sort()
 
     # Test FOURCC codes
     if verbose:
@@ -1151,20 +1237,55 @@ def print_result(result: BenchmarkResult) -> None:
 
 def print_capabilities(caps: CameraCapabilities) -> None:
     """Print camera capabilities."""
-    logger.info("─" * 40)
+    logger.info("─" * 60)
     logger.info(f"Camera {caps.camera_index} Capabilities")
-    logger.info("─" * 40)
+    logger.info("─" * 60)
     logger.info(f"Backend: {caps.backend}")
-    logger.info(f"Supported Resolutions: {len(caps.supported_resolutions)}")
+    
+    # USB connection info
+    if caps.usb_speed_mbps > 0:
+        usb_icon = "🚀" if caps.usb_speed_mbps >= 5000 else "⚡" if caps.usb_speed_mbps >= 480 else "🐢"
+        effective_bw = caps.usb_speed_mbps * 0.8  # ~80% efficiency
+        logger.info(f"USB: {usb_icon} {caps.usb_version} ({caps.usb_speed_mbps} Mbps, ~{effective_bw:.0f} Mbps effective)")
+    
+    # Print resolution + measured FPS
+    logger.info(f"\nSupported Resolutions (measured FPS with MJPG):")
+    logger.info("─" * 60)
     for w, h in caps.supported_resolutions:
-        logger.info(f"  • {w}x{h}")
-    logger.info(f"Supported FPS: {len(caps.supported_fps)}")
-    for fps in caps.supported_fps:
-        logger.info(f"  • {fps}")
-    logger.info(f"Supported FOURCC: {len(caps.supported_fourcc)}")
-    for fourcc in caps.supported_fourcc:
-        logger.info(f"  • {fourcc}")
-    logger.info("─" * 40)
+        fps_list = caps.resolution_fps_map.get((w, h), [])
+        if fps_list:
+            max_fps = max(fps_list)
+            # Highlight high FPS support
+            marker = "🚀" if max_fps >= 90 else ("⚡" if max_fps >= 60 else "  ")
+            logger.info(f"  {marker} {w:4d}x{h:<4d}  @  {max_fps:.1f} FPS")
+        else:
+            logger.info(f"     {w:4d}x{h:<4d}  @  N/A")
+    
+    logger.info(f"\nSupported FOURCC: {caps.supported_fourcc}")
+    logger.info("─" * 60)
+    
+    # Summary - find best resolution for 60 FPS
+    high_fps_resolutions = [
+        (w, h, max(fps_list)) for (w, h), fps_list in caps.resolution_fps_map.items() 
+        if fps_list and max(fps_list) >= 60
+    ]
+    if high_fps_resolutions:
+        # Sort by resolution (pixels) descending
+        high_fps_resolutions.sort(key=lambda x: x[0] * x[1], reverse=True)
+        best = high_fps_resolutions[0]
+        logger.info(f"\n✅ Best 60+ FPS: {best[0]}x{best[1]} @ {best[2]:.1f} FPS")
+    else:
+        # Find the best FPS available
+        all_fps = [(w, h, max(fps_list)) for (w, h), fps_list in caps.resolution_fps_map.items() if fps_list]
+        if all_fps:
+            all_fps.sort(key=lambda x: x[2], reverse=True)
+            best = all_fps[0]
+            logger.info(f"\n⚠️ Max FPS available: {best[0]}x{best[1]} @ {best[2]:.1f} FPS (60 FPS not supported)")
+    
+    # USB bandwidth recommendation
+    if caps.usb_speed_mbps > 0 and caps.usb_speed_mbps < 5000:
+        logger.info(f"\n💡 Tip: Camera is on {caps.usb_version}. Use MJPG for high FPS.")
+        logger.info(f"   For YUYV high FPS, connect to USB 3.0 (blue port).")
 
 
 def find_cameras(max_index: int = 10) -> list[int]:
@@ -1239,6 +1360,186 @@ def save_results_csv(results: list[BenchmarkResult], output_path: Path) -> None:
     logger.info(f"Results saved to: {output_path}")
 
 
+def compare_fourcc_formats(
+    camera_index: int | str,
+    fps: float = 60,
+    width: int = 1280,
+    height: int = 720,
+    duration_s: float = 5.0,
+    warmup_s: float = 1.0,
+) -> None:
+    """
+    Compare MJPG vs YUYV performance (bandwidth and FPS).
+
+    Args:
+        camera_index: Camera index or path
+        fps: Target FPS to test
+        width: Resolution width
+        height: Resolution height
+        duration_s: Test duration per format
+        warmup_s: Warmup time per format
+    """
+    import time
+
+    logger.info("=" * 70)
+    logger.info(f"FOURCC Format Comparison: MJPG vs YUYV")
+    logger.info(f"Camera: {camera_index} | Resolution: {width}x{height} | Target FPS: {fps}")
+    logger.info("=" * 70)
+
+    formats_to_test = ["MJPG", "YUYV"]
+    results: dict[str, dict] = {}
+
+    for fourcc_str in formats_to_test:
+        logger.info(f"\n📹 Testing {fourcc_str}...")
+
+        cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
+        if not cap.isOpened():
+            logger.error(f"Failed to open camera {camera_index}")
+            continue
+
+        # Set format
+        fourcc_code = cv2.VideoWriter_fourcc(*fourcc_str)
+        cap.set(cv2.CAP_PROP_FOURCC, fourcc_code)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        cap.set(cv2.CAP_PROP_FPS, fps)
+
+        # Read actual settings
+        actual_fourcc_int = int(cap.get(cv2.CAP_PROP_FOURCC))
+        actual_fourcc = "".join([chr((actual_fourcc_int >> (8 * i)) & 0xFF) for i in range(4)])
+        actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        actual_fps_reported = cap.get(cv2.CAP_PROP_FPS)
+
+        if actual_fourcc != fourcc_str:
+            logger.warning(f"  ⚠️ Requested {fourcc_str}, got {actual_fourcc}")
+
+        # Warmup
+        warmup_frames = 0
+        warmup_start = time.perf_counter()
+        while time.perf_counter() - warmup_start < warmup_s:
+            ret, frame = cap.read()
+            if ret:
+                warmup_frames += 1
+
+        # Benchmark
+        frame_count = 0
+        total_bytes = 0
+        latencies = []
+        start_time = time.perf_counter()
+
+        while time.perf_counter() - start_time < duration_s:
+            frame_start = time.perf_counter()
+            ret, frame = cap.read()
+            frame_end = time.perf_counter()
+
+            if ret:
+                frame_count += 1
+                total_bytes += frame.nbytes
+                latencies.append((frame_end - frame_start) * 1000)
+
+        elapsed = time.perf_counter() - start_time
+        cap.release()
+
+        # Calculate metrics
+        actual_fps = frame_count / elapsed if elapsed > 0 else 0
+        decoded_throughput = (total_bytes / elapsed) / (1024 * 1024) if elapsed > 0 else 0
+        avg_latency = sum(latencies) / len(latencies) if latencies else 0
+
+        # Calculate USB bandwidth in Mbps (actual data transferred over USB)
+        # YUYV = 2 bytes per pixel (uncompressed)
+        # MJPG = compressed, typically 1/10 to 1/20 of YUYV
+        # Convert: bytes/s -> Mbps = bytes/s * 8 / 1_000_000
+        if fourcc_str == "YUYV":
+            usb_bandwidth = (actual_width * actual_height * 2 * actual_fps) * 8 / 1_000_000
+        else:  # MJPG - estimate based on typical compression ratio
+            # MJPG compression ratio varies, typically 10:1 to 20:1 for video
+            usb_bandwidth = (actual_width * actual_height * 2 * actual_fps) * 8 / 1_000_000 / 10
+
+        results[fourcc_str] = {
+            "actual_fourcc": actual_fourcc,
+            "actual_fps": actual_fps,
+            "fps_ratio": (actual_fps / fps * 100) if fps > 0 else 0,
+            "usb_bandwidth_mbps": usb_bandwidth,
+            "decoded_throughput_mbps": decoded_throughput,
+            "avg_latency_ms": avg_latency,
+            "frame_count": frame_count,
+            "resolution": f"{actual_width}x{actual_height}",
+            "width": actual_width,
+            "height": actual_height,
+        }
+
+        logger.info(f"  Resolution: {actual_width}x{actual_height}")
+        logger.info(f"  Actual FPS: {actual_fps:.1f} ({results[fourcc_str]['fps_ratio']:.0f}% of target)")
+        logger.info(f"  USB Bandwidth: ~{usb_bandwidth:.0f} Mbps {'(uncompressed)' if fourcc_str == 'YUYV' else '(compressed ~10:1)'}")
+        logger.info(f"  Avg Latency: {avg_latency:.1f} ms")
+
+    # Print comparison summary
+    logger.info("\n" + "=" * 70)
+    logger.info("📊 COMPARISON SUMMARY")
+    logger.info("=" * 70)
+
+    # Table header
+    logger.info(f"{'Format':<8} {'Resolution':<12} {'FPS':<12} {'USB BW':<15} {'Latency':<12} {'Status'}")
+    logger.info("-" * 70)
+
+    for fourcc_str, data in results.items():
+        fps_status = "✓" if data["fps_ratio"] >= 95 else "⚠" if data["fps_ratio"] >= 50 else "✗"
+        logger.info(
+            f"{fourcc_str:<8} {data['resolution']:<12} "
+            f"{data['actual_fps']:.1f} FPS{'':<4} "
+            f"~{data['usb_bandwidth_mbps']:.0f} Mbps{'':<6} "
+            f"{data['avg_latency_ms']:.1f} ms{'':<5} "
+            f"{fps_status}"
+        )
+
+    # Analysis
+    if "MJPG" in results and "YUYV" in results:
+        mjpg = results["MJPG"]
+        yuyv = results["YUYV"]
+
+        logger.info("\n" + "-" * 70)
+        logger.info("📈 ANALYSIS")
+        logger.info("-" * 70)
+
+        fps_diff = mjpg["actual_fps"] - yuyv["actual_fps"]
+        fps_ratio = (mjpg["actual_fps"] / yuyv["actual_fps"]) if yuyv["actual_fps"] > 0 else 0
+
+        if fps_diff > 0:
+            logger.info(f"⚡ MJPG is {fps_ratio:.1f}x faster ({mjpg['actual_fps']:.1f} vs {yuyv['actual_fps']:.1f} FPS)")
+        elif fps_diff < 0:
+            fps_ratio_inv = (yuyv["actual_fps"] / mjpg["actual_fps"]) if mjpg["actual_fps"] > 0 else 0
+            logger.info(f"⚡ YUYV is {fps_ratio_inv:.1f}x faster ({yuyv['actual_fps']:.1f} vs {mjpg['actual_fps']:.1f} FPS)")
+        else:
+            logger.info("⚡ Both formats achieve similar FPS")
+
+        # Calculate theoretical USB bandwidth for uncompressed YUYV at MJPG's FPS (in Mbps)
+        w, h = mjpg["width"], mjpg["height"]
+        yuyv_theoretical_at_mjpg_fps = (w * h * 2 * mjpg["actual_fps"]) * 8 / 1_000_000
+        mjpg_usb_bw = mjpg["usb_bandwidth_mbps"]
+        yuyv_usb_bw = yuyv["usb_bandwidth_mbps"]
+
+        logger.info(f"\n💾 USB Bandwidth Analysis:")
+        logger.info(f"   YUYV @ {yuyv['actual_fps']:.0f} FPS: ~{yuyv_usb_bw:.0f} Mbps (uncompressed)")
+        logger.info(f"   MJPG @ {mjpg['actual_fps']:.0f} FPS: ~{mjpg_usb_bw:.0f} Mbps (compressed)")
+        logger.info(f"   YUYV @ {mjpg['actual_fps']:.0f} FPS would need: ~{yuyv_theoretical_at_mjpg_fps:.0f} Mbps")
+
+        bw_savings = yuyv_theoretical_at_mjpg_fps / mjpg_usb_bw if mjpg_usb_bw > 0 else 0
+        logger.info(f"   💡 MJPG saves ~{bw_savings:.0f}x USB bandwidth vs YUYV at same FPS")
+
+        # USB bandwidth info
+        logger.info("\n📡 USB Bandwidth Reference:")
+        logger.info("   USB 2.0: ~280-320 Mbps effective (of 480 Mbps)")
+        logger.info("   USB 3.0: ~3200 Mbps effective (of 5000 Mbps)")
+
+        yuyv_limited_by_usb = yuyv["actual_fps"] < fps * 0.5  # Less than 50% of target
+        if yuyv_limited_by_usb:
+            logger.info(f"\n⚠️ YUYV is bandwidth-limited (only {yuyv['fps_ratio']:.0f}% of target FPS)")
+            logger.info("✅ Recommendation: Use MJPG for high FPS on USB 2.0")
+
+    logger.info("=" * 70)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="OpenCV Camera Performance Benchmark",
@@ -1292,8 +1593,8 @@ def main():
     parser.add_argument(
         "--fourcc",
         type=str,
-        default=None,
-        help="FOURCC codec (e.g., MJPG, YUYV). Default: auto.",
+        default="MJPG",
+        help="FOURCC codec (e.g., MJPG, YUYV). Default: MJPG.",
     )
     parser.add_argument(
         "--duration",
@@ -1345,6 +1646,11 @@ def main():
         "--test-all-fps",
         action="store_true",
         help="Test all common FPS values.",
+    )
+    parser.add_argument(
+        "--compare-fourcc",
+        action="store_true",
+        help="Compare MJPG vs YUYV performance (bandwidth and FPS).",
     )
     parser.add_argument(
         "--output",
@@ -1459,6 +1765,17 @@ def main():
                     verbose=verbose,
                 )
                 all_results.append(result)
+
+        # Compare MJPG vs YUYV
+        elif args.compare_fourcc:
+            compare_fourcc_formats(
+                cam_id,
+                fps=args.fps,
+                width=args.width,
+                height=args.height,
+                duration_s=min(args.duration, 5.0),
+                warmup_s=args.warmup,
+            )
 
         # Standard benchmark
         else:
