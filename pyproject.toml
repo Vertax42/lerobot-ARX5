@@ -83,9 +83,12 @@ dependencies = [
     "pyserial>=3.5,<4.0",
     "wandb>=0.20.0,<0.22.0",
     "pyrealsense2",
-    "torch>=2.2.1,<2.8.1",
-    "torchcodec==0.7.0; sys_platform != 'win32' and (sys_platform != 'linux' or (platform_machine != 'aarch64' and platform_machine != 'arm64' and platform_machine != 'armv7l')) and (sys_platform != 'darwin' or platform_machine != 'x86_64')",
-    "torchvision>=0.21.0,<0.24.0",
+    # AMD ROCm 7.1.1 PyTorch stack (from https://repo.radeon.com/rocm/manylinux/rocm-rel-7.1.1/)
+    # For pip users: pip3 install -f https://repo.radeon.com/rocm/manylinux/rocm-rel-7.1.1/ torch torchvision
+    "torch>=2.8.0,<2.9.0",
+    "torchvision>=0.23.0,<0.24.0",
+    # ONNX Runtime with MIGraphX backend for ROCm:
+    "onnxruntime-migraphx==1.23.1",
     "draccus==0.10.0",
     "gymnasium>=1.1.1,<2.0.0",
     # Pin to 0.23.1 to stay compatible with TensorFlow/JAX numpy<2 constraint in openpi
@@ -165,7 +168,7 @@ groot = [
     "Pillow>=10.0.0,<13.0.0",
     "decord>=0.6.0,<1.0.0; (platform_machine == 'AMD64' or platform_machine == 'x86_64')",
     "ninja>=1.11.1,<2.0.0",
-    "flash-attn>=2.5.9,<3.0.0 ; sys_platform != 'darwin'",
+    # NOTE: flash-attn removed - not compatible with AMD ROCm
 ]
 hilserl = [
     "lerobot[transformers-dep]",
@@ -255,6 +258,8 @@ where = ["src"]
 # NOTE: xensesdk currently requires NumPy <= 1.26.4, while rerun-sdk declares NumPy >= 2.
 # We intentionally override NumPy here to keep the Xense stack working in a single environment.
 override-dependencies = ["numpy==1.26.4"]
+# AMD ROCm 7.1.1 official wheel repository
+find-links = ["https://repo.radeon.com/rocm/manylinux/rocm-rel-7.1.1/"]
 
 [tool.ruff]
 target-version = "py310"

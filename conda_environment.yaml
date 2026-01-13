@@ -1,8 +1,7 @@
-name: lerobot-tacxense
+name: lexense-migraphx
 channels:
   - robostack-staging
   - conda-forge
-  - nvidia
 dependencies:
   - python=3.10
   - ros-humble-kdl-parser
@@ -24,8 +23,9 @@ dependencies:
   - pip
   - evdev
   - wxpython # for pico4
-  - nvidia::cuda-toolkit=12.8 # for xensesdk
-  - nvidia::cudnn # for xensesdk, cuda-version=12
+  # NOTE: You need to install AMD Unified Driver Package Repositories and Installer Script
+  # wget https://repo.radeon.com/amdgpu-install/7.1.1/ubuntu/noble/amdgpu-install_7.1.1.70101-1_all.deb
+  # sudo apt install ./amdgpu-install_7.1.1.70101-1_all.deb
   - conda-forge::ffmpeg=7.1.1 # for libsvtav1 encoder
   - conda-forge::soem=1.4.0 # This package is missing in aarch64
   # To install it on aarch64 (arm64), comment out this package and first create the arx-py311 environment.
