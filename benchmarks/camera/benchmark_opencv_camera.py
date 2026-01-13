@@ -6,46 +6,60 @@ Measures camera performance metrics including:
 - Actual FPS vs requested FPS
 - Frame read latency (min/max/avg/std)
 - Frame drop detection
-- Resolution/FPS capability matrix
-- Real-time video streaming with Rerun visualization
+- Resolution/FPS/FOURCC capability matrix
+- USB connection speed detection (USB 2.0/3.0)
+- MJPG vs YUYV bandwidth comparison
+- Real-time video streaming with Rerun/cv2.imshow
 
 Usage:
-    # List all cameras with device info
+    ==================== Camera Discovery ====================
+    # List all cameras with device info (name, USB speed, etc.)
     python benchmark_opencv_camera.py --list
 
-    # Basic benchmark (auto-detect cameras)
-    python benchmark_opencv_camera.py
+    ==================== Capability Scan ====================
+    # Full capability scan (resolution, FPS, USB speed)
+    python benchmark_opencv_camera.py -i 0 --scan-capabilities
+    
+    # Compare MJPG vs YUYV performance and bandwidth
+    python benchmark_opencv_camera.py -i 0 --compare-fourcc
+    python benchmark_opencv_camera.py -i 0 --compare-fourcc --fps 60 --width 1920 --height 1080
 
-    # Benchmark specific camera
-    python benchmark_opencv_camera.py --index 0
+    ==================== Benchmark ====================
+    # Basic benchmark (MJPG format, 1280x720@30fps by default)
+    python benchmark_opencv_camera.py -i 0
+    python benchmark_opencv_camera.py -i 0 --fps 60 --width 1920 --height 1080
+    python benchmark_opencv_camera.py -i 0 --duration 30  # 30 second test
 
-    # Test specific settings
-    python benchmark_opencv_camera.py --index 0 --fps 30 --width 1280 --height 720
-
-    # Full capability scan
-    python benchmark_opencv_camera.py --index 0 --scan-capabilities
-
-    # Video stream with raw OpenCV (MJPG by default, 2s warmup)
-    python benchmark_opencv_camera.py --index 0 --video-stream
-    python benchmark_opencv_camera.py --index 0 --video-stream --width 1920 --height 1080 --fps 60
-    python benchmark_opencv_camera.py --index 0 --video-stream --warmup 3  # 3s warmup
-    python benchmark_opencv_camera.py --index 0 --video-stream --warmup 0  # No warmup
-    python benchmark_opencv_camera.py --index 0 --video-stream --duration 60  # 60 seconds
-
-    # Video stream with LeRobot's OpenCVCamera (threaded, lower latency)
-    python benchmark_opencv_camera.py --index 0 --video-stream --use-lerobot
-    python benchmark_opencv_camera.py --index 0 --video-stream --use-lerobot --fps 60
-    python benchmark_opencv_camera.py --index 0 --video-stream --use-lerobot --sync-read  # Sync read
-
-    # Lowest latency display with cv2.imshow (press Q to quit)
-    python benchmark_opencv_camera.py --index 0 --video-stream --cv2-display
-    python benchmark_opencv_camera.py --index 0 --video-stream --use-lerobot --cv2-display
+    # Test with YUYV format (uncompressed, higher USB bandwidth)
+    python benchmark_opencv_camera.py -i 0 --fourcc YUYV
 
     # Test multiple cameras
-    python benchmark_opencv_camera.py --index 0 1 2
+    python benchmark_opencv_camera.py -i 0 1 2
 
-    # Long duration test
-    python benchmark_opencv_camera.py --index 0 --duration 60
+    ==================== Video Stream ====================
+    # Stream with Rerun visualization (default)
+    python benchmark_opencv_camera.py -i 0 --video-stream
+    python benchmark_opencv_camera.py -i 0 -v --fps 60 --width 1920 --height 1080
+
+    # Stream with cv2.imshow (lowest latency, press Q to quit)
+    python benchmark_opencv_camera.py -i 0 -v --cv2-display
+
+    # Stream with LeRobot's threaded camera (recommended for low latency)
+    python benchmark_opencv_camera.py -i 0 -v --use-lerobot
+    python benchmark_opencv_camera.py -i 0 -v --use-lerobot --cv2-display
+
+Defaults:
+    --fourcc MJPG     (compressed, saves USB bandwidth)
+    --fps 30
+    --width 1280
+    --height 720
+    --warmup 2.0s
+    --duration 10.0s
+
+Note:
+    - MJPG is recommended for USB 2.0 cameras (480 Mbps bandwidth limit)
+    - YUYV requires USB 3.0 for high resolution/FPS (uncompressed)
+    - Use --cv2-display instead of Rerun for better FPS during streaming
 """
 
 import argparse
