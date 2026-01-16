@@ -88,7 +88,7 @@ dependencies = [
     "torch>=2.8.0,<2.9.0",
     "torchvision>=0.23.0,<0.24.0",
     # ONNX Runtime with MIGraphX backend for ROCm:
-    "onnxruntime-migraphx==1.23.1",
+    # "onnxruntime-migraphx==1.23.1",
     "draccus==0.10.0",
     "gymnasium>=1.1.1,<2.0.0",
     # Pin to 0.23.1 to stay compatible with TensorFlow/JAX numpy<2 constraint in openpi

@@ -215,27 +215,6 @@ EOF
         uv pip install av==15.1.0
         echo "[INFO] xensesdk and xensegripper installed successfully!"
 
-        # Fix onnxruntime for AMD ROCm: xensesdk installs onnxruntime-gpu (CUDA), we need migraphx
-        echo "[INFO] Reinstalling onnxruntime-migraphx for AMD ROCm support..."
-        pip uninstall onnxruntime onnxruntime-gpu -y 2>/dev/null || true
-        pip install onnxruntime-migraphx==1.23.1 -f https://repo.radeon.com/rocm/manylinux/rocm-rel-7.1.1/ --force-reinstall --no-deps
-
-        # Fix onnxruntime-migraphx RPATH for ROCm libraries
-        echo "[INFO] Fixing onnxruntime-migraphx RPATH for ROCm libraries..."
-        uv pip install patchelf
-        PY_VER="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
-        ONNX_MIGRAPHX_SO="${CONDA_PREFIX}/lib/python${PY_VER}/site-packages/onnxruntime/capi/libonnxruntime_providers_migraphx.so"
-        ONNX_PYBIND_SO="${CONDA_PREFIX}/lib/python${PY_VER}/site-packages/onnxruntime/capi/onnxruntime_pybind11_state.cpython-310-x86_64-linux-gnu.so"
-        ROCM_LIB_PATH="/opt/rocm/lib"
-        if [[ -f "$ONNX_MIGRAPHX_SO" ]]; then
-            patchelf --set-rpath "${ROCM_LIB_PATH}:${CONDA_PREFIX}/lib" "$ONNX_MIGRAPHX_SO"
-            echo "[INFO] onnxruntime MIGraphX provider RPATH: $(patchelf --print-rpath "$ONNX_MIGRAPHX_SO")"
-        fi
-        if [[ -f "$ONNX_PYBIND_SO" ]]; then
-            patchelf --set-rpath "${ROCM_LIB_PATH}:${CONDA_PREFIX}/lib" "$ONNX_PYBIND_SO"
-            echo "[INFO] onnxruntime pybind RPATH: $(patchelf --print-rpath "$ONNX_PYBIND_SO")"
-        fi
-
         # Workaround:
         # After installing xensesdk, remove OpenCV's bundled Qt platform plugin if present.
         # This avoids Qt/XCB plugin loading issues inside conda environments.
