@@ -60,12 +60,9 @@ def main():
         
         while True:
             # 获取传感器数据
-            rectify, diff, depth, force, force_resultant = sensor.selectSensorInfo(
+            rectify, diff = sensor.selectSensorInfo(
                 OutputType.Rectify,
                 OutputType.Difference,
-                OutputType.Depth,
-                OutputType.Force,
-                OutputType.ForceResultant,
             )
             
             # 记录图像数据到 Rerun
@@ -78,45 +75,6 @@ def main():
             if diff is not None:
                 diff_rgb = diff[..., ::-1] if diff.ndim == 3 else diff
                 rr.log("sensor/difference", rr.Image(diff_rgb))
-            
-            # Depth 图像 (归一化到 0-255 显示)
-            if depth is not None:
-                # 归一化深度图用于显示
-                depth_normalized = (depth - depth.min()) / (depth.max() - depth.min() + 1e-6)
-                depth_display = (depth_normalized * 255).astype(np.uint8)
-                rr.log("sensor/depth", rr.Image(depth_display))
-                
-                # 也记录原始深度值作为 DepthImage
-                rr.log("sensor/depth_raw", rr.DepthImage(depth))
-            
-            # Force 数据 (作为热力图)
-            if force is not None and force.ndim >= 2:
-                # 计算力的幅值
-                if force.ndim == 3 and force.shape[-1] == 3:
-                    force_magnitude = np.linalg.norm(force, axis=-1)
-                else:
-                    force_magnitude = np.abs(force) if force.ndim == 2 else force
-                
-                # 归一化
-                force_normalized = (force_magnitude - force_magnitude.min()) / (force_magnitude.max() - force_magnitude.min() + 1e-6)
-                force_display = (force_normalized * 255).astype(np.uint8)
-                rr.log("sensor/force", rr.Image(force_display))
-            
-            # Force Resultant (作为标量时间序列)
-            if force_resultant is not None:
-                if isinstance(force_resultant, np.ndarray):
-                    if force_resultant.size == 6:
-                        # [fx, fy, fz, tx, ty, tz]
-                        rr.log("sensor/force_resultant/fx", rr.Scalar(float(force_resultant[0])))
-                        rr.log("sensor/force_resultant/fy", rr.Scalar(float(force_resultant[1])))
-                        rr.log("sensor/force_resultant/fz", rr.Scalar(float(force_resultant[2])))
-                        rr.log("sensor/force_resultant/tx", rr.Scalar(float(force_resultant[3])))
-                        rr.log("sensor/force_resultant/ty", rr.Scalar(float(force_resultant[4])))
-                        rr.log("sensor/force_resultant/tz", rr.Scalar(float(force_resultant[5])))
-                    elif force_resultant.size == 1:
-                        rr.log("sensor/force_resultant", rr.Scalar(float(force_resultant)))
-                else:
-                    rr.log("sensor/force_resultant", rr.Scalar(float(force_resultant)))
             
             # 计算并显示 FPS
             frame_count += 1
