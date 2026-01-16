@@ -773,6 +773,11 @@ def stream_video_with_lerobot(
 
     camera = OpenCVCamera(config)
 
+    # Initialize variables before try block to avoid UnboundLocalError in finally
+    frame_count = 0
+    start_time = None
+    recent_fps = 0.0
+
     try:
         # Connect (includes warmup)
         logger.info(f"Connecting camera (warmup: {warmup_s}s)...")
@@ -780,11 +785,9 @@ def stream_video_with_lerobot(
         logger.info(f"Connected: {camera.width}x{camera.height} @ {camera.fps} FPS")
 
         # Streaming loop
-        frame_count = 0
         start_time = time.perf_counter()
         fps_update_interval = 0.5
         last_fps_update = start_time
-        recent_fps = 0.0
 
         logger.info("Streaming... Press Ctrl+C to stop.")
 
@@ -845,20 +848,29 @@ def stream_video_with_lerobot(
                     f"Latency: {frame_latency_ms:.1f}ms, Elapsed: {elapsed:.1f}s"
                 )
 
+    except RuntimeError as e:
+        # Handle FPS validation errors or other camera connection issues
+        if "failed to set fps" in str(e):
+            logger.error(f"Camera FPS validation failed: {e}")
+            logger.info("Tip: The camera may not support the requested FPS. Try using --scan-capabilities to see supported FPS.")
+        else:
+            logger.error(f"Camera error: {e}")
+        raise
     except KeyboardInterrupt:
         logger.info("Stream stopped by user.")
     finally:
         camera.disconnect()
         if use_cv2_display:
             cv2.destroyAllWindows()
-        elapsed = time.perf_counter() - start_time
-        avg_fps = frame_count / elapsed if elapsed > 0 else 0
-        logger.info("=" * 60)
-        logger.info("LeRobot Camera Stream Summary:")
-        logger.info(f"  Total frames: {frame_count}")
-        logger.info(f"  Duration: {elapsed:.1f}s")
-        logger.info(f"  Average FPS: {avg_fps:.2f}")
-        logger.info("=" * 60)
+        if start_time is not None:
+            elapsed = time.perf_counter() - start_time
+            avg_fps = frame_count / elapsed if elapsed > 0 else 0
+            logger.info("=" * 60)
+            logger.info("LeRobot Camera Stream Summary:")
+            logger.info(f"  Total frames: {frame_count}")
+            logger.info(f"  Duration: {elapsed:.1f}s")
+            logger.info(f"  Average FPS: {avg_fps:.2f}")
+            logger.info("=" * 60)
 
 
 def benchmark_camera(
