@@ -84,7 +84,7 @@ lerobot-teleoperate \
 lerobot-record \
     --robot.type=xense_flare \
     --robot.mac_addr=6ebbc5f53240 \
-    --dataset.repo_id=Vertax/xense_flare_pick_and_place_cube_20260105 \
+    --dataset.repo_id=Vertax/xense_flare_pick_and_place_cube_20260113 \
     --dataset.num_episodes=50 \
     --dataset.single_task="pick up cubes in rgb order from the table and place them in the blue box" \
     --dataset.fps=20 \
@@ -110,22 +110,9 @@ lerobot-record \
 lerobot-record \
     --robot.type=xense_flare \
     --robot.mac_addr=6ebbc5f53240 \
-    --dataset.repo_id=Vertax/xense_flare_wipe_vase_20260110 \
-    --dataset.num_episodes=50 \
+    --dataset.repo_id=Vertax/xense_flare_wipe_vase_20260113 \
+    --dataset.num_episodes=20 \
     --dataset.single_task="wipe the vase" \
-    --dataset.fps=20 \
-    --display_data=false \
-    --resume=false \
-    --dataset.push_to_hub=true
-```
-
-```python
-lerobot-record \
-    --robot.type=xense_flare \
-    --robot.mac_addr=6ebbc5f53240 \
-    --dataset.repo_id=Vertax/xense_flare_open_lock_20260110 \
-    --dataset.num_episodes=50 \
-    --dataset.single_task="open the lock with the key" \
     --dataset.fps=20 \
     --display_data=false \
     --resume=false \
