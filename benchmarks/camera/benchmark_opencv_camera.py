@@ -664,11 +664,11 @@ def stream_video_with_rerun(
             cv2.putText(
                 frame,
                 overlay_text,
-                (10, 30),
+                (10, 20),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                1.0,
+                0.5,
                 (0, 255, 0),
-                2,
+                1,
             )
 
             # Display frame
@@ -815,11 +815,11 @@ def stream_video_with_lerobot(
             cv2.putText(
                 frame_bgr,
                 overlay_text,
-                (10, 30),
+                (10, 20),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                1.0,
+                0.5,
                 (0, 255, 0),
-                2,
+                1,
             )
 
             # Display frame
