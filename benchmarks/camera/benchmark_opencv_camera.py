@@ -515,7 +515,9 @@ def print_camera_list(cameras: list[CameraDeviceInfo]) -> None:
         # Current settings
         logger.info(f"  Resolution   : {cam.width}x{cam.height}")
         logger.info(f"  FPS          : {cam.fps:.0f}")
-        logger.info(f"  FOURCC       : {cam.fourcc}")
+        # Only display MJPG or YUYV, show "Other" for other formats
+        fourcc_display = cam.fourcc if cam.fourcc in ["MJPG", "YUYV"] else "Other"
+        logger.info(f"  FOURCC       : {fourcc_display}")
         logger.info(f"  Backend      : {cam.backend}")
 
     logger.info("")
@@ -1191,10 +1193,10 @@ def scan_camera_capabilities(
     # Sort supported_fps
     capabilities.supported_fps.sort()
 
-    # Test FOURCC codes
+    # Test FOURCC codes (only MJPG and YUYV)
     if verbose:
-        logger.info("Testing FOURCC codes...")
-    for fourcc_str in COMMON_FOURCC:
+        logger.info("Testing FOURCC codes (MJPG, YUYV)...")
+    for fourcc_str in ["MJPG", "YUYV"]:
         cap = cv2.VideoCapture(camera_index)
         if not cap.isOpened():
             continue
