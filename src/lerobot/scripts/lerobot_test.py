@@ -373,8 +373,6 @@ def _register_builtin_devices(device_types: list[str] | None = None) -> dict[str
         ],
         "robots": [
             "lerobot.robots.koch_follower.config_koch_follower",
-            "lerobot.robots.bi_arx5.config_bi_arx5",
-            "lerobot.robots.arx5_follower.config_arx5_follower",
             "lerobot.robots.flexiv_rizon4.config_flexiv_rizon4",
             "lerobot.robots.xense_multisensor.config_xense_multisensor",
         ],
@@ -533,21 +531,6 @@ def _build_sample_configs() -> dict[str, Any]:
         samples["keyboard_teleop_cfg"] = KeyboardTeleopConfig()
     except Exception as e:
         samples["keyboard_teleop_cfg_error"] = f"{type(e).__name__}: {e}"
-
-    # Robots (configs only; do NOT connect/instantiate hardware)
-    try:
-        from lerobot.robots.arx5_follower.config_arx5_follower import ARX5FollowerConfig
-
-        samples["arx5_robot_cfg"] = ARX5FollowerConfig(port="/dev/ttyUSB0")
-    except Exception as e:
-        samples["arx5_robot_cfg_error"] = f"{type(e).__name__}: {e}"
-
-    try:
-        from lerobot.robots.bi_arx5.config_bi_arx5 import BiARX5Config
-
-        samples["bi_arx5_robot_cfg"] = BiARX5Config(enable_tactile_sensors=False)
-    except Exception as e:
-        samples["bi_arx5_robot_cfg_error"] = f"{type(e).__name__}: {e}"
 
     return samples
 

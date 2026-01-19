@@ -55,8 +55,6 @@ from lerobot.processor.rename_processor import rename_stats
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
-    arx5_follower,
-    bi_arx5,
     flexiv_rizon4,  # noqa: F401
     hope_jr,
     koch_follower,
@@ -305,190 +303,6 @@ def apply_velocity_limits(
         logging.debug(f"Applied velocity limits: {clip_count} joints clipped")
 
     return limited_action
-
-
-@safe_stop_image_writer
-def bi_arx5_record_loop(
-    robot: Robot,
-    events: dict,
-    fps: int,
-    teleop_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],  # runs after teleop
-    robot_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],  # runs before robot
-    robot_observation_processor: RobotProcessorPipeline[
-        RobotObservation, RobotObservation
-    ],  # runs after robot
-    dataset: LeRobotDataset | None = None,
-    teleop: Teleoperator | list[Teleoperator] | None = None,
-    policy: PreTrainedPolicy | None = None,
-    preprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]] | None = None,
-    postprocessor: PolicyProcessorPipeline[PolicyAction, PolicyAction] | None = None,
-    control_time_s: int | None = None,
-    single_task: str | None = None,
-    display_data: bool = False,
-):
-    """
-    Specialized record loop for BiARX5 robot supporting both policy and manual demonstration modes.
-
-    Policy mode:
-    - Uses current observation for policy inference
-    - Saves current observation with actually sent action (no shifting)
-    - All frames are saved to dataset
-
-    Manual demonstration mode with action shifting:
-    - Frame 0: Only records observation, no dataset entry created
-    - Frame 1+: Creates dataset entry using prev_observation and current joint positions as action
-    - Last frame: Gets discarded (no dataset entry)
-
-    This is optimized for dual-arm robots where the human manually moves the robot arms
-    while in gravity compensation mode, and the system records the joint positions as demonstrations.
-
-    Action shifting in manual mode ensures that action[t] corresponds to the state that will be reached at time t+1.
-    """
-
-    if dataset is not None and dataset.fps != fps:
-        raise ValueError(
-            f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
-        )
-
-    # Set appropriate control mode based on operation type
-    if policy is not None:
-        logging.info("Starting BiARX5 record loop for policy inference")
-        # Policy mode: switch to normal position control for precise action execution
-        robot.set_to_normal_position_control()
-        policy.reset()
-
-    # Reset processor if they are provided
-    if preprocessor is not None and postprocessor is not None:
-        preprocessor.reset()
-        postprocessor.reset()
-
-    timestamp = 0
-    start_episode_t = time.perf_counter()
-
-    # Variables for action shifting (only used in manual demonstration mode)
-    prev_observation = None
-    prev_observation_frame = None
-
-    while timestamp < control_time_s:
-        start_loop_t = time.perf_counter()
-
-        if events["exit_early"]:
-            events["exit_early"] = False
-            break
-
-        # Handle rerecord_episode event (same as standard record_loop)
-        if events["rerecord_episode"]:
-            # Don't reset the event here - let the main record() function handle it
-            logging.info("Re-record episode requested, exiting record loop early")
-            break
-
-        # Handle go_home event for BiARX5 robot when recording (non-blocking)
-        if events["go_start"] and policy is None:
-            events["go_start"] = False
-            logging.info(
-                "Starting smooth_go_start in background while recording continues..."
-            )
-
-            # Execute smooth_go_start in a separate thread to avoid blocking
-            import threading
-
-            def go_start_thread():
-                try:
-                    robot.smooth_go_start(duration=3.0)
-                    logging.info(
-                        "✅ smooth_go_start completed successfully in 2 seconds"
-                    )
-                except Exception as e:
-                    logging.error(f"Error during smooth_go_start: {e}")
-
-            thread = threading.Thread(target=go_start_thread, daemon=True)
-            thread.start()
-
-        # Get robot observation
-        current_observation = robot.get_observation()
-        current_observation_processed = robot_observation_processor(current_observation)
-        current_observation_frame = None
-
-        # Applies a pipeline to the raw robot observation, default is IdentityProcessor
-
-        if policy is not None or dataset is not None:
-            current_observation_frame = build_dataset_frame(
-                dataset.features, current_observation_processed, prefix=OBS_STR
-            )
-
-        # Get action from either policy or teleop
-        if (
-            policy is not None
-            and preprocessor is not None
-            and postprocessor is not None
-        ):
-            action_values = predict_action(
-                observation=current_observation_frame,
-                policy=policy,
-                device=get_safe_torch_device(policy.config.device),
-                preprocessor=preprocessor,
-                postprocessor=postprocessor,
-                use_amp=policy.config.use_amp,
-                task=single_task,
-                robot_type=robot.robot_type,
-            )
-
-            current_action = {
-                key: action_values[i].item()
-                for i, key in enumerate(robot.action_features)
-            }
-
-            sent_action = robot.send_action(current_action)
-            if dataset is not None:
-                action_frame = build_dataset_frame(
-                    dataset.features, sent_action, prefix=ACTION
-                )
-                frame = {
-                    **current_observation_frame,
-                    **action_frame,
-                    "task": single_task,
-                }
-                dataset.add_frame(frame)
-        else:
-            current_action = extract_joint_positions(current_observation)
-            # Action shifting logic: from second frame onwards, create dataset entries
-            if prev_observation is not None and dataset is not None:
-                # Manual demonstration mode with action shifting
-                # Use current frame's joint positions as previous frame's action
-
-                # Apply velocity limits to ensure consistency with inference-time clipping
-                prev_action = extract_joint_positions(prev_observation)
-                limited_action = apply_velocity_limits(
-                    current_action, prev_action, 1.0 / fps, robot
-                )
-                action_frame = build_dataset_frame(
-                    dataset.features, limited_action, prefix=ACTION
-                )
-                frame = {**prev_observation_frame, **action_frame, "task": single_task}
-                dataset.add_frame(frame)
-
-        if display_data:
-            display_action = (
-                extract_joint_positions(current_observation_processed)
-                if policy is None
-                else {}
-            )
-            log_rerun_data(
-                observation=current_observation_processed, action=display_action
-            )
-
-        # Update for next iteration
-        prev_observation = current_observation
-        prev_observation_frame = current_observation_frame
-
-        dt_s = time.perf_counter() - start_loop_t
-        busy_wait(1 / fps - dt_s)
-
-        timestamp = time.perf_counter() - start_episode_t
 
 
 @safe_stop_image_writer
@@ -899,24 +713,6 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         single_task=cfg.dataset.single_task,
                         display_data=cfg.display_data,
                     )
-                # Use specialized record loop for BiARX5 robot
-                elif cfg.robot.type == "bi_arx5":
-                    bi_arx5_record_loop(
-                        robot=robot,
-                        events=events,
-                        fps=cfg.dataset.fps,
-                        teleop_action_processor=teleop_action_processor,
-                        robot_action_processor=robot_action_processor,
-                        robot_observation_processor=robot_observation_processor,
-                        teleop=teleop,
-                        policy=policy,
-                        preprocessor=preprocessor,
-                        postprocessor=postprocessor,
-                        dataset=dataset,
-                        control_time_s=cfg.dataset.episode_time_s,
-                        single_task=cfg.dataset.single_task,
-                        display_data=cfg.display_data,
-                    )
                 else:
                     record_loop(
                         robot=robot,
@@ -946,19 +742,6 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                             robot=robot,
                             events=events,
                             fps=cfg.dataset.fps,
-                            control_time_s=cfg.dataset.reset_time_s,
-                            single_task=cfg.dataset.single_task,
-                            display_data=cfg.display_data,
-                        )
-                    elif cfg.robot.type == "bi_arx5":
-                        bi_arx5_record_loop(
-                            robot=robot,
-                            events=events,
-                            fps=cfg.dataset.fps,
-                            teleop_action_processor=teleop_action_processor,
-                            robot_action_processor=robot_action_processor,
-                            robot_observation_processor=robot_observation_processor,
-                            teleop=teleop,
                             control_time_s=cfg.dataset.reset_time_s,
                             single_task=cfg.dataset.single_task,
                             display_data=cfg.display_data,

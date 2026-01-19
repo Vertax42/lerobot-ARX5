@@ -34,28 +34,24 @@ class XenseMultisensorConfig(RobotConfig):
     def __post_init__(self):
         # Camera configuration based on tactile sensors setting
          self.cameras = {
-                # "OG000337": XenseCameraConfig(
-                #     serial_number="OG000337",
+                "OS000097": XenseCameraConfig(
+                    serial_number="OS000097",
+                    fps=30,
+                    output_types=[XenseOutputType.RECTIFY],
+                    warmup_s=1.0,
+                ),
+                "OS000115": XenseCameraConfig(
+                    serial_number="OS000115",
+                    fps=30,
+                    output_types=[XenseOutputType.RECTIFY],
+                    warmup_s=1.0,
+                    use_gpu=False,
+                ),
+                # "OG000456": XenseCameraConfig(
+                #     serial_number="OG000456",
                 #     fps=30,
                 #     output_types=[XenseOutputType.RECTIFY],
                 #     warmup_s=1.0,
+                #     use_gpu=False,
                 # ),
-                "OG000344": XenseCameraConfig(
-                    serial_number="OG000344",
-                    fps=30,
-                    output_types=[XenseOutputType.RECTIFY],
-                    warmup_s=1.0,
-                ),
-                "OS000128": XenseCameraConfig(
-                    serial_number="OS000128",
-                    fps=30,
-                    output_types=[XenseOutputType.RECTIFY],
-                    warmup_s=1.0,
-                ),
-                "OS000079": XenseCameraConfig(
-                    serial_number="OS000079",
-                    fps=30,
-                    output_types=[XenseOutputType.RECTIFY],
-                    warmup_s=1.0,
-                ),
             }

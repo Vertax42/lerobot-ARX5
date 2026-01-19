@@ -30,8 +30,6 @@ from lerobot.processor import (
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
-    arx5_follower,
-    bi_arx5,
     flexiv_rizon4,  # noqa: F401
     hope_jr,
     koch_follower,
@@ -86,12 +84,6 @@ def replay(cfg: ReplayConfig):
 
     try:
         robot.connect()
-        # Switch to normal position control if supported (for BiARX5)
-        if isinstance(robot, bi_arx5.BiARX5) and callable(
-            robot.set_to_normal_position_control
-        ):
-            logging.info("Switching robot to normal position control mode for replay")
-            robot.set_to_normal_position_control()
 
         log_say("Replaying episode", cfg.play_sounds, blocking=True)
         for idx in range(len(episode_frames)):
