@@ -146,6 +146,7 @@ class XenseTactileCamera(Camera):
         self.warmup_s = config.warmup_s
         self.rectify_size = config.rectify_size
         self.raw_size = config.raw_size
+        self.infer_type = config.infer_type
 
         self.sensor = None
 
@@ -196,12 +197,39 @@ class XenseTactileCamera(Camera):
 
         try:
             _patch_ctypes_find_library_for_udev()
-            # Use default OpenCV backend (no api parameter = CV2_V4L2)
+            
+            # Prepare Sensor.create() parameters
+            create_kwargs = {
+                "api": CameraSource.CV2_V4L2,
+                "rectify_size": self.rectify_size,
+                "raw_size": self.raw_size,
+            }
+            
+            # Add infer_type if specified
+            if self.infer_type is not None:
+                from xensesdk.xenseInterface.sensorEnum import InferType
+                
+                # Convert string to InferType enum
+                infer_type_str = self.infer_type.upper()
+                if infer_type_str == "MIGRAPHX":
+                    create_kwargs["infer_type"] = InferType.MIGraphX
+                    create_kwargs["use_gpu"] = True  # MIGraphX requires GPU
+                elif infer_type_str == "ONNX":
+                    create_kwargs["infer_type"] = InferType.ONNX
+                    create_kwargs["use_gpu"] = True  # ONNX typically uses GPU
+                elif infer_type_str == "CPU":
+                    create_kwargs["infer_type"] = InferType.CPU
+                    create_kwargs["use_gpu"] = False  # CPU mode doesn't use GPU
+                else:
+                    raise ValueError(
+                        f"Invalid infer_type: {self.infer_type}. "
+                        f"Valid values: MIGraphX, ONNX, CPU"
+                    )
+            
+            # Use default OpenCV backend (CV2_V4L2)
             self.sensor = self._Sensor.create(
                 self.serial_number,
-                api=CameraSource.CV2_V4L2,
-                rectify_size=self.rectify_size,
-                raw_size=self.raw_size,
+                **create_kwargs,
             )
         except Exception as e:
             raise ConnectionError(

@@ -37,6 +37,10 @@ Usage:
     python benchmark_opencv_camera.py --index 0 --video-stream --use-lerobot --fps 60
     python benchmark_opencv_camera.py --index 0 --video-stream --use-lerobot --sync-read  # Sync read
 
+    # Multiple cameras streaming simultaneously with LeRobot (Rerun visualization)
+    python benchmark_opencv_camera.py --index 0 1 --video-stream --use-lerobot
+    python benchmark_opencv_camera.py --index 0 1 2 --video-stream --use-lerobot --fps 30
+
     # Lowest latency display with cv2.imshow (press Q to quit)
     python benchmark_opencv_camera.py --index 0 --video-stream --cv2-display
     python benchmark_opencv_camera.py --index 0 --video-stream --use-lerobot --cv2-display
@@ -844,6 +848,201 @@ def stream_video_with_lerobot(
         logger.info(f"  Total frames: {frame_count}")
         logger.info(f"  Duration: {elapsed:.1f}s")
         logger.info(f"  Average FPS: {avg_fps:.2f}")
+        logger.info("=" * 60)
+
+
+def stream_multiple_cameras_with_lerobot(
+    camera_indices: list[int | str],
+    fps: float = 30,
+    width: int = 1280,
+    height: int = 720,
+    fourcc: str = "MJPG",
+    duration_s: float | None = None,
+    warmup_s: float = 2.0,
+    use_async: bool = True,
+) -> None:
+    """
+    Stream video from multiple cameras simultaneously using LeRobot's OpenCVCamera.
+
+    Uses LeRobot's threaded camera implementation for optimal latency.
+    Each camera runs in its own background thread managed by OpenCVCamera.
+
+    Args:
+        camera_indices: List of camera indices or paths
+        fps: Requested FPS
+        width: Requested width
+        height: Requested height
+        fourcc: FOURCC codec (default: MJPG)
+        duration_s: Stream duration in seconds (None for infinite)
+        warmup_s: Warmup time before measuring FPS
+        use_async: Use async_read() for lower latency (default: True)
+    """
+    from lerobot.cameras.opencv import OpenCVCamera
+    from lerobot.cameras.opencv.configuration_opencv import ColorMode, OpenCVCameraConfig
+
+    logger.info("=" * 60)
+    logger.info(f"Starting LeRobot multi-camera stream for {len(camera_indices)} camera(s)")
+    logger.info(f"Settings: {width}x{height} @ {fps} FPS, FOURCC: {fourcc}")
+    logger.info(f"Mode: {'async_read()' if use_async else 'read()'}")
+    logger.info("=" * 60)
+
+    try:
+        import rerun as rr
+    except ImportError:
+        logger.error("Rerun is not installed. Install with: pip install rerun-sdk")
+        return
+
+    rr.init("multi_camera_stream")
+    rr.spawn(memory_limit=RERUN_MEMORY_LIMIT)
+
+    # Create camera configs and instances
+    cameras = []
+    camera_configs = []
+    for cam_idx in camera_indices:
+        config = OpenCVCameraConfig(
+            index_or_path=cam_idx if isinstance(cam_idx, int) else Path(cam_idx),
+            fps=fps,
+            width=width,
+            height=height,
+            color_mode=ColorMode.RGB,  # RGB for Rerun
+            warmup_s=int(warmup_s),
+            fourcc=fourcc,
+        )
+        camera_configs.append(config)
+        camera = OpenCVCamera(config)
+        cameras.append(camera)
+
+    # Initialize variables before try block to avoid UnboundLocalError in finally
+    start_time = time.perf_counter()
+    frame_counts = {i: 0 for i in range(len(cameras))}  # Use dict like bi_arx5
+    connected_camera_dict = {}  # Track successfully connected cameras
+    connected_indices = []  # Track indices of successfully connected cameras
+
+    try:
+        # Connect all cameras (similar to bi_arx5 implementation)
+        # Connect cameras sequentially with simple error handling like bi_arx5
+        logger.info(f"Connecting {len(cameras)} camera(s) (warmup: {warmup_s}s)...")
+
+        # Create a dictionary to store cameras by their indices (similar to bi_arx5's self.cameras)
+        camera_dict = {idx: cam for idx, cam in enumerate(cameras)}
+        connected_camera_dict = {}  # Successfully connected cameras
+        connected_indices = []
+
+        for cam_idx, camera in camera_dict.items():
+            try:
+                logger.info(f"  Connecting camera {camera_indices[cam_idx]}...")
+
+                # Add much longer delay between connections to avoid resource conflicts
+                # These tactile sensors seem to need significant time between connections
+                if cam_idx > 0:
+                    time.sleep(5.0)  # Increased to 5.0s for tactile sensors
+
+                # Connect with warmup (same as bi_arx5)
+                camera.connect()
+                logger.info(f"  Camera {camera_indices[cam_idx]}: {camera.width}x{camera.height} @ {camera.fps} FPS")
+
+                connected_camera_dict[cam_idx] = camera
+                connected_indices.append(cam_idx)
+
+            except Exception as e:
+                logger.error(f"  Failed to connect camera {camera_indices[cam_idx]}: {e}")
+                logger.warn(f"  Camera {camera_indices[cam_idx]} will be skipped.")
+
+        if not connected_camera_dict:
+            logger.error("No cameras successfully connected. Exiting.")
+            return
+
+        logger.info(f"Successfully connected {len(connected_camera_dict)}/{len(cameras)} camera(s)")
+
+        # Streaming loop
+        fps_update_interval = 0.5
+        last_fps_update = start_time
+        recent_fps_list = [0.0] * len(cameras)
+
+        logger.info("Streaming... Press Ctrl+C to stop.")
+
+        while True:
+            loop_start = time.perf_counter()
+
+            # Check duration limit
+            if duration_s is not None and (loop_start - start_time) >= duration_s:
+                logger.info(f"Duration limit reached ({duration_s}s)")
+                break
+
+            # Read frames from all cameras (similar to bi_arx5 read_observation)
+            frames_rgb = [None] * len(cameras)  # Initialize with None for all cameras
+            latencies_ms = [0] * len(cameras)
+
+            # Read from connected cameras (similar to bi_arx5's camera reading loop)
+            for cam_idx, camera in connected_camera_dict.items():
+                frame_start = time.perf_counter()
+                try:
+                    if use_async:
+                        frame_rgb = camera.async_read()
+                    else:
+                        frame_rgb = camera.read()
+                    frame_end = time.perf_counter()
+                    frame_latency_ms = (frame_end - frame_start) * 1000
+
+                    frames_rgb[cam_idx] = frame_rgb
+                    latencies_ms[cam_idx] = frame_latency_ms
+                    frame_counts[cam_idx] += 1
+
+                except Exception as e:
+                    logger.warn(f"Failed to read from camera {camera_indices[cam_idx]}: {e}")
+                    frames_rgb[cam_idx] = None
+                    latencies_ms[cam_idx] = 0
+
+            # Update FPS for all cameras
+            current_time = time.perf_counter()
+            if current_time - last_fps_update >= fps_update_interval:
+                elapsed = current_time - start_time
+                for i in range(len(cameras)):
+                    recent_fps_list[i] = frame_counts[i] / elapsed if elapsed > 0 else 0
+                last_fps_update = current_time
+
+            # Log all frames to Rerun with separate paths for each camera
+            for i, (frame_rgb, cam_idx) in enumerate(zip(frames_rgb, camera_indices)):
+                if frame_rgb is not None:
+                    # Use camera index in path for Rerun
+                    camera_path = f"camera_{cam_idx}"
+                    rr.log(f"{camera_path}/image", rr.Image(frame_rgb))
+                    rr.log(f"{camera_path}/fps", rr.Scalars(recent_fps_list[i]))
+                    rr.log(f"{camera_path}/latency_ms", rr.Scalars(latencies_ms[i] if i < len(latencies_ms) else 0))
+
+            # Progress log every 100 frames (for first connected camera)
+            if connected_camera_dict and frame_counts[list(connected_camera_dict.keys())[0]] % 100 == 0:
+                elapsed = current_time - start_time
+                fps_str = ", ".join([f"Cam{i}: {fps:.1f}" for i, fps in enumerate(recent_fps_list)])
+                logger.info(
+                    f"  Frames: {frame_counts}, FPS: [{fps_str}], "
+                    f"Elapsed: {elapsed:.1f}s"
+                )
+
+    except KeyboardInterrupt:
+        logger.info("Stream stopped by user.")
+    finally:
+        # Disconnect all cameras (similar to bi_arx5 disconnect)
+        for cam_idx, camera in camera_dict.items():
+            try:
+                if camera.is_connected:
+                    camera.disconnect()
+                    logger.info(f"Camera {camera_indices[cam_idx]} disconnected.")
+            except Exception as e:
+                logger.warn(f"Error disconnecting camera {camera_indices[cam_idx]}: {e}")
+
+        # Calculate elapsed time safely
+        end_time = time.perf_counter()
+        elapsed = end_time - start_time if start_time > 0 else 0
+
+        logger.info("=" * 60)
+        logger.info("Multi-Camera Stream Summary:")
+        for cam_idx, count in frame_counts.items():
+            avg_fps = count / elapsed if elapsed > 0 else 0
+            status = "✓" if cam_idx in connected_indices else "✗"
+            logger.info(f"  {status} Camera {camera_indices[cam_idx]}: {count} frames, {avg_fps:.2f} FPS avg")
+        logger.info(f"  Total duration: {elapsed:.1f}s")
+        logger.info(f"  Successfully connected: {len(connected_camera_dict)}/{len(cameras)} camera(s)")
         logger.info("=" * 60)
 
 
@@ -1692,28 +1891,46 @@ def main():
 
     # Handle --video-stream option
     if args.video_stream:
-        if len(camera_ids) > 1:
-            logger.warn("Video stream only supports one camera. Using first camera.")
-        cam_id = camera_ids[0]
         # Default to MJPG for video streaming if not specified
         fourcc = args.fourcc if args.fourcc else "MJPG"
         duration = args.duration if args.duration != 10.0 else None  # None for infinite if default
 
+        # Support multiple cameras when using lerobot
         if args.use_lerobot:
-            # Use LeRobot's OpenCVCamera implementation
-            stream_video_with_lerobot(
-                camera_index=cam_id,
-                fps=args.fps,
-                width=args.width,
-                height=args.height,
-                fourcc=fourcc,
-                duration_s=duration,
-                warmup_s=args.warmup,
-                use_async=not args.sync_read,
-                use_cv2_display=args.cv2_display,
-            )
+            if len(camera_ids) > 1:
+                # Multi-camera streaming with lerobot
+                # Always use async_read() for multi-camera (required for optimal performance)
+                if args.sync_read:
+                    logger.warn("--sync-read is ignored for multi-camera streaming. Using async_read() for optimal performance.")
+                stream_multiple_cameras_with_lerobot(
+                    camera_indices=camera_ids,
+                    fps=args.fps,
+                    width=args.width,
+                    height=args.height,
+                    fourcc=fourcc,
+                    duration_s=duration,
+                    warmup_s=args.warmup,
+                    use_async=True,  # Always True for multi-camera
+                )
+            else:
+                # Single camera with lerobot
+                cam_id = camera_ids[0]
+                stream_video_with_lerobot(
+                    camera_index=cam_id,
+                    fps=args.fps,
+                    width=args.width,
+                    height=args.height,
+                    fourcc=fourcc,
+                    duration_s=duration,
+                    warmup_s=args.warmup,
+                    use_async=not args.sync_read,
+                    use_cv2_display=args.cv2_display,
+                )
         else:
-            # Use raw OpenCV implementation
+            # Raw OpenCV implementation (single camera only)
+            if len(camera_ids) > 1:
+                logger.warn("Multiple cameras only supported with --use-lerobot. Using first camera.")
+            cam_id = camera_ids[0]
             stream_video_with_rerun(
                 camera_index=cam_id,
                 fps=args.fps,
