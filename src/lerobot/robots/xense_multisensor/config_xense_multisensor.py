@@ -34,24 +34,15 @@ class XenseMultisensorConfig(RobotConfig):
     def __post_init__(self):
         # Camera configuration based on tactile sensors setting
          self.cameras = {
-                "head": RealSenseCameraConfig(
-                    serial_number_or_name="230322271365", fps=60, width=640, height=480
-                ),
-                "left_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230422271416", fps=60, width=640, height=480
-                ),
-                "right_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230322274234", fps=60, width=640, height=480
-                ),
-                "right_tactile_0": XenseCameraConfig(
-                    serial_number="OG000344",
-                    fps=60,
-                    output_types=[XenseOutputType.DIFFERENCE],
+                "OS000128": XenseCameraConfig(
+                    serial_number="OS000128",
+                    fps=30,
+                    output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
-                "left_tactile_0": XenseCameraConfig(
-                    serial_number="OG000337",
-                    fps=60,
+                "OS000079": XenseCameraConfig(
+                    serial_number="OS000079",
+                    fps=30,
                     output_types=[XenseOutputType.DIFFERENCE],
                     warmup_s=1.0,
                 ),
