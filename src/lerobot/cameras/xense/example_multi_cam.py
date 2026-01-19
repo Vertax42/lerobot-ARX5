@@ -17,7 +17,6 @@
     # 指定 infer_type
     python -m lerobot.cameras.xense.example_multi_cam --sensors OG000337 --infer-type MIGraphX
     python -m lerobot.cameras.xense.example_multi_cam --sensors OG000337 OG000456 --infer-type ONNX
-    python -m lerobot.cameras.xense.example_multi_cam --sensors OG000337 --infer-type CPU
     
     # 自定义输出类型和 FPS
     python -m lerobot.cameras.xense.example_multi_cam --sensors OG000337 OG000456 --output-types difference depth force --fps 60
@@ -158,8 +157,8 @@ def main():
         "--infer-type",
         type=str,
         default=None,
-        choices=["MIGraphX", "ONNX", "CPU"],
-        help="Inference type: MIGraphX (AMD GPU), ONNX, or CPU (default: auto-detect)",
+        choices=["MIGraphX", "ONNX"],
+        help="Inference type: MIGraphX (AMD GPU) or ONNX (default: auto-detect)",
     )
     args = parser.parse_args()
 

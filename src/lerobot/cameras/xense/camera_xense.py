@@ -217,13 +217,10 @@ class XenseTactileCamera(Camera):
                 elif infer_type_str == "ONNX":
                     create_kwargs["infer_type"] = InferType.ONNX
                     create_kwargs["use_gpu"] = True  # ONNX typically uses GPU
-                elif infer_type_str == "CPU":
-                    create_kwargs["infer_type"] = InferType.CPU
-                    create_kwargs["use_gpu"] = False  # CPU mode doesn't use GPU
                 else:
                     raise ValueError(
                         f"Invalid infer_type: {self.infer_type}. "
-                        f"Valid values: MIGraphX, ONNX, CPU"
+                        f"Valid values: MIGraphX, ONNX"
                     )
             
             # Use default OpenCV backend (CV2_V4L2)
