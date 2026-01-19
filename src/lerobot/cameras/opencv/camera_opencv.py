@@ -272,7 +272,7 @@ class OpenCVCamera(Camera):
         )
 
         if not success or actual_fourcc != self.config.fourcc:
-            logger.warning(
+            logger.warn(
                 f"{self} failed to set fourcc={self.config.fourcc} (actual={actual_fourcc}, success={success}). "
                 f"Continuing with default format."
             )
@@ -482,7 +482,7 @@ class OpenCVCamera(Camera):
             except DeviceNotConnectedError:
                 break
             except Exception as e:
-                logger.warning(
+                logger.warn(
                     f"Error reading frame in background thread for {self}: {e}"
                 )
 
