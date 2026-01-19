@@ -202,6 +202,17 @@ EOF
         echo "[INFO] sitecustomize.py created at: $SITECUSTOMIZE_FILE"
     fi
     cd "$PROJECT_ROOT"
+    
+    # Install torch and torchvision from AMD ROCm repository before installing lerobot
+    echo "[INFO] Installing torch and torchvision from AMD ROCm repository..."
+    ROCM_URL="https://repo.radeon.com/rocm/manylinux/rocm-rel-7.1.1/"
+    if uv pip install --find-links "$ROCM_URL" "torch>=2.8.0,<2.9.0" "torchvision>=0.23.0,<0.24.0"; then
+        echo "[INFO] torch and torchvision installed successfully from ROCm repository!"
+    else
+        echo "[ERROR] torch/torchvision installation failed. See the error output above."
+        exit 1
+    fi
+    
     echo "[INFO] Installing Lerobot from pyproject.toml"
     if uv pip install -e .; then
         echo "[INFO] Lerobot installed successfully!"
