@@ -60,6 +60,10 @@ def make_robot_from_config(config: RobotConfig) -> Robot:
         from .xense_flare import XenseFlare
 
         return XenseFlare(config)
+    elif config.type == "xense_multisensor":
+        from .xense_multisensor import XenseMultisensor
+
+        return XenseMultisensor(config)
     else:
         try:
             return cast(Robot, make_device_from_device_class(config))

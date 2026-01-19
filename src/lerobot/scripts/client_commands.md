@@ -1,5 +1,16 @@
 # Lerobot-integration with BiARX5
 
+## Xense Multisensor Robot lerobot-teleoperate command
+
+```python
+lerobot-teleoperate \
+    --robot.type=xense_multisensor \
+    --teleop.type=mock_teleop \
+    --fps=30 \
+    --debug_timing=false \
+    --display_data=true
+```
+
 ## BiARX5 Robot lerobot-teleoperate command
 
 ```python

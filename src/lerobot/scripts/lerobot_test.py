@@ -172,7 +172,7 @@ def _test_robot(
             logger.info("Observation loop interrupted by user")
             
     except KeyboardInterrupt:
-        logger.warn("Interrupted by user (Ctrl+C)")
+        logger.warnnterrupted by user (Ctrl+C)")
     except Exception as e:
         logger.error(f"Error during robot testing: {e}")
         logger.exception("Test failed")
@@ -189,7 +189,7 @@ def _test_robot(
                 # Force cleanup for Flexiv robots
                 try:
                     if hasattr(robot, '_robot') and robot._robot is not None:
-                        logger.warn("Attempting emergency stop...")
+                        logger.warnttempting emergency stop...")
                         robot._robot.Stop()
                 except Exception as stop_error:
                     logger.error(f"Error during emergency stop: {stop_error}")
@@ -376,6 +376,7 @@ def _register_builtin_devices(device_types: list[str] | None = None) -> dict[str
             "lerobot.robots.bi_arx5.config_bi_arx5",
             "lerobot.robots.arx5_follower.config_arx5_follower",
             "lerobot.robots.flexiv_rizon4.config_flexiv_rizon4",
+            "lerobot.robots.xense_multisensor.config_xense_multisensor",
         ],
         "teleoperators": [
             "lerobot.teleoperators.keyboard.configuration_keyboard",
@@ -606,7 +607,7 @@ def test_with_config(cfg: TestConfig):
         _test_teleop(cfg.teleop)
     else:
         # If nothing specified, just show help or list
-        logger.warn("No device specified. Use --robot.type, --camera.type, or --teleop.type")
+        logger.warno device specified. Use --robot.type, --camera.type, or --teleop.type")
         logger.info("Use --list to see available devices")
 
 

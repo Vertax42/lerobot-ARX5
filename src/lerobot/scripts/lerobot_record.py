@@ -62,6 +62,7 @@ from lerobot.robots import (  # noqa: F401
     koch_follower,
     make_robot_from_config,
     xense_flare,  # noqa: F401
+    xense_multisensor,  # noqa: F401
 )
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
@@ -565,6 +566,63 @@ def xense_flare_record_loop(
 
 
 @safe_stop_image_writer
+def xense_multisensor_record_loop(
+    robot: Robot,
+    events: dict,
+    fps: int,
+    dataset: LeRobotDataset | None = None,
+    control_time_s: int | None = None,
+    single_task: str | None = None,
+    display_data: bool = False,
+):
+    """
+    Record loop for Xense Multisensor data collection device.
+
+    Xense Multisensor is a pure observation device with no actions.
+    This loop only records observations (camera images) without any actions.
+    """
+    if dataset is not None and dataset.fps != fps:
+        raise ValueError(
+            f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
+        )
+
+    timestamp = 0
+    start_episode_t = time.perf_counter()
+
+    while timestamp < control_time_s:
+        start_loop_t = time.perf_counter()
+
+        if events["exit_early"]:
+            events["exit_early"] = False
+            break
+
+        if events["rerecord_episode"]:
+            logging.info("Re-record episode requested, exiting record loop early")
+            break
+
+        # Get robot observation (camera images only)
+        current_observation = robot.get_observation()
+
+        if dataset is not None:
+            # Only record observation, no action
+            current_observation_frame = build_dataset_frame(
+                dataset.features, current_observation, prefix=OBS_STR
+            )
+            # Create frame with only observation (no action)
+            frame = {**current_observation_frame, "task": single_task}
+            dataset.add_frame(frame)
+
+        if display_data:
+            # Display observation only (no action)
+            log_rerun_data(observation=current_observation, action={})
+
+        dt_s = time.perf_counter() - start_loop_t
+        busy_wait(1 / fps - dt_s)
+
+        timestamp = time.perf_counter() - start_episode_t
+
+
+@safe_stop_image_writer
 def record_loop(
     robot: Robot,
     events: dict,
@@ -822,6 +880,17 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 # Use specialized record loop for XenseFlare (data collection gripper)
                 if cfg.robot.type == "xense_flare":
                     xense_flare_record_loop(
+                        robot=robot,
+                        events=events,
+                        fps=cfg.dataset.fps,
+                        dataset=dataset,
+                        control_time_s=cfg.dataset.episode_time_s,
+                        single_task=cfg.dataset.single_task,
+                        display_data=cfg.display_data,
+                    )
+                # Use specialized record loop for Xense Multisensor (pure observation device)
+                elif cfg.robot.type == "xense_multisensor":
+                    xense_multisensor_record_loop(
                         robot=robot,
                         events=events,
                         fps=cfg.dataset.fps,

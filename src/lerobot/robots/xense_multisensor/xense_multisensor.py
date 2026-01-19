@@ -48,6 +48,9 @@ class XenseMultisensor(Robot):
         # Logger
         self.logger = get_logger("XenseMultisensor")
 
+        # Connection state
+        self._is_connected = False
+
         self.cameras = make_cameras_from_configs(config.cameras)
         np.set_printoptions(precision=3, suppress=True)
 
@@ -69,7 +72,8 @@ class XenseMultisensor(Robot):
 
     @cached_property
     def action_features(self) -> dict[str, type]:
-        return self._cameras_ft
+        """Xense Multisensor is a pure observation device with no actions."""
+        return {}
 
     @property
     def is_connected(self) -> bool:
@@ -115,3 +119,29 @@ class XenseMultisensor(Robot):
             image = cam.async_read()
             obs[cam_key] = image
         return obs
+
+    def send_action(self, action: dict[str, Any] | None = None) -> dict[str, Any]:
+        """
+        No need to send action to Xense Multisensor, it is a pure observation device.
+        """
+        # No need to send action to Xense Multisensor, it is a pure observation device.
+        return {}
+
+    def disconnect(self) -> None:
+        """Disconnect from the Xense Multisensor device."""
+        if not self._is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected")
+
+        self.logger.info("Disconnecting from Xense Multisensor...")
+
+        # Disconnect all cameras
+        for cam_key, cam in self.cameras.items():
+            try:
+                if cam.is_connected:
+                    cam.disconnect()
+                    self.logger.info(f"  Disconnected camera: {cam_key}")
+            except Exception as e:
+                self.logger.error(f"  Error disconnecting camera {cam_key}: {e}")
+
+        self._is_connected = False
+        self.logger.info("✅ Xense Multisensor disconnected")
