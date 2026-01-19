@@ -147,7 +147,7 @@ class XenseTactileCamera(Camera):
         self.rectify_size = config.rectify_size
         self.raw_size = config.raw_size
         self.infer_type = config.infer_type
-
+        self.use_gpu = config.use_gpu
         self.sensor = None
 
         # Threading for async read
@@ -203,6 +203,7 @@ class XenseTactileCamera(Camera):
                 "api": CameraSource.CV2_V4L2,
                 "rectify_size": self.rectify_size,
                 "raw_size": self.raw_size,
+                "use_gpu": self.use_gpu,
             }
             
             # Add infer_type if specified

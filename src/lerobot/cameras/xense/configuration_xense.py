@@ -99,6 +99,7 @@ class XenseCameraConfig(CameraConfig):
     rectify_size: tuple[int, int] | None = None  # (width, height) for rectified images
     raw_size: tuple[int, int] | None = None  # (width, height) for raw sensor data
     infer_type: str | None = None  # Inference type: "MIGraphX", "ONNX", "CPU", or None (auto-detect)
+    use_gpu: bool = False
 
     def __post_init__(self):
         # Set default output types if not provided
