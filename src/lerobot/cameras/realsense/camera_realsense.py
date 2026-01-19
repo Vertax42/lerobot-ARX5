@@ -506,7 +506,7 @@ class RealSenseCamera(Camera):
             except DeviceNotConnectedError:
                 break
             except Exception as e:
-                logger.warning(
+                logger.warn(
                     f"Error reading frame in background thread for {self}: {e}"
                 )
 

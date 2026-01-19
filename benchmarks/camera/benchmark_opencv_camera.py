@@ -481,7 +481,7 @@ def print_camera_list(cameras: list[CameraDeviceInfo]) -> None:
         cameras: List of CameraDeviceInfo objects
     """
     if not cameras:
-        logger.warning("No cameras found!")
+        logger.warn("No cameras found!")
         return
 
     logger.info("=" * 80)
@@ -642,12 +642,12 @@ def stream_video_with_rerun(
             # Read frame with minimal latency:
             # grab() discards buffered frames, retrieve() gets the latest
             if not cap.grab():
-                logger.warning("Failed to grab frame, retrying...")
+                logger.warn("Failed to grab frame, retrying...")
                 time.sleep(0.01)
                 continue
             ret, frame = cap.retrieve()
             if not ret or frame is None:
-                logger.warning("Failed to retrieve frame, retrying...")
+                logger.warn("Failed to retrieve frame, retrying...")
                 time.sleep(0.01)
                 continue
 
@@ -1183,7 +1183,7 @@ def scan_camera_capabilities(
                     logger.info(f"  {marker} {width}x{height} @ {measured_fps:.1f} FPS (measured)")
             else:
                 if verbose:
-                    logger.warning(f"  ✗ {width}x{height} (cannot read frame)")
+                    logger.warn(f"  ✗ {width}x{height} (cannot read frame)")
         else:
             if verbose:
                 logger.debug(f"  ✗ {width}x{height} (got {actual_w}x{actual_h})")
@@ -1214,7 +1214,7 @@ def scan_camera_capabilities(
                         logger.info(f"  ✓ {fourcc_str}")
                 else:
                     if verbose:
-                        logger.warning(f"  ✗ {fourcc_str} (cannot read frame)")
+                        logger.warn(f"  ✗ {fourcc_str} (cannot read frame)")
             else:
                 if verbose:
                     logger.debug(f"  ✗ {fourcc_str} (got {actual_fourcc})")
@@ -1440,7 +1440,7 @@ def compare_fourcc_formats(
         actual_fps_reported = cap.get(cv2.CAP_PROP_FPS)
 
         if actual_fourcc != fourcc_str:
-            logger.warning(f"  ⚠️ Requested {fourcc_str}, got {actual_fourcc}")
+            logger.warn(f"  ⚠️ Requested {fourcc_str}, got {actual_fourcc}")
 
         # Warmup
         warmup_frames = 0
@@ -1727,7 +1727,7 @@ def main():
     # Handle --video-stream option
     if args.video_stream:
         if len(camera_ids) > 1:
-            logger.warning("Video stream only supports one camera. Using first camera.")
+            logger.warn("Video stream only supports one camera. Using first camera.")
         cam_id = camera_ids[0]
         # Default to MJPG for video streaming if not specified
         fourcc = args.fourcc if args.fourcc else "MJPG"
