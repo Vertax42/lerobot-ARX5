@@ -43,6 +43,7 @@ from lerobot.robots import (  # noqa: F401
     koch_follower,
     make_robot_from_config,
     xense_flare,  # noqa: F401
+    xense_multisensor,  # noqa: F401
 )
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
@@ -1163,6 +1164,100 @@ def xense_flare_teleop_loop(
             return
 
 
+def xense_multisensor_teleop_loop(
+    robot: Robot,
+    fps: int,
+    robot_observation_processor: RobotProcessorPipeline[RobotObservation, RobotObservation],
+    display_data: bool = False,
+    duration: float | None = None,
+    debug_timing: bool = False,
+):
+    """
+    Data collection loop for Xense Multisensor robot.
+
+    Xense Multisensor is a pure observation device (similar to teach mode).
+    This loop continuously reads multi-modal sensor data from multiple cameras:
+    - RealSense cameras: RGB images
+    - Xense tactile sensors: Tactile images
+
+    No actions are sent to the robot - it is a data collection device.
+    """
+    import numpy as np
+    start = time.perf_counter()
+    timing_stats = {
+        "camera_times": {},
+        "total_obs_times": [],
+        "loop_times": [],
+    }
+
+    # Identify camera keys
+    camera_keys = list(robot.observation_features.keys())
+    for cam_key in camera_keys:
+        timing_stats["camera_times"][cam_key] = []
+
+    while True:
+        loop_start = time.perf_counter()
+
+        # Time the complete observation acquisition
+        obs_start = time.perf_counter()
+
+        try:
+            # Get all observations from the robot
+            obs = robot.get_observation()
+        except Exception as e:
+            logger.error(f"Error getting observation: {e}")
+            dt_s = time.perf_counter() - loop_start
+            busy_wait(1 / fps - dt_s)
+            continue
+
+        total_obs_time = time.perf_counter() - obs_start
+        timing_stats["total_obs_times"].append(total_obs_time * 1000)
+
+        # Process observation through pipeline
+        if robot_observation_processor is not None:
+            obs = robot_observation_processor(obs)
+
+        if display_data:
+            # Log all camera data to Rerun
+            log_rerun_data(
+                observation=obs,
+                action={},  # No actions for data collection device
+            )
+
+        dt_s = time.perf_counter() - loop_start
+        busy_wait(1 / fps - dt_s)
+        loop_s = time.perf_counter() - loop_start
+        timing_stats["loop_times"].append(loop_s * 1000)
+
+        if debug_timing:
+            # Display timing info (single line, clear before print)
+            print(
+                f"\r\033[K🔍 obs: {total_obs_time * 1000:5.1f}ms | loop: {loop_s * 1000:5.1f}ms | target: {1000 / fps:.1f}ms | eff: {(1 / fps) / loop_s * 100:5.1f}%",
+                end="",
+                flush=True,
+            )
+        else:
+            # Simple status line (single line with clear)
+            camera_count = len([k for k in obs.keys() if isinstance(obs.get(k), np.ndarray)])
+            print(
+                f"\r\033[Ktime: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz) | cameras: {camera_count}",
+                end="",
+                flush=True,
+            )
+
+        if duration is not None and time.perf_counter() - start >= duration:
+            # Print final statistics before exiting
+            if len(timing_stats["total_obs_times"]) > 10:
+                print("\n=== FINAL TIMING REPORT ===")
+                all_total = timing_stats["total_obs_times"]
+                all_loops = timing_stats["loop_times"]
+
+                print(f"Total samples: {len(all_total)}")
+                print(f"Total obs - avg: {sum(all_total) / len(all_total):.2f}ms")
+                print(f"Loop time - avg: {sum(all_loops) / len(all_loops):.2f}ms")
+            return
+
+
 @parser.wrap()
 def teleoperate(cfg: TeleoperateConfig):
     logger.info(pformat(asdict(cfg)))
@@ -1232,6 +1327,61 @@ def teleoperate(cfg: TeleoperateConfig):
                         logger.info("✅ Xense Flare disconnected")
                 except Exception as e:
                     logger.error(f"Error disconnecting Xense Flare: {e}\n{traceback.format_exc()}")
+
+    # Check if this is Xense Multisensor (data collection device - no teleoperator needed)
+    elif cfg.robot.type == "xense_multisensor":
+        logger.info("Detected Xense Multisensor data collection device")
+
+        robot = None
+
+        try:
+            # Create robot instance
+            robot = make_robot_from_config(cfg.robot)
+
+            # Connect to robot
+            try:
+                robot.connect()
+                logger.info("✅ Xense Multisensor connected")
+                logger.info(f"   Cameras: {list(robot.cameras.keys())}")
+            except Exception as e:
+                logger.error(f"Failed to connect to Xense Multisensor: {e}\n{traceback.format_exc()}")
+                raise
+
+            _, _, robot_observation_processor = make_default_processors()
+
+            # Run data collection loop
+            try:
+                xense_multisensor_teleop_loop(
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    robot_observation_processor=robot_observation_processor,
+                    debug_timing=cfg.debug_timing,
+                )
+            except KeyboardInterrupt:
+                logger.info("Data collection interrupted by user")
+            except Exception as e:
+                logger.error(f"Error during data collection: {e}\n{traceback.format_exc()}")
+                raise
+
+        except Exception as e:
+            logger.error(f"Error in Xense Multisensor setup: {e}\n{traceback.format_exc()}")
+        finally:
+            # Safe disconnect
+            if cfg.display_data:
+                try:
+                    rr.rerun_shutdown()
+                except Exception as e:
+                    logger.warn(f"Error shutting down rerun: {e}")
+
+            if robot is not None:
+                try:
+                    if robot.is_connected:
+                        robot.disconnect()
+                        logger.info("✅ Xense Multisensor disconnected")
+                except Exception as e:
+                    logger.error(f"Error disconnecting Xense Multisensor: {e}\n{traceback.format_exc()}")
 
     # Check if this is ARX5 robot (single arm or bimanual)
     elif cfg.robot.type in ("bi_arx5", "arx5_follower"):
