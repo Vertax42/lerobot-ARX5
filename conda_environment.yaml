@@ -1,9 +1,9 @@
-name: lexense-migraphx
+name: xense-migraphx
 channels:
   - robostack-staging
   - conda-forge
 dependencies:
-  - python=3.10
+  - python=3.12
   - ros-humble-kdl-parser
   - ros-humble-ament-cmake
   - cxx-compiler
