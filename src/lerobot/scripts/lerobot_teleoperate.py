@@ -25,23 +25,6 @@ from pprint import pformat
 
 import rerun as rr
 
-# Import robot configs with optional dependencies to register them with draccus ChoiceRegistry
-# These imports are done here so that the configs are available for command-line parsing
-try:
-    from lerobot.robots import xense_multisensor  # noqa: F401
-except ImportError:
-    pass
-
-try:
-    from lerobot.robots import xense_flare  # noqa: F401
-except ImportError:
-    pass
-
-try:
-    from lerobot.robots import flexiv_rizon4  # noqa: F401
-except ImportError:
-    pass
-
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
 from lerobot.configs import parser
 from lerobot.processor import (
@@ -53,9 +36,14 @@ from lerobot.processor import (
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
+    arx5_follower,
+    bi_arx5,
+    flexiv_rizon4,  # noqa: F401
     hope_jr,
     koch_follower,
     make_robot_from_config,
+    xense_flare,  # noqa: F401
+    xense_multisensor,  # noqa: F401
 )
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
@@ -71,6 +59,7 @@ from lerobot.teleoperators import (  # noqa: F401
     so101_leader,
     spacemouse,
     vive_tracker,
+    xense_flare,
 )
 from lerobot.utils.import_utils import register_third_party_devices
 from lerobot.utils.robot_utils import busy_wait, get_logger, rotation_6d_to_quaternion
@@ -190,8 +179,8 @@ def arx5_teleop_loop(
     specified frequency until a set duration is reached or it is manually interrupted.
 
     Supports:
-    - Single arm mode (arx5_follower): robot.arm (requires bi_arx5 dependencies)
-    - Bimanual mode (bi_arx5): robot.left_arm, robot.right_arm (requires bi_arx5 dependencies)
+    - Single arm mode (arx5_follower): robot.arm
+    - Bimanual mode (bi_arx5): robot.left_arm, robot.right_arm
     """
     start = time.perf_counter()
     timing_stats = {
@@ -1282,9 +1271,6 @@ def teleoperate(cfg: TeleoperateConfig):
 
     # Check if this is Xense Flare (data collection gripper - no teleoperator needed)
     if cfg.robot.type == "xense_flare":
-        # Delayed import for xense_flare robot
-        from lerobot.robots import xense_flare  # noqa: F401
-
         logger.info("Detected Xense Flare data collection gripper")
 
         robot = None
@@ -1344,9 +1330,6 @@ def teleoperate(cfg: TeleoperateConfig):
 
     # Check if this is Xense Multisensor (data collection device - no teleoperator needed)
     elif cfg.robot.type == "xense_multisensor":
-        # Delayed import for xense_multisensor robot
-        from lerobot.robots import xense_multisensor  # noqa: F401
-
         logger.info("Detected Xense Multisensor data collection device")
 
         robot = None
@@ -1400,12 +1383,63 @@ def teleoperate(cfg: TeleoperateConfig):
                 except Exception as e:
                     logger.error(f"Error disconnecting Xense Multisensor: {e}\n{traceback.format_exc()}")
 
-                # Note: xense_multisensor doesn't use a teleoperator, so no teleop.disconnect() needed
+    # Check if this is ARX5 robot (single arm or bimanual)
+    elif cfg.robot.type in ("bi_arx5", "arx5_follower"):
+        mode = "bimanual" if cfg.robot.type == "bi_arx5" else "single-arm"
+        logger.info(f"Detected ARX5 robot ({mode}), using specialized teleop loop")
+
+        # Create robot instance
+        robot = make_robot_from_config(cfg.robot)
+        robot.connect()
+
+        teleop_action_processor, robot_action_processor, robot_observation_processor = (
+            make_default_processors()
+        )
+        if cfg.teleop.type == "spacemouse":
+            teleop = make_teleoperator_from_config(cfg.teleop)
+            logger.info(f"Start EEF pose: {robot.get_start_eef_pose()}")
+            teleop.connect(start_eef_pose=robot.get_start_eef_pose())
+            logger.info("Connected to Spacemouse")
+            try:
+                spacemouse_teleop_loop(
+                    teleop=teleop,
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    teleop_action_processor=teleop_action_processor,
+                    robot_action_processor=robot_action_processor,
+                    robot_observation_processor=robot_observation_processor,
+                    dryrun=cfg.dryrun,
+                    debug_timing=cfg.debug_timing,
+                )
+            except KeyboardInterrupt:
+                pass
+            finally:
+                if cfg.display_data:
+                    rr.rerun_shutdown()
+                robot.disconnect()
+                teleop.disconnect()
+        else:
+            try:
+                arx5_teleop_loop(
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    teleop_action_processor=teleop_action_processor,
+                    robot_action_processor=robot_action_processor,
+                    robot_observation_processor=robot_observation_processor,
+                    debug_timing=cfg.debug_timing,
+                )
+            except KeyboardInterrupt:
+                pass
+            finally:
+                if cfg.display_data:
+                    rr.rerun_shutdown()
+                robot.disconnect()
     # Check if this is Flexiv Rizon4 robot with pico4
     elif cfg.robot.type == "flexiv_rizon4" and cfg.teleop.type == "pico4":
-        # Delayed import for flexiv_rizon4 robot
-        from lerobot.robots import flexiv_rizon4  # noqa: F401
-
         logger.info("Detected Flexiv Rizon4 robot with Pico4, using specialized teleop loop")
 
         robot = None
@@ -1500,9 +1534,6 @@ def teleoperate(cfg: TeleoperateConfig):
                         pass
     # Check if this is Flexiv Rizon4 robot with spacemouse
     elif cfg.robot.type == "flexiv_rizon4" and cfg.teleop.type == "spacemouse":
-        # Delayed import for flexiv_rizon4 robot
-        from lerobot.robots import flexiv_rizon4  # noqa: F401
-
         logger.info("Detected Flexiv Rizon4 robot with Spacemouse, using specialized teleop loop")
 
         robot = None
@@ -1599,9 +1630,6 @@ def teleoperate(cfg: TeleoperateConfig):
                         pass
     # Check if this is Flexiv Rizon4 robot with vive_tracker
     elif cfg.robot.type == "flexiv_rizon4" and cfg.teleop.type == "vive_tracker":
-        # Delayed import for flexiv_rizon4 robot
-        from lerobot.robots import flexiv_rizon4  # noqa: F401
-
         logger.info("Detected Flexiv Rizon4 robot with Vive Tracker, using specialized teleop loop")
 
         robot = None
@@ -1699,9 +1727,6 @@ def teleoperate(cfg: TeleoperateConfig):
                         pass
     # Check if this is Flexiv Rizon4 robot with xense_flare teleoperator
     elif cfg.robot.type == "flexiv_rizon4" and cfg.teleop.type == "xense_flare":
-        # Delayed import for flexiv_rizon4 robot
-        from lerobot.robots import flexiv_rizon4  # noqa: F401
-
         logger.info(
             "Detected Flexiv Rizon4 robot with Xense Flare teleoperator, using specialized teleop loop"
         )

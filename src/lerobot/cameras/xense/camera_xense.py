@@ -588,7 +588,9 @@ class XenseTactileCamera(Camera):
                 f"Internal error: Event set but no data available for {self}."
             )
 
-        return self._format_read_result(data)
+        # latest_data is already formatted by read() (including BGR->RGB conversion),
+        # so we can return it directly without calling _format_read_result again
+        return data
 
     def disconnect(self):
         """
