@@ -81,7 +81,7 @@ def find_all_realsense_cameras() -> list[dict[str, Any]]:
             all_realsense_cameras_info.append(cam_info)
         logger.info(f"Found {len(realsense_cameras)} RealSense cameras.")
     except ImportError:
-        logger.warning("Skipping RealSense camera search: pyrealsense2 library not found or not importable.")
+        logger.warn("Skipping RealSense camera search: pyrealsense2 library not found or not importable.")
     except Exception as e:
         logger.error(f"Error finding RealSense cameras: {e}")
 
@@ -111,9 +111,9 @@ def find_and_print_cameras(camera_type_filter: str | None = None) -> list[dict[s
 
     if not all_cameras_info:
         if camera_type_filter:
-            logger.warning(f"No {camera_type_filter} cameras were detected.")
+            logger.warn(f"No {camera_type_filter} cameras were detected.")
         else:
-            logger.warning("No cameras (OpenCV or RealSense) were detected.")
+            logger.warn("No cameras (OpenCV or RealSense) were detected.")
     else:
         print("\n--- Detected Cameras ---")
         for i, cam_info in enumerate(all_cameras_info):
@@ -175,7 +175,7 @@ def create_camera_instance(cam_meta: dict[str, Any]) -> dict[str, Any] | None:
             )
             instance = RealSenseCamera(rs_config)
         else:
-            logger.warning(f"Unknown camera type: {cam_type} for ID {cam_id}. Skipping.")
+            logger.warn(f"Unknown camera type: {cam_type} for ID {cam_id}. Skipping.")
             return None
 
         if instance:
@@ -208,7 +208,7 @@ def process_camera_image(
             cam_type_str,
         )
     except TimeoutError:
-        logger.warning(
+        logger.warn(
             f"Timeout reading from {cam_type_str} camera {cam_id_str} at time {current_time:.2f}s."
         )
     except Exception as e:
@@ -247,7 +247,7 @@ def save_images_from_all_cameras(
     all_camera_metadata = find_and_print_cameras(camera_type_filter=camera_type)
 
     if not all_camera_metadata:
-        logger.warning("No cameras detected matching the criteria. Cannot save images.")
+        logger.warn("No cameras detected matching the criteria. Cannot save images.")
         return
 
     cameras_to_use = []
@@ -257,7 +257,7 @@ def save_images_from_all_cameras(
             cameras_to_use.append(camera_instance)
 
     if not cameras_to_use:
-        logger.warning("No cameras could be connected. Aborting image save.")
+        logger.warn("No cameras could be connected. Aborting image save.")
         return
 
     logger.info(f"Starting image capture for {record_time_s} seconds from {len(cameras_to_use)} cameras.")

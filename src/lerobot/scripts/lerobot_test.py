@@ -140,7 +140,7 @@ def _test_robot(
             # Not a Flexiv robot or control_mode not available, skip
             pass
         except Exception as e:
-            logger.warning(f"Failed to send initial TCP pose action: {e}")
+            logger.warn(f"Failed to send initial TCP pose action: {e}")
             # Continue anyway - this is not critical
         
         # Continuous observation loop
@@ -172,7 +172,7 @@ def _test_robot(
             logger.info("Observation loop interrupted by user")
             
     except KeyboardInterrupt:
-        logger.warning("Interrupted by user (Ctrl+C)")
+        logger.warn("Interrupted by user (Ctrl+C)")
     except Exception as e:
         logger.error(f"Error during robot testing: {e}")
         logger.exception("Test failed")
@@ -189,7 +189,7 @@ def _test_robot(
                 # Force cleanup for Flexiv robots
                 try:
                     if hasattr(robot, '_robot') and robot._robot is not None:
-                        logger.warning("Attempting emergency stop...")
+                        logger.warn("Attempting emergency stop...")
                         robot._robot.Stop()
                 except Exception as stop_error:
                     logger.error(f"Error during emergency stop: {stop_error}")
@@ -606,7 +606,7 @@ def test_with_config(cfg: TestConfig):
         _test_teleop(cfg.teleop)
     else:
         # If nothing specified, just show help or list
-        logger.warning("No device specified. Use --robot.type, --camera.type, or --teleop.type")
+        logger.warn("No device specified. Use --robot.type, --camera.type, or --teleop.type")
         logger.info("Use --list to see available devices")
 
 

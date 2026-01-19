@@ -119,7 +119,7 @@ class PolicyServer(services_pb2_grpc.AsyncInferenceServicer):
         """Receive policy instructions from the robot client"""
 
         if not self.running:
-            self.logger.warning("Server is not running. Ignoring policy instructions.")
+            self.logger.warn("Server is not running. Ignoring policy instructions.")
             return services_pb2.Empty()
 
         client_id = context.peer()

@@ -282,7 +282,7 @@ class XenseTactileCamera(Camera):
             return found_sensors
 
         except ImportError:
-            logger.warning(
+            logger.warn(
                 "xensesdk not installed. Cannot detect Xense sensors. "
                 "Please install xensesdk to use Xense tactile sensors."
             )
@@ -503,7 +503,7 @@ class XenseTactileCamera(Camera):
             except DeviceNotConnectedError:
                 break
             except Exception as e:
-                logger.warning(
+                logger.warn(
                     f"Error reading data in background thread for {self}: {e}"
                 )
 
@@ -612,7 +612,7 @@ class XenseTactileCamera(Camera):
             try:
                 self.sensor.release()
             except Exception as e:
-                logger.warning(f"Error releasing {self}: {e}")
+                logger.warn(f"Error releasing {self}: {e}")
             self.sensor = None
 
         logger.info(f"{self} disconnected.")
