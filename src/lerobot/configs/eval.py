@@ -48,7 +48,7 @@ class EvalPipelineConfig:
             self.policy.pretrained_path = Path(policy_path)
 
         else:
-            logger.warning(
+            logger.warn(
                 "No pretrained path was provided, evaluated policy will be built from scratch (random weights)."
             )
 
@@ -60,7 +60,7 @@ class EvalPipelineConfig:
                     f"{self.env.type}_{self.policy.type if self.policy is not None else 'scratch'}"
                 )
 
-            logger.warning(f"No job name provided, using '{self.job_name}' as job name.")
+            logger.warnNo job name provided, using '{self.job_name}' as job name.")
 
         if not self.output_dir:
             now = dt.datetime.now()
