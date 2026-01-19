@@ -1760,6 +1760,12 @@ def main():
         help="List all cameras with device/manufacturer information.",
     )
     parser.add_argument(
+        "--max-index",
+        type=int,
+        default=25,
+        help="Maximum camera index to scan when using --list (default: 25).",
+    )
+    parser.add_argument(
         "--index",
         "-i",
         type=int,
@@ -1877,7 +1883,7 @@ def main():
 
     # Handle --list option
     if args.list:
-        cameras = list_cameras()
+        cameras = list_cameras(max_index=args.max_index)
         print_camera_list(cameras)
         return
 
