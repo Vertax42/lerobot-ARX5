@@ -8,7 +8,7 @@ lerobot-teleoperate \
     --teleop.type=mock_teleop \
     --fps=30 \
     --debug_timing=false \
-    --display_data=true
+    --display_data=false
 ```
 
 ## BiARX5 Robot lerobot-teleoperate command

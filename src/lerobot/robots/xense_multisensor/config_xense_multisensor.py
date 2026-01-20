@@ -46,20 +46,20 @@ class XenseMultisensorConfig(RobotConfig):
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
-                    use_gpu=False,
+                    use_gpu=True,
                 ),
                 "OS000079": XenseCameraConfig(
                     serial_number="OS000079",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
-                    use_gpu=False,
+                    use_gpu=True,
                 ),
                 "OS000128": XenseCameraConfig(
                     serial_number="OS000128",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
-                    use_gpu=False,
+                    use_gpu=True,
                 ),
             }
