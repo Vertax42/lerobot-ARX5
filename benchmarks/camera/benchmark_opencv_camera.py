@@ -177,6 +177,53 @@ def get_camera_info(cap: cv2.VideoCapture) -> dict[str, Any]:
     }
 
 
+def has_video_capture_capability(device_path: str) -> bool:
+    """Check if V4L2 device has Video Capture capability.
+
+    Args:
+        device_path: Path to video device (e.g., '/dev/video0')
+
+    Returns:
+        True if device has Video Capture capability, False otherwise
+    """
+    try:
+        result = subprocess.run(
+            ["v4l2-ctl", "--device", device_path, "--all"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            output = result.stdout
+            output_lower = output.lower()
+            
+            # Look for capabilities section
+            # Video Capture capability is 0x00000001
+            # Metadata Capture capability is 0x00000002
+            # We want devices with Video Capture (0x00000001) but not just Metadata Capture
+            
+            # Check if it has Video Capture capability
+            has_video_capture = (
+                "video capture" in output_lower or 
+                "0x00000001" in output or
+                "capabilities     : 0x" in output_lower and "0x00000001" in output
+            )
+            
+            # Check if it's ONLY metadata (has metadata but not video capture)
+            has_metadata_only = (
+                "metadata capture" in output_lower or 
+                "0x00000002" in output
+            ) and "video capture" not in output_lower
+            
+            # Return True if it has video capture and is not metadata-only
+            if has_video_capture and not has_metadata_only:
+                return True
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        pass
+
+    return False
+
+
 def get_v4l2_device_info(device_path: str) -> dict[str, str]:
     """Get V4L2 device info using v4l2-ctl command.
 
@@ -421,8 +468,12 @@ def list_cameras(max_index: int = 10) -> list[CameraDeviceInfo]:
         if not Path(device_path).exists():
             continue
 
-        # Try to open with OpenCV
-        cap = cv2.VideoCapture(i)
+        # Check if device has Video Capture capability (filter out metadata nodes)
+        if not has_video_capture_capability(device_path):
+            continue
+
+        # Try to open with OpenCV using V4L2 backend
+        cap = cv2.VideoCapture(device_path, cv2.CAP_V4L2)
         if not cap.isOpened():
             cap.release()
             continue
@@ -575,8 +626,9 @@ def stream_video_with_rerun(
         rr.init("camera_stream")
         rr.spawn(memory_limit=RERUN_MEMORY_LIMIT)
 
-    # Open camera
-    cap = cv2.VideoCapture(camera_index)
+    # Open camera with explicit V4L2 backend
+    device_path = f"/dev/video{camera_index}" if isinstance(camera_index, int) else camera_index
+    cap = cv2.VideoCapture(device_path, cv2.CAP_V4L2)
     if not cap.isOpened():
         logger.error(f"Failed to open camera {camera_index}")
         return
@@ -585,6 +637,9 @@ def stream_video_with_rerun(
         # Set FOURCC first (MJPG for better performance)
         if fourcc:
             cap.set(cv2.CAP_PROP_FOURCC, string_to_fourcc(fourcc))
+        else:
+            # Default to MJPG if not specified
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
 
         # Set resolution and FPS
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -1087,8 +1142,9 @@ def benchmark_camera(
 
     cap = None
     try:
-        # Open camera
-        cap = cv2.VideoCapture(camera_index)
+        # Open camera with explicit V4L2 backend
+        device_path = f"/dev/video{camera_index}" if isinstance(camera_index, int) else camera_index
+        cap = cv2.VideoCapture(device_path, cv2.CAP_V4L2)
         if not cap.isOpened():
             return BenchmarkResult(
                 camera_index=camera_index,
@@ -1116,6 +1172,9 @@ def benchmark_camera(
         # Set FOURCC first (affects available resolutions/fps)
         if fourcc:
             cap.set(cv2.CAP_PROP_FOURCC, string_to_fourcc(fourcc))
+        else:
+            # Default to MJPG if not specified
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
 
         # Set resolution and FPS
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -1280,7 +1339,9 @@ def scan_camera_capabilities(
         logger.info(f"Scanning capabilities for camera {camera_index}")
         logger.info("=" * 60)
 
-    cap = cv2.VideoCapture(camera_index)
+    # Open camera with explicit V4L2 backend
+    device_path = f"/dev/video{camera_index}" if isinstance(camera_index, int) else camera_index
+    cap = cv2.VideoCapture(device_path, cv2.CAP_V4L2)
     if not cap.isOpened():
         logger.error(f"Failed to open camera {camera_index}")
         return CameraCapabilities(
@@ -1310,12 +1371,14 @@ def scan_camera_capabilities(
     if verbose:
         logger.info("Testing resolutions and measuring actual FPS (using MJPG)...")
     for width, height in COMMON_RESOLUTIONS:
-        cap = cv2.VideoCapture(camera_index)
+        # Open camera with explicit V4L2 backend
+        device_path = f"/dev/video{camera_index}" if isinstance(camera_index, int) else camera_index
+        cap = cv2.VideoCapture(device_path, cv2.CAP_V4L2)
         if not cap.isOpened():
             continue
 
         # Use MJPG for best FPS performance
-        cap.set(cv2.CAP_PROP_FOURCC, string_to_fourcc("MJPG"))
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
         
@@ -1375,12 +1438,14 @@ def scan_camera_capabilities(
     if verbose:
         logger.info("Testing FOURCC codes (MJPG, YUYV)...")
     for fourcc_str in ["MJPG", "YUYV"]:
-        cap = cv2.VideoCapture(camera_index)
+        # Open camera with explicit V4L2 backend
+        device_path = f"/dev/video{camera_index}" if isinstance(camera_index, int) else camera_index
+        cap = cv2.VideoCapture(device_path, cv2.CAP_V4L2)
         if not cap.isOpened():
             continue
 
         try:
-            cap.set(cv2.CAP_PROP_FOURCC, string_to_fourcc(fourcc_str))
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*fourcc_str))
             actual_fourcc_int = int(cap.get(cv2.CAP_PROP_FOURCC))
             actual_fourcc = fourcc_to_string(actual_fourcc_int)
 
@@ -1498,7 +1563,18 @@ def find_cameras(max_index: int = 10) -> list[int]:
     """Find available camera indices."""
     available = []
     for i in range(max_index):
-        cap = cv2.VideoCapture(i)
+        device_path = f"/dev/video{i}"
+        
+        # Check if device exists
+        if not Path(device_path).exists():
+            continue
+        
+        # Check if device has Video Capture capability (filter out metadata nodes)
+        if not has_video_capture_capability(device_path):
+            continue
+        
+        # Try to open with OpenCV using V4L2 backend
+        cap = cv2.VideoCapture(device_path, cv2.CAP_V4L2)
         if cap.isOpened():
             available.append(i)
             cap.release()
@@ -1598,7 +1674,9 @@ def compare_fourcc_formats(
     for fourcc_str in formats_to_test:
         logger.info(f"\n📹 Testing {fourcc_str}...")
 
-        cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
+        # Open camera with explicit V4L2 backend
+        device_path = f"/dev/video{camera_index}" if isinstance(camera_index, int) else camera_index
+        cap = cv2.VideoCapture(device_path, cv2.CAP_V4L2)
         if not cap.isOpened():
             logger.error(f"Failed to open camera {camera_index}")
             continue
