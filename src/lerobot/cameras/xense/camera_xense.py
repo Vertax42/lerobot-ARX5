@@ -199,8 +199,9 @@ class XenseTactileCamera(Camera):
             _patch_ctypes_find_library_for_udev()
             
             # Prepare Sensor.create() parameters
+            camera_api = CameraSource.AV_V4L2
             create_kwargs = {
-                "api": CameraSource.CV2_V4L2,
+                "api": camera_api,
                 "rectify_size": self.rectify_size,
                 "raw_size": self.raw_size,
                 "use_gpu": self.use_gpu,
@@ -236,7 +237,6 @@ class XenseTactileCamera(Camera):
             ) from e
 
         if warmup:
-            # time.sleep(2)
             # Start background thread first for async_read
             # Do warmup reads to stabilize the sensor
             start_time = time.time()
@@ -248,7 +248,10 @@ class XenseTactileCamera(Camera):
                 time.sleep(0.1)
             self._start_read_thread()
 
-        logger.info(f"{self} connected with CV2_V4L2 API (OpenCV backend)")
+        # Get API name for logging
+        api_name = camera_api.name if hasattr(camera_api, 'name') else str(camera_api)
+        backend_name = "OpenCV backend" if camera_api == CameraSource.CV2_V4L2 else "FFmpeg backend" if camera_api == CameraSource.AV_V4L2 else "Unknown backend"
+        logger.info(f"{self} connected with {api_name} API ({backend_name})")
 
     @staticmethod
     def find_cameras() -> list[dict[str, Any]]:
