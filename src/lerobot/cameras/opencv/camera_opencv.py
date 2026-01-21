@@ -195,6 +195,8 @@ class OpenCVCamera(Camera):
         This method attempts to set the camera properties via OpenCV. It checks if
         the camera successfully applied the settings and raises an error if not.
         FOURCC is set first (if specified) as it can affect the available FPS and resolution options.
+        FOURCC is also re-applied after resolution/FPS settings because V4L2 drivers may reset
+        the format when resolution is changed.
 
         Args:
             fourcc: The desired FOURCC code (e.g., "MJPG", "YUYV"). If None, auto-detect.
@@ -215,7 +217,7 @@ class OpenCVCamera(Camera):
 
         # Set FOURCC first (if specified) as it can affect available FPS/resolution options
         if self.config.fourcc is not None:
-            self._validate_fourcc()
+            self._set_fourcc()
         if self.videocapture is None:
             raise DeviceNotConnectedError(f"{self} videocapture is not initialized")
 
@@ -239,6 +241,11 @@ class OpenCVCamera(Camera):
         else:
             self._validate_fps()
 
+        # Re-apply FOURCC after resolution/FPS settings because V4L2 drivers may reset
+        # the video format to default (e.g., YUYV) when resolution is changed
+        if self.config.fourcc is not None:
+            self._validate_fourcc()
+
     def _validate_fps(self) -> None:
         """Validates and sets the camera's frames per second (FPS)."""
 
@@ -254,14 +261,27 @@ class OpenCVCamera(Camera):
         if not success or not math.isclose(self.fps, actual_fps, rel_tol=1e-3):
             raise RuntimeError(f"{self} failed to set fps={self.fps} ({actual_fps=}).")
 
-    def _validate_fourcc(self) -> None:
-        """Validates and sets the camera's FOURCC code."""
+    def _set_fourcc(self) -> None:
+        """Sets the camera's FOURCC code without validation.
 
-        fourcc_code = cv2.VideoWriter_fourcc(*self.config.fourcc)
-
+        This is used for initial FOURCC setting before resolution/FPS configuration.
+        """
         if self.videocapture is None:
             raise DeviceNotConnectedError(f"{self} videocapture is not initialized")
 
+        fourcc_code = cv2.VideoWriter_fourcc(*self.config.fourcc)
+        self.videocapture.set(cv2.CAP_PROP_FOURCC, fourcc_code)
+
+    def _validate_fourcc(self) -> None:
+        """Validates and sets the camera's FOURCC code.
+
+        This is called after all other settings (resolution, FPS) to ensure the
+        FOURCC format is correctly applied and not reset by V4L2 driver.
+        """
+        if self.videocapture is None:
+            raise DeviceNotConnectedError(f"{self} videocapture is not initialized")
+
+        fourcc_code = cv2.VideoWriter_fourcc(*self.config.fourcc)
         success = self.videocapture.set(cv2.CAP_PROP_FOURCC, fourcc_code)
         actual_fourcc_code = self.videocapture.get(cv2.CAP_PROP_FOURCC)
 
@@ -276,6 +296,8 @@ class OpenCVCamera(Camera):
                 f"{self} failed to set fourcc={self.config.fourcc} (actual={actual_fourcc}, success={success}). "
                 f"Continuing with default format."
             )
+        else:
+            logger.info(f"{self} FOURCC set to {actual_fourcc}")
 
     def _validate_width_and_height(self) -> None:
         """Validates and sets the camera's frame capture width and height."""

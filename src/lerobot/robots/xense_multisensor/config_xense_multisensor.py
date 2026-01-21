@@ -19,6 +19,7 @@ from enum import Enum
 
 from lerobot.cameras import CameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
+from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.xense import XenseCameraConfig, XenseOutputType
 from lerobot.robots.config import RobotConfig
 
@@ -34,13 +35,20 @@ class XenseMultisensorConfig(RobotConfig):
     def __post_init__(self):
         # Camera configuration based on tactile sensors setting
          self.cameras = {
-                # "OS000097": XenseCameraConfig(
-                #     serial_number="OS000097",
-                #     fps=30,
-                #     output_types=[XenseOutputType.RECTIFY],
-                #     warmup_s=1.0,
-                #     use_gpu=False,
+                "head": RealSenseCameraConfig(
+                    serial_number_or_name="834412071827", fps=30, width=640, height=480,
+                ),
+
+                # "back": OpenCVCameraConfig(
+                #     index_or_path=16, fps=30, width=640, height=480,
                 # ),
+                "OS000097": XenseCameraConfig(
+                    serial_number="OS000097",
+                    fps=30,
+                    output_types=[XenseOutputType.RECTIFY],
+                    warmup_s=1.0,
+                    use_gpu=True,
+                ),
                 "OS000115": XenseCameraConfig(
                     serial_number="OS000115",
                     fps=30,
@@ -48,13 +56,13 @@ class XenseMultisensorConfig(RobotConfig):
                     warmup_s=1.0,
                     use_gpu=True,
                 ),
-                "OS000079": XenseCameraConfig(
-                    serial_number="OS000079",
-                    fps=30,
-                    output_types=[XenseOutputType.RECTIFY],
-                    warmup_s=1.0,
-                    use_gpu=True,
-                ),
+                # "OS000079": XenseCameraConfig(
+                #     serial_number="OS000079",
+                #     fps=30,
+                #     output_types=[XenseOutputType.RECTIFY],
+                #     warmup_s=1.0,
+                #     use_gpu=True,
+                # ),
                 "OS000128": XenseCameraConfig(
                     serial_number="OS000128",
                     fps=30,
@@ -62,4 +70,21 @@ class XenseMultisensorConfig(RobotConfig):
                     warmup_s=1.0,
                     use_gpu=True,
                 ),
+                "front": OpenCVCameraConfig(
+                    index_or_path=14, fps=30, width=640, height=480,
+                ),
+                # "OG000337": XenseCameraConfig(
+                #     serial_number="OG000337",
+                #     fps=30,
+                #     output_types=[XenseOutputType.RECTIFY],
+                #     warmup_s=1.0,
+                #     use_gpu=True,
+                # ),
+                # "OG000344": XenseCameraConfig(
+                #     serial_number="OG000344",
+                #     fps=30,
+                #     output_types=[XenseOutputType.RECTIFY],
+                #     warmup_s=1.0,
+                #     use_gpu=True,
+                # ),
             }

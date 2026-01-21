@@ -199,7 +199,7 @@ class XenseTactileCamera(Camera):
             _patch_ctypes_find_library_for_udev()
             
             # Prepare Sensor.create() parameters
-            camera_api = CameraSource.AV_V4L2
+            camera_api = CameraSource.CV2_V4L2
             create_kwargs = {
                 "api": camera_api,
                 "rectify_size": self.rectify_size,
