@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
@@ -29,7 +28,7 @@ Example:
         print(lerobot.available_policies_per_env)
         print(lerobot.available_robots)
         print(lerobot.available_cameras)
-        print(lerobot.available_motors)
+        # Note: available_motors removed (motors functionality not supported)
     ```
 
 When implementing a new dataset loadable with LeRobotDataset follow these steps:
@@ -48,33 +47,37 @@ import itertools
 
 from lerobot.__version__ import __version__  # noqa: F401
 
-# TODO(rcadene): Improve policies and envs. As of now, an item in `available_policies`
-# refers to a yaml file AND a modeling name. Same for `available_envs` which refers to
-# a yaml file AND a environment name. The difference should be more obvious.
-available_tasks_per_env = {
-    "aloha": [
-        "AlohaInsertion-v0",
-        "AlohaTransferCube-v0",
-    ],
-    "pusht": ["PushT-v0"],
-}
-available_envs = list(available_tasks_per_env.keys())
+# Note: This fork only supports data collection, not training or simulation.
+# The following variables are kept for backward compatibility but refer to
+# functionality that has been removed (policies, environments, simulation).
 
-available_datasets_per_env = {
-    "aloha": [
-        "lerobot/aloha_sim_insertion_human",
-        "lerobot/aloha_sim_insertion_scripted",
-        "lerobot/aloha_sim_transfer_cube_human",
-        "lerobot/aloha_sim_transfer_cube_scripted",
-        "lerobot/aloha_sim_insertion_human_image",
-        "lerobot/aloha_sim_insertion_scripted_image",
-        "lerobot/aloha_sim_transfer_cube_human_image",
-        "lerobot/aloha_sim_transfer_cube_scripted_image",
-    ],
-    # TODO(alexander-soare): Add "lerobot/pusht_keypoints". Right now we can't because this is too tightly
-    # coupled with tests.
-    "pusht": ["lerobot/pusht", "lerobot/pusht_image"],
-}
+# available_tasks_per_env = {
+#     "aloha": [
+#         "AlohaInsertion-v0",
+#         "AlohaTransferCube-v0",
+#     ],
+#     "pusht": ["PushT-v0"],
+# }
+# available_envs = list(available_tasks_per_env.keys())
+
+# available_datasets_per_env = {
+#     "aloha": [
+#         "lerobot/aloha_sim_insertion_human",
+#         "lerobot/aloha_sim_insertion_scripted",
+#         "lerobot/aloha_sim_transfer_cube_human",
+#         "lerobot/aloha_sim_transfer_cube_scripted",
+#         "lerobot/aloha_sim_insertion_human_image",
+#         "lerobot/aloha_sim_insertion_scripted_image",
+#         "lerobot/aloha_sim_transfer_cube_human_image",
+#         "lerobot/aloha_sim_transfer_cube_scripted_image",
+#     ],
+#     "pusht": ["lerobot/pusht", "lerobot/pusht_image"],
+# }
+
+# Empty dicts for compatibility
+available_tasks_per_env = {}
+available_envs = []
+available_datasets_per_env = {}
 
 available_real_world_datasets = [
     "lerobot/aloha_mobile_cabinet",
@@ -153,19 +156,22 @@ available_real_world_datasets = [
 ]
 
 available_datasets = sorted(
-    set(itertools.chain(*available_datasets_per_env.values(), available_real_world_datasets))
+    set(
+        itertools.chain(
+            *available_datasets_per_env.values(), available_real_world_datasets
+        )
+    )
 )
 
-# lists all available policies from `lerobot/policies`
-available_policies = ["act", "diffusion", "tdmpc", "vqbet"]
+# Note: Policies have been removed from this data collection-only fork
+# available_policies = ["act", "diffusion", "tdmpc", "vqbet"]
+available_policies = []
 
 # lists all available robots from `lerobot/robots`
 available_robots = [
-    "koch",
-    "koch_bimanual",
-    "aloha",
-    "so100",
-    "so101",
+    "flexiv_rizon4",
+    "xense_flare",
+    "xense_multisensor",
 ]
 
 # lists all available cameras from `lerobot/cameras`
@@ -174,27 +180,19 @@ available_cameras = [
     "intelrealsense",
 ]
 
-# lists all available motors from `lerobot/motors`
-available_motors = [
-    "dynamixel",
-    "feetech",
-]
+# Note: Motors functionality has been removed from this data collection-only fork
+available_motors = []
 
-# keys and values refer to yaml files
-available_policies_per_env = {
-    "aloha": ["act"],
-    "pusht": ["diffusion", "vqbet"],
-    "koch_real": ["act_koch_real"],
-    "aloha_real": ["act_aloha_real"],
-}
+# Note: Policy and environment mappings removed (training/simulation not supported)
+# available_policies_per_env = {
+#     "aloha": ["act"],
+#     "pusht": ["diffusion", "vqbet"],
+#     "koch_real": ["act_koch_real"],
+#     "aloha_real": ["act_aloha_real"],
+# }
+available_policies_per_env = {}
 
-env_task_pairs = [(env, task) for env, tasks in available_tasks_per_env.items() for task in tasks]
-env_dataset_pairs = [
-    (env, dataset) for env, datasets in available_datasets_per_env.items() for dataset in datasets
-]
-env_dataset_policy_triplets = [
-    (env, dataset, policy)
-    for env, datasets in available_datasets_per_env.items()
-    for dataset in datasets
-    for policy in available_policies_per_env[env]
-]
+# Empty lists for compatibility
+env_task_pairs = []
+env_dataset_pairs = []
+env_dataset_policy_triplets = []

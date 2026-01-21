@@ -164,7 +164,9 @@ class ProcessorStep(ABC):
             ValueError: If accessed before the step has been called with a transition.
         """
         if self._current_transition is None:
-            raise ValueError("Transition is not set. Make sure to call the step with a transition first.")
+            raise ValueError(
+                "Transition is not set. Make sure to call the step with a transition first."
+            )
         return self._current_transition
 
     @abstractmethod
@@ -240,7 +242,9 @@ class ProcessorKwargs(TypedDict, total=False):
 class ProcessorMigrationError(Exception):
     """Raised when a model needs migration to the processor format"""
 
-    def __init__(self, model_path: str | Path, migration_command: str, original_error: str):
+    def __init__(
+        self, model_path: str | Path, migration_command: str, original_error: str
+    ):
         self.model_path = model_path
         self.migration_command = migration_command
         self.original_error = original_error
@@ -271,15 +275,24 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
     name: str = "DataProcessorPipeline"
 
     to_transition: Callable[[TInput], EnvTransition] = field(
-        default_factory=lambda: cast(Callable[[TInput], EnvTransition], batch_to_transition), repr=False
+        default_factory=lambda: cast(
+            Callable[[TInput], EnvTransition], batch_to_transition
+        ),
+        repr=False,
     )
     to_output: Callable[[EnvTransition], TOutput] = field(
-        default_factory=lambda: cast(Callable[[EnvTransition], TOutput], transition_to_batch),
+        default_factory=lambda: cast(
+            Callable[[EnvTransition], TOutput], transition_to_batch
+        ),
         repr=False,
     )
 
-    before_step_hooks: list[Callable[[int, EnvTransition], None]] = field(default_factory=list, repr=False)
-    after_step_hooks: list[Callable[[int, EnvTransition], None]] = field(default_factory=list, repr=False)
+    before_step_hooks: list[Callable[[int, EnvTransition], None]] = field(
+        default_factory=list, repr=False
+    )
+    after_step_hooks: list[Callable[[int, EnvTransition], None]] = field(
+        default_factory=list, repr=False
+    )
 
     def __call__(self, data: TInput) -> TOutput:
         """Processes input data through the full pipeline.
@@ -377,21 +390,29 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
                 state = processor_step.state_dict()
                 if state:
                     # Clone tensors to avoid modifying the original state.
-                    cloned_state = {key: tensor.clone() for key, tensor in state.items()}
+                    cloned_state = {
+                        key: tensor.clone() for key, tensor in state.items()
+                    }
 
                     # Create a unique filename for the state file.
                     if registry_name:
                         state_filename = f"{sanitized_name}_step_{step_index}_{registry_name}.safetensors"
                     else:
-                        state_filename = f"{sanitized_name}_step_{step_index}.safetensors"
+                        state_filename = (
+                            f"{sanitized_name}_step_{step_index}.safetensors"
+                        )
 
-                    save_file(cloned_state, os.path.join(str(save_directory), state_filename))
+                    save_file(
+                        cloned_state, os.path.join(str(save_directory), state_filename)
+                    )
                     step_entry["state_file"] = state_filename
 
             config["steps"].append(step_entry)
 
         # Write the main configuration JSON file.
-        with open(os.path.join(str(save_directory), config_filename), "w") as file_pointer:
+        with open(
+            os.path.join(str(save_directory), config_filename), "w"
+        ) as file_pointer:
             json.dump(config, file_pointer, indent=2)
 
     def save_pretrained(
@@ -564,7 +585,9 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
         }
 
         # 1. Load configuration using simplified 3-way logic
-        loaded_config, base_path = cls._load_config(model_id, config_filename, hub_download_kwargs)
+        loaded_config, base_path = cls._load_config(
+            model_id, config_filename, hub_download_kwargs
+        )
 
         # 2. Validate configuration and handle migration
         cls._validate_loaded_config(model_id, loaded_config, config_filename)
@@ -581,8 +604,10 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
         return cls(
             steps=steps,
             name=loaded_config.get("name", "DataProcessorPipeline"),
-            to_transition=to_transition or cast(Callable[[TInput], EnvTransition], batch_to_transition),
-            to_output=to_output or cast(Callable[[EnvTransition], TOutput], transition_to_batch),
+            to_transition=to_transition
+            or cast(Callable[[TInput], EnvTransition], batch_to_transition),
+            to_output=to_output
+            or cast(Callable[[EnvTransition], TOutput], transition_to_batch),
         )
 
     @classmethod
@@ -635,7 +660,9 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
             if not config_path.exists():
                 # Check for migration before giving clear error
                 if cls._should_suggest_migration(model_path):
-                    cls._suggest_processor_migration(model_id, f"Config file '{config_filename}' not found")
+                    cls._suggest_processor_migration(
+                        model_id, f"Config file '{config_filename}' not found"
+                    )
                 raise FileNotFoundError(
                     f"Config file '{config_filename}' not found in directory '{model_id}'"
                 )
@@ -698,7 +725,9 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
         """
         # Validate that this is actually a processor config
         if not cls._is_processor_config(loaded_config):
-            if Path(model_id).is_dir() and cls._should_suggest_migration(Path(model_id)):
+            if Path(model_id).is_dir() and cls._should_suggest_migration(
+                Path(model_id)
+            ):
                 cls._suggest_processor_migration(
                     model_id,
                     f"Config file '{config_filename}' is not a valid processor configuration",
@@ -775,10 +804,14 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
             step_class, step_key = cls._resolve_step_class(step_entry)
 
             # 2. Instantiate step with overrides
-            step_instance = cls._instantiate_step(step_entry, step_class, step_key, overrides)
+            step_instance = cls._instantiate_step(
+                step_entry, step_class, step_key, overrides
+            )
 
             # 3. Load step state if available
-            cls._load_step_state(step_instance, step_entry, model_id, base_path, hub_download_kwargs)
+            cls._load_step_state(
+                step_instance, step_entry, model_id, base_path, hub_download_kwargs
+            )
 
             # 4. Track used overrides
             if step_key in override_keys:
@@ -789,7 +822,9 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
         return steps, override_keys
 
     @classmethod
-    def _resolve_step_class(cls, step_entry: dict[str, Any]) -> tuple[type[ProcessorStep], str]:
+    def _resolve_step_class(
+        cls, step_entry: dict[str, Any]
+    ) -> tuple[type[ProcessorStep], str]:
         """Resolve step class from registry or import path.
 
         This method implements a two-tier resolution strategy:
@@ -835,7 +870,9 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
                 step_class = ProcessorStepRegistry.get(step_entry["registry_name"])
                 return step_class, step_entry["registry_name"]
             except KeyError as e:
-                raise ImportError(f"Failed to load processor step from registry. {str(e)}") from e
+                raise ImportError(
+                    f"Failed to load processor step from registry. {str(e)}"
+                ) from e
         else:
             # Fallback to dynamic import using the full class path
             full_class_path = step_entry["class"]
@@ -905,7 +942,9 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
             merged_cfg = {**saved_cfg, **step_overrides}
             return step_class(**merged_cfg)
         except Exception as e:
-            step_name = step_entry.get("registry_name", step_entry.get("class", "Unknown"))
+            step_name = step_entry.get(
+                "registry_name", step_entry.get("class", "Unknown")
+            )
             raise ValueError(
                 f"Failed to instantiate processor step '{step_name}' with config: {step_entry.get('config', {})}. "
                 f"Error: {str(e)}"
@@ -963,7 +1002,9 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
             This method modifies step_instance in-place and returns None.
             If state loading fails, exceptions from load_state_dict propagate.
         """
-        if "state_file" not in step_entry or not hasattr(step_instance, "load_state_dict"):
+        if "state_file" not in step_entry or not hasattr(
+            step_instance, "load_state_dict"
+        ):
             return
 
         state_filename = step_entry["state_file"]
@@ -1028,7 +1069,8 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
             return
 
         available_keys = [
-            step.get("registry_name") or step["class"].rsplit(".", 1)[1] for step in loaded_config["steps"]
+            step.get("registry_name") or step["class"].rsplit(".", 1)[1]
+            for step in loaded_config["steps"]
         ]
 
         raise KeyError(
@@ -1166,7 +1208,9 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
         return True
 
     @classmethod
-    def _suggest_processor_migration(cls, model_path: str | Path, original_error: str) -> None:
+    def _suggest_processor_migration(
+        cls, model_path: str | Path, original_error: str
+    ) -> None:
         """Raise migration error when we detect JSON files but no processor configs.
 
         This method is called when migration detection determines that a model
@@ -1180,10 +1224,7 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
         - _should_suggest_migration() returned True
 
         **Migration Command Generation**:
-        - Constructs exact command user needs to run
-        - Uses the migration script: migrate_policy_normalization.py
-        - Includes the model path automatically
-        - Example: "python src/lerobot/processor/migrate_policy_normalization.py --pretrained-path /models/old_model"
+        - Note: Policy migration functionality has been removed in this data collection-only fork.
 
         **Error Structure**:
         - **Always raises**: ProcessorMigrationError (never returns)
@@ -1206,7 +1247,7 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
             ProcessorMigrationError: Always raised (this method never returns normally)
         """
         migration_command = (
-            f"python src/lerobot/processor/migrate_policy_normalization.py --pretrained-path {model_path}"
+            f"Policy migration is not available in this data collection-only fork."
         )
 
         raise ProcessorMigrationError(model_path, migration_command, original_error)
@@ -1215,7 +1256,9 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
         """Returns the number of steps in the pipeline."""
         return len(self.steps)
 
-    def __getitem__(self, idx: int | slice) -> ProcessorStep | DataProcessorPipeline[TInput, TOutput]:
+    def __getitem__(
+        self, idx: int | slice
+    ) -> ProcessorStep | DataProcessorPipeline[TInput, TOutput]:
         """Retrieves a step or a sub-pipeline by index or slice.
 
         Args:
@@ -1312,7 +1355,9 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
         """Validates that all provided steps are instances of `ProcessorStep`."""
         for i, step in enumerate(self.steps):
             if not isinstance(step, ProcessorStep):
-                raise TypeError(f"Step {i} ({type(step).__name__}) must inherit from ProcessorStep")
+                raise TypeError(
+                    f"Step {i} ({type(step).__name__}) must inherit from ProcessorStep"
+                )
 
     def transform_features(
         self, initial_features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
@@ -1329,7 +1374,9 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
         Returns:
             The final feature description after all transformations.
         """
-        features: dict[PipelineFeatureType, dict[str, PolicyFeature]] = deepcopy(initial_features)
+        features: dict[PipelineFeatureType, dict[str, PolicyFeature]] = deepcopy(
+            initial_features
+        )
 
         for _, step in enumerate(self.steps):
             out = step.transform_features(features)
@@ -1417,7 +1464,9 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
         transformed_transition = self._forward(transition)
         return transformed_transition[TransitionKey.INFO]
 
-    def process_complementary_data(self, complementary_data: dict[str, Any]) -> dict[str, Any]:
+    def process_complementary_data(
+        self, complementary_data: dict[str, Any]
+    ) -> dict[str, Any]:
         """Processes only the complementary data part of a transition through the pipeline.
 
         Args:
@@ -1426,7 +1475,9 @@ class DataProcessorPipeline(HubMixin, Generic[TInput, TOutput]):
         Returns:
             The processed complementary data dictionary.
         """
-        transition: EnvTransition = create_transition(complementary_data=complementary_data)
+        transition: EnvTransition = create_transition(
+            complementary_data=complementary_data
+        )
         transformed_transition = self._forward(transition)
         return transformed_transition[TransitionKey.COMPLEMENTARY_DATA]
 
@@ -1458,7 +1509,9 @@ class ObservationProcessorStep(ProcessorStep, ABC):
 
         observation = new_transition.get(TransitionKey.OBSERVATION)
         if observation is None or not isinstance(observation, dict):
-            raise ValueError("ObservationProcessorStep requires an observation in the transition.")
+            raise ValueError(
+                "ObservationProcessorStep requires an observation in the transition."
+            )
 
         processed_observation = self.observation(observation.copy())
         new_transition[TransitionKey.OBSERVATION] = processed_observation
@@ -1489,7 +1542,9 @@ class ActionProcessorStep(ProcessorStep, ABC):
 
         action = new_transition.get(TransitionKey.ACTION)
         if action is None:
-            raise ValueError("ActionProcessorStep requires an action in the transition.")
+            raise ValueError(
+                "ActionProcessorStep requires an action in the transition."
+            )
 
         processed_action = self.action(action)
         new_transition[TransitionKey.ACTION] = processed_action
@@ -1518,7 +1573,9 @@ class RobotActionProcessorStep(ProcessorStep, ABC):
 
         action = new_transition.get(TransitionKey.ACTION)
         if action is None or not isinstance(action, dict):
-            raise ValueError(f"Action should be a RobotAction type (dict), but got {type(action)}")
+            raise ValueError(
+                f"Action should be a RobotAction type (dict), but got {type(action)}"
+            )
 
         processed_action = self.action(action.copy())
         new_transition[TransitionKey.ACTION] = processed_action
@@ -1547,7 +1604,9 @@ class PolicyActionProcessorStep(ProcessorStep, ABC):
 
         action = new_transition.get(TransitionKey.ACTION)
         if not isinstance(action, PolicyAction):
-            raise ValueError(f"Action should be a PolicyAction type (tensor), but got {type(action)}")
+            raise ValueError(
+                f"Action should be a PolicyAction type (tensor), but got {type(action)}"
+            )
 
         processed_action = self.action(action)
         new_transition[TransitionKey.ACTION] = processed_action
@@ -1605,7 +1664,9 @@ class DoneProcessorStep(ProcessorStep, ABC):
 
         done = new_transition.get(TransitionKey.DONE)
         if done is None:
-            raise ValueError("DoneProcessorStep requires a done flag in the transition.")
+            raise ValueError(
+                "DoneProcessorStep requires a done flag in the transition."
+            )
 
         processed_done = self.done(done)
         new_transition[TransitionKey.DONE] = processed_done
@@ -1634,7 +1695,9 @@ class TruncatedProcessorStep(ProcessorStep, ABC):
 
         truncated = new_transition.get(TransitionKey.TRUNCATED)
         if truncated is None:
-            raise ValueError("TruncatedProcessorStep requires a truncated flag in the transition.")
+            raise ValueError(
+                "TruncatedProcessorStep requires a truncated flag in the transition."
+            )
 
         processed_truncated = self.truncated(truncated)
         new_transition[TransitionKey.TRUNCATED] = processed_truncated
@@ -1663,7 +1726,9 @@ class InfoProcessorStep(ProcessorStep, ABC):
 
         info = new_transition.get(TransitionKey.INFO)
         if info is None or not isinstance(info, dict):
-            raise ValueError("InfoProcessorStep requires an info dictionary in the transition.")
+            raise ValueError(
+                "InfoProcessorStep requires an info dictionary in the transition."
+            )
 
         processed_info = self.info(info.copy())
         new_transition[TransitionKey.INFO] = processed_info
@@ -1692,9 +1757,13 @@ class ComplementaryDataProcessorStep(ProcessorStep, ABC):
 
         complementary_data = new_transition.get(TransitionKey.COMPLEMENTARY_DATA)
         if complementary_data is None or not isinstance(complementary_data, dict):
-            raise ValueError("ComplementaryDataProcessorStep requires complementary data in the transition.")
+            raise ValueError(
+                "ComplementaryDataProcessorStep requires complementary data in the transition."
+            )
 
-        processed_complementary_data = self.complementary_data(complementary_data.copy())
+        processed_complementary_data = self.complementary_data(
+            complementary_data.copy()
+        )
         new_transition[TransitionKey.COMPLEMENTARY_DATA] = processed_complementary_data
         return new_transition
 

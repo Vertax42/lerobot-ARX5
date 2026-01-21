@@ -28,7 +28,10 @@ from .core import (
     RobotObservation,
     TransitionKey,
 )
-from .delta_action_processor import MapDeltaActionToRobotActionStep, MapTensorToDeltaActionDictStep
+from .delta_action_processor import (
+    MapDeltaActionToRobotActionStep,
+    MapTensorToDeltaActionDictStep,
+)
 from .device_processor import DeviceProcessorStep
 from .factory import (
     make_default_processors,
@@ -49,8 +52,12 @@ from .hil_processor import (
     RewardClassifierProcessorStep,
     TimeLimitProcessorStep,
 )
-from .joint_observations_processor import JointVelocityProcessorStep, MotorCurrentProcessorStep
-from .normalize_processor import NormalizerProcessorStep, UnnormalizerProcessorStep, hotswap_stats
+from .joint_observations_processor import JointVelocityProcessorStep
+from .normalize_processor import (
+    NormalizerProcessorStep,
+    UnnormalizerProcessorStep,
+    hotswap_stats,
+)
 from .observation_processor import VanillaObservationProcessorStep
 from .pipeline import (
     ActionProcessorStep,
@@ -101,7 +108,6 @@ __all__ = [
     "make_default_robot_observation_processor",
     "MapDeltaActionToRobotActionStep",
     "MapTensorToDeltaActionDictStep",
-    "MotorCurrentProcessorStep",
     "NormalizerProcessorStep",
     "Numpy2TorchActionProcessorStep",
     "ObservationProcessorStep",

@@ -37,8 +37,6 @@ from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
     flexiv_rizon4,  # noqa: F401
-    hope_jr,
-    koch_follower,
     make_robot_from_config,
     xense_flare,  # noqa: F401
     xense_multisensor,  # noqa: F401
@@ -46,15 +44,9 @@ from lerobot.robots import (  # noqa: F401
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
     TeleoperatorConfig,
-    bi_so100_leader,
-    gamepad,
-    homunculus,
-    koch_leader,
     make_teleoperator_from_config,
     mock_teleop,
     pico4,
-    so100_leader,
-    so101_leader,
     spacemouse,
     vive_tracker,
     xense_flare,
@@ -88,9 +80,15 @@ def teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
     fps: int,
-    teleop_action_processor: RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction],
-    robot_action_processor: RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction],
-    robot_observation_processor: RobotProcessorPipeline[RobotObservation, RobotObservation],
+    teleop_action_processor: RobotProcessorPipeline[
+        tuple[RobotAction, RobotObservation], RobotAction
+    ],
+    robot_action_processor: RobotProcessorPipeline[
+        tuple[RobotAction, RobotObservation], RobotAction
+    ],
+    robot_observation_processor: RobotProcessorPipeline[
+        RobotObservation, RobotObservation
+    ],
     display_data: bool = False,
     duration: float | None = None,
 ):
@@ -163,9 +161,15 @@ def spacemouse_teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
     fps: int,
-    teleop_action_processor: RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction],
-    robot_action_processor: RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction],
-    robot_observation_processor: RobotProcessorPipeline[RobotObservation, RobotObservation],
+    teleop_action_processor: RobotProcessorPipeline[
+        tuple[RobotAction, RobotObservation], RobotAction
+    ],
+    robot_action_processor: RobotProcessorPipeline[
+        tuple[RobotAction, RobotObservation], RobotAction
+    ],
+    robot_observation_processor: RobotProcessorPipeline[
+        RobotObservation, RobotObservation
+    ],
     display_data: bool = False,
     duration: float | None = None,
     dryrun: bool = False,
@@ -215,18 +219,30 @@ def spacemouse_teleop_loop(
                         # This ensures teleop target matches robot's actual position after reset
                         # so teleoperation can continue smoothly from the reset position
                         current_pose_euler = robot.get_current_tcp_pose_euler()
-                        teleop.reset_to_pose(current_pose_euler[:6], current_pose_euler[6])
+                        teleop.reset_to_pose(
+                            current_pose_euler[:6], current_pose_euler[6]
+                        )
                         # Also update saved start pose for future resets
                         teleop._start_pose_6d = current_pose_euler[:6].copy()
                         teleop._start_gripper_pos = current_pose_euler[6]
-                        logger.info("Reset to initial position triggered by both buttons")
+                        logger.info(
+                            "Reset to initial position triggered by both buttons"
+                        )
                     except Exception as e:
-                        logger.error(f"Failed to reset robot position: {e}\n{traceback.format_exc()}")
+                        logger.error(
+                            f"Failed to reset robot position: {e}\n{traceback.format_exc()}"
+                        )
                 else:
                     # For other robots or fallback: use saved initial pose from teleop.connect()
-                    if hasattr(teleop, "_start_pose_6d") and hasattr(teleop, "_start_gripper_pos"):
-                        teleop.reset_to_pose(teleop._start_pose_6d, teleop._start_gripper_pos)
-                        logger.info("Reset to initial position triggered by both buttons")
+                    if hasattr(teleop, "_start_pose_6d") and hasattr(
+                        teleop, "_start_gripper_pos"
+                    ):
+                        teleop.reset_to_pose(
+                            teleop._start_pose_6d, teleop._start_gripper_pos
+                        )
+                        logger.info(
+                            "Reset to initial position triggered by both buttons"
+                        )
                 # Continue to next iteration (skip sending action this cycle)
                 continue
 
@@ -281,7 +297,9 @@ def spacemouse_teleop_loop(
             )
         elif not display_data:
             # Print time and actions (key-value pairs) only when not display_data
-            action_str = ", ".join([f"{k}={v:.4f}" for k, v in robot_action_to_send.items()])
+            action_str = ", ".join(
+                [f"{k}={v:.4f}" for k, v in robot_action_to_send.items()]
+            )
             if dryrun:
                 print(
                     f"\rtime: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz) | [DRYRUN] Actions: {action_str}",
@@ -303,9 +321,15 @@ def pico4_teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
     fps: int,
-    teleop_action_processor: RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction],
-    robot_action_processor: RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction],
-    robot_observation_processor: RobotProcessorPipeline[RobotObservation, RobotObservation],
+    teleop_action_processor: RobotProcessorPipeline[
+        tuple[RobotAction, RobotObservation], RobotAction
+    ],
+    robot_action_processor: RobotProcessorPipeline[
+        tuple[RobotAction, RobotObservation], RobotAction
+    ],
+    robot_observation_processor: RobotProcessorPipeline[
+        RobotObservation, RobotObservation
+    ],
     display_data: bool = False,
     duration: float | None = None,
     dryrun: bool = False,
@@ -353,7 +377,9 @@ def pico4_teleop_loop(
                 current_pose_quat = robot.get_current_tcp_pose_quat()
                 teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
             except Exception as e:
-                logger.error(f"Failed to reset robot position: {e}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Failed to reset robot position: {e}\n{traceback.format_exc()}"
+                )
             # Skip this loop iteration (don't send action after reset)
             continue
 
@@ -392,7 +418,9 @@ def pico4_teleop_loop(
             enable_str = "ENABLED" if teleop._enabled else "DISABLED"
             ori_str = "ORI:ON" if teleop._orientation_control_active else "ORI:OFF"
             grip_str = f"grip={teleop._last_grip:.2f}"
-            gripper_pos_str = f"gripper={robot_action_to_send.get('gripper.pos', 0.0):.2f}"
+            gripper_pos_str = (
+                f"gripper={robot_action_to_send.get('gripper.pos', 0.0):.2f}"
+            )
             if dryrun:
                 print(
                     f"\r\033[Ktime: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz) | [DRYRUN] | {enable_str} | {grip_str} | {gripper_pos_str} | {ori_str}",
@@ -414,9 +442,15 @@ def vive_tracker_teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
     fps: int,
-    teleop_action_processor: RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction],
-    robot_action_processor: RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction],
-    robot_observation_processor: RobotProcessorPipeline[RobotObservation, RobotObservation],
+    teleop_action_processor: RobotProcessorPipeline[
+        tuple[RobotAction, RobotObservation], RobotAction
+    ],
+    robot_action_processor: RobotProcessorPipeline[
+        tuple[RobotAction, RobotObservation], RobotAction
+    ],
+    robot_observation_processor: RobotProcessorPipeline[
+        RobotObservation, RobotObservation
+    ],
     display_data: bool = False,
     duration: float | None = None,
     dryrun: bool = False,
@@ -487,7 +521,9 @@ def vive_tracker_teleop_loop(
         loop_s = time.perf_counter() - loop_start
 
         # Print status line
-        action_str = ", ".join([f"{k}={v:.4f}" for k, v in robot_action_to_send.items()])
+        action_str = ", ".join(
+            [f"{k}={v:.4f}" for k, v in robot_action_to_send.items()]
+        )
         if dryrun:
             print(
                 f"\rtime: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz) | [DRYRUN] | {action_str}",
@@ -509,9 +545,15 @@ def xense_flare_flexiv_teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
     fps: int,
-    teleop_action_processor: RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction],
-    robot_action_processor: RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction],
-    robot_observation_processor: RobotProcessorPipeline[RobotObservation, RobotObservation],
+    teleop_action_processor: RobotProcessorPipeline[
+        tuple[RobotAction, RobotObservation], RobotAction
+    ],
+    robot_action_processor: RobotProcessorPipeline[
+        tuple[RobotAction, RobotObservation], RobotAction
+    ],
+    robot_observation_processor: RobotProcessorPipeline[
+        RobotObservation, RobotObservation
+    ],
     display_data: bool = False,
     duration: float | None = None,
     dryrun: bool = False,
@@ -622,7 +664,9 @@ def xense_flare_flexiv_teleop_loop(
 def xense_flare_teleop_loop(
     robot: Robot,
     fps: int,
-    robot_observation_processor: RobotProcessorPipeline[RobotObservation, RobotObservation],
+    robot_observation_processor: RobotProcessorPipeline[
+        RobotObservation, RobotObservation
+    ],
     display_data: bool = False,
     duration: float | None = None,
     debug_timing: bool = False,
@@ -700,11 +744,19 @@ def xense_flare_teleop_loop(
                 # Support both 6D rotation (r1-r6) and quaternion (qw, qx, qy, qz) formats
                 if "tcp.r1" in obs:
                     # 6D rotation format - convert to quaternion for visualization
-                    r6d = np.array([
-                        obs["tcp.r1"], obs["tcp.r2"], obs["tcp.r3"],
-                        obs["tcp.r4"], obs["tcp.r5"], obs["tcp.r6"]
-                    ])
-                    quat_wxyz = rotation_6d_to_quaternion(r6d)  # Returns [qw, qx, qy, qz]
+                    r6d = np.array(
+                        [
+                            obs["tcp.r1"],
+                            obs["tcp.r2"],
+                            obs["tcp.r3"],
+                            obs["tcp.r4"],
+                            obs["tcp.r5"],
+                            obs["tcp.r6"],
+                        ]
+                    )
+                    quat_wxyz = rotation_6d_to_quaternion(
+                        r6d
+                    )  # Returns [qw, qx, qy, qz]
                     rot_xyzw = [quat_wxyz[1], quat_wxyz[2], quat_wxyz[3], quat_wxyz[0]]
                 else:
                     # Legacy quaternion format
@@ -762,7 +814,9 @@ def xense_flare_teleop_loop(
                     rr.Arrows3D(
                         origins=np.array([pos, pos, pos]),
                         vectors=np.array([x_axis, y_axis, z_axis]),
-                        colors=np.array([[255, 0, 0], [0, 255, 0], [0, 0, 255]]),  # RGB for XYZ
+                        colors=np.array(
+                            [[255, 0, 0], [0, 255, 0], [0, 0, 255]]
+                        ),  # RGB for XYZ
                         radii=0.003,
                     ),
                 )
@@ -865,8 +919,12 @@ def xense_flare_teleop_loop(
                                     f"{base_path}/axes",
                                     rr.Arrows3D(
                                         origins=np.array([lh_pos, lh_pos, lh_pos]),
-                                        vectors=np.array([lh_x_axis, lh_y_axis, lh_z_axis]),
-                                        colors=np.array([[255, 0, 0], [0, 255, 0], [0, 0, 255]]),
+                                        vectors=np.array(
+                                            [lh_x_axis, lh_y_axis, lh_z_axis]
+                                        ),
+                                        colors=np.array(
+                                            [[255, 0, 0], [0, 255, 0], [0, 0, 255]]
+                                        ),
                                         radii=0.005,
                                     ),
                                 )
@@ -891,7 +949,9 @@ def xense_flare_teleop_loop(
             # Simple status line (single line with clear)
             pose_str = ""
             if "tcp.x" in obs and "tcp.y" in obs and "tcp.z" in obs:
-                pose_str = f"pos=[{obs['tcp.x']:.3f}, {obs['tcp.y']:.3f}, {obs['tcp.z']:.3f}]"
+                pose_str = (
+                    f"pos=[{obs['tcp.x']:.3f}, {obs['tcp.y']:.3f}, {obs['tcp.z']:.3f}]"
+                )
             gripper_str = f"grip={obs.get('gripper.pos', 0.0):.2f}"
             print(
                 f"\r\033[Ktime: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz) | {pose_str} | {gripper_str}",
@@ -915,7 +975,9 @@ def xense_flare_teleop_loop(
 def xense_multisensor_teleop_loop(
     robot: Robot,
     fps: int,
-    robot_observation_processor: RobotProcessorPipeline[RobotObservation, RobotObservation],
+    robot_observation_processor: RobotProcessorPipeline[
+        RobotObservation, RobotObservation
+    ],
     display_data: bool = False,
     duration: float | None = None,
     debug_timing: bool = False,
@@ -931,6 +993,7 @@ def xense_multisensor_teleop_loop(
     No actions are sent to the robot - it is a data collection device.
     """
     import numpy as np
+
     start = time.perf_counter()
     timing_stats = {
         "camera_times": {},
@@ -986,7 +1049,9 @@ def xense_multisensor_teleop_loop(
             )
         else:
             # Simple status line (single line with clear)
-            camera_count = len([k for k in obs.keys() if isinstance(obs.get(k), np.ndarray)])
+            camera_count = len(
+                [k for k in obs.keys() if isinstance(obs.get(k), np.ndarray)]
+            )
             print(
                 f"\r\033[Ktime: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz) | cameras: {camera_count}",
                 end="",
@@ -1010,7 +1075,9 @@ def xense_multisensor_teleop_loop(
 def teleoperate(cfg: TeleoperateConfig):
     logger.info(pformat(asdict(cfg)))
     if cfg.dryrun:
-        logger.warn("⚠️  DRYRUN MODE ENABLED - Actions will be printed but NOT sent to robot")
+        logger.warn(
+            "⚠️  DRYRUN MODE ENABLED - Actions will be printed but NOT sent to robot"
+        )
     if cfg.display_data:
         # Use robot and teleop names in session name
         teleop_name = cfg.teleop.type if cfg.teleop else "none"
@@ -1035,9 +1102,13 @@ def teleoperate(cfg: TeleoperateConfig):
                 logger.info(f"   Sensors: {list(robot._sensors.keys())}")
                 logger.info(f"   Camera: {'Yes' if robot._camera else 'No'}")
                 logger.info(f"   Gripper: {'Yes' if robot._gripper else 'No'}")
-                logger.info(f"   Vive Tracker: {'Yes' if robot._vive_tracker else 'No'}")
+                logger.info(
+                    f"   Vive Tracker: {'Yes' if robot._vive_tracker else 'No'}"
+                )
             except Exception as e:
-                logger.error(f"Failed to connect to Xense Flare: {e}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Failed to connect to Xense Flare: {e}\n{traceback.format_exc()}"
+                )
                 raise
 
             _, _, robot_observation_processor = make_default_processors()
@@ -1055,7 +1126,9 @@ def teleoperate(cfg: TeleoperateConfig):
             except KeyboardInterrupt:
                 logger.info("Data collection interrupted by user")
             except Exception as e:
-                logger.error(f"Error during data collection: {e}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Error during data collection: {e}\n{traceback.format_exc()}"
+                )
                 raise
 
         except Exception as e:
@@ -1074,7 +1147,9 @@ def teleoperate(cfg: TeleoperateConfig):
                         robot.disconnect()
                         logger.info("✅ Xense Flare disconnected")
                 except Exception as e:
-                    logger.error(f"Error disconnecting Xense Flare: {e}\n{traceback.format_exc()}")
+                    logger.error(
+                        f"Error disconnecting Xense Flare: {e}\n{traceback.format_exc()}"
+                    )
 
     # Check if this is Xense Multisensor (data collection device - no teleoperator needed)
     elif cfg.robot.type == "xense_multisensor":
@@ -1092,7 +1167,9 @@ def teleoperate(cfg: TeleoperateConfig):
                 logger.info("✅ Xense Multisensor connected")
                 logger.info(f"   Cameras: {list(robot.cameras.keys())}")
             except Exception as e:
-                logger.error(f"Failed to connect to Xense Multisensor: {e}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Failed to connect to Xense Multisensor: {e}\n{traceback.format_exc()}"
+                )
                 raise
 
             _, _, robot_observation_processor = make_default_processors()
@@ -1110,11 +1187,15 @@ def teleoperate(cfg: TeleoperateConfig):
             except KeyboardInterrupt:
                 logger.info("Data collection interrupted by user")
             except Exception as e:
-                logger.error(f"Error during data collection: {e}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Error during data collection: {e}\n{traceback.format_exc()}"
+                )
                 raise
 
         except Exception as e:
-            logger.error(f"Error in Xense Multisensor setup: {e}\n{traceback.format_exc()}")
+            logger.error(
+                f"Error in Xense Multisensor setup: {e}\n{traceback.format_exc()}"
+            )
         finally:
             # Safe disconnect
             if cfg.display_data:
@@ -1129,11 +1210,15 @@ def teleoperate(cfg: TeleoperateConfig):
                         robot.disconnect()
                         logger.info("✅ Xense Multisensor disconnected")
                 except Exception as e:
-                    logger.error(f"Error disconnecting Xense Multisensor: {e}\n{traceback.format_exc()}")
+                    logger.error(
+                        f"Error disconnecting Xense Multisensor: {e}\n{traceback.format_exc()}"
+                    )
 
     # Check if this is Flexiv Rizon4 robot with pico4
     elif cfg.robot.type == "flexiv_rizon4" and cfg.teleop.type == "pico4":
-        logger.info("Detected Flexiv Rizon4 robot with Pico4, using specialized teleop loop")
+        logger.info(
+            "Detected Flexiv Rizon4 robot with Pico4, using specialized teleop loop"
+        )
 
         robot = None
         teleop = None
@@ -1156,7 +1241,9 @@ def teleoperate(cfg: TeleoperateConfig):
                 robot.connect(go_to_start=False)
                 logger.info(f"Start EEF pose: {robot.get_current_tcp_pose_quat()}")
             except Exception as e:
-                logger.error(f"Failed to connect to robot: {e}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Failed to connect to robot: {e}\n{traceback.format_exc()}"
+                )
                 raise
 
             (
@@ -1171,7 +1258,9 @@ def teleoperate(cfg: TeleoperateConfig):
                 teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
                 logger.info("Connected to Pico4")
             except Exception as e:
-                logger.error(f"Failed to connect to Pico4: {e}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Failed to connect to Pico4: {e}\n{traceback.format_exc()}"
+                )
                 raise
 
             # Run teleoperation loop
@@ -1190,11 +1279,15 @@ def teleoperate(cfg: TeleoperateConfig):
             except KeyboardInterrupt:
                 logger.info("Teleoperation interrupted by user")
             except Exception as e:
-                logger.error(f"Error during teleoperation loop: {e}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Error during teleoperation loop: {e}\n{traceback.format_exc()}"
+                )
                 raise
 
         except Exception as e:
-            logger.error(f"Error in teleoperation setup or execution: {e}\n{traceback.format_exc()}")
+            logger.error(
+                f"Error in teleoperation setup or execution: {e}\n{traceback.format_exc()}"
+            )
             logger.error(f"Teleoperation failed\n{traceback.format_exc()}")
         finally:
             # Safe disconnect - ensure both robot and teleop are disconnected
@@ -1210,7 +1303,9 @@ def teleoperate(cfg: TeleoperateConfig):
                         teleop.disconnect()
                         logger.info("Pico4 disconnected")
                 except Exception as e:
-                    logger.error(f"Error disconnecting Pico4: {e}\n{traceback.format_exc()}")
+                    logger.error(
+                        f"Error disconnecting Pico4: {e}\n{traceback.format_exc()}"
+                    )
 
             if robot is not None:
                 try:
@@ -1218,7 +1313,9 @@ def teleoperate(cfg: TeleoperateConfig):
                         robot.disconnect()
                         logger.info("Robot safely disconnected")
                 except Exception as e:
-                    logger.error(f"Error disconnecting robot: {e}\n{traceback.format_exc()}")
+                    logger.error(
+                        f"Error disconnecting robot: {e}\n{traceback.format_exc()}"
+                    )
                     # Force cleanup even if disconnect fails
                     try:
                         if hasattr(robot, "_robot") and robot._robot is not None:
@@ -1227,7 +1324,9 @@ def teleoperate(cfg: TeleoperateConfig):
                         pass
     # Check if this is Flexiv Rizon4 robot with spacemouse
     elif cfg.robot.type == "flexiv_rizon4" and cfg.teleop.type == "spacemouse":
-        logger.info("Detected Flexiv Rizon4 robot with Spacemouse, using specialized teleop loop")
+        logger.info(
+            "Detected Flexiv Rizon4 robot with Spacemouse, using specialized teleop loop"
+        )
 
         robot = None
         teleop = None
@@ -1251,7 +1350,9 @@ def teleoperate(cfg: TeleoperateConfig):
                 logger.info(f"Start EEF pose: {robot.get_current_tcp_pose_euler()}")
                 logger.info(f"Start TCP pose: {robot.get_current_tcp_pose_quat()}")
             except Exception as e:
-                logger.error(f"Failed to connect to robot: {e}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Failed to connect to robot: {e}\n{traceback.format_exc()}"
+                )
                 raise
 
             (
@@ -1263,10 +1364,14 @@ def teleoperate(cfg: TeleoperateConfig):
             # Connect to teleoperator with error handling
             try:
                 teleop = make_teleoperator_from_config(cfg.teleop)
-                teleop.connect(current_tcp_pose_euler=robot.get_current_tcp_pose_euler())
+                teleop.connect(
+                    current_tcp_pose_euler=robot.get_current_tcp_pose_euler()
+                )
                 logger.info("Connected to Spacemouse")
             except Exception as e:
-                logger.error(f"Failed to connect to Spacemouse: {e}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Failed to connect to Spacemouse: {e}\n{traceback.format_exc()}"
+                )
                 raise
 
             # Run teleoperation loop
@@ -1286,11 +1391,15 @@ def teleoperate(cfg: TeleoperateConfig):
             except KeyboardInterrupt:
                 logger.info("Teleoperation interrupted by user")
             except Exception as e:
-                logger.error(f"Error during teleoperation loop: {e}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Error during teleoperation loop: {e}\n{traceback.format_exc()}"
+                )
                 raise
 
         except Exception as e:
-            logger.error(f"Error in teleoperation setup or execution: {e}\n{traceback.format_exc()}")
+            logger.error(
+                f"Error in teleoperation setup or execution: {e}\n{traceback.format_exc()}"
+            )
             logger.error(f"Teleoperation failed\n{traceback.format_exc()}")
         finally:
             # Safe disconnect - ensure both robot and teleop are disconnected
@@ -1306,7 +1415,9 @@ def teleoperate(cfg: TeleoperateConfig):
                         teleop.disconnect()
                         logger.info("Spacemouse disconnected")
                 except Exception as e:
-                    logger.error(f"Error disconnecting Spacemouse: {e}\n{traceback.format_exc()}")
+                    logger.error(
+                        f"Error disconnecting Spacemouse: {e}\n{traceback.format_exc()}"
+                    )
 
             if robot is not None:
                 try:
@@ -1314,7 +1425,9 @@ def teleoperate(cfg: TeleoperateConfig):
                         robot.disconnect()
                         logger.info("Robot safely disconnected")
                 except Exception as e:
-                    logger.error(f"Error disconnecting robot: {e}\n{traceback.format_exc()}")
+                    logger.error(
+                        f"Error disconnecting robot: {e}\n{traceback.format_exc()}"
+                    )
                     # Force cleanup even if disconnect fails
                     try:
                         if hasattr(robot, "_robot") and robot._robot is not None:
@@ -1323,7 +1436,9 @@ def teleoperate(cfg: TeleoperateConfig):
                         pass
     # Check if this is Flexiv Rizon4 robot with vive_tracker
     elif cfg.robot.type == "flexiv_rizon4" and cfg.teleop.type == "vive_tracker":
-        logger.info("Detected Flexiv Rizon4 robot with Vive Tracker, using specialized teleop loop")
+        logger.info(
+            "Detected Flexiv Rizon4 robot with Vive Tracker, using specialized teleop loop"
+        )
 
         robot = None
         teleop = None
@@ -1344,9 +1459,13 @@ def teleoperate(cfg: TeleoperateConfig):
             # Connect to robot with error handling
             try:
                 robot.connect(go_to_start=False)
-                logger.info(f"Start TCP pose (quat): {robot.get_current_tcp_pose_quat()}")
+                logger.info(
+                    f"Start TCP pose (quat): {robot.get_current_tcp_pose_quat()}"
+                )
             except Exception as e:
-                logger.error(f"Failed to connect to robot: {e}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Failed to connect to robot: {e}\n{traceback.format_exc()}"
+                )
                 raise
 
             (
@@ -1364,7 +1483,9 @@ def teleoperate(cfg: TeleoperateConfig):
                 teleop.connect(current_tcp_pose_quat=current_tcp_pose)
                 logger.info("Connected to Vive Tracker")
             except Exception as e:
-                logger.error(f"Failed to connect to Vive Tracker: {e}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Failed to connect to Vive Tracker: {e}\n{traceback.format_exc()}"
+                )
                 raise
 
             # Run teleoperation loop
@@ -1383,11 +1504,15 @@ def teleoperate(cfg: TeleoperateConfig):
             except KeyboardInterrupt:
                 logger.info("Teleoperation interrupted by user")
             except Exception as e:
-                logger.error(f"Error during teleoperation loop: {e}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Error during teleoperation loop: {e}\n{traceback.format_exc()}"
+                )
                 raise
 
         except Exception as e:
-            logger.error(f"Error in teleoperation setup or execution: {e}\n{traceback.format_exc()}")
+            logger.error(
+                f"Error in teleoperation setup or execution: {e}\n{traceback.format_exc()}"
+            )
             logger.error(f"Teleoperation failed\n{traceback.format_exc()}")
         finally:
             # Safe disconnect - ensure both robot and teleop are disconnected
@@ -1403,7 +1528,9 @@ def teleoperate(cfg: TeleoperateConfig):
                         teleop.disconnect()
                         logger.info("Vive Tracker disconnected")
                 except Exception as e:
-                    logger.error(f"Error disconnecting Vive Tracker: {e}\n{traceback.format_exc()}")
+                    logger.error(
+                        f"Error disconnecting Vive Tracker: {e}\n{traceback.format_exc()}"
+                    )
 
             if robot is not None:
                 try:
@@ -1411,7 +1538,9 @@ def teleoperate(cfg: TeleoperateConfig):
                         robot.disconnect()
                         logger.info("Robot safely disconnected")
                 except Exception as e:
-                    logger.error(f"Error disconnecting robot: {e}\n{traceback.format_exc()}")
+                    logger.error(
+                        f"Error disconnecting robot: {e}\n{traceback.format_exc()}"
+                    )
                     # Force cleanup even if disconnect fails
                     try:
                         if hasattr(robot, "_robot") and robot._robot is not None:
@@ -1443,9 +1572,13 @@ def teleoperate(cfg: TeleoperateConfig):
             # Connect to robot with error handling
             try:
                 robot.connect(go_to_start=False)
-                logger.info(f"Start TCP pose (quat): {robot.get_current_tcp_pose_quat()}")
+                logger.info(
+                    f"Start TCP pose (quat): {robot.get_current_tcp_pose_quat()}"
+                )
             except Exception as e:
-                logger.error(f"Failed to connect to robot: {e}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Failed to connect to robot: {e}\n{traceback.format_exc()}"
+                )
                 raise
 
             (
@@ -1463,7 +1596,9 @@ def teleoperate(cfg: TeleoperateConfig):
                 teleop.connect(current_tcp_pose_quat=current_tcp_pose)
                 logger.info("Connected to Xense Flare teleoperator")
             except Exception as e:
-                logger.error(f"Failed to connect to Xense Flare: {e}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Failed to connect to Xense Flare: {e}\n{traceback.format_exc()}"
+                )
                 raise
 
             # Run teleoperation loop
@@ -1483,11 +1618,15 @@ def teleoperate(cfg: TeleoperateConfig):
             except KeyboardInterrupt:
                 logger.info("Teleoperation interrupted by user")
             except Exception as e:
-                logger.error(f"Error during teleoperation loop: {e}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Error during teleoperation loop: {e}\n{traceback.format_exc()}"
+                )
                 raise
 
         except Exception as e:
-            logger.error(f"Error in teleoperation setup or execution: {e}\n{traceback.format_exc()}")
+            logger.error(
+                f"Error in teleoperation setup or execution: {e}\n{traceback.format_exc()}"
+            )
             logger.error(f"Teleoperation failed\n{traceback.format_exc()}")
         finally:
             # Safe disconnect - ensure both robot and teleop are disconnected
@@ -1503,7 +1642,9 @@ def teleoperate(cfg: TeleoperateConfig):
                         teleop.disconnect()
                         logger.info("Xense Flare teleoperator disconnected")
                 except Exception as e:
-                    logger.error(f"Error disconnecting Xense Flare: {e}\n{traceback.format_exc()}")
+                    logger.error(
+                        f"Error disconnecting Xense Flare: {e}\n{traceback.format_exc()}"
+                    )
 
             if robot is not None:
                 try:
@@ -1511,7 +1652,9 @@ def teleoperate(cfg: TeleoperateConfig):
                         robot.disconnect()
                         logger.info("Robot safely disconnected")
                 except Exception as e:
-                    logger.error(f"Error disconnecting robot: {e}\n{traceback.format_exc()}")
+                    logger.error(
+                        f"Error disconnecting robot: {e}\n{traceback.format_exc()}"
+                    )
                     # Force cleanup even if disconnect fails
                     try:
                         if hasattr(robot, "_robot") and robot._robot is not None:

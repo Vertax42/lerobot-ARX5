@@ -24,27 +24,7 @@ from .robot import Robot
 
 def make_robot_from_config(config: RobotConfig) -> Robot:
     # TODO(Steven): Consider just using the make_device_from_device_class for all types
-    if config.type == "koch_follower":
-        from .koch_follower import KochFollower
-
-        return KochFollower(config)
-    elif config.type == "lekiwi":
-        from .lekiwi import LeKiwi
-
-        return LeKiwi(config)
-    elif config.type == "hope_jr_hand":
-        from .hope_jr import HopeJrHand
-
-        return HopeJrHand(config)
-    elif config.type == "hope_jr_arm":
-        from .hope_jr import HopeJrArm
-
-        return HopeJrArm(config)
-    elif config.type == "reachy2":
-        from .reachy2 import Reachy2Robot
-
-        return Reachy2Robot(config)
-    elif config.type == "flexiv_rizon4":
+    if config.type == "flexiv_rizon4":
         from .flexiv_rizon4 import FlexivRizon4
 
         return FlexivRizon4(config)

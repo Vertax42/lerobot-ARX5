@@ -19,7 +19,11 @@ from dataclasses import dataclass
 from lerobot.configs.types import FeatureType, PipelineFeatureType, PolicyFeature
 
 from .core import PolicyAction, RobotAction
-from .pipeline import ActionProcessorStep, ProcessorStepRegistry, RobotActionProcessorStep
+from .pipeline import (
+    ActionProcessorStep,
+    ProcessorStepRegistry,
+    RobotActionProcessorStep,
+)
 
 
 @ProcessorStepRegistry.register("map_tensor_to_delta_action_dict")
@@ -101,15 +105,19 @@ class MapDeltaActionToRobotActionStep(RobotActionProcessorStep):
 
         # Determine if the teleoperator is actively providing input
         # Consider enabled if any significant movement delta is detected
-        position_magnitude = (delta_x**2 + delta_y**2 + delta_z**2) ** 0.5  # Use Euclidean norm for position
-        enabled = position_magnitude > self.noise_threshold  # Small threshold to avoid noise
+        position_magnitude = (
+            delta_x**2 + delta_y**2 + delta_z**2
+        ) ** 0.5  # Use Euclidean norm for position
+        enabled = (
+            position_magnitude > self.noise_threshold
+        )  # Small threshold to avoid noise
 
         # Scale the deltas appropriately
         scaled_delta_x = delta_x * self.position_scale
         scaled_delta_y = delta_y * self.position_scale
         scaled_delta_z = delta_z * self.position_scale
 
-        # For gamepad/keyboard, we don't have rotation input, so set to 0
+        # For simple teleoperators, we don't have rotation input, so set to 0
         # These could be extended in the future for more sophisticated teleoperators
         target_wx = 0.0
         target_wy = 0.0
@@ -135,7 +143,15 @@ class MapDeltaActionToRobotActionStep(RobotActionProcessorStep):
         for axis in ["x", "y", "z", "gripper"]:
             features[PipelineFeatureType.ACTION].pop(f"delta_{axis}", None)
 
-        for feat in ["enabled", "target_x", "target_y", "target_z", "target_wx", "target_wy", "target_wz"]:
+        for feat in [
+            "enabled",
+            "target_x",
+            "target_y",
+            "target_z",
+            "target_wx",
+            "target_wy",
+            "target_wz",
+        ]:
             features[PipelineFeatureType.ACTION][f"{feat}"] = PolicyFeature(
                 type=FeatureType.ACTION, shape=(1,)
             )

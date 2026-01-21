@@ -23,7 +23,9 @@ from .camera import Camera
 from .configs import CameraConfig, Cv2Rotation
 
 
-def make_cameras_from_configs(camera_configs: dict[str, CameraConfig]) -> dict[str, Camera]:
+def make_cameras_from_configs(
+    camera_configs: dict[str, CameraConfig],
+) -> dict[str, Camera]:
     cameras: dict[str, Camera] = {}
 
     for key, cfg in camera_configs.items():
@@ -43,16 +45,13 @@ def make_cameras_from_configs(camera_configs: dict[str, CameraConfig]) -> dict[s
 
             cameras[key] = XenseTactileCamera(cfg)
 
-        elif cfg.type == "reachy2_camera":
-            from .reachy2_camera.reachy2_camera import Reachy2Camera
-
-            cameras[key] = Reachy2Camera(cfg)
-
         else:
             try:
                 cameras[key] = cast(Camera, make_device_from_device_class(cfg))
             except Exception as e:
-                raise ValueError(f"Error creating camera {key} with config {cfg}: {e}") from e
+                raise ValueError(
+                    f"Error creating camera {key} with config {cfg}: {e}"
+                ) from e
 
     return cameras
 

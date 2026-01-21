@@ -31,8 +31,6 @@ from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
     flexiv_rizon4,  # noqa: F401
-    hope_jr,
-    koch_follower,
     make_robot_from_config,
 )
 from lerobot.utils.constants import ACTION

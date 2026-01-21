@@ -19,7 +19,6 @@ from typing import Any
 
 import draccus
 
-from lerobot.motors.motors_bus import MotorCalibration
 from lerobot.utils.constants import HF_LEROBOT_CALIBRATION, TELEOPERATORS
 
 from .config import TeleoperatorConfig
@@ -50,7 +49,7 @@ class Teleoperator(abc.ABC):
         )
         self.calibration_dir.mkdir(parents=True, exist_ok=True)
         self.calibration_fpath = self.calibration_dir / f"{self.id}.json"
-        self.calibration: dict[str, MotorCalibration] = {}
+        self.calibration: dict[str, Any] = {}
         if self.calibration_fpath.is_file():
             self._load_calibration()
 
@@ -128,7 +127,7 @@ class Teleoperator(abc.ABC):
         """
         fpath = self.calibration_fpath if fpath is None else fpath
         with open(fpath) as f, draccus.config_type("json"):
-            self.calibration = draccus.load(dict[str, MotorCalibration], f)
+            self.calibration = draccus.load(dict[str, Any], f)
 
     def _save_calibration(self, fpath: Path | None = None) -> None:
         """
