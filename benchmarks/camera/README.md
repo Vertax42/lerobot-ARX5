@@ -116,6 +116,13 @@ python benchmark_opencv_camera.py --index 0 --video-stream --use-lerobot --sync-
 python benchmark_opencv_camera.py --index 0 --test-all-resolutions --output results.csv
 ```
 
+## 带宽监视
+
+```bash
+sudo modprobe usbmon
+sudo usbtop
+```
+
 ## 输出示例
 
 ```
