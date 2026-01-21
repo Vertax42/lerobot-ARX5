@@ -28,10 +28,6 @@ def make_robot_from_config(config: RobotConfig) -> Robot:
         from .flexiv_rizon4 import FlexivRizon4
 
         return FlexivRizon4(config)
-    elif config.type == "xense_flare":
-        from .xense_flare import XenseFlare
-
-        return XenseFlare(config)
     elif config.type == "xense_multisensor":
         from .xense_multisensor import XenseMultisensor
 

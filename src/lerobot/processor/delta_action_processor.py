@@ -79,7 +79,7 @@ class MapTensorToDeltaActionDictStep(ActionProcessorStep):
 @dataclass
 class MapDeltaActionToRobotActionStep(RobotActionProcessorStep):
     """
-    Maps delta actions from teleoperators to robot target actions for inverse kinematics.
+    Maps delta actions from teleoperators to robot target actions.
 
     This step converts a dictionary of delta movements (e.g., from a gamepad)
     into a target action format that includes an "enabled" flag and target

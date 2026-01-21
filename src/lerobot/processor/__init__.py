@@ -39,19 +39,8 @@ from .factory import (
     make_default_robot_observation_processor,
     make_default_teleop_action_processor,
 )
-from .gym_action_processor import (
-    Numpy2TorchActionProcessorStep,
-    Torch2NumpyActionProcessorStep,
-)
-from .hil_processor import (
-    AddTeleopActionAsComplimentaryDataStep,
-    AddTeleopEventsAsInfoStep,
-    GripperPenaltyProcessorStep,
-    ImageCropResizeProcessorStep,
-    InterventionActionProcessorStep,
-    RewardClassifierProcessorStep,
-    TimeLimitProcessorStep,
-)
+
+# Note: gym_action_processor and hil_processor removed as they are training/simulation related
 from .joint_observations_processor import JointVelocityProcessorStep
 from .normalize_processor import (
     NormalizerProcessorStep,
@@ -86,8 +75,6 @@ from .tokenizer_processor import TokenizerProcessorStep
 
 __all__ = [
     "ActionProcessorStep",
-    "AddTeleopActionAsComplimentaryDataStep",
-    "AddTeleopEventsAsInfoStep",
     "ComplementaryDataProcessorStep",
     "batch_to_transition",
     "create_transition",
@@ -95,12 +82,9 @@ __all__ = [
     "DoneProcessorStep",
     "EnvAction",
     "EnvTransition",
-    "GripperPenaltyProcessorStep",
     "hotswap_stats",
     "IdentityProcessorStep",
-    "ImageCropResizeProcessorStep",
     "InfoProcessorStep",
-    "InterventionActionProcessorStep",
     "JointVelocityProcessorStep",
     "make_default_processors",
     "make_default_teleop_action_processor",
@@ -109,7 +93,6 @@ __all__ = [
     "MapDeltaActionToRobotActionStep",
     "MapTensorToDeltaActionDictStep",
     "NormalizerProcessorStep",
-    "Numpy2TorchActionProcessorStep",
     "ObservationProcessorStep",
     "PolicyAction",
     "PolicyActionProcessorStep",
@@ -121,14 +104,11 @@ __all__ = [
     "RobotActionProcessorStep",
     "RobotObservation",
     "RenameObservationsProcessorStep",
-    "RewardClassifierProcessorStep",
     "RewardProcessorStep",
     "DataProcessorPipeline",
-    "TimeLimitProcessorStep",
     "AddBatchDimensionProcessorStep",
     "RobotProcessorPipeline",
     "TokenizerProcessorStep",
-    "Torch2NumpyActionProcessorStep",
     "RobotActionToPolicyActionProcessorStep",
     "PolicyActionToRobotActionProcessorStep",
     "transition_to_batch",

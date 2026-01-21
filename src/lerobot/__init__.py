@@ -170,7 +170,6 @@ available_policies = []
 # lists all available robots from `lerobot/robots`
 available_robots = [
     "flexiv_rizon4",
-    "xense_flare",
     "xense_multisensor",
 ]
 

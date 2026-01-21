@@ -41,18 +41,6 @@ def make_teleoperator_from_config(config: TeleoperatorConfig) -> Teleoperator:
         from .pico4 import Pico4
 
         return Pico4(config)
-    elif config.type == "spacemouse":
-        from .spacemouse import SpacemouseTeleop
-
-        return SpacemouseTeleop(config)
-    elif config.type == "vive_tracker":
-        from .vive_tracker import ViveTrackerTeleop
-
-        return ViveTrackerTeleop(config)
-    elif config.type == "xense_flare":
-        from .xense_flare import XenseFlareTeleop
-
-        return XenseFlareTeleop(config)
     else:
         try:
             return cast(Teleoperator, make_device_from_device_class(config))

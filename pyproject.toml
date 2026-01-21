@@ -122,7 +122,7 @@ dependencies = [
 
 # Common
 pygame-dep = ["pygame>=2.5.1,<2.7.0"]
-placo-dep = ["placo>=0.9.6,<0.10.0"]
+# Note: placo-dep removed as kinematics functionality is not supported in this data collection-only fork
 xense = ["xensesdk>=1.7.0"]
 transformers-dep = ["transformers>=4.53.0,<5.0.0"]
 grpcio-dep = [
@@ -131,7 +131,6 @@ grpcio-dep = [
 ] # TODO: Bumb dependency (compatible with wandb)
 
 # Robots
-kinematics = ["lerobot[placo-dep]"]
 intelrealsense = [
     "pyrealsense2>=2.55.1.6486,<2.57.0 ; sys_platform != 'darwin'",
     "pyrealsense2-macosx>=2.54,<2.55.0 ; sys_platform == 'darwin'",
@@ -155,27 +154,18 @@ test = [
 ]
 video_benchmark = ["scikit-image>=0.23.2,<0.26.0", "pandas>=2.2.2,<2.4.0"]
 
-# Simulation (Note: Only libero and metaworld kept for compatibility, training/sim features removed)
-libero = [
-    "lerobot[transformers-dep]",
-    "libero @ git+https://github.com/huggingface/lerobot-libero.git@main#egg=libero",
-]
-metaworld = ["metaworld==3.0.0"]
+# Note: Simulation dependencies (libero, metaworld) removed as simulation is not supported in this data collection-only fork
 
 # All
 all = [
-    "lerobot[kinematics]",
     "lerobot[intelrealsense]",
     "lerobot[async]",
     "lerobot[dev]",
     "lerobot[test]",
     "lerobot[video_benchmark]",
-    "lerobot[libero]",
-    "lerobot[metaworld]",
 ]
 
 [project.scripts]
-lerobot-calibrate = "lerobot.scripts.lerobot_calibrate:main"
 lerobot-find-cameras = "lerobot.scripts.lerobot_find_cameras:main"
 lerobot-record = "lerobot.scripts.lerobot_record:main"
 lerobot-replay = "lerobot.scripts.lerobot_replay:main"
