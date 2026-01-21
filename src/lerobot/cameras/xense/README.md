@@ -170,7 +170,6 @@ cameras = {
 ## Performance Notes
 
 - **Recommended FPS**: 60 Hz for force sensing (reduce to 30 Hz if experiencing V4L2 timeouts)
-- **Warmup Time**: 0.5s default (adjustable via `warmup_s`)
 - **Async Reading**: Uses background thread for non-blocking reads
 - **Timeout**: 200ms default for async reads (adjustable)
 
@@ -223,17 +222,7 @@ XenseCameraConfig(
 )
 ```
 
-#### 4. Increase Warmup Time
-```python
-# Longer warmup helps stabilize sensor under load
-XenseCameraConfig(
-    serial_number="OG000344",
-    fps=60,
-    warmup_s=1.5,  # Increased from 0.5s
-)
-```
-
-#### 5. Recommended High-Load Configuration
+#### 4. Recommended High-Load Configuration
 ```python
 # Optimized configuration for recording with multiple cameras
 XenseCameraConfig(
@@ -241,7 +230,6 @@ XenseCameraConfig(
     fps=30,  # Reduced FPS
     output_types=[XenseOutputType.DIFFERENCE],  # Minimal output
     rectify_size=(200, 350),  # Reduced resolution
-    warmup_s=1.0,  # Longer warmup
 )
 ```
 
@@ -292,14 +280,13 @@ Configuration class for Xense sensors.
 - `serial_number` (str): Sensor serial number (e.g., "OG000344")
 - `fps` (int, optional): Target frame rate (default: 60)
 - `output_types` (list[XenseOutputType], optional): Data types to read
-- `warmup_s` (float, optional): Warmup duration in seconds (default: 0.5)
 
 ### XenseTactileCamera
 
 Main camera class implementing the Camera interface.
 
 **Methods**:
-- `connect(warmup=True)`: Connect to sensor
+- `connect()`: Connect to sensor
 - `read()`: Synchronous read, returns dict of arrays
 - `async_read(timeout_ms=200)`: Asynchronous read with timeout
 - `disconnect()`: Release sensor resources

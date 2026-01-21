@@ -143,7 +143,6 @@ class XenseTactileCamera(Camera):
         self.config = config
         self.serial_number = config.serial_number
         self.output_types = config.output_types
-        self.warmup_s = config.warmup_s
         self.rectify_size = config.rectify_size
         self.raw_size = config.raw_size
         self.infer_type = config.infer_type
@@ -182,7 +181,7 @@ class XenseTactileCamera(Camera):
         """Checks if the sensor is currently connected."""
         return self.sensor is not None
 
-    def connect(self, warmup: bool = True):
+    def connect(self):
         """
         Connects to the Xense sensor specified in the configuration.
 
@@ -236,17 +235,8 @@ class XenseTactileCamera(Camera):
                 "Make sure the sensor is plugged in and the serial number is correct."
             ) from e
 
-        if warmup:
-            # Start background thread first for async_read
-            # Do warmup reads to stabilize the sensor
-            start_time = time.time()
-            while time.time() - start_time < self.warmup_s:
-                try:
-                    self.read()
-                except Exception:
-                    pass  # Ignore errors during warmup
-                time.sleep(0.1)
-            self._start_read_thread()
+        # 启动后台线程
+        self._start_read_thread()
 
         # Get API name for logging
         api_name = camera_api.name if hasattr(camera_api, 'name') else str(camera_api)

@@ -162,6 +162,9 @@ class OpenCVCamera(Camera):
             ConnectionError: If the specified camera index/path is not found or the camera is found but fails to open.
             RuntimeError: If the camera opens but fails to apply requested FPS/resolution settings.
         """
+        connect_start = time.perf_counter()
+        logger.info(f"{self} connect() starting...")
+
         if self.is_connected:
             raise DeviceAlreadyConnectedError(f"{self} is already connected.")
 
@@ -169,7 +172,9 @@ class OpenCVCamera(Camera):
         # blocking in multi-threaded applications, especially during data collection.
         cv2.setNumThreads(1)
 
+        t0 = time.perf_counter()
         self.videocapture = cv2.VideoCapture(self.index_or_path, self.backend)
+        logger.info(f"{self} VideoCapture() took {(time.perf_counter() - t0) * 1e3:.1f}ms")
 
         if not self.videocapture.isOpened():
             self.videocapture.release()
@@ -178,15 +183,22 @@ class OpenCVCamera(Camera):
                 f"Failed to open {self}.Run `lerobot-find-cameras opencv` to find available cameras."
             )
 
+        t0 = time.perf_counter()
         self._configure_capture_settings()
+        logger.info(f"{self} _configure_capture_settings() took {(time.perf_counter() - t0) * 1e3:.1f}ms")
 
         if warmup:
+            t0 = time.perf_counter()
+            warmup_frames = 0
             start_time = time.time()
             while time.time() - start_time < self.warmup_s:
                 self.read()
+                warmup_frames += 1
                 time.sleep(0.1)
+            logger.info(f"{self} warmup ({warmup_frames} frames) took {(time.perf_counter() - t0) * 1e3:.1f}ms")
 
-        logger.info(f"{self} connected.")
+        total_time = (time.perf_counter() - connect_start) * 1e3
+        logger.info(f"{self} connected. Total connect() time: {total_time:.1f}ms")
 
     def _configure_capture_settings(self) -> None:
         """
@@ -210,6 +222,8 @@ class OpenCVCamera(Camera):
             DeviceNotConnectedError: If the camera is not connected when attempting
                                      to configure settings.
         """
+        logger.debug(f"{self} _configure_capture_settings() starting...")
+
         if not self.is_connected:
             raise DeviceNotConnectedError(
                 f"Cannot configure settings for {self} as it is not connected."
@@ -217,12 +231,17 @@ class OpenCVCamera(Camera):
 
         # Set FOURCC first (if specified) as it can affect available FPS/resolution options
         if self.config.fourcc is not None:
+            t0 = time.perf_counter()
             self._set_fourcc()
+            logger.debug(f"{self} _set_fourcc({self.config.fourcc}) took {(time.perf_counter() - t0) * 1e3:.1f}ms")
+
         if self.videocapture is None:
             raise DeviceNotConnectedError(f"{self} videocapture is not initialized")
 
+        t0 = time.perf_counter()
         default_width = int(round(self.videocapture.get(cv2.CAP_PROP_FRAME_WIDTH)))
         default_height = int(round(self.videocapture.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+        logger.debug(f"{self} get default resolution ({default_width}x{default_height}) took {(time.perf_counter() - t0) * 1e3:.1f}ms")
 
         if self.width is None or self.height is None:
             self.width, self.height = default_width, default_height
@@ -233,18 +252,29 @@ class OpenCVCamera(Camera):
             ]:
                 self.width, self.height = default_height, default_width
                 self.capture_width, self.capture_height = default_width, default_height
+            logger.debug(f"{self} using default resolution: {self.capture_width}x{self.capture_height}")
         else:
+            t0 = time.perf_counter()
             self._validate_width_and_height()
+            logger.debug(f"{self} _validate_width_and_height({self.capture_width}x{self.capture_height}) took {(time.perf_counter() - t0) * 1e3:.1f}ms")
 
         if self.fps is None:
+            t0 = time.perf_counter()
             self.fps = self.videocapture.get(cv2.CAP_PROP_FPS)
+            logger.debug(f"{self} get default FPS ({self.fps}) took {(time.perf_counter() - t0) * 1e3:.1f}ms")
         else:
+            t0 = time.perf_counter()
             self._validate_fps()
+            logger.debug(f"{self} _validate_fps({self.fps}) took {(time.perf_counter() - t0) * 1e3:.1f}ms")
 
         # Re-apply FOURCC after resolution/FPS settings because V4L2 drivers may reset
         # the video format to default (e.g., YUYV) when resolution is changed
         if self.config.fourcc is not None:
+            t0 = time.perf_counter()
             self._validate_fourcc()
+            logger.debug(f"{self} _validate_fourcc({self.config.fourcc}) took {(time.perf_counter() - t0) * 1e3:.1f}ms")
+
+        logger.debug(f"{self} _configure_capture_settings() done. Final: {self.capture_width}x{self.capture_height}@{self.fps}fps, fourcc={self.config.fourcc}")
 
     def _validate_fps(self) -> None:
         """Validates and sets the camera's frames per second (FPS)."""
@@ -255,8 +285,16 @@ class OpenCVCamera(Camera):
         if self.fps is None:
             raise ValueError(f"{self} FPS is not set")
 
+        t0 = time.perf_counter()
         success = self.videocapture.set(cv2.CAP_PROP_FPS, float(self.fps))
+        set_time = (time.perf_counter() - t0) * 1e3
+
+        t0 = time.perf_counter()
         actual_fps = self.videocapture.get(cv2.CAP_PROP_FPS)
+        get_time = (time.perf_counter() - t0) * 1e3
+
+        logger.debug(f"{self} FPS set({self.fps}): {set_time:.1f}ms, get: {get_time:.1f}ms, actual={actual_fps}, success={success}")
+
         # Use math.isclose for robust float comparison
         if not success or not math.isclose(self.fps, actual_fps, rel_tol=1e-3):
             raise RuntimeError(f"{self} failed to set fps={self.fps} ({actual_fps=}).")
@@ -270,7 +308,10 @@ class OpenCVCamera(Camera):
             raise DeviceNotConnectedError(f"{self} videocapture is not initialized")
 
         fourcc_code = cv2.VideoWriter_fourcc(*self.config.fourcc)
-        self.videocapture.set(cv2.CAP_PROP_FOURCC, fourcc_code)
+        t0 = time.perf_counter()
+        success = self.videocapture.set(cv2.CAP_PROP_FOURCC, fourcc_code)
+        set_time = (time.perf_counter() - t0) * 1e3
+        logger.debug(f"{self} FOURCC initial set({self.config.fourcc}): {set_time:.1f}ms, success={success}")
 
     def _validate_fourcc(self) -> None:
         """Validates and sets the camera's FOURCC code.
@@ -282,14 +323,22 @@ class OpenCVCamera(Camera):
             raise DeviceNotConnectedError(f"{self} videocapture is not initialized")
 
         fourcc_code = cv2.VideoWriter_fourcc(*self.config.fourcc)
+
+        t0 = time.perf_counter()
         success = self.videocapture.set(cv2.CAP_PROP_FOURCC, fourcc_code)
+        set_time = (time.perf_counter() - t0) * 1e3
+
+        t0 = time.perf_counter()
         actual_fourcc_code = self.videocapture.get(cv2.CAP_PROP_FOURCC)
+        get_time = (time.perf_counter() - t0) * 1e3
 
         # Convert actual FOURCC code back to string for comparison
         actual_fourcc_code_int = int(actual_fourcc_code)
         actual_fourcc = "".join(
             [chr((actual_fourcc_code_int >> 8 * i) & 0xFF) for i in range(4)]
         )
+
+        logger.debug(f"{self} FOURCC validate set({self.config.fourcc}): {set_time:.1f}ms, get: {get_time:.1f}ms, actual={actual_fourcc}, success={success}")
 
         if not success or actual_fourcc != self.config.fourcc:
             logger.warn(
@@ -308,20 +357,34 @@ class OpenCVCamera(Camera):
         if self.capture_width is None or self.capture_height is None:
             raise ValueError(f"{self} capture_width or capture_height is not set")
 
+        t0 = time.perf_counter()
         width_success = self.videocapture.set(
             cv2.CAP_PROP_FRAME_WIDTH, float(self.capture_width)
         )
+        width_set_time = (time.perf_counter() - t0) * 1e3
+
+        t0 = time.perf_counter()
         height_success = self.videocapture.set(
             cv2.CAP_PROP_FRAME_HEIGHT, float(self.capture_height)
         )
+        height_set_time = (time.perf_counter() - t0) * 1e3
 
+        t0 = time.perf_counter()
         actual_width = int(round(self.videocapture.get(cv2.CAP_PROP_FRAME_WIDTH)))
+        actual_height = int(round(self.videocapture.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+        get_time = (time.perf_counter() - t0) * 1e3
+
+        logger.debug(
+            f"{self} resolution set width({self.capture_width}): {width_set_time:.1f}ms success={width_success}, "
+            f"set height({self.capture_height}): {height_set_time:.1f}ms success={height_success}, "
+            f"get: {get_time:.1f}ms, actual={actual_width}x{actual_height}"
+        )
+
         if not width_success or self.capture_width != actual_width:
             raise RuntimeError(
                 f"{self} failed to set capture_width={self.capture_width} ({actual_width=}, {width_success=})."
             )
 
-        actual_height = int(round(self.videocapture.get(cv2.CAP_PROP_FRAME_HEIGHT)))
         if not height_success or self.capture_height != actual_height:
             raise RuntimeError(
                 f"{self} failed to set capture_height={self.capture_height} ({actual_height=}, {height_success=})."

@@ -79,7 +79,6 @@ class XenseCameraConfig(CameraConfig):
         width: Frame width in pixels (auto-set based on output_types and rectify_size)
         height: Frame height in pixels (auto-set based on output_types and rectify_size)
         output_types: List of output types to read from the sensor
-        warmup_s: Time to wait before returning from connect (in seconds)
         rectify_size: Rectified image size (width, height), default (400, 700)
         raw_size: Raw sensor resolution (width, height), default (320, 240)
 
@@ -95,7 +94,6 @@ class XenseCameraConfig(CameraConfig):
     serial_number: str
     # NOTE: we allow strings too (e.g. from CLI/YAML), and normalize them in __post_init__
     output_types: list[XenseOutputType] | list[str] | None = None
-    warmup_s: float = 0.5
     rectify_size: tuple[int, int] | None = None  # (width, height) for rectified images
     raw_size: tuple[int, int] | None = None  # (width, height) for raw sensor data
     infer_type: str | None = None  # Inference type: "MIGraphX", "ONNX", "CPU", or None (auto-detect)

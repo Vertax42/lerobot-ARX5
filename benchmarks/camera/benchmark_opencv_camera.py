@@ -1840,7 +1840,7 @@ def main():
     parser.add_argument(
         "--max-index",
         type=int,
-        default=25,
+        default=30,
         help="Maximum camera index to scan when using --list (default: 25).",
     )
     parser.add_argument(
