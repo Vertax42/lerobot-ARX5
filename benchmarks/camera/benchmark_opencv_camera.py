@@ -6,60 +6,50 @@ Measures camera performance metrics including:
 - Actual FPS vs requested FPS
 - Frame read latency (min/max/avg/std)
 - Frame drop detection
-- Resolution/FPS/FOURCC capability matrix
-- USB connection speed detection (USB 2.0/3.0)
-- MJPG vs YUYV bandwidth comparison
-- Real-time video streaming with Rerun/cv2.imshow
+- Resolution/FPS capability matrix
+- Real-time video streaming with Rerun visualization
 
 Usage:
-    ==================== Camera Discovery ====================
-    # List all cameras with device info (name, USB speed, etc.)
+    # List all cameras with device info
     python benchmark_opencv_camera.py --list
 
-    ==================== Capability Scan ====================
-    # Full capability scan (resolution, FPS, USB speed)
-    python benchmark_opencv_camera.py -i 0 --scan-capabilities
-    
-    # Compare MJPG vs YUYV performance and bandwidth
-    python benchmark_opencv_camera.py -i 0 --compare-fourcc
-    python benchmark_opencv_camera.py -i 0 --compare-fourcc --fps 60 --width 1920 --height 1080
+    # Basic benchmark (auto-detect cameras)
+    python benchmark_opencv_camera.py
 
-    ==================== Benchmark ====================
-    # Basic benchmark (MJPG format, 1280x720@30fps by default)
-    python benchmark_opencv_camera.py -i 0
-    python benchmark_opencv_camera.py -i 0 --fps 60 --width 1920 --height 1080
-    python benchmark_opencv_camera.py -i 0 --duration 30  # 30 second test
+    # Benchmark specific camera
+    python benchmark_opencv_camera.py --index 0
 
-    # Test with YUYV format (uncompressed, higher USB bandwidth)
-    python benchmark_opencv_camera.py -i 0 --fourcc YUYV
+    # Test specific settings
+    python benchmark_opencv_camera.py --index 0 --fps 30 --width 1280 --height 720
+
+    # Full capability scan
+    python benchmark_opencv_camera.py --index 0 --scan-capabilities
+
+    # Video stream with raw OpenCV (MJPG by default, 2s warmup)
+    python benchmark_opencv_camera.py --index 0 --video-stream
+    python benchmark_opencv_camera.py --index 0 --video-stream --width 1920 --height 1080 --fps 60
+    python benchmark_opencv_camera.py --index 0 --video-stream --warmup 3  # 3s warmup
+    python benchmark_opencv_camera.py --index 0 --video-stream --warmup 0  # No warmup
+    python benchmark_opencv_camera.py --index 0 --video-stream --duration 60  # 60 seconds
+
+    # Video stream with LeRobot's OpenCVCamera (threaded, lower latency)
+    python benchmark_opencv_camera.py --index 0 --video-stream --use-lerobot
+    python benchmark_opencv_camera.py --index 0 --video-stream --use-lerobot --fps 60
+    python benchmark_opencv_camera.py --index 0 --video-stream --use-lerobot --sync-read  # Sync read
+
+    # Multiple cameras streaming simultaneously with LeRobot (Rerun visualization)
+    python benchmark_opencv_camera.py --index 0 1 --video-stream --use-lerobot
+    python benchmark_opencv_camera.py --index 0 1 2 --video-stream --use-lerobot --fps 30
+
+    # Lowest latency display with cv2.imshow (press Q to quit)
+    python benchmark_opencv_camera.py --index 0 --video-stream --cv2-display
+    python benchmark_opencv_camera.py --index 0 --video-stream --use-lerobot --cv2-display
 
     # Test multiple cameras
-    python benchmark_opencv_camera.py -i 0 1 2
+    python benchmark_opencv_camera.py --index 0 1 2
 
-    ==================== Video Stream ====================
-    # Stream with Rerun visualization (default)
-    python benchmark_opencv_camera.py -i 0 --video-stream
-    python benchmark_opencv_camera.py -i 0 -v --fps 60 --width 1920 --height 1080
-
-    # Stream with cv2.imshow (lowest latency, press Q to quit)
-    python benchmark_opencv_camera.py -i 0 -v --cv2-display
-
-    # Stream with LeRobot's threaded camera (recommended for low latency)
-    python benchmark_opencv_camera.py -i 0 -v --use-lerobot
-    python benchmark_opencv_camera.py -i 0 -v --use-lerobot --cv2-display
-
-Defaults:
-    --fourcc MJPG     (compressed, saves USB bandwidth)
-    --fps 30
-    --width 1280
-    --height 720
-    --warmup 2.0s
-    --duration 10.0s
-
-Note:
-    - MJPG is recommended for USB 2.0 cameras (480 Mbps bandwidth limit)
-    - YUYV requires USB 3.0 for high resolution/FPS (uncompressed)
-    - Use --cv2-display instead of Rerun for better FPS during streaming
+    # Long duration test
+    python benchmark_opencv_camera.py --index 0 --duration 60
 """
 
 import argparse
@@ -121,7 +111,9 @@ class CameraCapabilities:
     # Resolution -> max FPS: {(width, height): max_fps}
     resolution_max_fps_map: dict[tuple[int, int], float] = field(default_factory=dict)
     # USB connection info
-    usb_speed_mbps: int = 0  # USB speed in Mbps (e.g., 480 for USB 2.0, 5000 for USB 3.0)
+    usb_speed_mbps: int = (
+        0  # USB speed in Mbps (e.g., 480 for USB 2.0, 5000 for USB 3.0)
+    )
     usb_version: str = ""  # USB version string (e.g., "USB 2.0", "USB 3.0")
 
 
@@ -185,6 +177,53 @@ def get_camera_info(cap: cv2.VideoCapture) -> dict[str, Any]:
         "fourcc": fourcc_to_string(fourcc_int),
         "backend": cap.getBackendName(),
     }
+
+
+def has_video_capture_capability(device_path: str) -> bool:
+    """Check if V4L2 device has Video Capture capability.
+
+    Args:
+        device_path: Path to video device (e.g., '/dev/video0')
+
+    Returns:
+        True if device has Video Capture capability, False otherwise
+    """
+    try:
+        result = subprocess.run(
+            ["v4l2-ctl", "--device", device_path, "--all"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            output = result.stdout
+            output_lower = output.lower()
+
+            # Look for capabilities section
+            # Video Capture capability is 0x00000001
+            # Metadata Capture capability is 0x00000002
+            # We want devices with Video Capture (0x00000001) but not just Metadata Capture
+
+            # Check if it has Video Capture capability
+            has_video_capture = (
+                "video capture" in output_lower
+                or "0x00000001" in output
+                or "capabilities     : 0x" in output_lower
+                and "0x00000001" in output
+            )
+
+            # Check if it's ONLY metadata (has metadata but not video capture)
+            has_metadata_only = (
+                "metadata capture" in output_lower or "0x00000002" in output
+            ) and "video capture" not in output_lower
+
+            # Return True if it has video capture and is not metadata-only
+            if has_video_capture and not has_metadata_only:
+                return True
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        pass
+
+    return False
 
 
 def get_v4l2_device_info(device_path: str) -> dict[str, str]:
@@ -431,8 +470,12 @@ def list_cameras(max_index: int = 10) -> list[CameraDeviceInfo]:
         if not Path(device_path).exists():
             continue
 
-        # Try to open with OpenCV
-        cap = cv2.VideoCapture(i)
+        # Check if device has Video Capture capability (filter out metadata nodes)
+        if not has_video_capture_capability(device_path):
+            continue
+
+        # Try to open with OpenCV using V4L2 backend
+        cap = cv2.VideoCapture(device_path, cv2.CAP_V4L2)
         if not cap.isOpened():
             cap.release()
             continue
@@ -515,8 +558,13 @@ def print_camera_list(cameras: list[CameraDeviceInfo]) -> None:
         # Current settings
         logger.info(f"  Resolution   : {cam.width}x{cam.height}")
         logger.info(f"  FPS          : {cam.fps:.0f}")
-        # Only display MJPG or YUYV, show "Other" for other formats
-        fourcc_display = cam.fourcc if cam.fourcc in ["MJPG", "YUYV"] else "Other"
+        # Only display MJPG or YUYV, map UYVY to YUYV, show "Other" for other formats
+        if cam.fourcc in ["MJPG", "YUYV"]:
+            fourcc_display = cam.fourcc
+        elif cam.fourcc == "UYVY":
+            fourcc_display = "YUYV"  # Map UYVY to YUYV for display
+        else:
+            fourcc_display = "Other"
         logger.info(f"  FOURCC       : {fourcc_display}")
         logger.info(f"  Backend      : {cam.backend}")
 
@@ -526,13 +574,19 @@ def print_camera_list(cameras: list[CameraDeviceInfo]) -> None:
     # Summary table
     logger.info("")
     logger.info("Summary:")
-    logger.info(f"{'Index':<6} {'Device':<14} {'Manufacturer':<20} {'Product':<25} {'Resolution':<12}")
+    logger.info(
+        f"{'Index':<6} {'Device':<14} {'Manufacturer':<20} {'Product':<25} {'Resolution':<12}"
+    )
     logger.info("-" * 80)
     for cam in cameras:
         manufacturer = cam.manufacturer[:18] if cam.manufacturer else "N/A"
-        product = cam.product[:23] if cam.product else cam.name[:23] if cam.name else "N/A"
+        product = (
+            cam.product[:23] if cam.product else cam.name[:23] if cam.name else "N/A"
+        )
         res = f"{cam.width}x{cam.height}"
-        logger.info(f"{cam.index:<6} {cam.device_path:<14} {manufacturer:<20} {product:<25} {res:<12}")
+        logger.info(
+            f"{cam.index:<6} {cam.device_path:<14} {manufacturer:<20} {product:<25} {res:<12}"
+        )
 
 
 def stream_video_with_rerun(
@@ -563,7 +617,9 @@ def stream_video_with_rerun(
     try:
         import rerun as rr
     except ImportError:
-        logger.error("Rerun is required for video streaming. Install with: pip install rerun-sdk")
+        logger.error(
+            "Rerun is required for video streaming. Install with: pip install rerun-sdk"
+        )
         return
 
     display_mode = "cv2.imshow (low latency)" if use_cv2_display else "Rerun"
@@ -580,8 +636,11 @@ def stream_video_with_rerun(
         rr.init("camera_stream")
         rr.spawn(memory_limit=RERUN_MEMORY_LIMIT)
 
-    # Open camera
-    cap = cv2.VideoCapture(camera_index)
+    # Open camera with explicit V4L2 backend
+    device_path = (
+        f"/dev/video{camera_index}" if isinstance(camera_index, int) else camera_index
+    )
+    cap = cv2.VideoCapture(device_path, cv2.CAP_V4L2)
     if not cap.isOpened():
         logger.error(f"Failed to open camera {camera_index}")
         return
@@ -590,6 +649,9 @@ def stream_video_with_rerun(
         # Set FOURCC first (MJPG for better performance)
         if fourcc:
             cap.set(cv2.CAP_PROP_FOURCC, string_to_fourcc(fourcc))
+        else:
+            # Default to MJPG if not specified
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
 
         # Set resolution and FPS
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -639,15 +701,10 @@ def stream_video_with_rerun(
                 logger.info(f"Duration limit reached ({duration_s}s)")
                 break
 
-            # Read frame with minimal latency:
-            # grab() discards buffered frames, retrieve() gets the latest
-            if not cap.grab():
-                logger.warn("Failed to grab frame, retrying...")
-                time.sleep(0.01)
-                continue
-            ret, frame = cap.retrieve()
+            # Read frame
+            ret, frame = cap.read()
             if not ret or frame is None:
-                logger.warn("Failed to retrieve frame, retrying...")
+                logger.warn("Failed to read frame, retrying...")
                 time.sleep(0.01)
                 continue
 
@@ -666,11 +723,11 @@ def stream_video_with_rerun(
             cv2.putText(
                 frame,
                 overlay_text,
-                (10, 20),
+                (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
+                1.0,
                 (0, 255, 0),
-                1,
+                2,
             )
 
             # Display frame
@@ -740,7 +797,10 @@ def stream_video_with_lerobot(
         use_cv2_display: Use cv2.imshow() for lowest latency display (default: False)
     """
     from lerobot.cameras.opencv import OpenCVCamera
-    from lerobot.cameras.opencv.configuration_opencv import ColorMode, OpenCVCameraConfig
+    from lerobot.cameras.opencv.configuration_opencv import (
+        ColorMode,
+        OpenCVCameraConfig,
+    )
 
     display_mode = "cv2.imshow (low latency)" if use_cv2_display else "Rerun"
     logger.info("=" * 60)
@@ -764,7 +824,9 @@ def stream_video_with_lerobot(
 
     # Create camera config
     config = OpenCVCameraConfig(
-        index_or_path=camera_index if isinstance(camera_index, int) else Path(camera_index),
+        index_or_path=(
+            camera_index if isinstance(camera_index, int) else Path(camera_index)
+        ),
         fps=fps,
         width=width,
         height=height,
@@ -775,11 +837,6 @@ def stream_video_with_lerobot(
 
     camera = OpenCVCamera(config)
 
-    # Initialize variables before try block to avoid UnboundLocalError in finally
-    frame_count = 0
-    start_time = None
-    recent_fps = 0.0
-
     try:
         # Connect (includes warmup)
         logger.info(f"Connecting camera (warmup: {warmup_s}s)...")
@@ -787,9 +844,11 @@ def stream_video_with_lerobot(
         logger.info(f"Connected: {camera.width}x{camera.height} @ {camera.fps} FPS")
 
         # Streaming loop
+        frame_count = 0
         start_time = time.perf_counter()
         fps_update_interval = 0.5
         last_fps_update = start_time
+        recent_fps = 0.0
 
         logger.info("Streaming... Press Ctrl+C to stop.")
 
@@ -820,11 +879,11 @@ def stream_video_with_lerobot(
             cv2.putText(
                 frame_bgr,
                 overlay_text,
-                (10, 20),
+                (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
+                1.0,
                 (0, 255, 0),
-                1,
+                2,
             )
 
             # Display frame
@@ -850,29 +909,242 @@ def stream_video_with_lerobot(
                     f"Latency: {frame_latency_ms:.1f}ms, Elapsed: {elapsed:.1f}s"
                 )
 
-    except RuntimeError as e:
-        # Handle FPS validation errors or other camera connection issues
-        if "failed to set fps" in str(e):
-            logger.error(f"Camera FPS validation failed: {e}")
-            logger.info("Tip: The camera may not support the requested FPS. Try using --scan-capabilities to see supported FPS.")
-        else:
-            logger.error(f"Camera error: {e}")
-        raise
     except KeyboardInterrupt:
         logger.info("Stream stopped by user.")
     finally:
         camera.disconnect()
         if use_cv2_display:
             cv2.destroyAllWindows()
-        if start_time is not None:
-            elapsed = time.perf_counter() - start_time
-            avg_fps = frame_count / elapsed if elapsed > 0 else 0
-            logger.info("=" * 60)
-            logger.info("LeRobot Camera Stream Summary:")
-            logger.info(f"  Total frames: {frame_count}")
-            logger.info(f"  Duration: {elapsed:.1f}s")
-            logger.info(f"  Average FPS: {avg_fps:.2f}")
-            logger.info("=" * 60)
+        elapsed = time.perf_counter() - start_time
+        avg_fps = frame_count / elapsed if elapsed > 0 else 0
+        logger.info("=" * 60)
+        logger.info("LeRobot Camera Stream Summary:")
+        logger.info(f"  Total frames: {frame_count}")
+        logger.info(f"  Duration: {elapsed:.1f}s")
+        logger.info(f"  Average FPS: {avg_fps:.2f}")
+        logger.info("=" * 60)
+
+
+def stream_multiple_cameras_with_lerobot(
+    camera_indices: list[int | str],
+    fps: float = 30,
+    width: int = 1280,
+    height: int = 720,
+    fourcc: str = "MJPG",
+    duration_s: float | None = None,
+    warmup_s: float = 2.0,
+    use_async: bool = True,
+) -> None:
+    """
+    Stream video from multiple cameras simultaneously using LeRobot's OpenCVCamera.
+
+    Uses LeRobot's threaded camera implementation for optimal latency.
+    Each camera runs in its own background thread managed by OpenCVCamera.
+
+    Args:
+        camera_indices: List of camera indices or paths
+        fps: Requested FPS
+        width: Requested width
+        height: Requested height
+        fourcc: FOURCC codec (default: MJPG)
+        duration_s: Stream duration in seconds (None for infinite)
+        warmup_s: Warmup time before measuring FPS
+        use_async: Use async_read() for lower latency (default: True)
+    """
+    from lerobot.cameras.opencv import OpenCVCamera
+    from lerobot.cameras.opencv.configuration_opencv import (
+        ColorMode,
+        OpenCVCameraConfig,
+    )
+
+    logger.info("=" * 60)
+    logger.info(
+        f"Starting LeRobot multi-camera stream for {len(camera_indices)} camera(s)"
+    )
+    logger.info(f"Settings: {width}x{height} @ {fps} FPS, FOURCC: {fourcc}")
+    logger.info(f"Mode: {'async_read()' if use_async else 'read()'}")
+    logger.info("=" * 60)
+
+    try:
+        import rerun as rr
+    except ImportError:
+        logger.error("Rerun is not installed. Install with: pip install rerun-sdk")
+        return
+
+    rr.init("multi_camera_stream")
+    rr.spawn(memory_limit=RERUN_MEMORY_LIMIT)
+
+    # Create camera configs and instances
+    cameras = []
+    camera_configs = []
+    for cam_idx in camera_indices:
+        config = OpenCVCameraConfig(
+            index_or_path=cam_idx if isinstance(cam_idx, int) else Path(cam_idx),
+            fps=fps,
+            width=width,
+            height=height,
+            color_mode=ColorMode.RGB,  # RGB for Rerun
+            warmup_s=int(warmup_s),
+            fourcc=fourcc,
+        )
+        camera_configs.append(config)
+        camera = OpenCVCamera(config)
+        cameras.append(camera)
+
+    # Initialize variables before try block to avoid UnboundLocalError in finally
+    start_time = time.perf_counter()
+    frame_counts = {i: 0 for i in range(len(cameras))}  # Use dict like bi_arx5
+    connected_camera_dict = {}  # Track successfully connected cameras
+    connected_indices = []  # Track indices of successfully connected cameras
+
+    try:
+        # Connect all cameras (similar to bi_arx5 implementation)
+        # Connect cameras sequentially with simple error handling like bi_arx5
+        logger.info(f"Connecting {len(cameras)} camera(s) (warmup: {warmup_s}s)...")
+
+        # Create a dictionary to store cameras by their indices (similar to bi_arx5's self.cameras)
+        camera_dict = {idx: cam for idx, cam in enumerate(cameras)}
+        connected_camera_dict = {}  # Successfully connected cameras
+        connected_indices = []
+
+        for cam_idx, camera in camera_dict.items():
+            try:
+                logger.info(f"  Connecting camera {camera_indices[cam_idx]}...")
+
+                # Add much longer delay between connections to avoid resource conflicts
+                # These tactile sensors seem to need significant time between connections
+                if cam_idx > 0:
+                    time.sleep(5.0)  # Increased to 5.0s for tactile sensors
+
+                # Connect with warmup (same as bi_arx5)
+                camera.connect()
+                logger.info(
+                    f"  Camera {camera_indices[cam_idx]}: {camera.width}x{camera.height} @ {camera.fps} FPS"
+                )
+
+                connected_camera_dict[cam_idx] = camera
+                connected_indices.append(cam_idx)
+
+            except Exception as e:
+                logger.error(
+                    f"  Failed to connect camera {camera_indices[cam_idx]}: {e}"
+                )
+                logger.warn(f"  Camera {camera_indices[cam_idx]} will be skipped.")
+
+        if not connected_camera_dict:
+            logger.error("No cameras successfully connected. Exiting.")
+            return
+
+        logger.info(
+            f"Successfully connected {len(connected_camera_dict)}/{len(cameras)} camera(s)"
+        )
+
+        # Streaming loop
+        fps_update_interval = 0.5
+        last_fps_update = start_time
+        recent_fps_list = [0.0] * len(cameras)
+
+        logger.info("Streaming... Press Ctrl+C to stop.")
+
+        while True:
+            loop_start = time.perf_counter()
+
+            # Check duration limit
+            if duration_s is not None and (loop_start - start_time) >= duration_s:
+                logger.info(f"Duration limit reached ({duration_s}s)")
+                break
+
+            # Read frames from all cameras (similar to bi_arx5 read_observation)
+            frames_rgb = [None] * len(cameras)  # Initialize with None for all cameras
+            latencies_ms = [0] * len(cameras)
+
+            # Read from connected cameras (similar to bi_arx5's camera reading loop)
+            for cam_idx, camera in connected_camera_dict.items():
+                frame_start = time.perf_counter()
+                try:
+                    if use_async:
+                        frame_rgb = camera.async_read()
+                    else:
+                        frame_rgb = camera.read()
+                    frame_end = time.perf_counter()
+                    frame_latency_ms = (frame_end - frame_start) * 1000
+
+                    frames_rgb[cam_idx] = frame_rgb
+                    latencies_ms[cam_idx] = frame_latency_ms
+                    frame_counts[cam_idx] += 1
+
+                except Exception as e:
+                    logger.warn(
+                        f"Failed to read from camera {camera_indices[cam_idx]}: {e}"
+                    )
+                    frames_rgb[cam_idx] = None
+                    latencies_ms[cam_idx] = 0
+
+            # Update FPS for all cameras
+            current_time = time.perf_counter()
+            if current_time - last_fps_update >= fps_update_interval:
+                elapsed = current_time - start_time
+                for i in range(len(cameras)):
+                    recent_fps_list[i] = frame_counts[i] / elapsed if elapsed > 0 else 0
+                last_fps_update = current_time
+
+            # Log all frames to Rerun with separate paths for each camera
+            for i, (frame_rgb, cam_idx) in enumerate(zip(frames_rgb, camera_indices)):
+                if frame_rgb is not None:
+                    # Use camera index in path for Rerun
+                    camera_path = f"camera_{cam_idx}"
+                    rr.log(f"{camera_path}/image", rr.Image(frame_rgb))
+                    rr.log(f"{camera_path}/fps", rr.Scalars(recent_fps_list[i]))
+                    rr.log(
+                        f"{camera_path}/latency_ms",
+                        rr.Scalars(latencies_ms[i] if i < len(latencies_ms) else 0),
+                    )
+
+            # Progress log every 100 frames (for first connected camera)
+            if (
+                connected_camera_dict
+                and frame_counts[list(connected_camera_dict.keys())[0]] % 100 == 0
+            ):
+                elapsed = current_time - start_time
+                fps_str = ", ".join(
+                    [f"Cam{i}: {fps:.1f}" for i, fps in enumerate(recent_fps_list)]
+                )
+                logger.info(
+                    f"  Frames: {frame_counts}, FPS: [{fps_str}], "
+                    f"Elapsed: {elapsed:.1f}s"
+                )
+
+    except KeyboardInterrupt:
+        logger.info("Stream stopped by user.")
+    finally:
+        # Disconnect all cameras (similar to bi_arx5 disconnect)
+        for cam_idx, camera in camera_dict.items():
+            try:
+                if camera.is_connected:
+                    camera.disconnect()
+                    logger.info(f"Camera {camera_indices[cam_idx]} disconnected.")
+            except Exception as e:
+                logger.warn(
+                    f"Error disconnecting camera {camera_indices[cam_idx]}: {e}"
+                )
+
+        # Calculate elapsed time safely
+        end_time = time.perf_counter()
+        elapsed = end_time - start_time if start_time > 0 else 0
+
+        logger.info("=" * 60)
+        logger.info("Multi-Camera Stream Summary:")
+        for cam_idx, count in frame_counts.items():
+            avg_fps = count / elapsed if elapsed > 0 else 0
+            status = "✓" if cam_idx in connected_indices else "✗"
+            logger.info(
+                f"  {status} Camera {camera_indices[cam_idx]}: {count} frames, {avg_fps:.2f} FPS avg"
+            )
+        logger.info(f"  Total duration: {elapsed:.1f}s")
+        logger.info(
+            f"  Successfully connected: {len(connected_camera_dict)}/{len(cameras)} camera(s)"
+        )
+        logger.info("=" * 60)
 
 
 def benchmark_camera(
@@ -904,13 +1176,20 @@ def benchmark_camera(
     if verbose:
         logger.info("=" * 60)
         logger.info(f"Benchmarking camera {camera_index}")
-        logger.info(f"Requested: {width}x{height} @ {fps} FPS, FOURCC: {fourcc or 'MJPG'}")
+        logger.info(
+            f"Requested: {width}x{height} @ {fps} FPS, FOURCC: {fourcc or 'MJPG'}"
+        )
         logger.info("=" * 60)
 
     cap = None
     try:
-        # Open camera
-        cap = cv2.VideoCapture(camera_index)
+        # Open camera with explicit V4L2 backend
+        device_path = (
+            f"/dev/video{camera_index}"
+            if isinstance(camera_index, int)
+            else camera_index
+        )
+        cap = cv2.VideoCapture(device_path, cv2.CAP_V4L2)
         if not cap.isOpened():
             return BenchmarkResult(
                 camera_index=camera_index,
@@ -938,6 +1217,9 @@ def benchmark_camera(
         # Set FOURCC first (affects available resolutions/fps)
         if fourcc:
             cap.set(cv2.CAP_PROP_FOURCC, string_to_fourcc(fourcc))
+        else:
+            # Default to MJPG if not specified
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
 
         # Set resolution and FPS
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -1019,7 +1301,9 @@ def benchmark_camera(
             if verbose and total_frames % 100 == 0:
                 elapsed = time.perf_counter() - start_time
                 current_fps = total_frames / elapsed
-                logger.info(f"  Progress: {elapsed:.1f}s, Frames: {total_frames}, FPS: {current_fps:.1f}")
+                logger.info(
+                    f"  Progress: {elapsed:.1f}s, Frames: {total_frames}, FPS: {current_fps:.1f}"
+                )
 
         end_time = time.perf_counter()
         actual_duration = end_time - start_time
@@ -1040,13 +1324,27 @@ def benchmark_camera(
             duration_s=actual_duration,
             total_frames=total_frames,
             dropped_frames=dropped_frames,
-            latency_ms_min=float(np.min(latencies_arr)) if len(latencies_arr) > 0 else 0,
-            latency_ms_max=float(np.max(latencies_arr)) if len(latencies_arr) > 0 else 0,
-            latency_ms_avg=float(np.mean(latencies_arr)) if len(latencies_arr) > 0 else 0,
-            latency_ms_std=float(np.std(latencies_arr)) if len(latencies_arr) > 0 else 0,
-            latency_ms_p50=float(np.percentile(latencies_arr, 50)) if len(latencies_arr) > 0 else 0,
-            latency_ms_p95=float(np.percentile(latencies_arr, 95)) if len(latencies_arr) > 0 else 0,
-            latency_ms_p99=float(np.percentile(latencies_arr, 99)) if len(latencies_arr) > 0 else 0,
+            latency_ms_min=(
+                float(np.min(latencies_arr)) if len(latencies_arr) > 0 else 0
+            ),
+            latency_ms_max=(
+                float(np.max(latencies_arr)) if len(latencies_arr) > 0 else 0
+            ),
+            latency_ms_avg=(
+                float(np.mean(latencies_arr)) if len(latencies_arr) > 0 else 0
+            ),
+            latency_ms_std=(
+                float(np.std(latencies_arr)) if len(latencies_arr) > 0 else 0
+            ),
+            latency_ms_p50=(
+                float(np.percentile(latencies_arr, 50)) if len(latencies_arr) > 0 else 0
+            ),
+            latency_ms_p95=(
+                float(np.percentile(latencies_arr, 95)) if len(latencies_arr) > 0 else 0
+            ),
+            latency_ms_p99=(
+                float(np.percentile(latencies_arr, 99)) if len(latencies_arr) > 0 else 0
+            ),
             success=True,
         )
 
@@ -1102,7 +1400,11 @@ def scan_camera_capabilities(
         logger.info(f"Scanning capabilities for camera {camera_index}")
         logger.info("=" * 60)
 
-    cap = cv2.VideoCapture(camera_index)
+    # Open camera with explicit V4L2 backend
+    device_path = (
+        f"/dev/video{camera_index}" if isinstance(camera_index, int) else camera_index
+    )
+    cap = cv2.VideoCapture(device_path, cv2.CAP_V4L2)
     if not cap.isOpened():
         logger.error(f"Failed to open camera {camera_index}")
         return CameraCapabilities(
@@ -1112,13 +1414,13 @@ def scan_camera_capabilities(
         )
 
     info = get_camera_info(cap)
-    
+
     # Get USB speed if camera index is an integer
     usb_speed_mbps = 0
     usb_version = "Unknown"
     if isinstance(camera_index, int):
         usb_speed_mbps, usb_version = get_usb_speed(camera_index)
-    
+
     capabilities = CameraCapabilities(
         camera_index=camera_index,
         name=f"Camera {camera_index}",
@@ -1132,15 +1434,21 @@ def scan_camera_capabilities(
     if verbose:
         logger.info("Testing resolutions and measuring actual FPS (using MJPG)...")
     for width, height in COMMON_RESOLUTIONS:
-        cap = cv2.VideoCapture(camera_index)
+        # Open camera with explicit V4L2 backend
+        device_path = (
+            f"/dev/video{camera_index}"
+            if isinstance(camera_index, int)
+            else camera_index
+        )
+        cap = cv2.VideoCapture(device_path, cv2.CAP_V4L2)
         if not cap.isOpened():
             continue
 
         # Use MJPG for best FPS performance
-        cap.set(cv2.CAP_PROP_FOURCC, string_to_fourcc("MJPG"))
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-        
+
         # Request high FPS to measure maximum achievable
         cap.set(cv2.CAP_PROP_FPS, 120)
 
@@ -1155,32 +1463,38 @@ def scan_camera_capabilities(
                 # Warm up
                 for _ in range(5):
                     cap.read()
-                
+
                 # Measure actual FPS over ~1 second
                 frame_count = 0
                 start_time = time.perf_counter()
                 measure_duration = 1.0  # seconds
-                
+
                 while time.perf_counter() - start_time < measure_duration:
                     ret, _ = cap.read()
                     if ret:
                         frame_count += 1
                     else:
                         break
-                
+
                 elapsed = time.perf_counter() - start_time
                 measured_fps = frame_count / elapsed if elapsed > 0 else 0
-                
+
                 capabilities.supported_resolutions.append((width, height))
                 capabilities.resolution_fps_map[(width, height)] = [measured_fps]
-                
+
                 # Track max FPS globally
                 if measured_fps not in capabilities.supported_fps:
                     capabilities.supported_fps.append(measured_fps)
-                
+
                 if verbose:
-                    marker = "🚀" if measured_fps >= 90 else ("⚡" if measured_fps >= 60 else "✓")
-                    logger.info(f"  {marker} {width}x{height} @ {measured_fps:.1f} FPS (measured)")
+                    marker = (
+                        "🚀"
+                        if measured_fps >= 90
+                        else ("⚡" if measured_fps >= 60 else "✓")
+                    )
+                    logger.info(
+                        f"  {marker} {width}x{height} @ {measured_fps:.1f} FPS (measured)"
+                    )
             else:
                 if verbose:
                     logger.warn(f"  ✗ {width}x{height} (cannot read frame)")
@@ -1189,7 +1503,7 @@ def scan_camera_capabilities(
                 logger.debug(f"  ✗ {width}x{height} (got {actual_w}x{actual_h})")
 
         cap.release()
-    
+
     # Sort supported_fps
     capabilities.supported_fps.sort()
 
@@ -1197,12 +1511,18 @@ def scan_camera_capabilities(
     if verbose:
         logger.info("Testing FOURCC codes (MJPG, YUYV)...")
     for fourcc_str in ["MJPG", "YUYV"]:
-        cap = cv2.VideoCapture(camera_index)
+        # Open camera with explicit V4L2 backend
+        device_path = (
+            f"/dev/video{camera_index}"
+            if isinstance(camera_index, int)
+            else camera_index
+        )
+        cap = cv2.VideoCapture(device_path, cv2.CAP_V4L2)
         if not cap.isOpened():
             continue
 
         try:
-            cap.set(cv2.CAP_PROP_FOURCC, string_to_fourcc(fourcc_str))
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*fourcc_str))
             actual_fourcc_int = int(cap.get(cv2.CAP_PROP_FOURCC))
             actual_fourcc = fourcc_to_string(actual_fourcc_int)
 
@@ -1237,7 +1557,11 @@ def print_result(result: BenchmarkResult) -> None:
         logger.error(f"❌ FAILED: {result.error}")
         return
 
-    fps_ratio = result.actual_fps / result.requested_fps * 100 if result.requested_fps > 0 else 0
+    fps_ratio = (
+        result.actual_fps / result.requested_fps * 100
+        if result.requested_fps > 0
+        else 0
+    )
     fps_status = "✓" if fps_ratio >= 95 else "⚠" if fps_ratio >= 80 else "✗"
 
     logger.info(f"Camera: {result.camera_index}")
@@ -1269,13 +1593,19 @@ def print_capabilities(caps: CameraCapabilities) -> None:
     logger.info(f"Camera {caps.camera_index} Capabilities")
     logger.info("─" * 60)
     logger.info(f"Backend: {caps.backend}")
-    
+
     # USB connection info
     if caps.usb_speed_mbps > 0:
-        usb_icon = "🚀" if caps.usb_speed_mbps >= 5000 else "⚡" if caps.usb_speed_mbps >= 480 else "🐢"
+        usb_icon = (
+            "🚀"
+            if caps.usb_speed_mbps >= 5000
+            else "⚡" if caps.usb_speed_mbps >= 480 else "🐢"
+        )
         effective_bw = caps.usb_speed_mbps * 0.8  # ~80% efficiency
-        logger.info(f"USB: {usb_icon} {caps.usb_version} ({caps.usb_speed_mbps} Mbps, ~{effective_bw:.0f} Mbps effective)")
-    
+        logger.info(
+            f"USB: {usb_icon} {caps.usb_version} ({caps.usb_speed_mbps} Mbps, ~{effective_bw:.0f} Mbps effective)"
+        )
+
     # Print resolution + measured FPS
     logger.info(f"\nSupported Resolutions (measured FPS with MJPG):")
     logger.info("─" * 60)
@@ -1288,13 +1618,14 @@ def print_capabilities(caps: CameraCapabilities) -> None:
             logger.info(f"  {marker} {w:4d}x{h:<4d}  @  {max_fps:.1f} FPS")
         else:
             logger.info(f"     {w:4d}x{h:<4d}  @  N/A")
-    
+
     logger.info(f"\nSupported FOURCC: {caps.supported_fourcc}")
     logger.info("─" * 60)
-    
+
     # Summary - find best resolution for 60 FPS
     high_fps_resolutions = [
-        (w, h, max(fps_list)) for (w, h), fps_list in caps.resolution_fps_map.items() 
+        (w, h, max(fps_list))
+        for (w, h), fps_list in caps.resolution_fps_map.items()
         if fps_list and max(fps_list) >= 60
     ]
     if high_fps_resolutions:
@@ -1304,15 +1635,23 @@ def print_capabilities(caps: CameraCapabilities) -> None:
         logger.info(f"\n✅ Best 60+ FPS: {best[0]}x{best[1]} @ {best[2]:.1f} FPS")
     else:
         # Find the best FPS available
-        all_fps = [(w, h, max(fps_list)) for (w, h), fps_list in caps.resolution_fps_map.items() if fps_list]
+        all_fps = [
+            (w, h, max(fps_list))
+            for (w, h), fps_list in caps.resolution_fps_map.items()
+            if fps_list
+        ]
         if all_fps:
             all_fps.sort(key=lambda x: x[2], reverse=True)
             best = all_fps[0]
-            logger.info(f"\n⚠️ Max FPS available: {best[0]}x{best[1]} @ {best[2]:.1f} FPS (60 FPS not supported)")
-    
+            logger.info(
+                f"\n⚠️ Max FPS available: {best[0]}x{best[1]} @ {best[2]:.1f} FPS (60 FPS not supported)"
+            )
+
     # USB bandwidth recommendation
     if caps.usb_speed_mbps > 0 and caps.usb_speed_mbps < 5000:
-        logger.info(f"\n💡 Tip: Camera is on {caps.usb_version}. Use MJPG for high FPS.")
+        logger.info(
+            f"\n💡 Tip: Camera is on {caps.usb_version}. Use MJPG for high FPS."
+        )
         logger.info(f"   For YUYV high FPS, connect to USB 3.0 (blue port).")
 
 
@@ -1320,7 +1659,18 @@ def find_cameras(max_index: int = 10) -> list[int]:
     """Find available camera indices."""
     available = []
     for i in range(max_index):
-        cap = cv2.VideoCapture(i)
+        device_path = f"/dev/video{i}"
+
+        # Check if device exists
+        if not Path(device_path).exists():
+            continue
+
+        # Check if device has Video Capture capability (filter out metadata nodes)
+        if not has_video_capture_capability(device_path):
+            continue
+
+        # Try to open with OpenCV using V4L2 backend
+        cap = cv2.VideoCapture(device_path, cv2.CAP_V4L2)
         if cap.isOpened():
             available.append(i)
             cap.release()
@@ -1411,7 +1761,9 @@ def compare_fourcc_formats(
 
     logger.info("=" * 70)
     logger.info(f"FOURCC Format Comparison: MJPG vs YUYV")
-    logger.info(f"Camera: {camera_index} | Resolution: {width}x{height} | Target FPS: {fps}")
+    logger.info(
+        f"Camera: {camera_index} | Resolution: {width}x{height} | Target FPS: {fps}"
+    )
     logger.info("=" * 70)
 
     formats_to_test = ["MJPG", "YUYV"]
@@ -1420,7 +1772,13 @@ def compare_fourcc_formats(
     for fourcc_str in formats_to_test:
         logger.info(f"\n📹 Testing {fourcc_str}...")
 
-        cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
+        # Open camera with explicit V4L2 backend
+        device_path = (
+            f"/dev/video{camera_index}"
+            if isinstance(camera_index, int)
+            else camera_index
+        )
+        cap = cv2.VideoCapture(device_path, cv2.CAP_V4L2)
         if not cap.isOpened():
             logger.error(f"Failed to open camera {camera_index}")
             continue
@@ -1434,7 +1792,9 @@ def compare_fourcc_formats(
 
         # Read actual settings
         actual_fourcc_int = int(cap.get(cv2.CAP_PROP_FOURCC))
-        actual_fourcc = "".join([chr((actual_fourcc_int >> (8 * i)) & 0xFF) for i in range(4)])
+        actual_fourcc = "".join(
+            [chr((actual_fourcc_int >> (8 * i)) & 0xFF) for i in range(4)]
+        )
         actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         actual_fps_reported = cap.get(cv2.CAP_PROP_FPS)
@@ -1471,7 +1831,9 @@ def compare_fourcc_formats(
 
         # Calculate metrics
         actual_fps = frame_count / elapsed if elapsed > 0 else 0
-        decoded_throughput = (total_bytes / elapsed) / (1024 * 1024) if elapsed > 0 else 0
+        decoded_throughput = (
+            (total_bytes / elapsed) / (1024 * 1024) if elapsed > 0 else 0
+        )
         avg_latency = sum(latencies) / len(latencies) if latencies else 0
 
         # Calculate USB bandwidth in Mbps (actual data transferred over USB)
@@ -1479,10 +1841,14 @@ def compare_fourcc_formats(
         # MJPG = compressed, typically 1/10 to 1/20 of YUYV
         # Convert: bytes/s -> Mbps = bytes/s * 8 / 1_000_000
         if fourcc_str == "YUYV":
-            usb_bandwidth = (actual_width * actual_height * 2 * actual_fps) * 8 / 1_000_000
+            usb_bandwidth = (
+                (actual_width * actual_height * 2 * actual_fps) * 8 / 1_000_000
+            )
         else:  # MJPG - estimate based on typical compression ratio
             # MJPG compression ratio varies, typically 10:1 to 20:1 for video
-            usb_bandwidth = (actual_width * actual_height * 2 * actual_fps) * 8 / 1_000_000 / 10
+            usb_bandwidth = (
+                (actual_width * actual_height * 2 * actual_fps) * 8 / 1_000_000 / 10
+            )
 
         results[fourcc_str] = {
             "actual_fourcc": actual_fourcc,
@@ -1498,8 +1864,12 @@ def compare_fourcc_formats(
         }
 
         logger.info(f"  Resolution: {actual_width}x{actual_height}")
-        logger.info(f"  Actual FPS: {actual_fps:.1f} ({results[fourcc_str]['fps_ratio']:.0f}% of target)")
-        logger.info(f"  USB Bandwidth: ~{usb_bandwidth:.0f} Mbps {'(uncompressed)' if fourcc_str == 'YUYV' else '(compressed ~10:1)'}")
+        logger.info(
+            f"  Actual FPS: {actual_fps:.1f} ({results[fourcc_str]['fps_ratio']:.0f}% of target)"
+        )
+        logger.info(
+            f"  USB Bandwidth: ~{usb_bandwidth:.0f} Mbps {'(uncompressed)' if fourcc_str == 'YUYV' else '(compressed ~10:1)'}"
+        )
         logger.info(f"  Avg Latency: {avg_latency:.1f} ms")
 
     # Print comparison summary
@@ -1508,11 +1878,15 @@ def compare_fourcc_formats(
     logger.info("=" * 70)
 
     # Table header
-    logger.info(f"{'Format':<8} {'Resolution':<12} {'FPS':<12} {'USB BW':<15} {'Latency':<12} {'Status'}")
+    logger.info(
+        f"{'Format':<8} {'Resolution':<12} {'FPS':<12} {'USB BW':<15} {'Latency':<12} {'Status'}"
+    )
     logger.info("-" * 70)
 
     for fourcc_str, data in results.items():
-        fps_status = "✓" if data["fps_ratio"] >= 95 else "⚠" if data["fps_ratio"] >= 50 else "✗"
+        fps_status = (
+            "✓" if data["fps_ratio"] >= 95 else "⚠" if data["fps_ratio"] >= 50 else "✗"
+        )
         logger.info(
             f"{fourcc_str:<8} {data['resolution']:<12} "
             f"{data['actual_fps']:.1f} FPS{'':<4} "
@@ -1531,13 +1905,23 @@ def compare_fourcc_formats(
         logger.info("-" * 70)
 
         fps_diff = mjpg["actual_fps"] - yuyv["actual_fps"]
-        fps_ratio = (mjpg["actual_fps"] / yuyv["actual_fps"]) if yuyv["actual_fps"] > 0 else 0
+        fps_ratio = (
+            (mjpg["actual_fps"] / yuyv["actual_fps"]) if yuyv["actual_fps"] > 0 else 0
+        )
 
         if fps_diff > 0:
-            logger.info(f"⚡ MJPG is {fps_ratio:.1f}x faster ({mjpg['actual_fps']:.1f} vs {yuyv['actual_fps']:.1f} FPS)")
+            logger.info(
+                f"⚡ MJPG is {fps_ratio:.1f}x faster ({mjpg['actual_fps']:.1f} vs {yuyv['actual_fps']:.1f} FPS)"
+            )
         elif fps_diff < 0:
-            fps_ratio_inv = (yuyv["actual_fps"] / mjpg["actual_fps"]) if mjpg["actual_fps"] > 0 else 0
-            logger.info(f"⚡ YUYV is {fps_ratio_inv:.1f}x faster ({yuyv['actual_fps']:.1f} vs {mjpg['actual_fps']:.1f} FPS)")
+            fps_ratio_inv = (
+                (yuyv["actual_fps"] / mjpg["actual_fps"])
+                if mjpg["actual_fps"] > 0
+                else 0
+            )
+            logger.info(
+                f"⚡ YUYV is {fps_ratio_inv:.1f}x faster ({yuyv['actual_fps']:.1f} vs {mjpg['actual_fps']:.1f} FPS)"
+            )
         else:
             logger.info("⚡ Both formats achieve similar FPS")
 
@@ -1548,12 +1932,22 @@ def compare_fourcc_formats(
         yuyv_usb_bw = yuyv["usb_bandwidth_mbps"]
 
         logger.info(f"\n💾 USB Bandwidth Analysis:")
-        logger.info(f"   YUYV @ {yuyv['actual_fps']:.0f} FPS: ~{yuyv_usb_bw:.0f} Mbps (uncompressed)")
-        logger.info(f"   MJPG @ {mjpg['actual_fps']:.0f} FPS: ~{mjpg_usb_bw:.0f} Mbps (compressed)")
-        logger.info(f"   YUYV @ {mjpg['actual_fps']:.0f} FPS would need: ~{yuyv_theoretical_at_mjpg_fps:.0f} Mbps")
+        logger.info(
+            f"   YUYV @ {yuyv['actual_fps']:.0f} FPS: ~{yuyv_usb_bw:.0f} Mbps (uncompressed)"
+        )
+        logger.info(
+            f"   MJPG @ {mjpg['actual_fps']:.0f} FPS: ~{mjpg_usb_bw:.0f} Mbps (compressed)"
+        )
+        logger.info(
+            f"   YUYV @ {mjpg['actual_fps']:.0f} FPS would need: ~{yuyv_theoretical_at_mjpg_fps:.0f} Mbps"
+        )
 
-        bw_savings = yuyv_theoretical_at_mjpg_fps / mjpg_usb_bw if mjpg_usb_bw > 0 else 0
-        logger.info(f"   💡 MJPG saves ~{bw_savings:.0f}x USB bandwidth vs YUYV at same FPS")
+        bw_savings = (
+            yuyv_theoretical_at_mjpg_fps / mjpg_usb_bw if mjpg_usb_bw > 0 else 0
+        )
+        logger.info(
+            f"   💡 MJPG saves ~{bw_savings:.0f}x USB bandwidth vs YUYV at same FPS"
+        )
 
         # USB bandwidth info
         logger.info("\n📡 USB Bandwidth Reference:")
@@ -1562,7 +1956,9 @@ def compare_fourcc_formats(
 
         yuyv_limited_by_usb = yuyv["actual_fps"] < fps * 0.5  # Less than 50% of target
         if yuyv_limited_by_usb:
-            logger.info(f"\n⚠️ YUYV is bandwidth-limited (only {yuyv['fps_ratio']:.0f}% of target FPS)")
+            logger.info(
+                f"\n⚠️ YUYV is bandwidth-limited (only {yuyv['fps_ratio']:.0f}% of target FPS)"
+            )
             logger.info("✅ Recommendation: Use MJPG for high FPS on USB 2.0")
 
     logger.info("=" * 70)
@@ -1584,7 +1980,7 @@ def main():
     parser.add_argument(
         "--max-index",
         type=int,
-        default=25,
+        default=30,
         help="Maximum camera index to scan when using --list (default: 25).",
     )
     parser.add_argument(
@@ -1726,28 +2122,52 @@ def main():
 
     # Handle --video-stream option
     if args.video_stream:
-        if len(camera_ids) > 1:
-            logger.warn("Video stream only supports one camera. Using first camera.")
-        cam_id = camera_ids[0]
         # Default to MJPG for video streaming if not specified
         fourcc = args.fourcc if args.fourcc else "MJPG"
-        duration = args.duration if args.duration != 10.0 else None  # None for infinite if default
+        duration = (
+            args.duration if args.duration != 10.0 else None
+        )  # None for infinite if default
 
+        # Support multiple cameras when using lerobot
         if args.use_lerobot:
-            # Use LeRobot's OpenCVCamera implementation
-            stream_video_with_lerobot(
-                camera_index=cam_id,
-                fps=args.fps,
-                width=args.width,
-                height=args.height,
-                fourcc=fourcc,
-                duration_s=duration,
-                warmup_s=args.warmup,
-                use_async=not args.sync_read,
-                use_cv2_display=args.cv2_display,
-            )
+            if len(camera_ids) > 1:
+                # Multi-camera streaming with lerobot
+                # Always use async_read() for multi-camera (required for optimal performance)
+                if args.sync_read:
+                    logger.warn(
+                        "--sync-read is ignored for multi-camera streaming. Using async_read() for optimal performance."
+                    )
+                stream_multiple_cameras_with_lerobot(
+                    camera_indices=camera_ids,
+                    fps=args.fps,
+                    width=args.width,
+                    height=args.height,
+                    fourcc=fourcc,
+                    duration_s=duration,
+                    warmup_s=args.warmup,
+                    use_async=True,  # Always True for multi-camera
+                )
+            else:
+                # Single camera with lerobot
+                cam_id = camera_ids[0]
+                stream_video_with_lerobot(
+                    camera_index=cam_id,
+                    fps=args.fps,
+                    width=args.width,
+                    height=args.height,
+                    fourcc=fourcc,
+                    duration_s=duration,
+                    warmup_s=args.warmup,
+                    use_async=not args.sync_read,
+                    use_cv2_display=args.cv2_display,
+                )
         else:
-            # Use raw OpenCV implementation
+            # Raw OpenCV implementation (single camera only)
+            if len(camera_ids) > 1:
+                logger.warn(
+                    "Multiple cameras only supported with --use-lerobot. Using first camera."
+                )
+            cam_id = camera_ids[0]
             stream_video_with_rerun(
                 camera_index=cam_id,
                 fps=args.fps,
@@ -1835,7 +2255,9 @@ def main():
         logger.info("-" * 70)
         for r in all_results:
             if r.success:
-                fps_ratio = r.actual_fps / r.requested_fps * 100 if r.requested_fps > 0 else 0
+                fps_ratio = (
+                    r.actual_fps / r.requested_fps * 100 if r.requested_fps > 0 else 0
+                )
                 status = "✓" if fps_ratio >= 95 else "⚠" if fps_ratio >= 80 else "✗"
                 res = f"{r.actual_width}x{r.actual_height}"
                 latency = f"{r.latency_ms_avg:.1f}±{r.latency_ms_std:.1f}"
