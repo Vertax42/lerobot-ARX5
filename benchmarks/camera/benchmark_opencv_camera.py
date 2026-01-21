@@ -658,8 +658,9 @@ def stream_video_with_rerun(
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
         cap.set(cv2.CAP_PROP_FPS, fps)
 
-        # Minimize buffer to reduce latency (get latest frame, not buffered old frames)
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        # Note: CAP_PROP_BUFFERSIZE=1 can cause FPS to drop on some cameras
+        # Uncomment if you need lower latency and your camera supports it
+        # cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         # Get actual settings
         info = get_camera_info(cap)
@@ -837,6 +838,10 @@ def stream_video_with_lerobot(
 
     camera = OpenCVCamera(config)
 
+    # Initialize variables before try block to avoid UnboundLocalError in finally
+    frame_count = 0
+    start_time = None
+
     try:
         # Connect (includes warmup)
         logger.info(f"Connecting camera (warmup: {warmup_s}s)...")
@@ -844,7 +849,6 @@ def stream_video_with_lerobot(
         logger.info(f"Connected: {camera.width}x{camera.height} @ {camera.fps} FPS")
 
         # Streaming loop
-        frame_count = 0
         start_time = time.perf_counter()
         fps_update_interval = 0.5
         last_fps_update = start_time
@@ -915,14 +919,15 @@ def stream_video_with_lerobot(
         camera.disconnect()
         if use_cv2_display:
             cv2.destroyAllWindows()
-        elapsed = time.perf_counter() - start_time
-        avg_fps = frame_count / elapsed if elapsed > 0 else 0
-        logger.info("=" * 60)
-        logger.info("LeRobot Camera Stream Summary:")
-        logger.info(f"  Total frames: {frame_count}")
-        logger.info(f"  Duration: {elapsed:.1f}s")
-        logger.info(f"  Average FPS: {avg_fps:.2f}")
-        logger.info("=" * 60)
+        if start_time is not None:
+            elapsed = time.perf_counter() - start_time
+            avg_fps = frame_count / elapsed if elapsed > 0 else 0
+            logger.info("=" * 60)
+            logger.info("LeRobot Camera Stream Summary:")
+            logger.info(f"  Total frames: {frame_count}")
+            logger.info(f"  Duration: {elapsed:.1f}s")
+            logger.info(f"  Average FPS: {avg_fps:.2f}")
+            logger.info("=" * 60)
 
 
 def stream_multiple_cameras_with_lerobot(

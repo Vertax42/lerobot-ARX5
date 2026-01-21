@@ -16,7 +16,6 @@
 Provides the OpenCVCamera class for capturing frames from cameras using OpenCV.
 """
 
-import math
 import os
 import platform
 import time
@@ -250,9 +249,15 @@ class OpenCVCamera(Camera):
 
         success = self.videocapture.set(cv2.CAP_PROP_FPS, float(self.fps))
         actual_fps = self.videocapture.get(cv2.CAP_PROP_FPS)
-        # Use math.isclose for robust float comparison
-        if not success or not math.isclose(self.fps, actual_fps, rel_tol=1e-3):
+        # Allow actual_fps >= requested fps (camera running faster is acceptable)
+        # Some cameras only support fixed fps (e.g., 60 FPS only)
+        if not success or actual_fps < self.fps * 0.95:  # Allow 5% tolerance below
             raise RuntimeError(f"{self} failed to set fps={self.fps} ({actual_fps=}).")
+        if actual_fps > self.fps * 1.05:  # Warn if camera runs significantly faster
+            self.logger.warn(
+                f"Camera running at {actual_fps} FPS (requested {self.fps} FPS). "
+                "Software will read at requested rate."
+            )
 
     def _validate_fourcc(self) -> None:
         """Validates and sets the camera's FOURCC code."""
@@ -482,9 +487,7 @@ class OpenCVCamera(Camera):
             except DeviceNotConnectedError:
                 break
             except Exception as e:
-                logger.warn(
-                    f"Error reading frame in background thread for {self}: {e}"
-                )
+                logger.warn(f"Error reading frame in background thread for {self}: {e}")
 
     def _start_read_thread(self) -> None:
         """Starts or restarts the background read thread if it's not running."""
