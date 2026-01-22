@@ -132,10 +132,9 @@ def teleop_loop(
             # Process robot observation through pipeline
             obs_transition = robot_observation_processor(obs)
 
-            log_rerun_data(
-                observation=obs_transition,
-                action=teleop_action,
-            )
+            rr.set_time("timeline", sequence=int(frame_id))
+            log_rerun_data(observation=obs_transition, action=teleop_action)
+            frame_id += 1
 
             print("\n" + "-" * (display_len + 10))
             print(f"{'NAME':<{display_len}} | {'NORM':>7}")
@@ -188,7 +187,7 @@ def pico4_teleop_loop(
     """
     display_len = max(len(key) for key in robot.action_features)
     start = time.perf_counter()
-
+    frame_id = 0
     while True:
         loop_start = time.perf_counter()
 
@@ -235,10 +234,12 @@ def pico4_teleop_loop(
 
         if display_data:
             # Log raw observation directly (including images from FlareGripper)
+            rr.set_time("timeline", sequence=int(frame_id))
             log_rerun_data(
                 observation=obs,  # Use raw obs to ensure images are included
                 action=teleop_action,
             )
+            frame_id += 1
 
             print("\n" + "-" * (display_len + 10))
             print(f"{'NAME':<{display_len}} | {'NORM':>7}")
@@ -314,6 +315,7 @@ def xense_multisensor_teleop_loop(
     for cam_key in camera_keys:
         timing_stats["camera_times"][cam_key] = []
 
+    frame_id = 0
     while True:
         loop_start = time.perf_counter()
 
@@ -338,10 +340,12 @@ def xense_multisensor_teleop_loop(
 
         if display_data:
             # Log all camera data to Rerun
+            rr.set_time("timeline", sequence=int(frame_id))
             log_rerun_data(
                 observation=obs,
                 action={},  # No actions for data collection device
             )
+            frame_id += 1
 
         dt_s = time.perf_counter() - loop_start
         busy_wait(1 / fps - dt_s)

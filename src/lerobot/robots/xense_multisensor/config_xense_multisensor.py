@@ -39,34 +39,34 @@ class XenseMultisensorConfig(RobotConfig):
                     serial_number_or_name="834412071827", fps=30, width=640, height=480,
                 ),
                 "back": OpenCVCameraConfig(
-                    index_or_path=10, fps=30, width=640, height=480,
+                    index_or_path=16, fps=30, width=640, height=480,
                 ),
                 "OS000097": XenseCameraConfig(
                     serial_number="OS000097",
                     fps=30,
-                    output_types=[XenseOutputType.RECTIFY],
+                    output_types=[XenseOutputType.DIFFERENCE],
                     use_gpu=True,
                 ),
                 "OS000115": XenseCameraConfig(
                     serial_number="OS000115",
                     fps=30,
-                    output_types=[XenseOutputType.RECTIFY],
+                    output_types=[XenseOutputType.DIFFERENCE],
                     use_gpu=True,
                 ),
                 "OS000079": XenseCameraConfig(
                     serial_number="OS000079",
                     fps=30,
-                    output_types=[XenseOutputType.RECTIFY],
+                    output_types=[XenseOutputType.DIFFERENCE],
                     use_gpu=True,
                 ),
                 "OS000128": XenseCameraConfig(
                     serial_number="OS000128",
                     fps=30,
-                    output_types=[XenseOutputType.RECTIFY],
+                    output_types=[XenseOutputType.DIFFERENCE],
                     use_gpu=True,
                 ),
                 "front": OpenCVCameraConfig(
-                    index_or_path=16, fps=30, width=640, height=480,
+                    index_or_path=4, fps=30, width=640, height=480,
                 ),
                 # "OG000337": XenseCameraConfig(
                 #     serial_number="OG000337",
