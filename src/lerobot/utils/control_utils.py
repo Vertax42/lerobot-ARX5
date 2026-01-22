@@ -19,13 +19,8 @@
 
 import logging
 import traceback
-from contextlib import nullcontext
-from copy import copy
 from functools import cache
-from typing import Any
 
-import numpy as np
-import torch
 from deepdiff import DeepDiff
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset

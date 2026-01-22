@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team & XenseRobotics Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,18 +29,8 @@ from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # no
 from lerobot.configs import parser
 from lerobot.datasets.image_writer import safe_stop_image_writer
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
-from lerobot.datasets.pipeline_features import (
-    aggregate_pipeline_dataset_features,
-    create_initial_features,
-)
-from lerobot.datasets.utils import build_dataset_frame, combine_feature_dicts
+from lerobot.datasets.utils import build_dataset_frame, combine_feature_dicts, hw_to_dataset_features
 from lerobot.datasets.video_utils import VideoEncodingManager
-from lerobot.processor import (
-    RobotAction,
-    RobotObservation,
-    RobotProcessorPipeline,
-    make_default_processors,
-)
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
@@ -141,22 +131,15 @@ class RecordConfig:
 """ --------------- record_loop() data flow --------------------------
        [ Robot ]
            V
-     [ robot.get_observation() ] ---> raw_obs
-           V
-     [ robot_observation_processor ] ---> processed_obs
+     [ robot.get_observation() ] ---> obs
            V
      [ From Teleoperator ]
      |
-     |  [teleop.get_action] -> raw_action
+     |  [teleop.get_action] -> action
      |          |
-     |          V
-     | [teleop_action_processor]
-     |          |
-     '---> processed_teleop_action
+     '---> action
      |
      '-------------------------.
-                               V
-                  [ robot_action_processor ] --> robot_action_to_send
                                V
                     [ robot.send_action() ] -- (Robot Executes)
                                V
@@ -164,101 +147,6 @@ class RecordConfig:
                                V
                   ( Rerun Log / Loop Wait )
 """
-
-
-def extract_joint_positions(obs):
-    """提取关节位置，排除摄像头数据"""
-    joint_positions = {}
-    for key, value in obs.items():
-        if (
-            key.endswith(".pos")
-            and not key.startswith("head")
-            and not key.startswith("left_wrist")
-            and not key.startswith("right_wrist")
-        ):
-            joint_positions[key] = value
-    return joint_positions
-
-
-def apply_velocity_limits(
-    current_action: dict, prev_action: dict, dt: float, robot=None
-) -> dict:
-    """Apply velocity limits to action to ensure physically executable actions.
-
-    Args:
-        current_action: Current action dictionary with joint positions
-        prev_action: Previous action dictionary with joint positions
-        dt: Time step between actions (typically 1/fps)
-        robot: Robot instance to get velocity limits from robot_configs
-
-    Returns:
-        Velocity-limited action dictionary
-    """
-    if prev_action is None:
-        return current_action
-
-    # Get velocity limits from robot config to ensure consistency with C++ settings
-    if robot is not None and hasattr(robot, "robot_configs"):
-        # Read from robot config (same as C++ controller uses)
-        left_config = robot.robot_configs["left_config"]
-        joint_vel_limits = (
-            left_config.joint_vel_max.tolist()
-        )  # Convert numpy array to list
-        gripper_vel_limit = left_config.gripper_vel_max
-    else:
-        # Fallback to hardcoded values if robot config not available
-        # From config.h: [20.0, 20.0, 20.5, 20.5, 20.0, 20.0] rad/s, gripper: 0.3 m/s
-        joint_vel_limits = [20.0, 20.0, 20.5, 20.5, 20.0, 20.0]  # rad/s
-        gripper_vel_limit = 0.3  # m/s
-
-    limited_action = current_action.copy()
-    clip_count = 0
-
-    # Apply joint velocity limits
-    for i in range(6):
-        left_key = f"left_joint_{i+1}.pos"
-        right_key = f"right_joint_{i+1}.pos"
-
-        for key in [left_key, right_key]:
-            if key in current_action and key in prev_action:
-                current_pos = current_action[key]
-                prev_pos = prev_action[key]
-                delta_pos = current_pos - prev_pos
-                max_delta = joint_vel_limits[i] * dt
-
-                if abs(delta_pos) > max_delta:
-                    # Clip to maximum allowed change
-                    sign = 1 if delta_pos > 0 else -1
-                    limited_action[key] = prev_pos + sign * max_delta
-                    clip_count += 1
-                    logging.debug(
-                        f"Clipped {key}: {delta_pos:.3f} -> {sign * max_delta:.3f} rad"
-                    )
-
-    # Apply gripper velocity limits
-    for gripper_key in ["left_gripper.pos", "right_gripper.pos"]:
-        if gripper_key in current_action and gripper_key in prev_action:
-            current_pos = current_action[gripper_key]
-            prev_pos = prev_action[gripper_key]
-            delta_pos = current_pos - prev_pos
-            max_delta = gripper_vel_limit * dt
-
-            if abs(delta_pos) > max_delta:
-                # Clip to maximum allowed change
-                sign = 1 if delta_pos > 0 else -1
-                limited_action[gripper_key] = prev_pos + sign * max_delta
-                clip_count += 1
-                logging.debug(
-                    f"Clipped {gripper_key}: {delta_pos:.3f} -> {sign * max_delta:.3f} m"
-                )
-
-    if clip_count > 0:
-        logging.debug(f"Applied velocity limits: {clip_count} joints clipped")
-
-    return limited_action
-
-
-# Note: xense_flare_record_loop removed as xense_flare robot has been deleted
 
 
 @safe_stop_image_writer
@@ -323,15 +211,6 @@ def record_loop(
     robot: Robot,
     events: dict,
     fps: int,
-    teleop_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],  # runs after teleop
-    robot_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],  # runs before robot
-    robot_observation_processor: RobotProcessorPipeline[
-        RobotObservation, RobotObservation
-    ],  # runs after robot
     dataset: LeRobotDataset | None = None,
     teleop: Teleoperator | list[Teleoperator] | None = None,
     control_time_s: int | None = None,
@@ -355,20 +234,14 @@ def record_loop(
         # Get robot observation
         obs = robot.get_observation()
 
-        # Applies a pipeline to the raw robot observation, default is IdentityProcessor
-        obs_processed = robot_observation_processor(obs)
-
         if dataset is not None:
             observation_frame = build_dataset_frame(
-                dataset.features, obs_processed, prefix=OBS_STR
+                dataset.features, obs, prefix=OBS_STR
             )
 
         # Get action from teleop
         if isinstance(teleop, Teleoperator):
-            act = teleop.get_action()
-
-            # Applies a pipeline to the raw teleop action, default is IdentityProcessor
-            act_processed_teleop = teleop_action_processor((act, obs))
+            action = teleop.get_action()
         else:
             logging.info(
                 "No teleoperator provided, skipping action generation. "
@@ -377,26 +250,19 @@ def record_loop(
             )
             continue
 
-        # Applies a pipeline to the action, default is IdentityProcessor
-        action_values = act_processed_teleop
-        robot_action_to_send = robot_action_processor((act_processed_teleop, obs))
-
         # Send action to robot
-        # Action can eventually be clipped using `max_relative_target`,
-        # so action actually sent is saved in the dataset. action = postprocessor.process(action)
-        # TODO(steven, pepijn, adil): we should use a pipeline step to clip the action, so the sent action is the action that we input to the robot.
-        robot.send_action(robot_action_to_send)
+        robot.send_action(action)
 
         # Write to dataset
         if dataset is not None:
             action_frame = build_dataset_frame(
-                dataset.features, action_values, prefix=ACTION
+                dataset.features, action, prefix=ACTION
             )
             frame = {**observation_frame, **action_frame, "task": single_task}
             dataset.add_frame(frame)
 
         if display_data:
-            log_rerun_data(observation=obs_processed, action=action_values)
+            log_rerun_data(observation=obs, action=action)
 
         dt_s = time.perf_counter() - start_loop_t
         busy_wait(1 / fps - dt_s)
@@ -416,25 +282,10 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         make_teleoperator_from_config(cfg.teleop) if cfg.teleop is not None else None
     )
 
-    teleop_action_processor, robot_action_processor, robot_observation_processor = (
-        make_default_processors()
-    )
-
+    # Create dataset features directly from robot features
     dataset_features = combine_feature_dicts(
-        aggregate_pipeline_dataset_features(
-            pipeline=teleop_action_processor,
-            initial_features=create_initial_features(
-                action=robot.action_features
-            ),  # TODO(steven, pepijn): in future this should come from teleop
-            use_videos=cfg.dataset.video,
-        ),
-        aggregate_pipeline_dataset_features(
-            pipeline=robot_observation_processor,
-            initial_features=create_initial_features(
-                observation=robot.observation_features
-            ),
-            use_videos=cfg.dataset.video,
-        ),
+        hw_to_dataset_features(robot.action_features, ACTION, use_video=cfg.dataset.video),
+        hw_to_dataset_features(robot.observation_features, OBS_STR, use_video=cfg.dataset.video),
     )
 
     if cfg.resume:
@@ -500,9 +351,6 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         robot=robot,
                         events=events,
                         fps=cfg.dataset.fps,
-                        teleop_action_processor=teleop_action_processor,
-                        robot_action_processor=robot_action_processor,
-                        robot_observation_processor=robot_observation_processor,
                         teleop=teleop,
                         dataset=dataset,
                         control_time_s=cfg.dataset.episode_time_s,
@@ -520,9 +368,6 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         robot=robot,
                         events=events,
                         fps=cfg.dataset.fps,
-                        teleop_action_processor=teleop_action_processor,
-                        robot_action_processor=robot_action_processor,
-                        robot_observation_processor=robot_observation_processor,
                         teleop=teleop,
                         dataset=None,
                         control_time_s=cfg.dataset.reset_time_s,

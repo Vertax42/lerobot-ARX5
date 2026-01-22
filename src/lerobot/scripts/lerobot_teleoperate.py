@@ -27,12 +27,6 @@ import rerun as rr
 
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
 from lerobot.configs import parser
-from lerobot.processor import (
-    RobotAction,
-    RobotObservation,
-    RobotProcessorPipeline,
-    make_default_processors,
-)
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
@@ -76,22 +70,13 @@ def teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
     fps: int,
-    teleop_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_observation_processor: RobotProcessorPipeline[
-        RobotObservation, RobotObservation
-    ],
     display_data: bool = False,
     duration: float | None = None,
 ):
     """
-    This function continuously reads actions from a teleoperation device, processes them through optional
-    pipelines, sends them to a robot, and optionally displays the robot's state. The loop runs at a
-    specified frequency until a set duration is reached or it is manually interrupted.
+    This function continuously reads actions from a teleoperation device, sends them to a robot,
+    and optionally displays the robot's state. The loop runs at a specified frequency until a
+    set duration is reached or it is manually interrupted.
 
     Args:
         teleop: The teleoperator device instance providing control actions.
@@ -99,9 +84,6 @@ def teleop_loop(
         fps: The target frequency for the control loop in frames per second.
         display_data: If True, fetches robot observations and displays them in the console and Rerun.
         duration: The maximum duration of the teleoperation loop in seconds. If None, the loop runs indefinitely.
-        teleop_action_processor: An optional pipeline to process raw actions from the teleoperator.
-        robot_action_processor: An optional pipeline to process actions before they are sent to the robot.
-        robot_observation_processor: An optional pipeline to process raw observations from the robot.
     """
 
     display_len = max(len(key) for key in robot.action_features)
@@ -111,37 +93,25 @@ def teleop_loop(
         loop_start = time.perf_counter()
 
         # Get robot observation
-        # Not really needed for now other than for visualization
-        # teleop_action_processor can take None as an observation
-        # given that it is the identity processor as default
         obs = robot.get_observation()
 
         # Get teleop action
-        raw_action = teleop.get_action()
+        action = teleop.get_action()
 
-        # Process teleop action through pipeline
-        teleop_action = teleop_action_processor((raw_action, obs))
-
-        # Process action for robot through pipeline
-        robot_action_to_send = robot_action_processor((teleop_action, obs))
-
-        # Send processed action to robot (robot_action_processor.to_output should return dict[str, Any])
-        _ = robot.send_action(robot_action_to_send)
+        # Send action to robot
+        robot.send_action(action)
 
         if display_data:
-            # Process robot observation through pipeline
-            obs_transition = robot_observation_processor(obs)
-
             rr.set_time("timeline", sequence=int(frame_id))
-            log_rerun_data(observation=obs_transition, action=teleop_action)
+            log_rerun_data(observation=obs, action=action)
             frame_id += 1
 
             print("\n" + "-" * (display_len + 10))
             print(f"{'NAME':<{display_len}} | {'NORM':>7}")
             # Display the final robot action that was sent
-            for motor, value in robot_action_to_send.items():
+            for motor, value in action.items():
                 print(f"{motor:<{display_len}} | {value:>7.2f}")
-            move_cursor_up(len(robot_action_to_send) + 5)
+            move_cursor_up(len(action) + 5)
 
         dt_s = time.perf_counter() - loop_start
         busy_wait(1 / fps - dt_s)
@@ -159,15 +129,6 @@ def pico4_teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
     fps: int,
-    teleop_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_observation_processor: RobotProcessorPipeline[
-        RobotObservation, RobotObservation
-    ],
     display_data: bool = False,
     duration: float | None = None,
     dryrun: bool = False,
@@ -221,32 +182,29 @@ def pico4_teleop_loop(
             # Skip this loop iteration (don't send action after reset)
             continue
 
-        # Process teleop action through pipeline (usually identity)
-        teleop_action = teleop_action_processor((raw_action, obs))
-
         # For Pico4 + Flexiv, action is already in correct format
         # No conversion needed (unlike Spacemouse which needs Euler->Quaternion)
-        robot_action_to_send = teleop_action
+        action = raw_action
 
         # Send action to robot
         if not dryrun:
-            _ = robot.send_action(robot_action_to_send)
+            robot.send_action(action)
 
         if display_data:
             # Log raw observation directly (including images from FlareGripper)
             rr.set_time("timeline", sequence=int(frame_id))
             log_rerun_data(
                 observation=obs,  # Use raw obs to ensure images are included
-                action=teleop_action,
+                action=action,
             )
             frame_id += 1
 
             print("\n" + "-" * (display_len + 10))
             print(f"{'NAME':<{display_len}} | {'NORM':>7}")
             # Display the final robot action that was sent
-            for motor, value in robot_action_to_send.items():
+            for motor, value in action.items():
                 print(f"{motor:<{display_len}} | {value:>7.4f}")
-            move_cursor_up(len(robot_action_to_send) + 5)
+            move_cursor_up(len(action) + 5)
 
         dt_s = time.perf_counter() - loop_start
         busy_wait(1 / fps - dt_s)
@@ -259,7 +217,7 @@ def pico4_teleop_loop(
             ori_str = "ORI:ON" if teleop._orientation_control_active else "ORI:OFF"
             grip_str = f"grip={teleop._last_grip:.2f}"
             gripper_pos_str = (
-                f"gripper={robot_action_to_send.get('gripper.pos', 0.0):.2f}"
+                f"gripper={action.get('gripper.pos', 0.0):.2f}"
             )
             if dryrun:
                 print(
@@ -284,9 +242,6 @@ def pico4_teleop_loop(
 def xense_multisensor_teleop_loop(
     robot: Robot,
     fps: int,
-    robot_observation_processor: RobotProcessorPipeline[
-        RobotObservation, RobotObservation
-    ],
     display_data: bool = False,
     duration: float | None = None,
     debug_timing: bool = False,
@@ -333,10 +288,6 @@ def xense_multisensor_teleop_loop(
 
         total_obs_time = time.perf_counter() - obs_start
         timing_stats["total_obs_times"].append(total_obs_time * 1000)
-
-        # Process observation through pipeline
-        if robot_observation_processor is not None:
-            obs = robot_observation_processor(obs)
 
         if display_data:
             # Log all camera data to Rerun
@@ -417,8 +368,6 @@ def teleoperate(cfg: TeleoperateConfig):
                 )
                 raise
 
-            _, _, robot_observation_processor = make_default_processors()
-
             # Run data collection loop
             try:
                 xense_multisensor_teleop_loop(
@@ -426,7 +375,6 @@ def teleoperate(cfg: TeleoperateConfig):
                     fps=cfg.fps,
                     display_data=cfg.display_data,
                     duration=cfg.teleop_time_s,
-                    robot_observation_processor=robot_observation_processor,
                     debug_timing=cfg.debug_timing,
                 )
             except KeyboardInterrupt:
@@ -491,12 +439,6 @@ def teleoperate(cfg: TeleoperateConfig):
                 )
                 raise
 
-            (
-                teleop_action_processor,
-                robot_action_processor,
-                robot_observation_processor,
-            ) = make_default_processors()
-
             # Connect to teleoperator with error handling
             try:
                 teleop = make_teleoperator_from_config(cfg.teleop)
@@ -516,9 +458,6 @@ def teleoperate(cfg: TeleoperateConfig):
                     fps=cfg.fps,
                     display_data=cfg.display_data,
                     duration=cfg.teleop_time_s,
-                    teleop_action_processor=teleop_action_processor,
-                    robot_action_processor=robot_action_processor,
-                    robot_observation_processor=robot_observation_processor,
                     dryrun=cfg.dryrun,
                 )
             except KeyboardInterrupt:
@@ -571,9 +510,6 @@ def teleoperate(cfg: TeleoperateConfig):
     else:
         teleop = make_teleoperator_from_config(cfg.teleop)
         robot = make_robot_from_config(cfg.robot)
-        teleop_action_processor, robot_action_processor, robot_observation_processor = (
-            make_default_processors()
-        )
 
         teleop.connect()
         robot.connect()
@@ -585,9 +521,6 @@ def teleoperate(cfg: TeleoperateConfig):
                 fps=cfg.fps,
                 display_data=cfg.display_data,
                 duration=cfg.teleop_time_s,
-                teleop_action_processor=teleop_action_processor,
-                robot_action_processor=robot_action_processor,
-                robot_observation_processor=robot_observation_processor,
             )
         except KeyboardInterrupt:
             pass

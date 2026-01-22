@@ -13,34 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-This file contains lists of available environments, dataset and policies to reflect the current state of LeRobot library.
+This file contains lists of available datasets, robots, and cameras to reflect the current state of LeRobot library.
 We do not want to import all the dependencies, but instead we keep it lightweight to ensure fast access to these variables.
+
+Note: This fork only supports data collection, not training or simulation.
+Policies, environments, and motors functionality have been removed.
 
 Example:
     ```python
         import lerobot
-        print(lerobot.available_envs)
-        print(lerobot.available_tasks_per_env)
         print(lerobot.available_datasets)
-        print(lerobot.available_datasets_per_env)
         print(lerobot.available_real_world_datasets)
-        print(lerobot.available_policies)
-        print(lerobot.available_policies_per_env)
         print(lerobot.available_robots)
         print(lerobot.available_cameras)
-        # Note: available_motors removed (motors functionality not supported)
     ```
 
-When implementing a new dataset loadable with LeRobotDataset follow these steps:
-- Update `available_datasets_per_env` in `lerobot/__init__.py`
-
-When implementing a new environment (e.g. `gym_aloha`), follow these steps:
-- Update `available_tasks_per_env` and `available_datasets_per_env` in `lerobot/__init__.py`
-
-When implementing a new policy class (e.g. `DiffusionPolicy`) follow these steps:
-- Update `available_policies` and `available_policies_per_env`, in `lerobot/__init__.py`
-- Set the required `name` class attribute.
-- Update variables in `tests/test_available.py` by importing your new Policy class
+When implementing a new dataset loadable with LeRobotDataset:
+- Update `available_real_world_datasets` in `lerobot/__init__.py`
 """
 
 import itertools
@@ -50,29 +39,6 @@ from lerobot.__version__ import __version__  # noqa: F401
 # Note: This fork only supports data collection, not training or simulation.
 # The following variables are kept for backward compatibility but refer to
 # functionality that has been removed (policies, environments, simulation).
-
-# available_tasks_per_env = {
-#     "aloha": [
-#         "AlohaInsertion-v0",
-#         "AlohaTransferCube-v0",
-#     ],
-#     "pusht": ["PushT-v0"],
-# }
-# available_envs = list(available_tasks_per_env.keys())
-
-# available_datasets_per_env = {
-#     "aloha": [
-#         "lerobot/aloha_sim_insertion_human",
-#         "lerobot/aloha_sim_insertion_scripted",
-#         "lerobot/aloha_sim_transfer_cube_human",
-#         "lerobot/aloha_sim_transfer_cube_scripted",
-#         "lerobot/aloha_sim_insertion_human_image",
-#         "lerobot/aloha_sim_insertion_scripted_image",
-#         "lerobot/aloha_sim_transfer_cube_human_image",
-#         "lerobot/aloha_sim_transfer_cube_scripted_image",
-#     ],
-#     "pusht": ["lerobot/pusht", "lerobot/pusht_image"],
-# }
 
 # Empty dicts for compatibility
 available_tasks_per_env = {}
@@ -164,7 +130,6 @@ available_datasets = sorted(
 )
 
 # Note: Policies have been removed from this data collection-only fork
-# available_policies = ["act", "diffusion", "tdmpc", "vqbet"]
 available_policies = []
 
 # lists all available robots from `lerobot/robots`
@@ -183,12 +148,6 @@ available_cameras = [
 available_motors = []
 
 # Note: Policy and environment mappings removed (training/simulation not supported)
-# available_policies_per_env = {
-#     "aloha": ["act"],
-#     "pusht": ["diffusion", "vqbet"],
-#     "koch_real": ["act_koch_real"],
-#     "aloha_real": ["act_aloha_real"],
-# }
 available_policies_per_env = {}
 
 # Empty lists for compatibility
