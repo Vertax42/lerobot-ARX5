@@ -28,7 +28,6 @@ from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
-    koch_follower,
     make_robot_from_config,
 )
 from lerobot.utils.constants import ACTION
