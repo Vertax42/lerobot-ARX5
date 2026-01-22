@@ -39,8 +39,6 @@ from lerobot.robots import (  # noqa: F401
     arx5_follower,
     bi_arx5,
     flexiv_rizon4,  # noqa: F401
-    hope_jr,
-    koch_follower,
     make_robot_from_config,
     xense_flare,  # noqa: F401
     xense_multisensor,  # noqa: F401
@@ -48,15 +46,10 @@ from lerobot.robots import (  # noqa: F401
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
     TeleoperatorConfig,
-    bi_so100_leader,
     gamepad,
-    homunculus,
-    koch_leader,
     make_teleoperator_from_config,
     mock_teleop,
     pico4,
-    so100_leader,
-    so101_leader,
     spacemouse,
     vive_tracker,
     xense_flare,
@@ -72,8 +65,6 @@ logger = get_logger("Teleoperate")
 
 @dataclass
 class TeleoperateConfig:
-    # TODO: pepijn, steven: if more robots require multiple teleoperators (like lekiwi)
-    # its good to make this possibele in teleop.py and record.py with List[Teleoperator]
     teleop: TeleoperatorConfig
     robot: RobotConfig
     # Limit the maximum frames per second.

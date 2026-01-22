@@ -27,15 +27,12 @@ import numpy as np
 from lerobot.model.kinematics import RobotKinematics
 from lerobot.robots import (  # noqa: F401
     RobotConfig,
-    koch_follower,
     make_robot_from_config,
 )
 from lerobot.teleoperators import (  # noqa: F401
     TeleoperatorConfig,
     gamepad,
-    koch_leader,
     make_teleoperator_from_config,
-    so100_leader,
 )
 
 # Import mock_teleop to register its config with draccus ChoiceRegistry

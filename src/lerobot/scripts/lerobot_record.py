@@ -58,20 +58,13 @@ from lerobot.robots import (  # noqa: F401
     arx5_follower,
     bi_arx5,
     flexiv_rizon4,  # noqa: F401
-    hope_jr,
-    koch_follower,
     make_robot_from_config,
     xense_flare,  # noqa: F401
 )
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
     TeleoperatorConfig,
-    bi_so100_leader,
-    homunculus,
-    koch_leader,
     make_teleoperator_from_config,
-    so100_leader,
-    so101_leader,
 )
 from lerobot.teleoperators.keyboard.teleop_keyboard import KeyboardTeleop
 
@@ -592,36 +585,10 @@ def record_loop(
             f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
         )
 
-    teleop_arm = teleop_keyboard = None
     if isinstance(teleop, list):
-        teleop_keyboard = next(
-            (t for t in teleop if isinstance(t, KeyboardTeleop)), None
+        raise ValueError(
+            "Multi-teleop mode is not supported in this version."
         )
-        teleop_arm = next(
-            (
-                t
-                for t in teleop
-                if isinstance(
-                    t,
-                    (
-                        so100_leader.SO100Leader
-                        | so101_leader.SO101Leader
-                        | koch_leader.KochLeader
-                    ),
-                )
-            ),
-            None,
-        )
-
-        if not (
-            teleop_arm
-            and teleop_keyboard
-            and len(teleop) == 2
-            and robot.name == "lekiwi_client"
-        ):
-            raise ValueError(
-                "For multi-teleop, the list must contain exactly one KeyboardTeleop and one arm teleoperator. Currently only supported for LeKiwi robot."
-            )
 
     # Reset policy and processor if they are provided
     if policy is not None and preprocessor is not None and postprocessor is not None:
@@ -676,13 +643,6 @@ def record_loop(
             # Applies a pipeline to the raw teleop action, default is IdentityProcessor
             act_processed_teleop = teleop_action_processor((act, obs))
 
-        elif policy is None and isinstance(teleop, list):
-            arm_action = teleop_arm.get_action()
-            arm_action = {f"arm_{k}": v for k, v in arm_action.items()}
-            keyboard_action = teleop_keyboard.get_action()
-            base_action = robot._from_keyboard_to_base_action(keyboard_action)
-            act = {**arm_action, **base_action} if len(base_action) > 0 else arm_action
-            act_processed_teleop = teleop_action_processor((act, obs))
         else:
             logging.info(
                 "No policy or teleoperator provided, skipping action generation."

@@ -19,8 +19,7 @@ Example:
 
 ```shell
 lerobot-calibrate \
-    --teleop.type=so100_leader \
-    --teleop.port=/dev/tty.usbmodem58760431551 \
+    --teleop.type=spacemouse \
     --teleop.id=blue
 ```
 """
@@ -38,19 +37,12 @@ from lerobot.cameras.realsense.configuration_realsense import (
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
-    hope_jr,
-    koch_follower,
-    lekiwi,
     make_robot_from_config,
 )
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
     TeleoperatorConfig,
-    homunculus,
-    koch_leader,
     make_teleoperator_from_config,
-    so100_leader,
-    so101_leader,
 )
 
 # Import mock_teleop to register its config with draccus ChoiceRegistry
