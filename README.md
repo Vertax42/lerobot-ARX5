@@ -24,12 +24,11 @@ sudo dpkg -i xensevr-pc-service_*.deb
 sudo apt-get install ./xensevr-pc-service_*.deb
 ```
 
-**Step 2:** 🐭 Install the spacenavd service for 3D spacemouse Cartesian control:
+**Step 2:** 🐭 Install HID API for 3D SpaceMouse support:
 
 ```bash
-sudo apt install libspnav-dev spacenavd
-sudo systemctl enable spacenavd.service
-sudo systemctl start spacenavd.service
+# Install hidapi library for SpaceMouse devices
+sudo apt-get install libhidapi-dev
 ```
 
 **Step 3:** 📂 Clone the repository and navigate into the directory:
@@ -53,6 +52,90 @@ bash ./setup_env.sh --install # you need to enter password for sudo access to in
 mamba list | grep ffmpeg
 ffmpeg -encoders | grep libsvtav1
 ```
+## 🐭 SpaceMouse Teleoperation System
+
+This project includes advanced SpaceMouse support with both single and dual-device modes for precise robotic control.
+
+### Features
+
+- ✅ **Modern PySpaceMouse Integration**: Uses PySpaceMouse library for cross-platform SpaceMouse support
+- ✅ **No System Services Required**: Direct HID communication, no need for spacenavd daemon  
+- ✅ **Single Device Mode**: Traditional 6-DoF control with one SpaceMouse
+- ✅ **Dual Device Mode**: Advanced left/right hand coordination for complex manipulation
+- ✅ **Flexible Axis Assignment**: Configure which device controls position vs orientation
+- ✅ **Independent Sensitivity**: Per-device sensitivity settings for optimal control
+
+### Single Device Configuration
+
+```python
+from lerobot.teleoperators.spacemouse import SpacemouseConfig, SpacemouseTeleop
+
+# Standard single SpaceMouse setup (default)
+config = SpacemouseConfig(
+    pos_sensitivity=0.8,     # Position control sensitivity
+    ori_sensitivity=1.5,     # Orientation control sensitivity
+    deadzone=0.1,           # Deadzone threshold
+    frequency=200,          # Polling frequency (Hz)
+)
+
+teleop = SpacemouseTeleop(config)
+```
+
+### Dual Device Configuration
+
+Perfect for complex robotic tasks requiring precise position and orientation control:
+
+```python
+from lerobot.teleoperators.spacemouse import SpacemouseConfig, DeviceConfig
+
+# Left hand controls position, right hand controls orientation
+config = SpacemouseConfig(
+    multi_device_mode=True,
+    left_device=DeviceConfig(
+        device_index=0,
+        enabled_axes=(True, True, True, False, False, False),  # X, Y, Z position only
+        pos_sensitivity=0.8,
+        ori_sensitivity=0.0,  # Disabled
+    ),
+    right_device=DeviceConfig(
+        device_index=1, 
+        enabled_axes=(False, False, False, True, True, True),  # Roll, pitch, yaw only
+        pos_sensitivity=0.0,  # Disabled
+        ori_sensitivity=1.5,
+    )
+)
+
+teleop = SpacemouseTeleop(config)
+```
+
+### Example Configurations
+
+See [examples/spacemouse_dual_config_example.py](examples/spacemouse_dual_config_example.py) for complete configuration examples including:
+- Position/Orientation split control
+- Dual-arm robot control  
+- Fine/Coarse movement control
+
+### Use Cases
+
+- 🤖 **Dual-Arm Robots**: Independent control of two robotic arms
+- 🎯 **Precision Manipulation**: Decouple position and orientation control for fine tasks
+- 🔄 **Complex Assembly**: Left hand positions, right hand orients components
+- 🏭 **Industrial Applications**: Enhanced ergonomics and control precision
+
+### Hardware Requirements
+
+- **Single Mode**: Any 3Dconnexion SpaceMouse device
+- **Dual Mode**: Two identical SpaceMouse devices (e.g., two SpaceNavigators)
+
+### Supported Devices
+
+All 3Dconnexion devices supported by PySpaceMouse:
+- SpaceNavigator
+- SpaceMouse Pro
+- SpaceMouse Wireless
+- SpaceMouse Compact
+- And more...
+
 ## 🤖 Flexiv Rizon4 Robot with Flare Gripper Policy Implementation
 
 Lerobot record XenseFlare dataset can be directly used for FlexivRizon4 policy training.  🎉
@@ -146,6 +229,31 @@ A `LeRobotDataset` is serialised using several widespread file formats for each 
 - metadata are stored in plain json/jsonl files
 
 Dataset can be uploaded/downloaded from the HuggingFace hub seamlessly. To work on a local dataset, you can specify its location with the `root` argument if it's not in the default `~/.cache/huggingface/lerobot` location.
+
+## 📝 Recent Updates
+
+### SpaceMouse System Upgrade (2025-01-23)
+
+🎉 **Major SpaceMouse System Overhaul:**
+
+- **Modern Library Migration**: Migrated from legacy `spnav` to modern `PySpaceMouse` library
+- **Cross-Platform Support**: Now supports Linux, macOS, and Windows
+- **No System Dependencies**: Removed requirement for `spacenavd` system service
+- **Dual-Device Support**: Revolutionary dual SpaceMouse mode for advanced manipulation
+- **Flexible Configuration**: Per-device sensitivity and axis assignment
+- **Hardware Independence**: Direct HID communication for better reliability
+
+**Breaking Changes:**
+- `spacenavd` service is no longer required
+- Configuration options have been expanded with new dual-device parameters
+- Old single-device configurations remain fully compatible
+
+**Migration Benefits:**
+- ✅ Easier setup (no system services to configure)
+- ✅ Better cross-platform compatibility  
+- ✅ More responsive input handling
+- ✅ Advanced dual-hand control capabilities
+- ✅ Future-proof with active library maintenance
 
 ## Acknowledgment
 
