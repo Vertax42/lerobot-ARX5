@@ -446,54 +446,15 @@ To setup the gamepad, you need to set the `control_mode` to `"gamepad"` and defi
   <i>Gamepad button mapping for robot control and episode management</i>
 </p>
 
-**Setting up the SO101 leader**
-
-The SO101 leader arm has reduced gears that allows it to move and track the follower arm during exploration. Therefore, taking over is much smoother than the gearless SO100.
-
-To setup the SO101 leader, you need to set the `control_mode` to `"leader"` and define the `teleop` section in the configuration file.
-
-```json
-{
-  "env": {
-    "teleop": {
-      "type": "so101_leader",
-      "port": "/dev/tty.usbmodem585A0077921",
-      "use_degrees": true
-    },
-    "processor": {
-      "control_mode": "leader",
-      "gripper": {
-        "use_gripper": true
-      }
-    }
-  }
-}
-```
-
 In order to annotate the success/failure of the episode, **you will need** to use a keyboard to press `s` for success, `esc` for failure.
 During the online training, press `space` to take over the policy and `space` again to give the control back to the policy.
 
-<details>
-<summary><strong>Video: SO101 leader teleoperation</strong></summary>
-
-<div class="video-container">
-  <video controls width="600">
-    <source
-      src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/lerobot/so101_leader_tutorial.mp4"
-      type="video/mp4"
-    />
-  </video>
-</div>
-
-<p align="center"><i>SO101 leader teleoperation example, the leader tracks the follower, press `space` to intervene</i></p>
-</details>
-
 **Recording Demonstrations**
 
-Start the recording process, an example of the config file can be found [here](https://huggingface.co/datasets/aractingi/lerobot-example-config-files/blob/main/env_config_so100.json):
+Start the recording process with your robot configuration file:
 
 ```bash
-python -m lerobot.rl.gym_manipulator --config_path src/lerobot/configs/env_config_so100.json
+python -m lerobot.rl.gym_manipulator --config_path <your_env_config.json>
 ```
 
 During recording:
@@ -785,7 +746,7 @@ Create a training configuration file (example available [here](https://huggingfa
 First, start the learner server process:
 
 ```bash
-python -m lerobot.rl.learner --config_path src/lerobot/configs/train_config_hilserl_so100.json
+python -m lerobot.rl.learner --config_path <your_train_config.json>
 ```
 
 The learner:
@@ -800,7 +761,7 @@ The learner:
 In a separate terminal, start the actor process with the same configuration:
 
 ```bash
-python -m lerobot.rl.actor --config_path src/lerobot/configs/train_config_hilserl_so100.json
+python -m lerobot.rl.actor --config_path <your_train_config.json>
 ```
 
 The actor:

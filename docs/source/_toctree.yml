@@ -59,16 +59,6 @@
     title: Processors for Robots and Teleoperators
   title: "Robot Processors"
 - sections:
-  - local: koch
-    title: Koch v1.1
-  - local: lekiwi
-    title: LeKiwi
-  - local: hope_jr
-    title: Hope Jr
-  - local: reachy2
-    title: Reachy 2
-  title: "Robots"
-- sections:
   - local: phone_teleop
     title: Phone
   title: "Teleoperators"

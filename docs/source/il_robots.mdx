@@ -53,59 +53,21 @@ To add cameras to your setup, follow this [Guide](./cameras#setup-cameras).
 
 ## Teleoperate with cameras
 
-With `rerun`, you can teleoperate again while simultaneously visualizing the camera feeds and joint positions. In this example, we’re using the Koch arm.
+With `rerun`, you can teleoperate again while simultaneously visualizing the camera feeds and joint positions.
 
-<hfoptions id="teleoperate_koch_camera">
-<hfoption id="Command">
 ```bash
 lerobot-teleoperate \
-    --robot.type=koch_follower \
-    --robot.port=/dev/tty.usbmodem58760431541 \
-    --robot.id=my_awesome_follower_arm \
+    --robot.type=<your_robot_type> \
+    --robot.port=<your_robot_port> \
+    --robot.id=my_awesome_robot \
     --robot.cameras="{ front: {type: opencv, index_or_path: 0, width: 1920, height: 1080, fps: 30}}" \
-    --teleop.type=koch_leader \
-    --teleop.port=/dev/tty.usbmodem58760431551 \
-    --teleop.id=my_awesome_leader_arm \
+    --teleop.type=<your_teleop_type> \
+    --teleop.port=<your_teleop_port> \
+    --teleop.id=my_awesome_teleop \
     --display_data=true
 ```
-</hfoption>
-<hfoption id="API example">
 
-<!-- prettier-ignore-start -->
-```python
-from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
-from lerobot.teleoperators.koch_leader import KochLeaderConfig, KochLeader
-from lerobot.robots.koch_follower import KochFollowerConfig, KochFollower
-
-camera_config = {
-    "front": OpenCVCameraConfig(index_or_path=0, width=1920, height=1080, fps=30)
-}
-
-robot_config = KochFollowerConfig(
-    port="/dev/tty.usbmodem585A0076841",
-    id="my_red_robot_arm",
-    cameras=camera_config
-)
-
-teleop_config = KochLeaderConfig(
-    port="/dev/tty.usbmodem58760431551",
-    id="my_blue_leader_arm",
-)
-
-robot = KochFollower(robot_config)
-teleop_device = KochLeader(teleop_config)
-robot.connect()
-teleop_device.connect()
-
-while True:
-    observation = robot.get_observation()
-    action = teleop_device.get_action()
-    robot.send_action(action)
-```
-<!-- prettier-ignore-end -->
-
-</hfoption>
-</hfoptions>
+Replace `<your_robot_type>`, `<your_robot_port>`, `<your_teleop_type>`, and `<your_teleop_port>` with your actual robot and teleoperator configuration.
 
 ## Record a dataset
 
