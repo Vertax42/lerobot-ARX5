@@ -108,20 +108,43 @@ class SpacemouseTeleop(Teleoperator):
         - x, y, z: absolute EEF position (meters)
         - roll, pitch, yaw: absolute EEF orientation (radians)
         - gripper_pos: absolute gripper position (meters)
+        
+        For dual-hand mode, the output combines both devices according to their enabled_axes configuration.
         """
-        return {
-            "dtype": "float32",
-            "shape": (7,),
-            "names": {
-                "x": 0,
-                "y": 1,
-                "z": 2,
-                "roll": 3,
-                "pitch": 4,
-                "yaw": 5,
-                "gripper_pos": 6,
-            },
-        }
+        if self.config.multi_device_mode:
+            # In dual-hand mode, we still output the same unified format
+            # but internally combine inputs from left (position) and right (orientation) devices
+            return {
+                "dtype": "float32",
+                "shape": (7,),
+                "names": {
+                    "x": 0,        # from left device (if enabled)
+                    "y": 1,        # from left device (if enabled) 
+                    "z": 2,        # from left device (if enabled)
+                    "roll": 3,     # from right device (if enabled)
+                    "pitch": 4,    # from right device (if enabled)
+                    "yaw": 5,      # from right device (if enabled)
+                    "gripper_pos": 6,  # from either device (buttons combined)
+                },
+                "_mode": "dual_hand",
+                "_left_axes": self.config.left_device.enabled_axes,
+                "_right_axes": self.config.right_device.enabled_axes,
+            }
+        else:
+            return {
+                "dtype": "float32",
+                "shape": (7,),
+                "names": {
+                    "x": 0,
+                    "y": 1,
+                    "z": 2,
+                    "roll": 3,
+                    "pitch": 4,
+                    "yaw": 5,
+                    "gripper_pos": 6,
+                },
+                "_mode": "single_device",
+            }
 
     @property
     def feedback_features(self) -> dict[str, type]:
@@ -137,26 +160,37 @@ class SpacemouseTeleop(Teleoperator):
 
         self.logger.info("Connecting to 3D Spacemouse...")
 
-        # Lazy import to avoid requiring spnav when module is loaded but not used
+        # Lazy import to avoid requiring pyspacemouse when module is loaded but not used
         try:
             from lerobot.teleoperators.spacemouse.peripherals import Spacemouse
         except ImportError as e:
             raise ImportError(
-                "spnav is required for Spacemouse teleoperator."
-                "Install it with: pip install spnav."
-                "Also ensure spacenavd is installed and running: sudo apt install spacenavd"
+                "pyspacemouse is required for Spacemouse teleoperator. "
+                "Install it with: pip install pyspacemouse"
             ) from e
 
         try:
             self._shm_manager = SharedMemoryManager()
             self._shm_manager.start()
 
-            self._spacemouse = Spacemouse(
-                shm_manager=self._shm_manager,
-                deadzone=self.config.deadzone,
-                max_value=self.config.max_value,
-                frequency=self.config.frequency,
-            )
+            # Pass multi-device configuration if enabled
+            if self.config.multi_device_mode:
+                self._spacemouse = Spacemouse(
+                    shm_manager=self._shm_manager,
+                    deadzone=self.config.deadzone,
+                    max_value=self.config.max_value,
+                    frequency=self.config.frequency,
+                    multi_device_mode=True,
+                    left_device_config=self.config.left_device,
+                    right_device_config=self.config.right_device,
+                )
+            else:
+                self._spacemouse = Spacemouse(
+                    shm_manager=self._shm_manager,
+                    deadzone=self.config.deadzone,
+                    max_value=self.config.max_value,
+                    frequency=self.config.frequency,
+                )
             self._spacemouse.start(wait=True)
 
             self._is_connected = True
@@ -258,14 +292,33 @@ class SpacemouseTeleop(Teleoperator):
         else:
             gripper_cmd = 0  # Stay
 
-        # Update target pose with increments (matching ARX5 SDK spacemouse_teleop.py)
-        # Position: target_pose_6d[:3] += state[:3] * pos_speed * dt
-        self._target_pose_6d[:3] += state[:3] * self.config.pos_sensitivity * dt
-        # Orientation: target_pose_6d[3:] += state[3:] * ori_speed * dt
-        self._target_pose_6d[3:] += state[3:] * self.config.ori_sensitivity * dt
+        # Update target pose with increments, using device-specific sensitivities in multi-device mode
+        if self.config.multi_device_mode:
+            # Apply sensitivities based on which device controls each axis
+            for i in range(3):  # Position axes (x, y, z)
+                if self.config.left_device.enabled_axes[i]:
+                    self._target_pose_6d[i] += state[i] * self.config.left_device.pos_sensitivity * dt
+                elif self.config.right_device.enabled_axes[i]:
+                    self._target_pose_6d[i] += state[i] * self.config.right_device.pos_sensitivity * dt
+            
+            for i in range(3, 6):  # Orientation axes (roll, pitch, yaw)
+                if self.config.left_device.enabled_axes[i]:
+                    self._target_pose_6d[i] += state[i] * self.config.left_device.ori_sensitivity * dt
+                elif self.config.right_device.enabled_axes[i]:
+                    self._target_pose_6d[i] += state[i] * self.config.right_device.ori_sensitivity * dt
+        else:
+            # Single device mode (original behavior)
+            self._target_pose_6d[:3] += state[:3] * self.config.pos_sensitivity * dt
+            self._target_pose_6d[3:] += state[3:] * self.config.ori_sensitivity * dt
 
         # Update gripper position with clamping
-        self._target_gripper_pos += gripper_cmd * self.config.gripper_speed * dt
+        if self.config.multi_device_mode:
+            # Use gripper speed from whichever device has buttons pressed (or default)
+            gripper_speed = max(self.config.left_device.gripper_speed, self.config.right_device.gripper_speed)
+        else:
+            gripper_speed = self.config.gripper_speed
+            
+        self._target_gripper_pos += gripper_cmd * gripper_speed * dt
         self._target_gripper_pos = np.clip(self._target_gripper_pos, 0, self.config.gripper_width)
 
         # Check if any input is active
