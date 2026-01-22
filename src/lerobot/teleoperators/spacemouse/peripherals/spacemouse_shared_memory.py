@@ -16,16 +16,16 @@
 
 import multiprocessing as mp
 import time
+import threading
 from multiprocessing.managers import SharedMemoryManager
+from typing import Any
 
 import numpy as np
-from spnav import (
-    SpnavButtonEvent,
-    SpnavMotionEvent,
-    spnav_close,
-    spnav_open,
-    spnav_poll_event,
-)
+
+try:
+    import pyspacemouse
+except ImportError:
+    pyspacemouse = None
 
 from ..shared_memory.shared_memory_ring_buffer import SharedMemoryRingBuffer
 
@@ -40,13 +40,22 @@ class Spacemouse(mp.Process):
         deadzone=(0, 0, 0, 0, 0, 0),
         dtype=np.float32,
         n_buttons=2,
+        multi_device_mode=False,
+        left_device_config=None,
+        right_device_config=None,
     ):
         """
-        Continuously listen to 3D connection space naviagtor events
-        and update the latest state.
+        Continuously listen to 3D connection space navigator events
+        using PySpaceMouse library and update the latest state.
 
-        max_value: {300, 500} 300 for wired version and 500 for wireless
-        deadzone: [0,1], number or tuple, axis with value lower than this value will stay at 0
+        Supports both single device and multi-device (dual-hand) modes.
+
+        Args:
+            multi_device_mode: If True, use dual SpaceMouse setup
+            left_device_config: Configuration for left hand device
+            right_device_config: Configuration for right hand device
+            max_value: {300, 500} 300 for wired version and 500 for wireless
+            deadzone: [0,1], number or tuple, axis with value lower than this value will stay at 0
 
         front
         z
@@ -69,8 +78,13 @@ class Spacemouse(mp.Process):
         self.dtype = dtype
         self.deadzone = deadzone
         self.n_buttons = n_buttons
-        # self.motion_event = SpnavMotionEvent([0,0,0], [0,0,0], 0)
-        # self.button_state = defaultdict(lambda: False)
+
+        # Multi-device configuration
+        self.multi_device_mode = multi_device_mode
+        self.left_device_config = left_device_config
+        self.right_device_config = right_device_config
+
+        # Coordinate transformation matrix (same as before to maintain compatibility)
         self.tx_zup_spnav = np.array([[0, 0, -1], [1, 0, 0], [0, 1, 0]], dtype=dtype)
 
         example = {
@@ -93,9 +107,16 @@ class Spacemouse(mp.Process):
         self.stop_event = mp.Event()
         self.ring_buffer = ring_buffer
 
+        # PySpaceMouse device instances
+        self._left_device = None
+        self._right_device = None
+        self._single_device = None
+        self._running = False
+
     # ======= get state APIs ==========
 
     def get_motion_state(self):
+        """Get normalized motion state from ring buffer."""
         state = self.ring_buffer.get()
         motion_event = state["motion_event"]
         assert isinstance(motion_event, np.ndarray)
@@ -123,10 +144,12 @@ class Spacemouse(mp.Process):
         return tf_state
 
     def get_button_state(self):
+        """Get button state from ring buffer."""
         state = self.ring_buffer.get()
         return state["button_state"]
 
     def is_button_pressed(self, button_id):
+        """Check if specific button is pressed."""
         button_state = self.get_button_state()
         assert isinstance(button_state, np.ndarray)
         return button_state[button_id]
@@ -134,11 +157,13 @@ class Spacemouse(mp.Process):
     # ========== start stop API ===========
 
     def start(self, wait=True):
+        """Start the spacemouse process."""
         super().start()
         if wait:
             self.ready_event.wait()
 
     def stop(self, wait=True):
+        """Stop the spacemouse process."""
         self.stop_event.set()
         if wait:
             self.join()
@@ -152,45 +177,183 @@ class Spacemouse(mp.Process):
 
     # ========= main loop ==========
     def run(self):
-        spnav_open()
-        try:
-            motion_event = np.zeros((7,), dtype=np.int64)
-            button_state = np.zeros((self.n_buttons,), dtype=bool)
-            # send one message immediately so client can start reading
-            self.ring_buffer.put(
-                {
-                    "motion_event": motion_event,
-                    "button_state": button_state,
-                    "receive_timestamp": time.monotonic(),  # type: ignore
-                }
+        """Main process loop using PySpaceMouse."""
+        if pyspacemouse is None:
+            raise ImportError(
+                "pyspacemouse is required for Spacemouse teleoperator. "
+                "Install it with: pip install pyspacemouse"
             )
+
+        if self.multi_device_mode:
+            self._run_multi_device()
+        else:
+            self._run_single_device()
+
+    def _run_single_device(self):
+        """Single device mode (original behavior)."""
+        try:
+            with pyspacemouse.open() as device:
+                if device is None:
+                    raise RuntimeError("Failed to open SpaceMouse device")
+
+                self._single_device = device
+                print(f"Connected to: {device.name}")
+
+                motion_event = np.zeros((7,), dtype=np.int64)
+                button_state = np.zeros((self.n_buttons,), dtype=bool)
+
+                self.ring_buffer.put(
+                    {
+                        "motion_event": motion_event,
+                        "button_state": button_state,
+                        "receive_timestamp": time.monotonic(),
+                    }
+                )
+                self.ready_event.set()
+                self._running = True
+
+                while not self.stop_event.is_set() and self._running:
+                    try:
+                        state = device.read()
+                        receive_timestamp = time.monotonic()
+
+                        if state is not None:
+                            motion_event[0] = int(state.x * self.max_value)
+                            motion_event[1] = int(state.y * self.max_value)
+                            motion_event[2] = int(state.z * self.max_value)
+                            motion_event[3] = int(state.roll * self.max_value)
+                            motion_event[4] = int(state.pitch * self.max_value)
+                            motion_event[5] = int(state.yaw * self.max_value)
+                            motion_event[6] = 0
+
+                            button_state.fill(False)
+                            if hasattr(state, "buttons") and state.buttons is not None:
+                                for i, button_pressed in enumerate(state.buttons):
+                                    if i < self.n_buttons:
+                                        button_state[i] = bool(button_pressed)
+
+                            self.ring_buffer.put(
+                                {
+                                    "motion_event": motion_event.copy(),
+                                    "button_state": button_state.copy(),
+                                    "receive_timestamp": receive_timestamp,
+                                }
+                            )
+
+                        time.sleep(1 / self.frequency)
+
+                    except Exception as e:
+                        print(f"Error reading SpaceMouse: {e}")
+                        time.sleep(1 / self.frequency)
+
+        except Exception as e:
+            print(f"Failed to initialize SpaceMouse: {e}")
             self.ready_event.set()
 
-            while not self.stop_event.is_set():
-                event = spnav_poll_event()
-                receive_timestamp = time.monotonic()
-                if isinstance(event, SpnavMotionEvent):
-                    motion_event[:3] = event.translation
-                    motion_event[3:6] = event.rotation
-                    motion_event[6] = event.period
-                elif isinstance(event, SpnavButtonEvent):
-                    button_state[event.bnum] = event.press
-                else:
-                    # finish integrating this round of events
-                    # before sending over
-                    self.ring_buffer.put(
-                        {
-                            "motion_event": motion_event,
-                            "button_state": button_state,
-                            "receive_timestamp": receive_timestamp,  # type: ignore
-                        }
-                    )
-                    time.sleep(1 / self.frequency)
         finally:
-            spnav_close()
+            self._running = False
+            self._single_device = None
+
+    def _run_multi_device(self):
+        """Dual device mode for left/right hand control."""
+        try:
+            connected_devices = pyspacemouse.get_connected_devices()
+            if len(connected_devices) < 2:
+                raise RuntimeError(f"Need at least 2 SpaceMouse devices, found {len(connected_devices)}")
+
+            device_name = connected_devices[0]
+            print(f"Opening dual devices: {device_name}")
+
+            with pyspacemouse.open(device=device_name, device_index=self.left_device_config.device_index) as left_device, \
+                 pyspacemouse.open(device=device_name, device_index=self.right_device_config.device_index) as right_device:
+
+                if left_device is None or right_device is None:
+                    raise RuntimeError("Failed to open one or both SpaceMouse devices")
+
+                self._left_device = left_device
+                self._right_device = right_device
+                print(f"Connected - Left: {left_device.name}, Right: {right_device.name}")
+
+                motion_event = np.zeros((7,), dtype=np.int64)
+                button_state = np.zeros((self.n_buttons,), dtype=bool)
+
+                self.ring_buffer.put(
+                    {
+                        "motion_event": motion_event,
+                        "button_state": button_state,
+                        "receive_timestamp": time.monotonic(),
+                    }
+                )
+                self.ready_event.set()
+                self._running = True
+
+                while not self.stop_event.is_set() and self._running:
+                    try:
+                        left_state = left_device.read()
+                        right_state = right_device.read()
+                        receive_timestamp = time.monotonic()
+
+                        self._combine_device_states(left_state, right_state, motion_event, button_state)
+
+                        self.ring_buffer.put(
+                            {
+                                "motion_event": motion_event.copy(),
+                                "button_state": button_state.copy(),
+                                "receive_timestamp": receive_timestamp,
+                            }
+                        )
+
+                        time.sleep(1 / self.frequency)
+
+                    except Exception as e:
+                        print(f"Error reading SpaceMouse devices: {e}")
+                        time.sleep(1 / self.frequency)
+
+        except Exception as e:
+            print(f"Failed to initialize dual SpaceMouse devices: {e}")
+            self.ready_event.set()
+
+        finally:
+            self._running = False
+            self._left_device = None
+            self._right_device = None
+
+    def _combine_device_states(self, left_state, right_state, motion_event, button_state):
+        """Combine states from left and right devices based on enabled axes."""
+        motion_event.fill(0)
+        button_state.fill(False)
+
+        # Process left device (typically position control)
+        if left_state is not None and self.left_device_config is not None:
+            left_values = [left_state.x, left_state.y, left_state.z,
+                          left_state.roll, left_state.pitch, left_state.yaw]
+
+            for i, (value, enabled) in enumerate(zip(left_values, self.left_device_config.enabled_axes)):
+                if enabled:
+                    motion_event[i] = int(value * self.max_value)
+
+            if hasattr(left_state, 'buttons') and left_state.buttons is not None:
+                for i, button_pressed in enumerate(left_state.buttons):
+                    if i < self.n_buttons:
+                        button_state[i] = button_state[i] or bool(button_pressed)
+
+        # Process right device (typically orientation control)
+        if right_state is not None and self.right_device_config is not None:
+            right_values = [right_state.x, right_state.y, right_state.z,
+                           right_state.roll, right_state.pitch, right_state.yaw]
+
+            for i, (value, enabled) in enumerate(zip(right_values, self.right_device_config.enabled_axes)):
+                if enabled:
+                    motion_event[i] = int(value * self.max_value)
+
+            if hasattr(right_state, 'buttons') and right_state.buttons is not None:
+                for i, button_pressed in enumerate(right_state.buttons):
+                    if i < self.n_buttons:
+                        button_state[i] = button_state[i] or bool(button_pressed)
 
 
 def test():
+    """Test function to verify SpaceMouse functionality."""
     with SharedMemoryManager() as shm_manager:
         with Spacemouse(shm_manager=shm_manager, deadzone=0.3, max_value=500) as sm:
             for i in range(2000):

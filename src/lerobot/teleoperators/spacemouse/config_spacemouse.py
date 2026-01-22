@@ -15,43 +15,82 @@
 # limitations under the License.
 
 from dataclasses import dataclass, field  # noqa: F401
-from typing import Tuple
+from typing import Tuple, Optional, Dict, Any
 
 from ..config import TeleoperatorConfig
+
+
+@dataclass
+class DeviceConfig:
+    """Configuration for a single SpaceMouse device."""
+    device_name: Optional[str] = None  # Specific device name, None for auto-detect
+    device_index: int = 0  # Device index when multiple same devices
+    pos_sensitivity: float = 0.8  # Position sensitivity multiplier
+    ori_sensitivity: float = 1.5  # Orientation sensitivity multiplier
+    gripper_speed: float = 0.6  # Gripper speed
+    deadzone: float = 0.1  # Deadzone threshold
+    invert_axes: Tuple[bool, bool, bool, bool, bool, bool] = (True, True, False, True, True, False)
+    swap_gripper_buttons: bool = False
+    enabled_axes: Tuple[bool, bool, bool, bool, bool, bool] = (True, True, True, True, True, True)  # Which axes to use
 
 
 @TeleoperatorConfig.register_subclass("spacemouse")
 @dataclass
 class SpacemouseConfig(TeleoperatorConfig):
-    """Configuration for 3D Spacemouse teleoperator.
+    """Configuration for 3D Spacemouse teleoperator with multi-device support.
 
     This teleoperator provides 6-DoF absolute pose control (translation + rotation)
-    suitable for end-effector teleoperation. The output is an accumulated target_pose_6d
-    that can be directly sent to a Cartesian controller.
+    suitable for end-effector teleoperation. Supports both single device and dual-hand modes.
+
+    Single Device Mode (default):
+        Uses one SpaceMouse for combined position+orientation control.
+        
+    Dual Hand Mode:
+        - Left device: typically position control (enabled_axes=[True,True,True,False,False,False])
+        - Right device: typically orientation control (enabled_axes=[False,False,False,True,True,True])
+        - Combined output for unified control
 
     Attributes:
-        pos_sensitivity: Sensitivity multiplier for position control (m/s at max deflection).
-        ori_sensitivity: Sensitivity multiplier for orientation control (rad/s at max deflection).
-        gripper_speed: Speed of gripper open/close (rad/s).
-        deadzone: Deadzone threshold [0-1] for each axis. Values below this are treated as zero.
-        max_value: Maximum raw value from spacemouse (300 for wired, 500 for wireless).
-        frequency: Polling frequency in Hz for spacemouse backend.
-        filter_window_size: Moving average filter window size for smoothing.
-        control_dt: Control loop period in seconds. Should match external loop (e.g., 1/fps).
-            This ensures consistent velocity scaling regardless of actual call timing.
-        invert_axes: Tuple of 6 bools to invert each axis (tx, ty, tz, rx, ry, rz).
-        swap_gripper_buttons: If True, swap left/right button for gripper open/close.
-        gripper_width: Maximum gripper position in ratio of gripper_max_pos (for clamping).
+        multi_device_mode: Enable dual SpaceMouse mode
+        left_device: Configuration for left hand device
+        right_device: Configuration for right hand device
+        max_value: Maximum raw value from spacemouse (300 for wired, 500 for wireless)
+        frequency: Polling frequency in Hz for spacemouse backend
+        filter_window_size: Moving average filter window size for smoothing
+        control_dt: Control loop period in seconds
+        gripper_width: Maximum gripper position ratio
+        
+    Legacy single-device attributes (used when multi_device_mode=False):
+        pos_sensitivity, ori_sensitivity, gripper_speed, deadzone, invert_axes, swap_gripper_buttons
     """
 
-    pos_sensitivity: float = 0.8  # default 0.8 m/s at max deflection
-    ori_sensitivity: float = 1.5  # default 1.5 rad/s at max deflection
-    gripper_speed: float = 0.6  # ratio of gripper_max_pos / s for gripper open/close
-    deadzone: float = 0.1  # [0-1] threshold
+    # Multi-device configuration
+    multi_device_mode: bool = False
+    left_device: DeviceConfig = field(default_factory=lambda: DeviceConfig(
+        device_index=0,
+        enabled_axes=(True, True, True, False, False, False),  # Position only
+        pos_sensitivity=0.8,
+        ori_sensitivity=0.0,  # Disabled
+    ))
+    right_device: DeviceConfig = field(default_factory=lambda: DeviceConfig(
+        device_index=1,
+        enabled_axes=(False, False, False, True, True, True),  # Orientation only
+        pos_sensitivity=0.0,  # Disabled
+        ori_sensitivity=1.5,
+    ))
+
+    # Global settings
     max_value: int = 500  # 300 for wired, 500 for wireless
     frequency: int = 200  # Hz for spacemouse states polling
     filter_window_size: int = 3  # Moving average filter window size
     control_dt: float = 0.01  # Control loop period in seconds (should match external loop)
+    gripper_width: float = 1.0  # Maximum gripper position (ratio of gripper_max_pos)
+
+    # Legacy single-device settings (used when multi_device_mode=False)
+    pos_sensitivity: float = 0.8  # default 0.8 m/s at max deflection
+    ori_sensitivity: float = 1.5  # default 1.5 rad/s at max deflection
+    gripper_speed: float = 0.6  # ratio of gripper_max_pos / s for gripper open/close
+    deadzone: float = 0.1  # [0-1] threshold
     invert_axes: Tuple[bool, bool, bool, bool, bool, bool] = (
         True,  # x-reverse
         True,  # y-reverse
@@ -61,4 +100,3 @@ class SpacemouseConfig(TeleoperatorConfig):
         False,
     )
     swap_gripper_buttons: bool = False  # default left button to close, right button to open
-    gripper_width: float = 1.0  # Maximum gripper position (ratio of gripper_max_pos)
