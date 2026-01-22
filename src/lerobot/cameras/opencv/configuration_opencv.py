@@ -60,7 +60,7 @@ class OpenCVCameraConfig(CameraConfig):
     index_or_path: int | Path
     color_mode: ColorMode = ColorMode.RGB
     rotation: Cv2Rotation = Cv2Rotation.NO_ROTATION
-    warmup_s: int = 1
+    warmup_s: float = 1.0
     fourcc: str | None = "MJPG"
 
     def __post_init__(self) -> None:

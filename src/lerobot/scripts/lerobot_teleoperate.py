@@ -340,7 +340,7 @@ def xense_multisensor_teleop_loop(
 
         if display_data:
             # Log all camera data to Rerun
-            rr.set_time("timeline", sequence=int(frame_id))
+            # rr.set_time("timeline", sequence=int(frame_id))
             log_rerun_data(
                 observation=obs,
                 action={},  # No actions for data collection device

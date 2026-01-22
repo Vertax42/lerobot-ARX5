@@ -41,6 +41,9 @@ class XenseMultisensorConfig(RobotConfig):
                 "back": OpenCVCameraConfig(
                     index_or_path=16, fps=30, width=640, height=480,
                 ),
+                "front": OpenCVCameraConfig(
+                    index_or_path=10, fps=30, width=640, height=480,
+                ),
                 "OS000097": XenseCameraConfig(
                     serial_number="OS000097",
                     fps=30,
@@ -65,9 +68,7 @@ class XenseMultisensorConfig(RobotConfig):
                     output_types=[XenseOutputType.DIFFERENCE],
                     use_gpu=True,
                 ),
-                "front": OpenCVCameraConfig(
-                    index_or_path=4, fps=30, width=640, height=480,
-                ),
+                
                 # "OG000337": XenseCameraConfig(
                 #     serial_number="OG000337",
                 #     fps=30,
