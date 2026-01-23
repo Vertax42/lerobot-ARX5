@@ -24,10 +24,10 @@ from .constants import OBS_PREFIX, OBS_STR
 
 def init_rerun(session_name: str = "lerobot_control_loop") -> None:
     """Initializes the Rerun SDK for visualizing the control loop."""
-    batch_size = os.getenv("RERUN_FLUSH_NUM_BYTES", str(100_000))
+    batch_size = os.getenv("RERUN_FLUSH_NUM_BYTES", str(500_0000))
     os.environ["RERUN_FLUSH_NUM_BYTES"] = batch_size
     rr.init(session_name)
-    memory_limit = os.getenv("LEROBOT_RERUN_MEMORY_LIMIT", "5%")
+    memory_limit = os.getenv("LEROBOT_RERUN_MEMORY_LIMIT", "10%")
     rr.spawn(memory_limit=memory_limit)
     # NOTE: We do NOT send a fixed blueprint here. This lets Rerun auto-discover
     # all logged entity paths and create views dynamically. If a static blueprint
