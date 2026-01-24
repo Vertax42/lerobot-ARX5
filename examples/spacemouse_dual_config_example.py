@@ -52,7 +52,7 @@ def example_position_orientation_split():
             deadzone=0.1,
             gripper_speed=0.6,
         ),
-        frequency=200,
+        control_dt=0.005,  # 200 Hz control loop
         gripper_width=1.0,
     )
 
@@ -82,7 +82,7 @@ def example_dual_arm_control():
             ori_sensitivity=2.0,
             deadzone=0.05,
         ),
-        frequency=200,
+        control_dt=0.005,  # 200 Hz control loop
     )
 
     return config
@@ -108,7 +108,7 @@ def example_fine_coarse_control():
             ori_sensitivity=0.2,
             deadzone=0.05,  # Lower deadzone for precision
         ),
-        frequency=200,
+        control_dt=0.005,  # 200 Hz control loop
     )
 
     return config

@@ -29,7 +29,6 @@ Based on the 3Dconnexion SpaceMouse using the spnav library.
 """
 
 import time
-from multiprocessing.managers import SharedMemoryManager
 from queue import Queue
 from typing import Any
 
@@ -76,7 +75,6 @@ class SpacemouseTeleop(Teleoperator):
         self.config = config
         self.logger = get_logger("SpacemouseTeleop")
         self._is_connected = False
-        self._shm_manager: SharedMemoryManager | None = None
         self._spacemouse = None
         self._start_pose_6d: np.ndarray = np.zeros(6, dtype=np.float32)
         self._start_gripper_pos: float = 0.0
@@ -170,29 +168,17 @@ class SpacemouseTeleop(Teleoperator):
             ) from e
 
         try:
-            self._shm_manager = SharedMemoryManager()
-            self._shm_manager.start()
-
             # Pass multi-device configuration if enabled
             if self.config.multi_device_mode:
                 self._spacemouse = Spacemouse(
-                    shm_manager=self._shm_manager,
-                    deadzone=self.config.deadzone,
-                    max_value=self.config.max_value,
-                    frequency=self.config.frequency,
                     multi_device_mode=True,
                     left_device_config=self.config.left_device,
                     right_device_config=self.config.right_device,
                 )
             else:
-                self._spacemouse = Spacemouse(
-                    shm_manager=self._shm_manager,
-                    deadzone=self.config.deadzone,
-                    max_value=self.config.max_value,
-                    frequency=self.config.frequency,
-                )
-            self._spacemouse.start(wait=True)
+                self._spacemouse = Spacemouse()
 
+            self._spacemouse.connect()
             self._is_connected = True
 
             # Set target pose on connect and save initial pose for reset
@@ -205,9 +191,6 @@ class SpacemouseTeleop(Teleoperator):
             self.logger.info("✅ 3D Spacemouse connected successfully.")
 
         except Exception as e:
-            if self._shm_manager is not None:
-                self._shm_manager.shutdown()
-                self._shm_manager = None
             raise RuntimeError(f"❌ Failed to connect to 3D Spacemouse: {e}") from e
 
     def calibrate(self) -> None:
@@ -231,7 +214,10 @@ class SpacemouseTeleop(Teleoperator):
         self.logger.info(f"✅ Reset target pose to: {pose_6d}, gripper: {gripper_pos}")
 
     def _get_filtered_state(self) -> np.ndarray:
-        """Get filtered spacemouse state with moving average."""
+        """Get filtered spacemouse state with moving average.
+        
+        Note: This uses cached data from the last poll() call.
+        """
         raw_state = self._spacemouse.get_motion_state_transformed()
 
         # Apply additional deadzone filtering after transformation
@@ -268,16 +254,20 @@ class SpacemouseTeleop(Teleoperator):
         if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
+        # Poll device data once per cycle (ensures motion & button data are synchronized)
+        self._spacemouse.poll()
+
         # Use fixed control_dt for consistent velocity scaling
         # This should match the external control loop period (e.g., 1/fps)
         dt = self.config.control_dt
 
-        # Get filtered motion state
+        # Get filtered motion state (uses cached data from poll())
         state = self._get_filtered_state()  # (6,) normalized [-1, 1]
 
-        # Get button states
-        button_left = self._spacemouse.is_button_pressed(0)
-        button_right = self._spacemouse.is_button_pressed(1)
+        # Get button states (uses cached data from poll())
+        # Use device-aware methods that handle different button layouts
+        button_left = self._spacemouse.is_left_button_pressed()
+        button_right = self._spacemouse.is_right_button_pressed()
 
         # Compute gripper command based on buttons
         if self.config.swap_gripper_buttons:
@@ -362,6 +352,9 @@ class SpacemouseTeleop(Teleoperator):
                 - terminate_episode: bool - Whether to terminate the current episode
                 - success: bool - Whether the episode was successful
                 - rerecord_episode: bool - Whether to rerecord the episode
+        
+        Note: This uses cached button state from the last poll() call.
+              Make sure to call get_action() first to ensure data is fresh.
         """
         if not self._is_connected:
             return {
@@ -371,9 +364,10 @@ class SpacemouseTeleop(Teleoperator):
                 TeleopEvents.RERECORD_EPISODE: False,
             }
 
-        # Get current button states
-        button_left = self._spacemouse.is_button_pressed(0)
-        button_right = self._spacemouse.is_button_pressed(1)
+        # Get current button states (uses cached data from last poll())
+        # Use device-aware methods that handle different button layouts
+        button_left = self._spacemouse.is_left_button_pressed()
+        button_right = self._spacemouse.is_right_button_pressed()
 
         # Check if both buttons are pressed (for reset)
         both_pressed = button_left and button_right
@@ -414,12 +408,8 @@ class SpacemouseTeleop(Teleoperator):
         self.logger.info("Disconnecting from Spacemouse...")
 
         if self._spacemouse is not None:
-            self._spacemouse.stop(wait=True)
+            self._spacemouse.disconnect()
             self._spacemouse = None
-
-        if self._shm_manager is not None:
-            self._shm_manager.shutdown()
-            self._shm_manager = None
 
         self._is_connected = False
         self.logger.info(f"{self} disconnected.")

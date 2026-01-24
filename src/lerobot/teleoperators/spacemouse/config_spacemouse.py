@@ -44,7 +44,7 @@ class SpacemouseConfig(TeleoperatorConfig):
 
     Single Device Mode (default):
         Uses one SpaceMouse for combined position+orientation control.
-        
+
     Dual Hand Mode:
         - Left device: typically position control (enabled_axes=[True,True,True,False,False,False])
         - Right device: typically orientation control (enabled_axes=[False,False,False,True,True,True])
@@ -54,12 +54,10 @@ class SpacemouseConfig(TeleoperatorConfig):
         multi_device_mode: Enable dual SpaceMouse mode
         left_device: Configuration for left hand device
         right_device: Configuration for right hand device
-        max_value: Maximum raw value from spacemouse (300 for wired, 500 for wireless)
-        frequency: Polling frequency in Hz for spacemouse backend
         filter_window_size: Moving average filter window size for smoothing
         control_dt: Control loop period in seconds
         gripper_width: Maximum gripper position ratio
-        
+
     Legacy single-device attributes (used when multi_device_mode=False):
         pos_sensitivity, ori_sensitivity, gripper_speed, deadzone, invert_axes, swap_gripper_buttons
     """
@@ -73,15 +71,13 @@ class SpacemouseConfig(TeleoperatorConfig):
         ori_sensitivity=0.0,  # Disabled
     ))
     right_device: DeviceConfig = field(default_factory=lambda: DeviceConfig(
-        device_index=1,
+        device_index=1,  # Second physical device (0-based index)
         enabled_axes=(False, False, False, True, True, True),  # Orientation only
         pos_sensitivity=0.0,  # Disabled
         ori_sensitivity=1.5,
     ))
 
     # Global settings
-    max_value: int = 500  # 300 for wired, 500 for wireless
-    frequency: int = 200  # Hz for spacemouse states polling
     filter_window_size: int = 3  # Moving average filter window size
     control_dt: float = 0.01  # Control loop period in seconds (should match external loop)
     gripper_width: float = 1.0  # Maximum gripper position (ratio of gripper_max_pos)
@@ -90,7 +86,7 @@ class SpacemouseConfig(TeleoperatorConfig):
     pos_sensitivity: float = 0.8  # default 0.8 m/s at max deflection
     ori_sensitivity: float = 1.5  # default 1.5 rad/s at max deflection
     gripper_speed: float = 0.6  # ratio of gripper_max_pos / s for gripper open/close
-    deadzone: float = 0.1  # [0-1] threshold
+    deadzone: float = 0.1  # [0-1] threshold for filtering noise
     invert_axes: Tuple[bool, bool, bool, bool, bool, bool] = (
         True,  # x-reverse
         True,  # y-reverse
