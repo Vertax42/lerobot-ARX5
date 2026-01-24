@@ -24,11 +24,50 @@ sudo dpkg -i xensevr-pc-service_*.deb
 sudo apt-get install ./xensevr-pc-service_*.deb
 ```
 
-**Step 2:** 🐭 Install HID API for 3D SpaceMouse support:
+**Step 2:** 🐭 Install HID API and configure permissions for 3D SpaceMouse support:
 
 ```bash
-# Install hidapi library for SpaceMouse devices
-sudo apt-get install libhidapi-dev
+# Install system HID libraries for SpaceMouse devices
+sudo apt-get update
+sudo apt-get install -y libhidapi-dev libhidapi-hidraw0 libhidapi-libusb0
+
+# Install Python HID packages (will be installed by setup_env.sh, but can be installed manually)
+# pip install hidapi pyspacemouse
+
+# Configure udev rules to allow non-root access to SpaceMouse devices
+sudo tee /etc/udev/rules.d/99-hidraw-permissions.rules << 'EOF'
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", MODE="0664", GROUP="plugdev"
+EOF
+
+# Reload udev rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+
+# Add current user to plugdev group (if not already added)
+sudo usermod -aG plugdev $USER
+
+# Apply group changes to current session
+newgrp plugdev
+```
+
+> ⚠️ **Important:** After setting up udev rules, you may need to:
+> - Re-plug your SpaceMouse USB receiver, or
+> - Log out and log back in, or
+> - Reboot your system
+>
+> to ensure the permissions take effect.
+
+**Verify SpaceMouse Setup:**
+
+```bash
+# Check if SpaceMouse is detected
+lsusb | grep -i "3Dconnexion\|space"
+
+# Check hidraw device permissions (should show MODE 0664 and GROUP plugdev)
+ls -l /dev/hidraw*
+
+# Test SpaceMouse connection
+python test_pyspacemouse_basic.py
 ```
 
 **Step 3:** 📂 Clone the repository and navigate into the directory:
@@ -55,6 +94,40 @@ ffmpeg -encoders | grep libsvtav1
 ## 🐭 SpaceMouse Teleoperation System
 
 This project includes advanced SpaceMouse support with both single and dual-device modes for precise robotic control.
+
+### Dependencies
+
+**System Requirements:**
+- Ubuntu 22.04 (tested) or other Linux distributions
+- Python 3.10+
+- libhidapi (installed via apt)
+
+**Python Packages:**
+- `pyspacemouse` - Modern cross-platform SpaceMouse library
+- `hidapi` - Python wrapper for HID API
+- `easyhid` - Easy-to-use HID library (dependency of pyspacemouse)
+
+All Python dependencies are automatically installed by `setup_env.sh --install`.
+
+### Permissions Setup
+
+SpaceMouse requires proper udev rules to allow non-root access. See **Step 2** in the Installation section above for complete setup instructions.
+
+### Testing Your SpaceMouse
+
+After installation and permissions setup, test your SpaceMouse:
+
+```bash
+# Basic functionality test (prints real-time 6-DoF values)
+python test_pyspacemouse_basic.py
+
+# Test with lerobot integration
+python test_spacemouse.py
+```
+
+The test script will display real-time position (x, y, z) and orientation (roll, pitch, yaw) values as you move the SpaceMouse.
+
+> 📝 **Note:** If you're using a 3Dconnexion Universal Receiver (wireless), you may see multiple devices listed (e.g., 14 "UniversalReceiver" entries). This is normal - the receiver exposes multiple HID interfaces for different functions. PySpaceMouse will automatically select the correct interface for 6-DoF input.
 
 ### Features
 
@@ -140,40 +213,6 @@ All 3Dconnexion devices supported by PySpaceMouse:
 
 Lerobot record XenseFlare dataset can be directly used for FlexivRizon4 policy training.  🎉
 
-## 📊 Weights & Biases
-
-To use Weights and Biases for experiment tracking, log in with:
-
-```bash
-wandb login
-```
-
-**Note:** You will also need to enable WandB in the configuration. See below.
-
-## 👀 Visualize datasets
-
-Check out [example 1](https://github.com/huggingface/lerobot/blob/main/examples/dataset/load_lerobot_dataset.py) that illustrates how to use our dataset class which automatically downloads data from the Hugging Face hub.
-
-You can also locally visualize episodes from a dataset on the hub by executing our script from the command line:
-
-```bash
-lerobot-dataset-viz \
-    --repo-id lerobot/pusht \
-    --episode-index 0
-```
-
-or from a dataset in a local folder with the `root` option and the `--mode local` (in the following case the dataset will be searched for in `./my_local_data_dir/lerobot/pusht`)
-
-```bash
-lerobot-dataset-viz \
-    --repo-id lerobot/pusht \
-    --root ./my_local_data_dir \
-    --mode local \
-    --episode-index 0
-```
-
-Our script can also visualize datasets stored on a distant server. See `lerobot-dataset-viz --help` for more instructions.
-
 ## 🔑 The `LeRobotDataset` format
 
 A dataset in `LeRobotDataset` format is very simple to use. It can be loaded from a repository on the Hugging Face hub or a local folder simply with e.g. `dataset = LeRobotDataset("lerobot/aloha_static_coffee")` and can be indexed into like any Hugging Face and PyTorch dataset. For instance `dataset[0]` will retrieve a single temporal frame from the dataset containing observation(s) and an action as PyTorch tensors ready to be fed to a model.
@@ -255,18 +294,9 @@ Dataset can be uploaded/downloaded from the HuggingFace hub seamlessly. To work 
 - ✅ Advanced dual-hand control capabilities
 - ✅ Future-proof with active library maintenance
 
-## Acknowledgment
-
-- The LeRobot team 🤗 for building SmolVLA [Paper](https://arxiv.org/abs/2506.01844), [Blog](https://huggingface.co/blog/smolvla).
-- Thanks to Tony Zhao, Zipeng Fu and colleagues for open sourcing ACT policy, ALOHA environments and datasets. Ours are adapted from [ALOHA](https://tonyzhaozh.github.io/aloha) and [Mobile ALOHA](https://mobile-aloha.github.io).
-- Thanks to Cheng Chi, Zhenjia Xu and colleagues for open sourcing Diffusion policy, Pusht environment and datasets, as well as UMI datasets. Ours are adapted from [Diffusion Policy](https://diffusion-policy.cs.columbia.edu) and [UMI Gripper](https://umi-gripper.github.io).
-- Thanks to Nicklas Hansen, Yunhai Feng and colleagues for open sourcing TDMPC policy, Simxarm environments and datasets. Ours are adapted from [TDMPC](https://github.com/nicklashansen/tdmpc) and [FOWM](https://www.yunhaifeng.com/FOWM).
-- Thanks to Antonio Loquercio and Ashish Kumar for their early support.
-- Thanks to [Seungjae (Jay) Lee](https://sjlee.cc/), [Mahi Shafiullah](https://mahis.life/) and colleagues for open sourcing [VQ-BeT](https://sjlee.cc/vq-bet/) policy and helping us adapt the codebase to our repository. The policy is adapted from [VQ-BeT repo](https://github.com/jayLEE0301/vq_bet_official).
-
 ## Citation
 
-If you want, you can cite this work with:
+If you use this codebase, please cite the original LeRobot project:
 
 ```bibtex
 @misc{cadene2024lerobot,
