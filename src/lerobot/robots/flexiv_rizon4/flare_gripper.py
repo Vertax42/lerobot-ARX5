@@ -16,8 +16,8 @@
 
 """Xense FlareGripper implementation for LeRobot."""
 
-from xensegripper import XenseCamera, XenseGripper
 from xensesdk import Sensor, call_service
+from xensesdk.gripper import XenseCamera, XenseGripper
 
 from lerobot.robots.flexiv_rizon4.config_flare_gripper import FlareGripperConfig
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError

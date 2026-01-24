@@ -1,17 +1,17 @@
 """
 使用 Rerun 可视化 Xense 传感器数据
-避免 Qt/LLVM 与 MIGraphX 的冲突
 
 安装依赖:
     pip install rerun-sdk
 
 运行:
-    python -m xensesdk.examples.example_rerun_viewer
+    python example1.py
 """
 
 import sys
 import time
 import numpy as np
+import os
 
 # 导入 rerun (不依赖 Qt，避免 LLVM 冲突)
 try:
@@ -44,7 +44,7 @@ def main():
     sensor = Sensor.create(
         "OG000456",
         use_gpu=True,
-        infer_type=InferType.MIGraphX,
+        # infer_type=InferType.MIGraphX,
         api=CameraSource.CV2_V4L2,
     )
     print("传感器连接成功!")

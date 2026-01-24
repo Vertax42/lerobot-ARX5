@@ -243,6 +243,20 @@ EOF
             else
                 echo "[INFO] OpenCV Qt plugin (libqxcb.so) not found; skipping removal."
             fi
+
+            # Workaround for onnxruntime-gpu CUDA library l oading issue:
+            # onnxruntime uses dlopen() to load CUDA providers but doesn't set RPATH,
+            # causing "libcublasLt.so.12: cannot open shared object file" errors.
+            # Fix by patching RPATH to include conda's lib directory.
+            ONNXRT_CUDA_SO="${CONDA_PREFIX}/lib/python${PY_VER}/site-packages/onnxruntime/capi/libonnxruntime_providers_cuda.so"
+            if [[ -f "$ONNXRT_CUDA_SO" ]] && command -v patchelf &>/dev/null; then
+                echo "[INFO] Fixing onnxruntime-gpu RPATH for CUDA libraries..."
+                patchelf --set-rpath "${CONDA_PREFIX}/lib" "$ONNXRT_CUDA_SO"
+                echo "[INFO] onnxruntime-gpu RPATH fixed: ${CONDA_PREFIX}/lib"
+            elif [[ -f "$ONNXRT_CUDA_SO" ]]; then
+                echo "[WARN] patchelf not found; cannot fix onnxruntime-gpu RPATH."
+                echo "[WARN] Install patchelf with: mamba install patchelf"
+            fi
         else
             echo "[WARN] CONDA_PREFIX is not set; cannot remove OpenCV Qt plugin."
         fi
