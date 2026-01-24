@@ -209,6 +209,34 @@ EOF
         echo "[ERROR] Lerobot installation failed. See the error output above."
         exit 1
     fi
+    # Install hidapi system library for pyspacemouse (SpaceMouse teleoperator)
+    echo "[INFO] Installing hidapi system library for SpaceMouse support..."
+    if ! dpkg -l | grep -q libhidapi-dev; then
+        sudo apt-get update && sudo apt-get install -y libhidapi-dev
+        echo "[INFO] libhidapi-dev installed successfully!"
+    else
+        echo "[INFO] libhidapi-dev already installed."
+    fi
+
+    # Setup udev rules for SpaceMouse HID access (allows non-root users)
+    UDEV_RULE_FILE="/etc/udev/rules.d/99-hidraw-permissions.rules"
+    if [[ ! -f "$UDEV_RULE_FILE" ]]; then
+        echo "[INFO] Setting up udev rules for SpaceMouse HID access..."
+        echo 'KERNEL=="hidraw*", SUBSYSTEM=="hidraw", MODE="0664", GROUP="plugdev"' | sudo tee "$UDEV_RULE_FILE" > /dev/null
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger
+        echo "[INFO] udev rules configured for HID device access."
+    else
+        echo "[INFO] udev rules for HID devices already exist."
+    fi
+
+    # Add user to plugdev group if not already a member
+    if ! groups "$USER" | grep -q plugdev; then
+        echo "[INFO] Adding user '$USER' to plugdev group for HID device access..."
+        sudo usermod -aG plugdev "$USER"
+        echo "[WARN] You may need to log out and log back in for group changes to take effect."
+    fi
+
     echo "[INFO] Installing xensesdk and xensegripper..."
 
     if uv pip install xensesdk xensegripper; then
