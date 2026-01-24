@@ -743,6 +743,66 @@ class FlexivRizon4(Robot):
 
         return obs_dict
 
+    def forward_kinematics(self, joint_positions_deg: list | np.ndarray) -> np.ndarray:
+        """Compute forward kinematics: joint positions -> TCP pose.
+        
+        This is a pure mathematical computation that only requires the Robot object
+        to be created (for accessing kinematic model), not necessarily connected/enabled.
+        
+        Args:
+            joint_positions_deg: Joint positions in degrees (7D)
+            
+        Returns:
+            TCP pose [x, y, z, qw, qx, qy, qz] (7D)
+        """
+        if self._robot is None:
+            raise RuntimeError("Robot object not created. Call connect() first or create Robot manually.")
+        
+        # Create Model object for kinematics computation
+        model = flexivrdk.Model(self._robot)
+        
+        # Convert degrees to radians
+        q_rad = np.deg2rad(joint_positions_deg).tolist()
+        
+        # Compute forward kinematics
+        tcp_pose = model.forwardKinematics(q_rad)
+        
+        return np.array(tcp_pose, dtype=np.float32)
+
+    def get_start_tcp_pose(self) -> np.ndarray:
+        """Get TCP pose at start position (from config.start_position_degree).
+        
+        This can be called after Robot object is created, even before robot is enabled.
+        
+        Returns:
+            TCP pose [x, y, z, qw, qx, qy, qz] (7D)
+        """
+        return self.forward_kinematics(self.config.start_position_degree)
+
+    def get_start_tcp_pose_euler(self) -> np.ndarray:
+        """Get TCP pose at start position in Euler format [x, y, z, roll, pitch, yaw, gripper_pos].
+        
+        This can be called after Robot object is created, even before robot is enabled.
+        
+        Returns:
+            numpy array of shape (7,) with [x, y, z, roll, pitch, yaw, gripper_pos]
+        """
+        tcp_pose_quat = self.get_start_tcp_pose()
+        
+        # Convert quaternion to Euler angles
+        euler = quaternion_to_euler(
+            tcp_pose_quat[3], tcp_pose_quat[4], tcp_pose_quat[5], tcp_pose_quat[6]
+        )
+        
+        # Get initial gripper position based on config
+        gripper_pos = self.config.flare_gripper_max_pos if self.config.flare_gripper_init_open else 0.0
+        
+        return np.array(
+            [tcp_pose_quat[0], tcp_pose_quat[1], tcp_pose_quat[2], 
+             euler[0], euler[1], euler[2], gripper_pos],
+            dtype=np.float32,
+        )
+
     def get_current_tcp_pose_euler(self) -> np.ndarray:
         """Get current TCP pose in Euler angles format [x, y, z, roll, pitch, yaw, gripper_pos].
 
