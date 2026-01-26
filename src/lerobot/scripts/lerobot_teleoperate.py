@@ -75,6 +75,8 @@ class TeleoperateConfig:
     debug_timing: bool = False
     # Dryrun mode: print actions without sending to robot
     dryrun: bool = False
+    # Skip observation acquisition for higher frequency teleop
+    no_obs: bool = False
 
 
 def teleop_loop(
@@ -413,10 +415,19 @@ def spacemouse_teleop_loop(
     duration: float | None = None,
     dryrun: bool = False,
     debug_timing: bool = False,
+    no_obs: bool = False,
 ):
     """
     Teleop loop for Spacemouse.
+    
+    Args:
+        no_obs: If True, skip observation acquisition for higher frequency teleop.
+                This disables display_data and any observation-dependent features.
     """
+    # no_obs mode disables display_data since there's no observation to display
+    if no_obs:
+        display_data = False
+    
     display_len = max(len(key) for key in robot.action_features)
     start = time.perf_counter()
     timing_stats = {"obs_times": [], "loop_times": []}
@@ -434,47 +445,51 @@ def spacemouse_teleop_loop(
     while True:
         loop_start = time.perf_counter()
 
-        # Get robot observation with timing
-        obs_start = time.perf_counter()
-        obs = robot.get_observation()
-        obs_time = time.perf_counter() - obs_start
-        timing_stats["obs_times"].append(obs_time * 1000)
+        # Get robot observation with timing (skip if no_obs mode)
+        obs = None
+        obs_time = 0
+        if not no_obs:
+            obs_start = time.perf_counter()
+            obs = robot.get_observation()
+            obs_time = time.perf_counter() - obs_start
+            timing_stats["obs_times"].append(obs_time * 1000)
 
-        # Check for reset event (both buttons pressed simultaneously - immediate reset like original code)
+        # Get teleop action (this calls poll() internally)
+        raw_action = teleop.get_action()
+
+        # Check for reset event (both buttons pressed simultaneously)
+        # Must check AFTER get_action() since that's when poll() is called
         if teleop.name == "spacemouse":
-            # Get button states directly from spacemouse (matching original code logic)
-            button_left = teleop._spacemouse.is_button_pressed(0)
-            button_right = teleop._spacemouse.is_button_pressed(1)
+            # Use device-aware button methods (handles different SpaceMouse models)
+            button_left = teleop._spacemouse.is_left_button_pressed()
+            button_right = teleop._spacemouse.is_right_button_pressed()
 
             if button_left and button_right:
-                # Both buttons pressed: Reset to initial position (immediate, no 1 second wait)
-                # For Flexiv robots, use robot's reset method which calls go_to_home or go_to_start
-                # based on config.go_to_start
-                if is_flexiv and hasattr(robot, "reset_to_initial_position"):
+                # Both buttons pressed: Reset to initial position
+                if dryrun:
+                    logger.info("[DRYRUN] Reset to initial position triggered by both buttons")
+                    # In dryrun mode, just reset teleop's internal state
+                    if hasattr(teleop, "_start_pose_6d") and hasattr(teleop, "_start_gripper_pos"):
+                        teleop.reset_to_pose(teleop._start_pose_6d, teleop._start_gripper_pos)
+                elif is_flexiv and hasattr(robot, "reset_to_initial_position"):
                     try:
                         # First, reset robot to initial position
                         robot.reset_to_initial_position()
                         # Then, get robot's current actual position and update teleop target pose
-                        # This ensures teleop target matches robot's actual position after reset
-                        # so teleoperation can continue smoothly from the reset position
                         current_pose_euler = robot.get_current_tcp_pose_euler()
                         teleop.reset_to_pose(current_pose_euler[:6], current_pose_euler[6])
-                        # Also update saved start pose for future resets
                         teleop._start_pose_6d = current_pose_euler[:6].copy()
                         teleop._start_gripper_pos = current_pose_euler[6]
                         logger.info("Reset to initial position triggered by both buttons")
                     except Exception as e:
                         logger.error(f"Failed to reset robot position: {e}\n{traceback.format_exc()}")
                 else:
-                    # For other robots or fallback: use saved initial pose from teleop.connect()
+                    # For other robots: use saved initial pose from teleop.connect()
                     if hasattr(teleop, "_start_pose_6d") and hasattr(teleop, "_start_gripper_pos"):
                         teleop.reset_to_pose(teleop._start_pose_6d, teleop._start_gripper_pos)
                         logger.info("Reset to initial position triggered by both buttons")
-                # Continue to next iteration (skip sending action this cycle)
+                # Skip sending action this cycle
                 continue
-
-        # Get teleop action
-        raw_action = teleop.get_action()
 
         # Process teleop action through pipeline
         teleop_action = teleop_action_processor((raw_action, obs))
@@ -523,20 +538,35 @@ def spacemouse_teleop_loop(
                 flush=True,
             )
         elif not display_data:
-            # Print time and actions (key-value pairs) only when not display_data
-            action_str = ", ".join([f"{k}={v:.4f}" for k, v in robot_action_to_send.items()])
+            # Print time and actions in a more readable format
+            # Extract position and gripper for cleaner display
+            pos_x = robot_action_to_send.get("tcp.x", teleop_action.get("x", 0))
+            pos_y = robot_action_to_send.get("tcp.y", teleop_action.get("y", 0))
+            pos_z = robot_action_to_send.get("tcp.z", teleop_action.get("z", 0))
+            gripper = robot_action_to_send.get("gripper.pos", teleop_action.get("gripper_pos", 0))
+            
+            # Get Euler angles from teleop_action (before conversion to 6D rotation)
+            roll = teleop_action.get("roll", 0)
+            pitch = teleop_action.get("pitch", 0)
+            yaw = teleop_action.get("yaw", 0)
+            
+            pos_str = f"pos=[{pos_x:+.3f}, {pos_y:+.3f}, {pos_z:+.3f}]"
+            ori_str = f"rpy=[{roll:+.3f}, {pitch:+.3f}, {yaw:+.3f}]"
+            grip_str = f"grip={gripper:.2f}"
+            
+            # Build status flags
+            flags = []
             if dryrun:
-                print(
-                    f"\rtime: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz) | [DRYRUN] Actions: {action_str}",
-                    end="",
-                    flush=True,
-                )
-            else:
-                print(
-                    f"\rtime: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz) | Actions: {action_str}",
-                    end="",
-                    flush=True,
-                )
+                flags.append("DRYRUN")
+            if no_obs:
+                flags.append("NO_OBS")
+            flag_str = f"[{','.join(flags)}] " if flags else ""
+            
+            print(
+                f"\r\033[K{loop_s * 1e3:5.1f}ms ({1 / loop_s:3.0f}Hz) | {flag_str}{pos_str} | {ori_str} | {grip_str}",
+                end="",
+                flush=True,
+            )
 
         if duration is not None and time.perf_counter() - start >= duration:
             return
@@ -1403,6 +1433,7 @@ def teleoperate(cfg: TeleoperateConfig):
                     robot_observation_processor=robot_observation_processor,
                     dryrun=cfg.dryrun,
                     debug_timing=cfg.debug_timing,
+                    no_obs=cfg.no_obs,
                 )
             except KeyboardInterrupt:
                 pass
@@ -1580,6 +1611,7 @@ def teleoperate(cfg: TeleoperateConfig):
                     robot_observation_processor=robot_observation_processor,
                     dryrun=cfg.dryrun,
                     debug_timing=cfg.debug_timing,
+                    no_obs=cfg.no_obs,
                 )
             except KeyboardInterrupt:
                 logger.info("Teleoperation interrupted by user")
