@@ -67,21 +67,17 @@ dependencies = [
 
     # Hugging Face dependencies
     "datasets>=4.0.0,<4.2.0",
-    "diffusers>=0.27.2,<0.36.0",
     "huggingface-hub[hf-transfer,cli]>=0.34.2,<0.36.0",
-    "accelerate>=1.10.0,<2.0.0",
 
     # Core dependencies
     "setuptools>=71.0.0,<81.0.0",
     "cmake>=3.29.0.1,<4.2.0",
-    "einops>=0.8.0,<0.9.0",
     "opencv-python-headless>=4.9.0,<4.13.0",
     "av>=15.0.0,<16.0.0",
     "jsonlines>=4.0.0,<5.0.0",
     "packaging>=24.2,<26.0",
     "pynput>=1.7.7,<1.9.0",
     "pyserial>=3.5,<4.0",
-    "wandb>=0.20.0,<0.22.0",
     "pyrealsense2",
     # AMD ROCm 7.1.1 PyTorch stack (from https://repo.radeon.com/rocm/manylinux/rocm-rel-7.1.1/)
     # Note: setup_env.sh will install torch and torchvision from ROCm repository before installing lerobot
@@ -91,7 +87,6 @@ dependencies = [
     # ONNX Runtime with MIGraphX backend for ROCm:
     # "onnxruntime-migraphx==1.23.1",
     "draccus==0.10.0",
-    "gymnasium>=1.1.1,<2.0.0",
     # Pin to 0.23.1 to stay compatible with TensorFlow/JAX numpy<2 constraint in openpi
     "rerun-sdk == 0.23.1",
     "deepdiff>=7.0.1,<9.0.0",
@@ -100,9 +95,6 @@ dependencies = [
     "scikit-image",
     # NOTE: xensesdk requires numpy<=1.26.4 but rerun-sdk requires numpy>=2
     "PyOpenGL_accelerate",
-    # for 3d spacemouse teleoperator
-    "atomics",
-    "spnav@https://github.com/cheng-chi/spnav/archive/c1c938ebe3cc542db4685e0d13850ff1abfdb943.tar.gz",
     # for flexiv robot
     "flexivrdk",
     "spdlog",
@@ -124,11 +116,7 @@ dependencies = [
 pygame-dep = ["pygame>=2.5.1,<2.7.0"]
 # Note: placo-dep removed as kinematics functionality is not supported in this data collection-only fork
 xense = ["xensesdk>=1.7.0"]
-transformers-dep = ["transformers>=4.53.0,<5.0.0"]
-grpcio-dep = [
-    "grpcio==1.73.1",
-    "protobuf==6.31.0",
-] # TODO: Bumb dependency (compatible with wandb)
+# Note: transformers-dep and grpcio-dep removed as training functionality is not supported in this data collection-only fork
 
 # Robots
 intelrealsense = [
@@ -137,14 +125,12 @@ intelrealsense = [
 ]
 
 # Features
-async = ["lerobot[grpcio-dep]", "matplotlib>=3.10.3,<4.0.0"]
+async = ["matplotlib>=3.10.3,<4.0.0"]
 
 # Development
 dev = [
     "pre-commit>=3.7.0,<5.0.0",
     "debugpy>=1.8.1,<1.9.0",
-    "lerobot[grpcio-dep]",
-    "grpcio-tools==1.73.1",
 ]
 test = [
     "pytest>=8.1.0,<9.0.0",
