@@ -25,11 +25,14 @@ class DeviceConfig:
     """Configuration for a single SpaceMouse device."""
     device_name: Optional[str] = None  # Specific device name, None for auto-detect
     device_index: int = 0  # Device index when multiple same devices
-    pos_sensitivity: float = 0.8  # Position sensitivity multiplier
-    ori_sensitivity: float = 1.5  # Orientation sensitivity multiplier
+    pos_sensitivity: float = 0.8  # Position sensitivity multiplier (m/s at max deflection)
+    ori_sensitivity: float = 1.5  # Orientation sensitivity multiplier (rad/s at max deflection)
     gripper_speed: float = 0.6  # Gripper speed
-    deadzone: float = 0.1  # Deadzone threshold
-    invert_axes: Tuple[bool, bool, bool, bool, bool, bool] = (True, True, False, True, True, False)
+    deadzone: float = 0.02  # Deadzone threshold (smaller = more responsive)
+    # Axis inversion after coordinate transformation [x, y, z, roll, pitch, yaw]
+    # x: True (SpaceMouse forward=-Y needs inversion to become Robot +X)
+    # yaw: True (SpaceMouse yaw needs inversion)
+    invert_axes: Tuple[bool, bool, bool, bool, bool, bool] = (True, False, False, False, False, True)
     swap_gripper_buttons: bool = False
     enabled_axes: Tuple[bool, bool, bool, bool, bool, bool] = (True, True, True, True, True, True)  # Which axes to use
 
@@ -78,21 +81,24 @@ class SpacemouseConfig(TeleoperatorConfig):
     ))
 
     # Global settings
-    filter_window_size: int = 3  # Moving average filter window size
+    filter_window_size: int = 1  # Moving average filter window size (1=disabled for best responsiveness)
     control_dt: float = 0.01  # Control loop period in seconds (should match external loop)
     gripper_width: float = 1.0  # Maximum gripper position (ratio of gripper_max_pos)
 
     # Legacy single-device settings (used when multi_device_mode=False)
-    pos_sensitivity: float = 0.8  # default 0.8 m/s at max deflection
-    ori_sensitivity: float = 1.5  # default 1.5 rad/s at max deflection
+    pos_sensitivity: float = 0.4  # default 0.4 m/s at max deflection
+    ori_sensitivity: float = 0.8  # default 0.8 rad/s at max deflection
     gripper_speed: float = 0.6  # ratio of gripper_max_pos / s for gripper open/close
-    deadzone: float = 0.1  # [0-1] threshold for filtering noise
+    deadzone: float = 0.02  # [0-1] threshold for filtering noise (smaller = more responsive)
+    # Axis inversion after coordinate transformation [x, y, z, roll, pitch, yaw]
+    # x: True (SpaceMouse forward=-Y needs inversion to become Robot +X)
+    # yaw: True (SpaceMouse yaw needs inversion)
     invert_axes: Tuple[bool, bool, bool, bool, bool, bool] = (
-        True,  # x-reverse
-        True,  # y-reverse
-        False,
-        True,  # roll-reverse
-        True,  # pitch-reverse
-        False,
+        False,   # x: no inversion
+        True,  # y: inversion
+        False,  # z
+        True,  # roll: inversion
+        True,  # pitch: inversion
+        True,   # yaw: inversion
     )
     swap_gripper_buttons: bool = False  # default left button to close, right button to open
