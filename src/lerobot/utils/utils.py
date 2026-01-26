@@ -27,7 +27,6 @@ from statistics import mean
 
 import numpy as np
 import torch
-from accelerate import Accelerator
 from datasets.utils.logging import disable_progress_bar, enable_progress_bar
 
 
@@ -132,19 +131,14 @@ def init_logging(
     display_pid: bool = False,
     console_level: str = "INFO",
     file_level: str = "DEBUG",
-    accelerator: Accelerator | None = None,
 ):
     """Initialize logging configuration for LeRobot.
-
-    In multi-GPU training, only the main process logs to console to avoid duplicate output.
-    Non-main processes have console logging suppressed but can still log to file.
 
     Args:
         log_file: Optional file path to write logs to
         display_pid: Include process ID in log messages (useful for debugging multi-process)
         console_level: Logging level for console output
         file_level: Logging level for file output
-        accelerator: Optional Accelerator instance (for multi-GPU detection)
     """
 
     def custom_format(record: logging.LogRecord) -> str:
@@ -162,19 +156,11 @@ def init_logging(
     # Clear any existing handlers
     logger.handlers.clear()
 
-    # Determine if this is a non-main process in distributed training
-    is_main_process = accelerator.is_main_process if accelerator is not None else True
-
-    # Console logging (main process only)
-    if is_main_process:
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
-        console_handler.setLevel(console_level.upper())
-        logger.addHandler(console_handler)
-    else:
-        # Suppress console output for non-main processes
-        logger.addHandler(logging.NullHandler())
-        logger.setLevel(logging.ERROR)
+    # Console logging
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    console_handler.setLevel(console_level.upper())
+    logger.addHandler(console_handler)
 
     if log_file is not None:
         file_handler = logging.FileHandler(log_file)

@@ -164,7 +164,7 @@ def set_rng_state(random_state_dict: dict[str, Any]):
         torch.cuda.random.set_rng_state(random_state_dict["torch_cuda_random_state"])
 
 
-def set_seed(seed, accelerator: Callable | None = None) -> None:
+def set_seed(seed) -> None:
     """Set seed for reproducibility."""
     random.seed(seed)
     np.random.seed(seed)
@@ -172,11 +172,6 @@ def set_seed(seed, accelerator: Callable | None = None) -> None:
 
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-
-    if accelerator:
-        from accelerate.utils import set_seed as _accelerate_set_seed
-
-        _accelerate_set_seed(seed)
 
 
 @contextmanager
