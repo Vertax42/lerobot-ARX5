@@ -149,59 +149,6 @@ elif [[ "$1" == "--install" ]]; then
 
     # project root directory
     PROJECT_ROOT=$(pwd)
-    ARX5_SDK_DIR="$PROJECT_ROOT/src/lerobot/robots/bi_arx5/ARX5_SDK"
-    if [[ -d "$ARX5_SDK_DIR" ]]; then
-        # Uninstall pip spdlog before building ARX5 SDK to avoid header conflicts
-        # pip spdlog installs headers in $CONDA_PREFIX/include/python3.10/spdlog/ which conflicts
-        # with conda's spdlog headers during ARX5 SDK compilation
-        pip uninstall -y spdlog 2>/dev/null || true
-        
-        echo "[INFO] Building ARX5 SDK..."
-        cd "$ARX5_SDK_DIR"
-        rm -rf build
-        mkdir build
-        cd build
-        cmake ..
-        sudo make install -j4
-        echo "[INFO] ARX5 SDK built successfully!"
-        
-        # Set real-time scheduling capability for Python (required by ARX5 SDK)
-        echo "[INFO] Setting real-time scheduling capability for Python..."
-        PYTHON_REAL_PATH=$(readlink -f "$CONDA_PREFIX/bin/python")
-        sudo setcap cap_sys_nice=ep "$PYTHON_REAL_PATH"
-        echo "[INFO] Real-time scheduling capability set for: $PYTHON_REAL_PATH"
-        
-        # Create sitecustomize.py to preload conda's libstdc++ (fixes CXXABI version issues)
-        echo "[INFO] Creating sitecustomize.py for C++ ABI compatibility..."
-        PY_VER="$(python -c 'import sys; print(f"python{sys.version_info.major}.{sys.version_info.minor}")')"
-        SITE_PACKAGES_DIR="${CONDA_PREFIX}/lib/${PY_VER}/site-packages"
-        SITECUSTOMIZE_FILE="${SITE_PACKAGES_DIR}/sitecustomize.py"
-        
-        cat > "$SITECUSTOMIZE_FILE" << 'EOF'
-"""
-Sitecustomize for conda environment.
-
-This file is automatically executed when Python starts.
-It preloads the conda environment's libstdc++.so.6 to ensure C++ extensions
-compiled with GCC 14.3.0 can find the required CXXABI_1.3.15 symbols.
-"""
-import os
-import ctypes
-
-conda_prefix = os.environ.get('CONDA_PREFIX')
-if conda_prefix:
-    libstdcxx_path = os.path.join(conda_prefix, 'lib', 'libstdc++.so.6')
-    if os.path.exists(libstdcxx_path):
-        try:
-            # Preload with RTLD_GLOBAL so all subsequently loaded modules can use it
-            ctypes.CDLL(libstdcxx_path, mode=ctypes.RTLD_GLOBAL)
-        except Exception:
-            # Silently fail if preloading doesn't work
-            pass
-EOF
-        echo "[INFO] sitecustomize.py created at: $SITECUSTOMIZE_FILE"
-    fi
-    cd "$PROJECT_ROOT"
     
     # Install torch and torchvision from AMD ROCm repository before installing lerobot
     echo "[INFO] Installing torch and torchvision from AMD ROCm repository..."
@@ -244,19 +191,6 @@ EOF
                 echo "[INFO] OpenCV Qt plugin (libqxcb.so) not found; skipping removal."
             fi
 
-            # Workaround for onnxruntime-gpu CUDA library l oading issue:
-            # onnxruntime uses dlopen() to load CUDA providers but doesn't set RPATH,
-            # causing "libcublasLt.so.12: cannot open shared object file" errors.
-            # Fix by patching RPATH to include conda's lib directory.
-            ONNXRT_CUDA_SO="${CONDA_PREFIX}/lib/python${PY_VER}/site-packages/onnxruntime/capi/libonnxruntime_providers_cuda.so"
-            if [[ -f "$ONNXRT_CUDA_SO" ]] && command -v patchelf &>/dev/null; then
-                echo "[INFO] Fixing onnxruntime-gpu RPATH for CUDA libraries..."
-                patchelf --set-rpath "${CONDA_PREFIX}/lib" "$ONNXRT_CUDA_SO"
-                echo "[INFO] onnxruntime-gpu RPATH fixed: ${CONDA_PREFIX}/lib"
-            elif [[ -f "$ONNXRT_CUDA_SO" ]]; then
-                echo "[WARN] patchelf not found; cannot fix onnxruntime-gpu RPATH."
-                echo "[WARN] Install patchelf with: mamba install patchelf"
-            fi
         else
             echo "[WARN] CONDA_PREFIX is not set; cannot remove OpenCV Qt plugin."
         fi
