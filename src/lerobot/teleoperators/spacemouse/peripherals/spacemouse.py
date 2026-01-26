@@ -99,10 +99,18 @@ class Spacemouse:
         self._left_button_idx: int = 0
         self._right_button_idx: int = 1
 
-        # Coordinate transformation matrix (z-up to match robot conventions)
-        # Original SpaceMouse coordinate system -> Robot coordinate system
-        # This transforms the axes AFTER pyspacemouse's built-in axis scaling
-        self.tx_zup_spnav = np.array([[0, 0, -1], [1, 0, 0], [0, 1, 0]], dtype=dtype)
+        # Position transformation matrix (SpaceMouse -> Robot coordinates)
+        # Pure axis remapping WITHOUT sign inversion (inversion handled by config.invert_axes)
+        # SpaceMouse axes: Y=forward/back, X=left/right, Z=up/down
+        # Robot axes: X=forward/back, Y=left/right, Z=up/down
+        # 
+        # Mapping: new_x=old_y, new_y=old_x, new_z=old_z
+        self.tx_pos = np.array([[0, 1, 0], [1, 0, 0], [0, 0, 1]], dtype=dtype)
+        
+        # Rotation transformation matrix (SpaceMouse -> Robot coordinates)
+        # Pure axis mapping: roll->roll, pitch->pitch, yaw->yaw (no remapping needed)
+        # Sign inversion handled by config.invert_axes
+        self.tx_rot = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=dtype)
 
     def __enter__(self):
         """Context manager entry."""
@@ -428,21 +436,23 @@ class Spacemouse:
 
         Transforms from SpaceMouse coordinate system to robot coordinate system:
 
-        Robot coordinates (z-up):
-            z
-            *------>y (right)
+        Robot coordinates (z-up, looking from above):
+            y (right)
+            ^
             |   _
             |  (O) spacemouse
-            v
-            x (back/forward)
+            *------>x (forward)
+            
+        Position: SpaceMouse forward -> Robot +X, right -> +Y, up -> +Z
+        Rotation: roll/pitch/yaw kept aligned (pitch negated to match forward)
 
         Returns:
-            np.ndarray: Transformed 6-DoF state
+            np.ndarray: Transformed 6-DoF state [x, y, z, roll, pitch, yaw]
         """
         state = self.get_motion_state()
         tf_state = np.zeros_like(state)
-        tf_state[:3] = self.tx_zup_spnav @ state[:3]  # Transform position
-        tf_state[3:] = self.tx_zup_spnav @ state[3:]  # Transform rotation
+        tf_state[:3] = self.tx_pos @ state[:3]  # Transform position
+        tf_state[3:] = self.tx_rot @ state[3:]  # Transform rotation
         return tf_state
 
     def get_button_state(self):

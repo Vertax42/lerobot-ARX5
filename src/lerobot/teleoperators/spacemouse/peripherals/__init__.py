@@ -14,5 +14,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .spacemouse_shared_memory import Spacemouse  # noqa: F401
+from .spacemouse import Spacemouse  # noqa: F401
 from .keystroke_counter import KeystrokeCounter  # noqa: F401
