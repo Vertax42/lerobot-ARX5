@@ -492,6 +492,8 @@ class FlexivRizon4(Robot):
 
             if self._flare_gripper and self.config.use_gripper:
                 gripper_status = "with Flare Gripper (gripper + wrist_cam + tactile)"
+            else:
+                gripper_status = "no gripper"
             self.logger.info(f"✅ Flexiv Rizon4 connected and ready in {mode_desc} mode ({gripper_status}).")
 
         except Exception as e:
@@ -527,23 +529,28 @@ class FlexivRizon4(Robot):
                 "jntVelScale": 30,  # Joint velocity scale [1-100]
             },
         )
-        if self.config.flare_gripper_init_open:
-            self._flare_gripper._gripper.set_position_sync(
-                self.config.flare_gripper_max_pos,
-                vmax=self.config.flare_gripper_v_max / 2,
-                fmax=self.config.flare_gripper_f_max / 2,
-            )  # fully open
-        else:
-            self._flare_gripper._gripper.set_position_sync(
-                0.0, vmax=self.config.flare_gripper_v_max / 2, fmax=self.config.flare_gripper_f_max / 2
-            )  # fully closed
+        
+        # Initialize gripper position (only if gripper is enabled)
+        if self._flare_gripper is not None:
+            if self.config.flare_gripper_init_open:
+                self._flare_gripper._gripper.set_position_sync(
+                    self.config.flare_gripper_max_pos,
+                    vmax=self.config.flare_gripper_v_max / 2,
+                    fmax=self.config.flare_gripper_f_max / 2,
+                )  # fully open
+            else:
+                self._flare_gripper._gripper.set_position_sync(
+                    0.0, vmax=self.config.flare_gripper_v_max / 2, fmax=self.config.flare_gripper_f_max / 2
+                )  # fully closed
+        
         # Wait for target reached
         while not self._robot.primitive_states()["reachedTarget"]:
             time.sleep(0.1)
         self._home_tcp_pose = np.array(self._robot.states().tcp_pose)
         self.logger.info(f"Home TCP pose: {self._home_tcp_pose}")
         self.logger.info("✅ Robot at home position.")
-        self.logger.info(f"Gripper position: {self._flare_gripper.get_gripper_position()}")
+        if self._flare_gripper is not None:
+            self.logger.info(f"Gripper position: {self._flare_gripper.get_gripper_position()}")
 
     def _go_to_start(self) -> None:
         """Move robot to start position using MoveJ primitive.
@@ -571,22 +578,27 @@ class FlexivRizon4(Robot):
                 "jntVelScale": self.config.start_vel_scale,
             },
         )
-        if self.config.flare_gripper_init_open:
-            self._flare_gripper._gripper.set_position_sync(
-                self.config.flare_gripper_max_pos,
-                vmax=self.config.flare_gripper_v_max / 2,
-                fmax=self.config.flare_gripper_f_max / 2,
-            )  # fully open
-        else:
-            self._flare_gripper._gripper.set_position_sync(
-                0.0, vmax=self.config.flare_gripper_v_max / 2, fmax=self.config.flare_gripper_f_max / 2
-            )  # fully closed
+        
+        # Initialize gripper position (only if gripper is enabled)
+        if self._flare_gripper is not None:
+            if self.config.flare_gripper_init_open:
+                self._flare_gripper._gripper.set_position_sync(
+                    self.config.flare_gripper_max_pos,
+                    vmax=self.config.flare_gripper_v_max / 2,
+                    fmax=self.config.flare_gripper_f_max / 2,
+                )  # fully open
+            else:
+                self._flare_gripper._gripper.set_position_sync(
+                    0.0, vmax=self.config.flare_gripper_v_max / 2, fmax=self.config.flare_gripper_f_max / 2
+                )  # fully closed
+        
         # Wait for target reached
         while not self._robot.primitive_states()["reachedTarget"]:
             time.sleep(0.1)
 
         self.logger.info("✅ Robot at start position.")
-        self.logger.info(f"Gripper position: {self._flare_gripper.get_gripper_position()}")
+        if self._flare_gripper is not None:
+            self.logger.info(f"Gripper position: {self._flare_gripper.get_gripper_position()}")
 
     def reset_to_initial_position(self) -> None:
         """Reset robot to initial position based on config.go_to_start.
