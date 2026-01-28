@@ -69,7 +69,7 @@ create_environment() {
 if [[ -n "$2" ]]; then
     ENV_NAME="$2"
 else
-    ENV_NAME="lexense-migraphx"
+    ENV_NAME="lerobot-migraphx"
 fi
 
 # Check if the --conda parameter is passed
@@ -132,9 +132,8 @@ elif [[ "$1" == "--install" ]]; then
     uv pip install --upgrade "setuptools>=71.0.0,<81.0.0" wheel
 
     # Workaround for Python ctypes.util.find_library("udev") on conda envs:
-    # Hacking the udev library discovery to avoid issues with pyudev/xensesdk.
     # If $CONDA_PREFIX/lib/udev exists as a directory, Python may return that directory as the "udev" library,
-    # causing pyudev/xensesdk to crash with: "OSError: .../lib/udev: Is a directory".
+    # causing pyudev (or other udev-dependent packages) to crash with: "OSError: .../lib/udev: Is a directory".
     if [[ -n "${CONDA_PREFIX}" && -d "${CONDA_PREFIX}/lib/udev" ]]; then
         echo "[INFO] Fixing libudev discovery for pyudev (renaming ${CONDA_PREFIX}/lib/udev)..."
         if [[ -e "${CONDA_PREFIX}/lib/udev.rules.d" ]]; then
@@ -167,76 +166,7 @@ elif [[ "$1" == "--install" ]]; then
         echo "[ERROR] Lerobot installation failed. See the error output above."
         exit 1
     fi
-    echo "[INFO] Installing xensesdk and xensegripper..."
 
-    if uv pip install xensesdk xensegripper; then
-        uv pip install av==15.1.0
-        echo "[INFO] xensesdk and xensegripper installed successfully!"
-
-        # Workaround:
-        # After installing xensesdk, remove OpenCV's bundled Qt platform plugin if present.
-        # This avoids Qt/XCB plugin loading issues inside conda environments.
-        if [[ -n "${CONDA_PREFIX}" ]]; then
-            PY_VER="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
-            QXCB_PATH="${CONDA_PREFIX}/lib/python${PY_VER}/site-packages/cv2/qt/plugins/platforms/libqxcb.so"
-            QXCB_PATH_310="${CONDA_PREFIX}/lib/python3.10/site-packages/cv2/qt/plugins/platforms/libqxcb.so"
-
-            if [[ -f "$QXCB_PATH" ]]; then
-                echo "[INFO] Removing OpenCV Qt plugin: $QXCB_PATH"
-                rm -f "$QXCB_PATH"
-            elif [[ -f "$QXCB_PATH_310" ]]; then
-                echo "[INFO] Removing OpenCV Qt plugin: $QXCB_PATH_310"
-                rm -f "$QXCB_PATH_310"
-            else
-                echo "[INFO] OpenCV Qt plugin (libqxcb.so) not found; skipping removal."
-            fi
-
-        else
-            echo "[WARN] CONDA_PREFIX is not set; cannot remove OpenCV Qt plugin."
-        fi
-
-    else
-        echo "[ERROR] xensesdk/xensegripper installation failed. See the error output above."
-        exit 1
-    fi
-
-    # Install xensevr_pc_service_sdk for pico4 teleoperator
-    echo "[INFO] Installing xensevr_pc_service_sdk..."
-    
-    # Save the project root directory
-    PROJECT_ROOT=$(pwd)
-    XENSEVR_PC_SERVICE_PYBIND_DIR="$PROJECT_ROOT/src/lerobot/teleoperators/pico4/xensevr-pc-service-pybind"
-
-    # Install the required packages
-    cd "$XENSEVR_PC_SERVICE_PYBIND_DIR"
-    mkdir -p dependencies
-    cd dependencies
-
-    # Clone if not already cloned
-    if [ ! -d "XenseVR-PC-Service" ]; then
-        git clone https://github.com/Vertax42/XenseVR-PC-Service.git
-    fi
-    cd XenseVR-PC-Service/RoboticsService/PXREARobotSDK
-    bash build.sh
-    
-    # Go back to xensevr-pc-service-pybind directory
-    cd "$XENSEVR_PC_SERVICE_PYBIND_DIR"
-    mkdir -p lib
-    mkdir -p include
-
-    # Copy files from the cloned repo
-    SDK_DIR="$XENSEVR_PC_SERVICE_PYBIND_DIR/dependencies/XenseVR-PC-Service/RoboticsService/PXREARobotSDK"
-    cp "$SDK_DIR/PXREARobotSDK.h" include/
-    cp -r "$SDK_DIR/nlohmann" include/
-    cp "$SDK_DIR/build/libPXREARobotSDK.so" lib/
-
-    # Clean up old build artifacts to avoid stale CMake cache issues
-    rm -rf build *.egg-info
-
-    pip uninstall -y xensevr_pc_service_sdk 2>/dev/null || true
-    python setup.py install
-    echo -e "[INFO] xensevr_pc_service_sdk is installed in $CONDA_CMD environment '$ENV_NAME'.\n"
-    
     # Verify critical package versions
     echo "[INFO] Verifying package versions..."
     cd "$PROJECT_ROOT"
