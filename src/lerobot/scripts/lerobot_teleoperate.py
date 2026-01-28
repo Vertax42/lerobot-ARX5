@@ -30,7 +30,6 @@ from lerobot.configs import parser
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
-    flexiv_rizon4,  # noqa: F401
     make_robot_from_config,
     xense_multisensor,  # noqa: F401
 )
