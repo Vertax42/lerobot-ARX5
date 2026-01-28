@@ -30,7 +30,7 @@ version = "0.4.1"
 description = "🤗 LeRobot: State-of-the-art Machine Learning for Real-World Robotics in Pytorch"
 readme = "README.md"
 license = { text = "Apache-2.0" }
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.11"
 authors = [
     { name = "Rémi Cadène", email = "re.cadene@gmail.com" },
     { name = "Simon Alibert", email = "alibert.sim@gmail.com" },
@@ -79,9 +79,9 @@ dependencies = [
     "pynput>=1.7.7,<1.9.0",
     "pyserial>=3.5,<4.0",
     "pyrealsense2",
-    # AMD ROCm 7.1.1 PyTorch stack (from https://repo.radeon.com/rocm/manylinux/rocm-rel-7.1.1/)
-    # Note: setup_env.sh will install torch and torchvision from ROCm repository before installing lerobot
-    # For manual installation: pip3 install -f https://repo.radeon.com/rocm/manylinux/rocm-rel-7.1.1/ torch torchvision
+    # AMD ROCm 7.2 PyTorch stack (from https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2/)
+    # Note: setup_env.sh will install torch and torchvision from ROCm repository before installing lerobot (cp310 wheels).
+    # For manual installation: pip3 install -f https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2/ torch==2.8.0 torchvision==0.23.0
     "torch>=2.8.0,<2.9.0",
     "torchvision>=0.23.0,<0.24.0",
     # ONNX Runtime with MIGraphX backend for ROCm:
@@ -170,11 +170,11 @@ where = ["src"]
 # NOTE: xensesdk currently requires NumPy <= 1.26.4, while rerun-sdk declares NumPy >= 2.
 # We intentionally override NumPy here to keep the Xense stack working in a single environment.
 override-dependencies = ["numpy==1.26.4"]
-# AMD ROCm 7.1.1 official wheel repository
-find-links = ["https://repo.radeon.com/rocm/manylinux/rocm-rel-7.1.1/"]
+# AMD ROCm 7.2 official wheel repository (cp310 wheels for torch 2.8.0)
+find-links = ["https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2/"]
 
 # Note: Standard pip doesn't support [tool.pip] in pyproject.toml.
-# setup_env.sh handles installing torch/torchvision from ROCm repository automatically.
+# setup_env.sh handles installing torch/torchvision from ROCm 7.2 repository automatically (Python 3.10).
 
 [tool.ruff]
 target-version = "py310"
