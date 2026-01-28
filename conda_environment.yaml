@@ -1,4 +1,4 @@
-name: xense-migraphx
+name: lerobot-migraphx
 channels:
   - robostack-staging
   - conda-forge
