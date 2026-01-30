@@ -60,7 +60,7 @@ class OpenCVCameraConfig(CameraConfig):
     index_or_path: int | Path
     color_mode: ColorMode = ColorMode.RGB
     rotation: Cv2Rotation = Cv2Rotation.NO_ROTATION
-    warmup_s: float = 1.0
+    warmup_s: float = 0.3
     fourcc: str | None = "MJPG"
 
     def __post_init__(self) -> None:
@@ -79,7 +79,9 @@ class OpenCVCameraConfig(CameraConfig):
                 f"`rotation` is expected to be in {(Cv2Rotation.NO_ROTATION, Cv2Rotation.ROTATE_90, Cv2Rotation.ROTATE_180, Cv2Rotation.ROTATE_270)}, but {self.rotation} is provided."
             )
 
-        if self.fourcc is not None and (not isinstance(self.fourcc, str) or len(self.fourcc) != 4):
+        if self.fourcc is not None and (
+            not isinstance(self.fourcc, str) or len(self.fourcc) != 4
+        ):
             raise ValueError(
                 f"`fourcc` must be a 4-character string (e.g., 'MJPG', 'YUYV'), but '{self.fourcc}' is provided."
             )
