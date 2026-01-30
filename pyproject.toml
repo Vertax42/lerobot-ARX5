@@ -94,7 +94,6 @@ dependencies = [
     "termcolor>=2.4.0,<4.0.0",
     "scikit-image",
     # NOTE: xensesdk requires numpy<=1.26.4 but rerun-sdk requires numpy>=2
-    "PyOpenGL_accelerate",
     # for flexiv robot
     "flexivrdk",
     "spdlog",
