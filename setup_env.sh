@@ -69,7 +69,7 @@ create_environment() {
 if [[ -n "$2" ]]; then
     ENV_NAME="$2"
 else
-    ENV_NAME="lerobot-migraphx"
+    ENV_NAME="xenseflare"
 fi
 
 # Check if the --conda parameter is passed
