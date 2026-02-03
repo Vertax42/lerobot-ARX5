@@ -63,6 +63,23 @@ lerobot-teleoperate \
     --dryrun=true
 ```
 
+## Flexiv Rizon4 Robot with Flare Gripper lerobot-record by Pico4 command 
+
+```python
+lerobot-record \
+    --robot.type=flexiv_rizon4 \
+    --robot.flare_gripper_mac_addr="e2b26adbb104" \
+    --robot.control_mode=cartesian_motion_force_control \
+    --teleop.type=pico4 \
+    --dataset.repo_id=flexiv_pico4/ceshi20260202 \
+    --dataset.num_episodes=2 \
+    --dataset.single_task="pick up cubes in rgb order from the table and place them in the blue box" \
+    --dataset.fps=10 \
+    --resume=false \
+    --dataset.push_to_hub=false
+    --display_data=true \
+```
+
 ## xense_flare Robot teleoperate by Mock Teleop command
 
 ### 1e892b82baa5 -another mac addr
