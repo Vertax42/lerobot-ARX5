@@ -84,9 +84,7 @@ class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):  # type: igno
 
         # Automatically deactivate AMP if necessary
         if self.use_amp and not is_amp_available(self.device):
-            logger.warn
-                f"Automatic Mixed Precision (amp) is not available on device '{self.device}'. Deactivating AMP."
-            )
+            logger.warn(f"Automatic Mixed Precision (amp) is not available on device '{self.device}'. Deactivating AMP.")
             self.use_amp = False
 
     @property
