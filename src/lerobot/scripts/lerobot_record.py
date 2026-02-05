@@ -60,9 +60,12 @@ from lerobot.robots import (  # noqa: F401
     flexiv_rizon4,  # noqa: F401
     make_robot_from_config,
     xense_flare,  # noqa: F401
+    franka_research3,  # noqa: F401
 )
 from lerobot.teleoperators import (  # noqa: F401
     pico4,
+    gamepad,
+    btgamepad,
     Teleoperator,
     TeleoperatorConfig,
     make_teleoperator_from_config,
@@ -680,6 +683,7 @@ def record_loop(
         # so action actually sent is saved in the dataset. action = postprocessor.process(action)
         # TODO(steven, pepijn, adil): we should use a pipeline step to clip the action, so the sent action is the action that we input to the robot.
         _sent_action = robot.send_action(robot_action_to_send)
+        # print(f"Action to send: {robot_action_to_send}")
 
         # Write to dataset
         if dataset is not None:
@@ -789,6 +793,15 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
     if teleop is not None:
         if cfg.teleop.type == "pico4" and cfg.robot.type == "flexiv_rizon4":
+            teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
+            print("Teleop initialized with robot EEF pose.")
+        elif cfg.teleop.type == "btgamepad" and cfg.robot.type == "flexiv_rizon4":
+            teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
+            print("Teleop initialized with robot EEF pose.")
+        elif cfg.teleop.type == "btgamepad" and cfg.robot.type == "franka_research3":
+            teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
+            print("Teleop initialized with robot EEF pose.")
+        elif cfg.teleop.type == "btgamepad" and cfg.robot.type == "pylibfranka_research3":
             teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
             print("Teleop initialized with robot EEF pose.")
         else:
