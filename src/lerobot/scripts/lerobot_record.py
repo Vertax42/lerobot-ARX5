@@ -55,12 +55,13 @@ from lerobot.processor.rename_processor import rename_stats
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
-    arx5_follower,
-    bi_arx5,
+    # arx5_follower,
+    # bi_arx5,
     flexiv_rizon4,  # noqa: F401
     make_robot_from_config,
     xense_flare,  # noqa: F401
     franka_research3,  # noqa: F401
+    pylibfranka_research3,  # noqa: F401
 )
 from lerobot.teleoperators import (  # noqa: F401
     pico4,
@@ -683,7 +684,8 @@ def record_loop(
         # so action actually sent is saved in the dataset. action = postprocessor.process(action)
         # TODO(steven, pepijn, adil): we should use a pipeline step to clip the action, so the sent action is the action that we input to the robot.
         _sent_action = robot.send_action(robot_action_to_send)
-        # print(f"Action to send: {robot_action_to_send}")
+
+        print(f"Action to send: {robot_action_to_send}")
 
         # Write to dataset
         if dataset is not None:

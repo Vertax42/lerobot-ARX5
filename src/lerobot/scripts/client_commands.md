@@ -423,7 +423,7 @@ lerobot-record \
   --robot.type=pylibfranka_research3 \
   --robot.control_mode=cartesian_impedance \
   --teleop.type=btgamepad \
-  --dataset.repo_id=franka_btgamepad/ceshi20260205 \
+  --dataset.repo_id=franka_btgamepad/ceshi20260209 \
   --dataset.num_episodes=2 \
   --dataset.single_task="pick" \
   --dataset.fps=30 \

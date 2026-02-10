@@ -1,0 +1,797 @@
+#!/usr/bin/env python
+
+import logging
+import time
+from functools import cached_property
+from typing import Any, Optional
+
+import numpy as np
+import requests
+
+from lerobot.cameras.utils import make_cameras_from_configs
+from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
+
+from ..robot import Robot
+from .config_pylibfranka_research3 import ControlMode, PylibfrankaResearch3Config
+
+import pylibfranka
+from pylibfranka import ControllerMode, JointPositions, CartesianPose
+# from pylibfranka_controllers import FrankaController
+from aiofranka.robot import RobotInterface
+from aiofranka import FrankaController
+from lerobot.utils.robot_utils import (
+    matrix_to_pose7d,
+    quaternion_to_euler,
+    rotation_6d_to_quaternion,
+    quaternion_to_matrix,
+)
+
+logger = logging.getLogger(__name__)
+
+JOINT_DOF = 7  # Franka Research3 robot joint DOF
+
+class PylibfrankaResearch3(Robot):
+    config_class = PylibfrankaResearch3Config
+    name = "franka_research3"
+    def __init__(self, config: PylibfrankaResearch3Config):
+        super().__init__(config)
+        self.config = config
+        self._robot = None  
+        if config.use_gripper:
+            self.gripper_server_ip = config.gripper_server_ip
+            self.gripper_server_port = config.gripper_server_port
+            self.gripper_url = f"http://{self.gripper_server_ip}:{self.gripper_server_port}"
+        
+        self._gripper_key = "gripper.pos"
+
+        # Initialize keys and buffers based on control mode
+        if config.control_mode == ControlMode.JOINT_IMPEDANCE:
+            self._init_joint_mode()
+        elif config.control_mode == ControlMode.CARTESIAN_IMPEDANCE:
+            self._init_cartesian_mode()
+        else:
+            raise ValueError(f"Unsupported control_mode: {config.control_mode}")
+
+        self.cameras = make_cameras_from_configs(config.cameras)
+
+        self._is_connected = False
+        self._robot_connected = False
+        self._gripper_connected = False
+        
+        logger.info(f"Initialized {self.name}")
+        logger.info(f"  Robot: Franka Follower at {config.fci_ip}")
+        logger.info(f"  Gripper: Xense Hand at {config.gripper_server_ip}:{config.gripper_server_port}")
+        logger.info(f"  Cameras: {len(self.cameras)} camera(s)")
+        logger.info(f"  Synchronize Actions: {config.synchronize_actions}")
+
+    def _init_joint_mode(self) -> None:
+        """Initialize keys and buffers for JOINT_POSITION control mode."""
+        # Joint state observation keys: joint_{1-7}.{pos, vel, effort}
+        self._joint_pos_keys = tuple(f"joint_{i}.pos" for i in range(1, JOINT_DOF + 1))
+        self._joint_vel_keys = tuple(f"joint_{i}.vel" for i in range(1, JOINT_DOF + 1))
+        self._joint_effort_keys = tuple(f"joint_{i}.effort" for i in range(1, JOINT_DOF + 1))
+
+        # Joint action keys: joint_{1-7}.pos
+        self._action_joint_keys = tuple(f"joint_{i}.pos" for i in range(1, JOINT_DOF + 1))
+
+        # Pre-cache config values as lists (for API calls)
+        # self._max_vel = self.config.joint_max_vel  # Already a list
+        # self._max_acc = self.config.joint_max_acc  # Already a list
+
+    def _init_cartesian_mode(self) -> None:
+        """Initialize keys and buffers for CARTESIAN_POSITION control mode.
+
+        Uses 6D rotation representation (r1-r6) instead of quaternion for:
+        - Continuity: No discontinuities like Euler angles (gimbal lock)
+        - No double-cover: Unlike quaternions where q and -q represent same rotation
+        - Better for neural networks: Continuous representation is easier to learn
+
+        Reference: "On the Continuity of Rotation Representations in Neural Networks"
+        """
+        # TCP pose observation/action keys: tcp.{x, y, z, r1, r2, r3, r4, r5, r6}
+        # 6D rotation: r1-r3 = first column, r4-r6 = second column of rotation matrix
+        self._tcp_pose_keys = (
+            "tcp.x",
+            "tcp.y",
+            "tcp.z",
+            "tcp.r1",
+            "tcp.r2",
+            "tcp.r3",
+            "tcp.r4",
+            "tcp.r5",
+            "tcp.r6",
+        )
+
+        # TCP velocity observation keys: tcp.{vx, vy, vz, wx, wy, wz}
+        self._tcp_vel_keys = (
+            "tcp.vx",
+            "tcp.vy",
+            "tcp.vz",
+            "tcp.wx",
+            "tcp.wy",
+            "tcp.wz",
+        )
+
+        # TCP pose action keys (same as observation keys for 6D rotation)
+        self._action_tcp_pose_keys = self._tcp_pose_keys
+
+        # Pre-cache max contact wrench (always needed in Cartesian mode for safety)
+        # self._max_contact_wrench = self.config.max_contact_wrench
+
+        # Initialize force-related keys if use_force is enabled
+        if self.config.use_force:
+            # Wrench keys: tcp.{fx, fy, fz, mx, my, mz}
+            # Used for both observation (external wrench) and action (target wrench)
+            self._wrench_keys = (
+                "tcp.fx",
+                "tcp.fy",
+                "tcp.fz",
+                "tcp.mx",
+                "tcp.my",
+                "tcp.mz",
+            )
+            # Action wrench keys are the same as observation wrench keys
+            self._action_wrench_keys = self._wrench_keys
+
+            # Pre-cache force control axis
+            # self._force_control_axis = tuple(self.config.force_control_axis)
+
+    @cached_property
+    def observation_features(self) -> dict[str, type | tuple]:
+        features = {}
+
+        if self.config.control_mode == ControlMode.JOINT_IMPEDANCE:
+            # Robot: 7 joint positions
+            features.update(dict.fromkeys(self._joint_pos_keys, float))
+            # Joint velocities (7 joints)
+            features.update(dict.fromkeys(self._joint_vel_keys, float)) 
+            # Joint efforts/torques (7D)
+            features.update(dict.fromkeys(self._joint_effort_keys, float))
+        elif self.config.control_mode == ControlMode.CARTESIAN_IMPEDANCE:
+            # TCP pose (9D: xyz + 6D rotation)
+            features.update(dict.fromkeys(self._action_tcp_pose_keys, float))
+            if self.config.use_force:
+                # + target wrench (6D)
+                features.update(dict.fromkeys(self._action_wrench_keys, float))
+        else:
+            raise ValueError(f"Unsupported control mode: {self.config.control_mode}")
+        
+        # Gripper: position (0.0=open, 1.0=closed)
+        features[self._gripper_key] = float
+        
+        # Cameras
+        for cam_name, cam_config in self.config.cameras.items():
+            features[cam_name] = (cam_config.height, cam_config.width, 3)
+        
+        return features
+    
+    @cached_property
+    def action_features(self) -> dict[str, type]:
+        action_dict = {}
+
+        if self.config.control_mode == ControlMode.JOINT_IMPEDANCE:
+            # 7 joint position commands
+            action_dict.update(dict.fromkeys(self._action_joint_keys, float))
+        elif self.config.control_mode == ControlMode.CARTESIAN_IMPEDANCE:
+            # Cartesian position commands (x, y, z, r1, r2, r3, r4, r5, r6)
+            action_dict.update(dict.fromkeys(self._action_tcp_pose_keys, float))
+            if self.config.use_force:
+                # + target wrench (6D)
+                action_dict.update(dict.fromkeys(self._action_wrench_keys, float))
+        else:
+            raise ValueError(f"Unsupported control mode: {self.config.control_mode}")
+        
+        # Gripper position
+        if self.config.use_gripper:
+            action_dict[self._gripper_key] = float
+        return action_dict
+    
+    # ======================== Robot ========================
+    def _get_robot_state(self) -> Optional[dict]:
+        """Get full robot state from franky"""
+        if not self.is_connected:
+            return None
+        try:
+            state = self._robot.state
+            positions = np.array(state.q, dtype=np.float32) # joint position (7D)
+            velocities = np.array(state.dq, dtype=np.float32) # joint velocity (7D)
+            ee_pose_matrix = np.array(state.O_T_EE.matrix, dtype=np.float32) # end-effector pose (4x4)
+            ee_pose = ee_pose_matrix.flatten() # Flattened end-effector pose (16D)
+            joint_torques = state.tau_J  # joint torque (7D)
+            filtered_torques = state.tau_ext_hat_filtered  # Filtered joint torque (7D)
+            ee_force_base = state.O_F_ext_hat_K # end-effector force in base frame (6D)
+            ee_force_ee = state.K_F_ext_hat_K # end-effector force in end-effector frame (6D)
+            return {
+                "joint_positions": positions,
+                "joint_velocities": velocities,
+                "ee_pose": ee_pose,
+                "joint_torques": joint_torques,
+                "filtered_torques": filtered_torques,
+                "ee_force_base": ee_force_base,
+                "ee_force_ee": ee_force_ee
+            }
+        except Exception as e:
+            logger.error(f"Failed to read robot state: {e}")
+            return None
+
+    # ======================== Gripper ========================
+    def _gripper_health_check(self) -> bool:
+        """Check if hand server is reachable"""
+        try:
+            response = requests.get(f"{self.gripper_url}/get_pos", timeout=2.0)
+            return response.status_code == 200
+        except Exception as e:
+            logger.error(f"Hand health check failed: {e}")
+            return False
+        
+    def _get_gripper_position(self) -> float:
+        try:
+            response = requests.get(f"{self.gripper_url}/get_pos", timeout=self.config.gripper_timeout)
+            if response.status_code != 200:
+                logger.warning(f"获取夹爪位置失败: HTTP {response.status_code}")
+                return self.config.gripper_home_position
+            data = response.json()
+            min_w = float(self.config.gripper_min_width_mm)
+            max_w = float(self.config.gripper_max_width_mm)
+            width = data.get("position", 0.0)
+            width = max(min_w, min(max_w, width))
+            # 映射: width (mm) -> closed_ratio (0-1)
+            closed_ratio = 1.0 - (width - min_w) / (max_w - min_w)
+            position = float(np.clip(closed_ratio, self.config.gripper_min_position, self.config.gripper_max_position))
+            logger.debug(f"获取夹爪位置: width_mm={width:.1f} -> closed_ratio={position:.3f}")
+            return position
+        except Exception as e:
+            logger.error(f"获取夹爪位置错误: {e}")
+            return self.config.gripper_home_position
+    
+    def _send_gripper_position_command(self, position: float) -> bool:
+        """position: Normalized target position [0.0, 1.0] 0.0 = open, 1.0 = closed"""
+        try:
+            min_w = float(self.config.gripper_min_width_mm)
+            max_w = float(self.config.gripper_max_width_mm)
+            
+            # 映射: closed_ratio -> width
+            target_width = min_w + (1.0 - position) * (max_w - min_w)
+            target_width = float(np.clip(target_width, min_w, max_w))
+            
+            logger.debug(f"转换夹爪位置: closed_ratio={position:.3f} -> width_mm={target_width:.1f}")
+            
+            response = requests.post(
+                f"{self.gripper_url}/move",
+                json={
+                    "pos": float(target_width),
+                    "vmax": self.config.gripper_default_velocity,
+                    "fmax": self.config.gripper_default_force
+                },
+                timeout=self.config.gripper_timeout
+            )
+            
+            if response.status_code == 200:
+                return True
+            else:
+                logger.warning(f"发送夹爪命令失败: HTTP {response.status_code}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"发送夹爪位置命令错误: {e}")
+            return False
+        
+    # ======================== Connection Management ========================
+    @property
+    def is_connected(self) -> bool:
+        """Check if both robot and gripper are connected."""
+        if self.config.use_gripper:
+            return self._is_connected and self._robot_connected and self._gripper_connected
+        else:
+            return self._is_connected and self._robot_connected
+
+    @property
+    def is_calibrated(self) -> bool:
+        """Check if robot is calibrated."""
+        return self.is_connected  # Franka gripper doesn't require calibration
+
+    def calibrate(self) -> None:
+        """Calibrate robot (gripper doesn't require calibration)."""
+        pass
+
+    def configure(self) -> None:
+        """Configure robot and gripper."""
+        if not self.is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected")
+        logger.debug(f"{self} configured")
+
+        if self.config.control_mode == ControlMode.JOINT_IMPEDANCE:
+            logger.info("Setting robot to JOINT_IMPEDANCE mode")
+            # Additional configuration can be added here if needed
+            # TODO
+        elif self.config.control_mode == ControlMode.CARTESIAN_IMPEDANCE:
+            logger.info("Setting robot to CARTESIAN_IMPEDANCE mode")
+            # Additional configuration can be added here if needed
+            # TODO
+
+        else:
+            raise ValueError(f"Unsupported control_mode: {self.config.control_mode}")
+
+    def connect(self, calibrate: bool = True, go_to_start: bool = True) -> None:
+        """Connect to franka robot and gripper."""
+        if self.is_connected:
+            raise DeviceAlreadyConnectedError(f"{self} already connected")
+        
+        try:
+            # Connect to robot via FCI
+            logger.info(f"Connecting to Franka robot at {self.config.fci_ip}")
+            self._robot = RobotInterface(self.config.fci_ip)
+            self._robot_controller = FrankaController(self._robot)
+            self._robot_controller.start()
+
+            self._robot_controller.move([0.0, 0.0, 0.0, -1.57079, 0.0, 1.57079, 0.7853])
+
+            self._robot_controller.switch("osc")
+            self._robot_controller.ee_kp = np.array([300.0, 300.0, 300.0, 1000.0, 1000.0, 1000.0])
+            self._robot_controller.ee_kd = np.ones(6) * 10.0
+            self._robot_controller.set_freq(30)  # Set 50Hz update rate
+
+            self._robot_connected = True
+
+            if self.config.use_gripper:
+                # Check gripper health
+                logger.info(f"Connecting to gripper server: {self.gripper_server_ip}:{self.gripper_server_port}")
+                
+                if not self._gripper_health_check():
+                    raise ConnectionError(f"Cannot reach gripper server at {self.gripper_server_ip}:{self.gripper_server_port}")
+                
+                self._gripper_connected = True
+                logger.info(f"Gripper connection successful")
+            
+            # Connect cameras
+            logger.info("Connecting cameras...")
+            for cam in self.cameras.values():
+                cam.connect()
+            
+            self._is_connected = True
+            logger.info(f"✅ {self} connected successfully")
+
+            # # Move to start position if requested (use parameter if provided, otherwise use config)
+            # self.config.go_to_start = go_to_start if go_to_start is not None else self.config.go_to_start
+            # if self.config.go_to_start:
+            #     self._go_to_start()
+
+            # Switch to the configured control mode
+            # self._switch_to_control_mode()
+            # Configure control parameters
+            self.configure()
+
+        except Exception as e:
+            # Cleanup on partial failure
+            try:
+                if self._robot_connected and self._robot is not None:
+                    self._robot.stop_control()
+            except Exception:
+                pass
+            try:
+                for cam in self.cameras.values():
+                    try:
+                        if cam.is_connected:
+                            cam.disconnect()
+                    except:
+                        pass
+            except:
+                pass
+            
+            self._robot_connected = False
+            self._gripper_connected = False
+            self._is_connected = False
+            logger.error(f"Failed to connect: {e}")
+            raise
+
+    def _go_to_home(self) -> None:
+        """Move robot to home position smoothly.
+        
+        Same as _go_to_start() - uses smooth interpolation.
+        """
+        # Reuse _go_to_start since they do the same thing
+        self._go_to_start()
+
+    def _go_to_start(self) -> None:
+        """Move robot to home position smoothly.
+        
+        The motion generator requires the first command to match the current position.
+        We gradually interpolate from current position to target position.
+        """
+        if not self._is_connected or self._robot is None:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        logger.info("Moving to home position...")
+        
+        # Target position (radians)
+        target_position = np.array(self.config.robot_home_position, dtype=np.float64)
+        
+        # Start joint position control
+        mod = self._robot.start_joint_position_control(ControllerMode.JointImpedance)
+        
+        # First read to get current position
+        state, duration = mod.readOnce()
+        current_position = np.array(state.q, dtype=np.float64)
+        
+        logger.info(f"Current position: {current_position}")
+        logger.info(f"Target position: {target_position}")
+        
+        # Calculate total distance
+        total_distance = np.linalg.norm(target_position - current_position)
+        
+        # If already at target, just hold position briefly
+        if total_distance < 0.01:  # ~0.5 degrees
+            logger.info("Already at target position")
+            for _ in range(100):  # Hold for ~100ms
+                state, duration = mod.readOnce()
+                joint_positions = JointPositions(current_position)
+                joint_positions.motion_finished = True
+                mod.writeOnce(joint_positions)
+            return
+        
+        # Interpolation parameters
+        # Move at ~0.1 rad/s max, calculate time needed
+        max_speed = 0.3  # rad/s per joint
+        move_time = total_distance / max_speed
+        move_time = max(2.0, min(10.0, move_time))  # Clamp between 2-10 seconds
+        
+        time_elapsed = 0.0
+        
+        logger.info(f"Moving to target in {move_time:.1f} seconds...")
+        
+        while time_elapsed < move_time:
+            state, duration = mod.readOnce()
+            time_elapsed += duration.to_sec()
+            
+            # Smooth interpolation using cosine easing
+            # t goes from 0 to 1 over move_time
+            t = min(1.0, time_elapsed / move_time)
+            # Cosine easing: starts and ends with zero velocity
+            smooth_t = 0.5 * (1 - np.cos(np.pi * t))
+            
+            # Interpolate position
+            interpolated_position = current_position + smooth_t * (target_position - current_position)
+            
+            joint_positions = JointPositions(interpolated_position)
+            
+            # Mark as finished on last iteration
+            if time_elapsed >= move_time:
+                joint_positions.motion_finished = True
+                
+            mod.writeOnce(joint_positions)
+        
+        logger.info("Reached target position")
+
+    def reset_to_initial_position(self) -> None:
+        """Reset robot to initial position based on config.go_to_start.
+
+        If config.go_to_start=True, calls _go_to_start().
+        Otherwise, calls _go_to_home().
+        """
+        if not self._is_connected or self._robot is None:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        if self.config.go_to_start:
+            logger.info("Resetting to start position (config.go_to_start=True)")
+            self._go_to_start()
+        else:
+            logger.info("Resetting to home position (config.go_to_start=False)")
+            self._go_to_home()
+
+        # Switch back to control mode after reset
+        self._switch_to_control_mode()
+
+    def _switch_to_control_mode(self) -> None:
+        """Switch to the control mode specified in config.
+
+        Maps ControlMode to flexivrdk.Mode:
+        - JOINT_IMPEDANCE -> NRT_JOINT_IMPEDANCE (joint impedance control)
+        - CARTESIAN_MOTION_FORCE -> NRT_CARTESIAN_MOTION_FORCE
+
+        Note: Python API uses NRT (Non-Real-Time) modes only.
+        """
+        if not self._is_connected or self._robot is None:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        if self.config.control_mode == ControlMode.JOINT_IMPEDANCE:
+            self.active_control = self._robot.start_joint_position_control(ControllerMode.CartesianImpedance)
+        if self.config.control_mode == ControlMode.CARTESIAN_IMPEDANCE:
+            self.active_control = self._robot.start_cartesian_pose_control(ControllerMode.CartesianImpedance)
+
+        if self.active_control is None:
+            raise ValueError(f"Unsupported control_mode: {self.config.control_mode}")
+
+    # ======================== Observation ========================
+    
+    def get_observation(self) -> dict[str, Any]:
+        """Get synchronized observation from robot, gripper, and cameras."""
+        if not self.is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected")
+        
+        obs_dict = {}
+
+        # state = self._robot.read_once()
+        # positions = np.array(state.q, dtype=np.float32) # joint position (7D)
+        # velocities = np.array(state.dq, dtype=np.float32) # joint velocity (7D)
+        # ee_pose_matrix = np.array(state.O_T_EE.matrix, dtype=np.float32) # end-effector pose (4x4)
+        # ee_pose = ee_pose_matrix.flatten() # Flattened end-effector pose (16D)
+        # joint_torques = state.tau_J  # joint torque (7D)
+        # filtered_torques = state.tau_ext_hat_filtered  # Filtered joint torque (7D)
+        # ee_force_base = state.O_F_ext_hat_K # end-effector force in base frame (6D)
+        # ee_force_ee = state.K_F_ext_hat_K # end-effector force in end-effector frame (6D)
+
+        if self.config.control_mode == ControlMode.JOINT_IMPEDANCE:
+            # Joint positions (7D)
+            # for i, key in enumerate(self._joint_pos_keys):
+            #     obs_dict[key] = state.q[i]
+            # # Joint velocities (7D)
+            # for i, key in enumerate(self._joint_vel_keys):
+            #     obs_dict[key] = state.dq[i]
+            # # Joint efforts/torques (7D)
+            # for i, key in enumerate(self._joint_effort_keys):
+            #     obs_dict[key] = state.tau_J[i]
+            pass
+
+        elif self.config.control_mode == ControlMode.CARTESIAN_IMPEDANCE:
+            # TCP pose from SDK: [r1 r4 r7 px; r2 r5 r8 py; r3 r6 r9 pz; 0 0 0 1]
+            # tcp_pose = self._robot.get_transform().flatten()
+            state = self._robot.state
+            tcp_pose = state['ee'].flatten()  # end-effector pose (16D)
+
+            # Position (3D)
+            obs_dict["tcp.x"] = tcp_pose[3]
+            obs_dict["tcp.y"] = tcp_pose[7]
+            obs_dict["tcp.z"] = tcp_pose[11]
+            # 6D Rotation (r1-r6)
+            obs_dict["tcp.r1"] = tcp_pose[0]
+            obs_dict["tcp.r2"] = tcp_pose[4]
+            obs_dict["tcp.r3"] = tcp_pose[8]
+            obs_dict["tcp.r4"] = tcp_pose[1]
+            obs_dict["tcp.r5"] = tcp_pose[5]
+            obs_dict["tcp.r6"] = tcp_pose[9]
+
+            # if self.config.use_force:
+            #     # + external wrench (6D)
+            #     ext_wrench = state.O_F_ext_hat_K
+            #     for i, key in enumerate(self._wrench_keys):
+            #         obs_dict[key] = ext_wrench[i]
+
+        else:
+            raise ValueError(f"Unsupported control_mode: {self.config.control_mode}")
+        
+        if self.config.use_gripper:
+            # Get gripper position via REST API
+            gripper_position = self._get_gripper_position()
+            obs_dict[self._gripper_key] = gripper_position
+        
+        # Get camera observations
+        for cam_name, cam in self.cameras.items():
+            obs_dict[cam_name] = cam.async_read()
+
+        return obs_dict
+
+    def get_current_tcp_pose_euler(self) -> np.ndarray:
+        """Get current TCP 4*4 pose in Euler angles format [x, y, z, roll, pitch, yaw, gripper_pos].
+
+        This method can be used for getting the current TCP pose in Euler angles format for initializing teleoperators (e.g., spacemouse) with the robot's
+        current TCP pose. Only available in CARTESIAN_IMPEDANCE mode.
+
+        Returns:
+            numpy array of shape (7,) with [x, y, z, roll, pitch, yaw, gripper_pos]
+        """
+        if not self.is_connected or self._robot is None:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        if self.config.control_mode != ControlMode.CARTESIAN_IMPEDANCE:
+            raise ValueError("get_current_tcp_pose_euler requires CARTESIAN_IMPEDANCE mode")
+
+        # tcp_pose = self._robot.get_pose()
+        state = self._robot.state
+        ee_pose_matrix = state['ee']  # end-effector pose (16D)
+        tcp_pose = matrix_to_pose7d(ee_pose_matrix, output_format="wxyz")
+        # Convert quaternion to Euler angles
+        euler = quaternion_to_euler(tcp_pose[3], tcp_pose[4], tcp_pose[5], tcp_pose[6])
+        roll, pitch, yaw = euler[0], euler[1], euler[2]
+
+        # Get gripper position directly from XenseFlare gripper
+        gripper_pos = 0.0
+        if self.config.use_gripper:
+            gripper_pos = self._get_gripper_position()
+
+        # Return [x, y, z, roll, pitch, yaw, gripper_pos]
+        return np.array(
+            [tcp_pose[0], tcp_pose[1], tcp_pose[2], roll, pitch, yaw, gripper_pos],
+            dtype=np.float32,
+        )
+
+    def get_current_tcp_pose_quat(self) -> np.ndarray:
+        """Get current TCP 4*4 pose in quaternion format [x, y, z, qw, qx, qy, qz, gripper_pos].
+
+        This method can be used for getting the current TCP pose in quaternion format for initializing teleoperators (e.g., pico4) with the robot's
+        current TCP pose. Only available in CARTESIAN_IMPEDANCE mode.
+
+        Returns:
+            numpy array of shape (8,) with [x, y, z, qw, qx, qy, qz, gripper_pos]
+        """
+        if not self.is_connected or self._robot is None:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        if self.config.control_mode != ControlMode.CARTESIAN_IMPEDANCE:
+            raise ValueError("get_current_tcp_pose_quat requires CARTESIAN_IMPEDANCE mode")
+
+        # tcp_pose = self._robot.get_pose()
+        state = self._robot.state
+        ee_pose_matrix = state['ee']  # end-effector pose (16D)
+        tcp_pose = matrix_to_pose7d(ee_pose_matrix, output_format="wxyz")
+
+        # Get gripper position directly from XenseFlare gripper
+        gripper_pos = 0.0
+        if self.config.use_gripper:
+            gripper_pos = self._get_gripper_position()
+
+        # Return [x, y, z, qw, qx, qy, qz, gripper_pos]
+        return np.array(
+            [*tcp_pose, gripper_pos],
+            dtype=np.float32,
+        )
+
+    # ======================== Action ========================
+    def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
+        """Send synchronized action to robot and gripper.
+        
+        Args:
+            action: Dictionary containing:
+                - delta_x, delta_y, delta_z: Cartesian velocity commands (m/s)
+                - gripper: Gripper position (0.0=open, 1.0=closed)
+        
+        Returns:
+            The action that was sent
+        """
+        if not self.is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected")
+        
+
+        # Send robot arm action
+        if self.config.control_mode == ControlMode.JOINT_IMPEDANCE:
+            result = self._send_joint_position_action(action)
+
+        elif self.config.control_mode == ControlMode.CARTESIAN_IMPEDANCE:
+            if self.config.use_force:
+                result = self._send_cartesian_motion_force_action(action)
+            else:
+                result = self._send_cartesian_pure_motion_action(action)
+
+        else:
+            raise ValueError(f"Unsupported control_mode: {self.config.control_mode}")
+
+        # Send gripper action
+        self._send_gripper_action(action)
+
+        return result
+
+    def _send_joint_position_action(self, action: dict[str, Any]) -> dict[str, Any]:
+        # target_pos = []
+        # for i in range(7):
+        #     # Get velocity command (rad/s) from action dict
+        #     Joint_pos = float(action.get(f'joint_{i}.pos', 0.0))
+        #     # print("velocity",Joint_pos)
+        #     target_pos.append(Joint_pos)
+        try:
+            joint_pos = [action[key] for key in self._action_joint_keys]
+            joint_pos = np.array(joint_pos, dtype=np.float32)
+            joint_positions = JointPositions(joint_pos)
+            self.active_control.writeOnce(joint_positions)
+        except Exception as e:
+            logger.warning(f"Error sending robot action: {e}")
+            self._robot.automatic_error_recovery()
+            logger.info("🚨 Robot recovered from Reflex mode")
+    
+    async def _send_cartesian_pure_motion_action(self, action: dict[str, Any]) -> dict[str, Any]:
+        """Send Cartesian pure motion command with smooth interpolation.
+
+        Action keys: action.tcp.{x,y,z,r1,r2,r3,r4,r5,r6}
+
+        Uses cosine easing for smooth motion, similar to _go_to_start().
+        The action uses 6D rotation representation which is converted to quaternion.
+        """
+        try:
+
+            # Extract position
+            x, y, z = action["tcp.x"], action["tcp.y"], action["tcp.z"]
+            # Extract 6D rotation and convert to quaternion
+            r6d = np.array(
+                [
+                    action["tcp.r1"],
+                    action["tcp.r2"],
+                    action["tcp.r3"],
+                    action["tcp.r4"],
+                    action["tcp.r5"],
+                    action["tcp.r6"],
+                ]
+            )
+            quat = rotation_6d_to_quaternion(r6d)  # Returns [qw, qx, qy, qz]
+            # pos = np.array([x, y, z, quat[0], quat[1], quat[2], quat[3]])
+            pos = np.array([x, y, z, 1, 0, 0, 0])
+            current_ee = quaternion_to_matrix(pos, input_format="wxyz")
+            # target_pose = quaternion_to_matrix(pos, input_format="wxyz").T.flatten()
+
+            # self._robot.move_pose(pos, velocity=0.1, mode='impedance')
+            await self._robot_controller.set("ee_desired", current_ee)
+                
+        except Exception as e:
+            logger.warning(f"Error sending robot action: {e}")
+            self._robot.recover()
+            logger.info("🚨 Robot recovered from Reflex mode")
+
+    def _send_cartesian_motion_force_action(self, action: dict[str, Any]) -> dict[str, Any]:
+        pass
+
+    def _send_gripper_action(self, action: dict[str, Any]) -> None:
+        # Send gripper action
+        try:
+            if "gripper.pos" in action:
+                target_gripper_position = float(action["gripper.pos"])
+                # Apply safety limits
+                target_gripper_position = np.clip(
+                    target_gripper_position,
+                    self.config.gripper_min_position,
+                    self.config.gripper_max_position
+                )
+            success = self._send_gripper_position_command(target_gripper_position)
+            if not success:
+                logger.warning("Failed to send action to gripper")
+        except Exception as e:
+            logger.warning(f"Error sending gripper action: {e}")
+
+
+    # ======================== Reset & Recovery ========================
+    def disconnect(self) -> None:
+        """Disconnect from both robot and gripper."""
+        if not self.is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected")
+        robot_success = True
+        gripper_success = True
+        # Stop robot motion
+        try:
+            # try:
+            #     self._go_to_home()
+            # except Exception as e:
+            #     logger.warn(f"Failed to move to home before disconnect: {e}")
+
+            if self._robot is not None:
+                self._robot.stop_control()   
+
+        except Exception as e:
+            logger.warning(f"Error stopping robot before disconnect: {e}")
+            robot_success = False
+
+        # Disconnect gripper
+        try:
+            self._gripper_connected = False
+        except Exception as e:
+            logger.error(f"Failed to disconnect gripper: {e}")
+            gripper_success = False
+
+        # Disconnect cameras
+        try:
+            for cam in self.cameras.values():
+                cam.disconnect()
+        except Exception as e:
+            logger.error(f"Failed to disconnect cameras: {e}")
+        self._robot = None
+        self._is_connected = False
+        self._robot_connected = False
+        self._gripper_connected = False
+        
+        if robot_success and gripper_success:
+            logger.info(f"{self} disconnected successfully")
+        else:
+            logger.warning(f"{self} disconnected with errors")
+
+    def __repr__(self) -> str:
+        return (
+            f"FrankaResearch3("
+            f"fci_ip={self.config.fci_ip}, "
+            f"gripper_port={self.config.gripper_server_port}, "
+            f"connected={self.is_connected})"
+        )
