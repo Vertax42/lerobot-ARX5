@@ -35,11 +35,14 @@ class TeleopServer:
     """WebSocket 遥操作服务端，支持笛卡尔和关节两种控制模式。"""
 
     def __init__(self, robot_ip: str, control_mode: str = "cartesian",
-                 host: str = "0.0.0.0", port: int = 8765):
+                 host: str = "0.0.0.0", port: int = 8765,
+                 home_joints: list = None, freq: int = 50):
         self.robot_ip = robot_ip
         self.control_mode = control_mode  # "cartesian" 或 "joint"
         self.host = host
         self.port = port
+        self.home_joints = home_joints if home_joints is not None else list(HOME_JOINTS)
+        self.freq = freq
 
         self.robot: RobotInterface = None
         self.controller: FrankaController = None
@@ -59,7 +62,7 @@ class TeleopServer:
         await self.controller.start()
 
         # 移动到初始位姿
-        await self.controller.move(HOME_JOINTS)
+        await self.controller.move(self.home_joints)
         await asyncio.sleep(1.0)
 
         if self.control_mode == "cartesian":
@@ -74,7 +77,7 @@ class TeleopServer:
         self.controller.switch("osc")
         self.controller.ee_kp = np.array([600.0, 600.0, 600.0, 50.0, 50.0, 50.0])
         self.controller.ee_kd = 2.0 * np.sqrt(self.controller.ee_kp)  # 临界阻尼
-        self.controller.set_freq(50)
+        self.controller.set_freq(self.freq)
 
         self.initial_ee = self.controller.ee_desired.copy()
 
@@ -88,7 +91,7 @@ class TeleopServer:
         self.controller.switch("impedance")
         self.controller.kp = np.ones(7) * 80.0
         self.controller.kd = np.ones(7) * 4.0
-        self.controller.set_freq(50)
+        self.controller.set_freq(self.freq)
 
         self.initial_q = self.controller.q_desired.copy()
 
@@ -114,6 +117,41 @@ class TeleopServer:
           {"type": "joint_absolute", "q_desired": [7 floats]}
         """
         cmd_type = cmd.get("type")
+
+        if cmd_type in ("get_state", "ee_desired"):
+            # 仅返回状态，不执行任何动作
+            return
+
+        if cmd_type == "move_home":
+            positions = cmd.get("positions", self.home_joints)
+            print(f"[Server] 移动到指定关节位置: {np.round(positions, 4)}")
+            await self.controller.move(positions)
+            await asyncio.sleep(1.0)
+            # 重新初始化控制模式
+            if self.control_mode == "cartesian":
+                self._init_cartesian()
+            else:
+                self._init_joint()
+            return
+
+        if cmd_type == "configure":
+            if "ee_kp" in cmd:
+                self.controller.ee_kp = np.array(cmd["ee_kp"])
+                self.controller.ee_kd = 2.0 * np.sqrt(self.controller.ee_kp)
+            if "kp" in cmd:
+                self.controller.kp = np.array(cmd["kp"])
+            if "kd" in cmd:
+                self.controller.kd = np.array(cmd["kd"])
+            if "freq" in cmd:
+                self.controller.set_freq(cmd["freq"])
+            if "switch_mode" in cmd:
+                mode = cmd["switch_mode"]
+                if mode == "osc":
+                    self._init_cartesian()
+                elif mode == "impedance":
+                    self._init_joint()
+            print("[Server] 配置更新完成")
+            return
 
         if cmd_type == "stop":
             print("[Server] 收到退出指令，正在停止...")
@@ -185,8 +223,8 @@ class TeleopServer:
         if self.control_mode == "cartesian":
             with self.controller.state_lock:
                 ee_desired = self.controller.ee_desired.copy()
-            result["O_T_EE"] = state["O_T_EE"].tolist()
-            result["ee_desired"] = ee_desired.tolist()
+            result["O_T_EE"] = state["O_T_EE"].tolist() # 16d
+            result["ee_desired"] = ee_desired.tolist() # 4x4 matrix
         else:
             with self.controller.state_lock:
                 q_desired = self.controller.q_desired.copy()
@@ -235,6 +273,9 @@ def main():
     parser.add_argument("--robot-ip", default="192.168.99.111", help="Franka 机器人 IP")
     parser.add_argument("--control-mode", choices=["cartesian", "joint"], default="cartesian",
                         help="控制模式: cartesian (笛卡尔) 或 joint (关节) (default: cartesian)")
+    parser.add_argument("--freq", type=int, default=50, help="控制频率 Hz (default: 50)")
+    parser.add_argument("--home", nargs=7, type=float, default=None,
+                        help="初始关节位置 (7 个浮点数)")
     args = parser.parse_args()
 
     server = TeleopServer(
@@ -242,6 +283,8 @@ def main():
         control_mode=args.control_mode,
         host=args.host,
         port=args.port,
+        home_joints=args.home,
+        freq=args.freq,
     )
     asyncio.run(server.run())
 

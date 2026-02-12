@@ -7,12 +7,13 @@ PylibfrankaResearch3 — Franka Research3 robot driver via WebSocket
 客户端 (本模块) 通过 WebSocket 发送指令并接收状态反馈。
 
 指令协议:
-  - get_state  : 获取机器人状态
-  - delta      : 增量运动
-  - set_ee     : 设置绝对末端位姿 (4x4 矩阵)
-  - move_home  : 移动到指定关节位置
-  - configure  : 配置控制器参数
-  - stop       : 停止
+  - get_state           : 获取机器人状态
+  - cartesian_absolute  : 设置绝对末端位姿 (4x4 矩阵)
+  - joint_absolute      : 设置绝对关节位置 (7 float)
+  - move_home           : 移动到指定关节位置
+  - configure           : 配置控制器参数
+  - reset               : 重置到初始位置
+  - stop                : 停止
 """
 
 import atexit
@@ -101,10 +102,18 @@ class PylibfrankaResearch3(Robot):
         3. 切换到 OSC 控制模式
         4. 启动 WebSocket 监听
         """
+        # Map ControlMode enum to server CLI argument
+        mode_map = {
+            ControlMode.CARTESIAN_IMPEDANCE: "cartesian",
+            ControlMode.JOINT_IMPEDANCE: "joint",
+        }
+        control_mode_str = mode_map.get(self.config.control_mode, "cartesian")
+
         cmd = [
             sys.executable, "-u", str(SERVER_SCRIPT),
             "--robot-ip", robot_ip,
             "--port", str(port),
+            "--control-mode", control_mode_str,
             "--freq", "30",
             "--home",
         ] + [str(x) for x in self.config.robot_home_position]
@@ -689,25 +698,25 @@ class PylibfrankaResearch3(Robot):
         return result
 
     def _send_joint_position_action(self, action: dict[str, Any]) -> dict[str, Any]:
-        """Send joint position action.
+        """Send absolute joint position action via WebSocket.
 
-        Note: Server runs in OSC mode by default. Joint position control
-        requires server-side support for joint mode switching.
+        Sends joint_absolute command with 7 joint positions to the server.
+        Server will clip joint positions to joint limits before applying.
         """
         try:
             joint_pos = [float(action[key]) for key in self._action_joint_keys]
-            logger.warning("Joint position action via WebSocket — not yet supported in OSC mode")
-            # TODO: Add "set_joints" command type to ws_teleop_server.py
+            cmd = {"type": "joint_absolute", "q_desired": joint_pos}
+            self._ws_send_recv(cmd)
             return action
         except Exception as e:
             logger.warning(f"Error sending joint action: {e}")
             return action
 
     def _send_cartesian_pure_motion_action(self, action: dict[str, Any]) -> dict[str, Any]:
-        """Send Cartesian pure motion command via WebSocket.
+        """Send Cartesian absolute pose command via WebSocket.
 
         Converts 6D rotation representation to quaternion, then to 4x4 matrix,
-        and sends as set_ee command to the server.
+        and sends as cartesian_absolute command to the server.
 
         Action keys: tcp.{x,y,z,r1,r2,r3,r4,r5,r6}
         """
@@ -717,33 +726,20 @@ class PylibfrankaResearch3(Robot):
             y = float(action["tcp.y"])
             z = float(action["tcp.z"])
 
-            # Extract 6D rotation and convert to quaternion → matrix
+            # Extract 6D rotation and convert to quaternion → 4x4 matrix
             r6d = np.array([
                 action["tcp.r1"], action["tcp.r2"], action["tcp.r3"],
                 action["tcp.r4"], action["tcp.r5"], action["tcp.r6"],
             ], dtype=np.float64)
-            # print("Received 6D rotation from action:", r6d)
             quat = rotation_6d_to_quaternion(r6d)  # Returns [qw, qx, qy, qz]
 
-            state_data1 = self._ws_send_recv({"type": "ee_desired"})
-            ee_matrix = self._parse_ee_matrix(state_data1)
-
-            translation_delta = np.array([x, y, z], dtype=np.float64)
-            ee_matrix[:3, 3] = translation_delta
-            ee_matrix[:3, :3] = ee_matrix[:3, :3]
-            # print("Current ee_matrix:\n", ee_matrix)
-
-            # pos7 = np.array([x, y, z, quat[0], quat[1], quat[2], quat[3]])
-            # ee_matrix = quaternion_to_matrix(pos7, input_format="wxyz")
-            # state_data1 = self._ws_send_recv({"type": "ee_desired"})
-            # ee_matrix1 = self._parse_ee_matrix(state_data1)
-            # print("Current ee_matrix:\n", ee_matrix)
-            # ee_matrix33 = ee_matrix[:3, :3]
-            # ee_matrix[:3, :3] = ee_matrix33  # 保持当前旋转不变，只更新位置
-            # print("ee_matrix:\n", ee_matrix)
-
-            # Send to server via WebSocket
-            cmd = {"type": "set_ee", "ee_desired": ee_matrix.tolist()}
+            # Build full 4x4 pose matrix from position + quaternion
+            pos7 = np.array([x, y, z, quat[0], quat[1], quat[2], quat[3]])
+            ee_matrix = quaternion_to_matrix(pos7, input_format="wxyz")
+            # print("Sending Cartesian action, pose matrix:\n", ee_matrix)
+            
+            # Send absolute pose as cartesian_absolute command
+            cmd = {"type": "cartesian_absolute", "pose": ee_matrix.tolist()}
             self._ws_send_recv(cmd)
             return action
 
