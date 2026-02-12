@@ -1,24 +1,36 @@
 #!/usr/bin/env python
+"""
+PylibfrankaResearch3 — Franka Research3 robot driver via WebSocket
 
+通过 WebSocket 客户端-服务端架构控制 Franka 机械臂。
+服务端 (ws_teleop_server.py) 运行在机器人侧，直接管理 aiofranka 控制器。
+客户端 (本模块) 通过 WebSocket 发送指令并接收状态反馈。
+
+指令协议:
+  - get_state  : 获取机器人状态
+  - delta      : 增量运动
+  - set_ee     : 设置绝对末端位姿 (4x4 矩阵)
+  - move_home  : 移动到指定关节位置
+  - configure  : 配置控制器参数
+  - stop       : 停止
+"""
+
+import atexit
+import json
 import logging
+import subprocess
+import sys
 import time
 from functools import cached_property
+from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
 import requests
+from websockets.sync.client import connect
 
 from lerobot.cameras.utils import make_cameras_from_configs
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
-
-from ..robot import Robot
-from .config_pylibfranka_research3 import ControlMode, PylibfrankaResearch3Config
-
-import pylibfranka
-from pylibfranka import ControllerMode, JointPositions, CartesianPose
-# from pylibfranka_controllers import FrankaController
-from aiofranka.robot import RobotInterface
-from aiofranka import FrankaController
 from lerobot.utils.robot_utils import (
     matrix_to_pose7d,
     quaternion_to_euler,
@@ -26,22 +38,35 @@ from lerobot.utils.robot_utils import (
     quaternion_to_matrix,
 )
 
+from ..robot import Robot
+from .config_pylibfranka_research3 import ControlMode, PylibfrankaResearch3Config
+
 logger = logging.getLogger(__name__)
 
 JOINT_DOF = 7  # Franka Research3 robot joint DOF
 
+SERVER_SCRIPT = Path(__file__).parent / "ws_teleop_server.py"
+
+
 class PylibfrankaResearch3(Robot):
     config_class = PylibfrankaResearch3Config
     name = "franka_research3"
+
     def __init__(self, config: PylibfrankaResearch3Config):
         super().__init__(config)
         self.config = config
-        self._robot = None  
+
+        # WebSocket / Server
+        self._ws = None                 # WebSocket connection (sync)
+        self._server_proc = None        # Server subprocess
+        self._last_state = None         # Cached robot state from server
+        self._server_uri = f"ws://localhost:{config.port}"
+
+        # Gripper
         if config.use_gripper:
             self.gripper_server_ip = config.gripper_server_ip
             self.gripper_server_port = config.gripper_server_port
             self.gripper_url = f"http://{self.gripper_server_ip}:{self.gripper_server_port}"
-        
         self._gripper_key = "gripper.pos"
 
         # Initialize keys and buffers based on control mode
@@ -57,12 +82,111 @@ class PylibfrankaResearch3(Robot):
         self._is_connected = False
         self._robot_connected = False
         self._gripper_connected = False
-        
+
         logger.info(f"Initialized {self.name}")
         logger.info(f"  Robot: Franka Follower at {config.fci_ip}")
-        logger.info(f"  Gripper: Xense Hand at {config.gripper_server_ip}:{config.gripper_server_port}")
+        if config.use_gripper:
+            logger.info(f"  Gripper: Xense Hand at {config.gripper_server_ip}:{config.gripper_server_port}")
         logger.info(f"  Cameras: {len(self.cameras)} camera(s)")
-        logger.info(f"  Synchronize Actions: {config.synchronize_actions}")
+        logger.info(f"  Control mode: {config.control_mode}")
+
+    # ======================== Server Management ========================
+
+    def _launch_server(self, robot_ip: str, port: int) -> subprocess.Popen:
+        """在本机后台启动 ws_teleop_server.py，返回子进程对象。
+
+        服务端负责：
+        1. 连接 Franka 机器人 (aiofranka)
+        2. 移动到初始位姿
+        3. 切换到 OSC 控制模式
+        4. 启动 WebSocket 监听
+        """
+        cmd = [
+            sys.executable, "-u", str(SERVER_SCRIPT),
+            "--robot-ip", robot_ip,
+            "--port", str(port),
+            "--freq", "30",
+            "--home",
+        ] + [str(x) for x in self.config.robot_home_position]
+
+        print(f"[Client] Launching server: {' '.join(cmd)}")
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+        )
+
+        # 退出时自动清理服务端
+        def cleanup():
+            if proc.poll() is None:
+                print("[Client] Shutting down server ...")
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+        atexit.register(cleanup)
+
+        # 等待服务端就绪（服务端输出 "listening" 或 "waiting" 表示就绪）
+        print("[Client] Waiting for server to be ready ...")
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
+            line = proc.stdout.readline()
+            if line:
+                print(f"  [Server] {line.rstrip()}")
+                if "listening" in line.lower():
+                    print("[Client] Server is ready!")
+                    return proc
+            if proc.poll() is not None:
+                raise RuntimeError(f"Server exited unexpectedly (code={proc.returncode})")
+        raise TimeoutError("Server did not become ready within 120s")
+
+    # ======================== WebSocket Communication ========================
+
+    def _ws_send_recv(self, cmd: dict, timeout: float = 5.0) -> dict:
+        """通过 WebSocket 发送指令并接收服务端返回的机器人状态。
+
+        Args:
+            cmd: 指令字典，必须包含 "type" 字段
+            timeout: 接收超时（秒）
+
+        Returns:
+            服务端返回的状态字典，包含:
+            - O_T_EE: 末端位姿 (16 float, 列主序)
+            - q: 关节位置 (7 float)
+            - dq: 关节速度 (7 float)
+            - tau: 关节力矩 (7 float)
+            - ext_wrench: 外部力/力矩 (6 float)
+            - ee_desired: 期望末端位姿 (4x4 嵌套列表)
+            - timestamp: 时间戳
+        """
+        if self._ws is None:
+            raise DeviceNotConnectedError(f"{self} WebSocket 未连接")
+
+        self._ws.send(json.dumps(cmd))
+        response = self._ws.recv(timeout=timeout)
+        state_data = json.loads(response)
+
+        if "error" in state_data:
+            logger.warning(f"Server error: {state_data['error']}")
+
+        self._last_state = state_data
+        return state_data
+
+    def _parse_ee_matrix(self, state_data: dict) -> np.ndarray:
+        """从服务端状态中解析末端位姿为 4x4 行主序矩阵。
+
+        服务端返回 ee_desired 为 16 元素列主序数组（Franka 标准格式），
+        需要 reshape(4,4).T 转换为行主序：
+          列主序: [r11, r21, r31, 0, r12, r22, r32, 0, r13, r23, r33, 0, px, py, pz, 1]
+          行主序: [[r11, r12, r13, px],
+                   [r21, r22, r23, py],
+                   [r31, r32, r33, pz],
+                   [0,   0,   0,   1]]
+        """
+        ee_desired = np.array(state_data.get("ee_desired", []), dtype=np.float64)
+        # print("Received ee_desired from server:", ee_desired)
+        return ee_desired
+
+    # ======================== Key Initialization ========================
 
     def _init_joint_mode(self) -> None:
         """Initialize keys and buffers for JOINT_POSITION control mode."""
@@ -73,10 +197,6 @@ class PylibfrankaResearch3(Robot):
 
         # Joint action keys: joint_{1-7}.pos
         self._action_joint_keys = tuple(f"joint_{i}.pos" for i in range(1, JOINT_DOF + 1))
-
-        # Pre-cache config values as lists (for API calls)
-        # self._max_vel = self.config.joint_max_vel  # Already a list
-        # self._max_acc = self.config.joint_max_acc  # Already a list
 
     def _init_cartesian_mode(self) -> None:
         """Initialize keys and buffers for CARTESIAN_POSITION control mode.
@@ -91,50 +211,29 @@ class PylibfrankaResearch3(Robot):
         # TCP pose observation/action keys: tcp.{x, y, z, r1, r2, r3, r4, r5, r6}
         # 6D rotation: r1-r3 = first column, r4-r6 = second column of rotation matrix
         self._tcp_pose_keys = (
-            "tcp.x",
-            "tcp.y",
-            "tcp.z",
-            "tcp.r1",
-            "tcp.r2",
-            "tcp.r3",
-            "tcp.r4",
-            "tcp.r5",
-            "tcp.r6",
+            "tcp.x", "tcp.y", "tcp.z",
+            "tcp.r1", "tcp.r2", "tcp.r3",
+            "tcp.r4", "tcp.r5", "tcp.r6",
         )
 
         # TCP velocity observation keys: tcp.{vx, vy, vz, wx, wy, wz}
         self._tcp_vel_keys = (
-            "tcp.vx",
-            "tcp.vy",
-            "tcp.vz",
-            "tcp.wx",
-            "tcp.wy",
-            "tcp.wz",
+            "tcp.vx", "tcp.vy", "tcp.vz",
+            "tcp.wx", "tcp.wy", "tcp.wz",
         )
 
         # TCP pose action keys (same as observation keys for 6D rotation)
         self._action_tcp_pose_keys = self._tcp_pose_keys
 
-        # Pre-cache max contact wrench (always needed in Cartesian mode for safety)
-        # self._max_contact_wrench = self.config.max_contact_wrench
-
         # Initialize force-related keys if use_force is enabled
         if self.config.use_force:
-            # Wrench keys: tcp.{fx, fy, fz, mx, my, mz}
-            # Used for both observation (external wrench) and action (target wrench)
             self._wrench_keys = (
-                "tcp.fx",
-                "tcp.fy",
-                "tcp.fz",
-                "tcp.mx",
-                "tcp.my",
-                "tcp.mz",
+                "tcp.fx", "tcp.fy", "tcp.fz",
+                "tcp.mx", "tcp.my", "tcp.mz",
             )
-            # Action wrench keys are the same as observation wrench keys
             self._action_wrench_keys = self._wrench_keys
 
-            # Pre-cache force control axis
-            # self._force_control_axis = tuple(self.config.force_control_axis)
+    # ======================== Features ========================
 
     @cached_property
     def observation_features(self) -> dict[str, type | tuple]:
@@ -144,27 +243,27 @@ class PylibfrankaResearch3(Robot):
             # Robot: 7 joint positions
             features.update(dict.fromkeys(self._joint_pos_keys, float))
             # Joint velocities (7 joints)
-            features.update(dict.fromkeys(self._joint_vel_keys, float)) 
+            features.update(dict.fromkeys(self._joint_vel_keys, float))
             # Joint efforts/torques (7D)
             features.update(dict.fromkeys(self._joint_effort_keys, float))
         elif self.config.control_mode == ControlMode.CARTESIAN_IMPEDANCE:
             # TCP pose (9D: xyz + 6D rotation)
             features.update(dict.fromkeys(self._action_tcp_pose_keys, float))
             if self.config.use_force:
-                # + target wrench (6D)
+                # + external wrench (6D)
                 features.update(dict.fromkeys(self._action_wrench_keys, float))
         else:
             raise ValueError(f"Unsupported control mode: {self.config.control_mode}")
-        
+
         # Gripper: position (0.0=open, 1.0=closed)
         features[self._gripper_key] = float
-        
+
         # Cameras
         for cam_name, cam_config in self.config.cameras.items():
             features[cam_name] = (cam_config.height, cam_config.width, 3)
-        
+
         return features
-    
+
     @cached_property
     def action_features(self) -> dict[str, type]:
         action_dict = {}
@@ -180,51 +279,46 @@ class PylibfrankaResearch3(Robot):
                 action_dict.update(dict.fromkeys(self._action_wrench_keys, float))
         else:
             raise ValueError(f"Unsupported control mode: {self.config.control_mode}")
-        
+
         # Gripper position
         if self.config.use_gripper:
             action_dict[self._gripper_key] = float
         return action_dict
-    
-    # ======================== Robot ========================
+
+    # ======================== Robot State ========================
+
     def _get_robot_state(self) -> Optional[dict]:
-        """Get full robot state from franky"""
+        """Get full robot state via WebSocket."""
         if not self.is_connected:
             return None
         try:
-            state = self._robot.state
-            positions = np.array(state.q, dtype=np.float32) # joint position (7D)
-            velocities = np.array(state.dq, dtype=np.float32) # joint velocity (7D)
-            ee_pose_matrix = np.array(state.O_T_EE.matrix, dtype=np.float32) # end-effector pose (4x4)
-            ee_pose = ee_pose_matrix.flatten() # Flattened end-effector pose (16D)
-            joint_torques = state.tau_J  # joint torque (7D)
-            filtered_torques = state.tau_ext_hat_filtered  # Filtered joint torque (7D)
-            ee_force_base = state.O_F_ext_hat_K # end-effector force in base frame (6D)
-            ee_force_ee = state.K_F_ext_hat_K # end-effector force in end-effector frame (6D)
+            state_data = self._ws_send_recv({"type": "get_state"})
+            ee_matrix = self._parse_ee_matrix(state_data)
             return {
-                "joint_positions": positions,
-                "joint_velocities": velocities,
-                "ee_pose": ee_pose,
-                "joint_torques": joint_torques,
-                "filtered_torques": filtered_torques,
-                "ee_force_base": ee_force_base,
-                "ee_force_ee": ee_force_ee
+                "joint_positions": np.array(state_data.get("q", []), dtype=np.float32),
+                "joint_velocities": np.array(state_data.get("dq", []), dtype=np.float32),
+                "ee_pose": ee_matrix.flatten().astype(np.float32),
+                "joint_torques": np.array(state_data.get("tau", []), dtype=np.float32),
+                "ext_wrench": np.array(state_data.get("ext_wrench", []), dtype=np.float32),
+                "ee_desired": np.array(state_data.get("ee_desired", np.eye(4).tolist()), dtype=np.float64),
             }
         except Exception as e:
             logger.error(f"Failed to read robot state: {e}")
             return None
 
     # ======================== Gripper ========================
+
     def _gripper_health_check(self) -> bool:
-        """Check if hand server is reachable"""
+        """Check if hand server is reachable."""
         try:
             response = requests.get(f"{self.gripper_url}/get_pos", timeout=2.0)
             return response.status_code == 200
         except Exception as e:
             logger.error(f"Hand health check failed: {e}")
             return False
-        
+
     def _get_gripper_position(self) -> float:
+        """Get normalized gripper position [0.0=open, 1.0=closed]."""
         try:
             response = requests.get(f"{self.gripper_url}/get_pos", timeout=self.config.gripper_timeout)
             if response.status_code != 200:
@@ -243,43 +337,44 @@ class PylibfrankaResearch3(Robot):
         except Exception as e:
             logger.error(f"获取夹爪位置错误: {e}")
             return self.config.gripper_home_position
-    
+
     def _send_gripper_position_command(self, position: float) -> bool:
         """position: Normalized target position [0.0, 1.0] 0.0 = open, 1.0 = closed"""
         try:
             min_w = float(self.config.gripper_min_width_mm)
             max_w = float(self.config.gripper_max_width_mm)
-            
+
             # 映射: closed_ratio -> width
             target_width = min_w + (1.0 - position) * (max_w - min_w)
             target_width = float(np.clip(target_width, min_w, max_w))
-            
+
             logger.debug(f"转换夹爪位置: closed_ratio={position:.3f} -> width_mm={target_width:.1f}")
-            
+
             response = requests.post(
                 f"{self.gripper_url}/move",
                 json={
                     "pos": float(target_width),
                     "vmax": self.config.gripper_default_velocity,
-                    "fmax": self.config.gripper_default_force
+                    "fmax": self.config.gripper_default_force,
                 },
-                timeout=self.config.gripper_timeout
+                timeout=self.config.gripper_timeout,
             )
-            
+
             if response.status_code == 200:
                 return True
             else:
                 logger.warning(f"发送夹爪命令失败: HTTP {response.status_code}")
                 return False
-                
+
         except Exception as e:
             logger.error(f"发送夹爪位置命令错误: {e}")
             return False
-        
+
     # ======================== Connection Management ========================
+
     @property
     def is_connected(self) -> bool:
-        """Check if both robot and gripper are connected."""
+        """Check if robot (WebSocket) and gripper are connected."""
         if self.config.use_gripper:
             return self._is_connected and self._robot_connected and self._gripper_connected
         else:
@@ -295,89 +390,92 @@ class PylibfrankaResearch3(Robot):
         pass
 
     def configure(self) -> None:
-        """Configure robot and gripper."""
+        """Configure robot controller via WebSocket."""
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected")
-        logger.debug(f"{self} configured")
-
-        if self.config.control_mode == ControlMode.JOINT_IMPEDANCE:
-            logger.info("Setting robot to JOINT_IMPEDANCE mode")
-            # Additional configuration can be added here if needed
-            # TODO
-        elif self.config.control_mode == ControlMode.CARTESIAN_IMPEDANCE:
-            logger.info("Setting robot to CARTESIAN_IMPEDANCE mode")
-            # Additional configuration can be added here if needed
-            # TODO
-
-        else:
-            raise ValueError(f"Unsupported control_mode: {self.config.control_mode}")
+        logger.debug(f"{self} configured (mode={self.config.control_mode})")
 
     def connect(self, calibrate: bool = True, go_to_start: bool = True) -> None:
-        """Connect to franka robot and gripper."""
+        """Connect to Franka robot via WebSocket server and gripper via REST.
+
+        流程:
+        1. 启动服务端子进程（初始化机器人、移动到初始位姿、切换 OSC 模式）
+        2. 建立 WebSocket 连接
+        3. 发送 get_state 验证连接
+        4. 连接夹爪（REST）
+        5. 连接相机
+        """
         if self.is_connected:
             raise DeviceAlreadyConnectedError(f"{self} already connected")
-        
+
         try:
-            # Connect to robot via FCI
-            logger.info(f"Connecting to Franka robot at {self.config.fci_ip}")
-            self._robot = RobotInterface(self.config.fci_ip)
-            self._robot_controller = FrankaController(self._robot)
-            self._robot_controller.start()
+            # 1. Launch server subprocess (initializes robot, moves to home)
+            logger.info(f"Launching robot server for {self.config.fci_ip}...")
+            self._server_proc = self._launch_server(self.config.fci_ip, self.config.port)
 
-            self._robot_controller.move([0.0, 0.0, 0.0, -1.57079, 0.0, 1.57079, 0.7853])
+            # 2. Open WebSocket connection (with retry)
+            logger.info(f"Connecting to server: {self._server_uri}")
+            self._ws = None
+            max_retries = 10
+            for attempt in range(1, max_retries + 1):
+                try:
+                    self._ws = connect(self._server_uri)
+                    break
+                except ConnectionRefusedError:
+                    if attempt == max_retries:
+                        raise ConnectionRefusedError(
+                            f"Cannot connect to server at {self._server_uri} after {max_retries} attempts"
+                        )
+                    logger.info(f"Connection attempt {attempt}/{max_retries} refused, retrying in 1s...")
+                    time.sleep(1.0)
 
-            self._robot_controller.switch("osc")
-            self._robot_controller.ee_kp = np.array([300.0, 300.0, 300.0, 1000.0, 1000.0, 1000.0])
-            self._robot_controller.ee_kd = np.ones(6) * 10.0
-            self._robot_controller.set_freq(30)  # Set 50Hz update rate
-
+            # 3. Verify connection by getting state
+            state = self._ws_send_recv({"type": "get_state"}, timeout=10.0)
+            q = state.get("q", [])
+            logger.info(f"Robot connected, joint positions: {np.round(q, 4).tolist()}")
             self._robot_connected = True
 
+            # 4. Connect gripper
             if self.config.use_gripper:
-                # Check gripper health
-                logger.info(f"Connecting to gripper server: {self.gripper_server_ip}:{self.gripper_server_port}")
-                
+                logger.info(f"Connecting to gripper: {self.gripper_server_ip}:{self.gripper_server_port}")
                 if not self._gripper_health_check():
-                    raise ConnectionError(f"Cannot reach gripper server at {self.gripper_server_ip}:{self.gripper_server_port}")
-                
+                    raise ConnectionError(
+                        f"Cannot reach gripper at {self.gripper_url}"
+                    )
                 self._gripper_connected = True
-                logger.info(f"Gripper connection successful")
-            
-            # Connect cameras
+                logger.info("Gripper connection successful")
+
+            # 5. Connect cameras
             logger.info("Connecting cameras...")
             for cam in self.cameras.values():
                 cam.connect()
-            
+
             self._is_connected = True
             logger.info(f"✅ {self} connected successfully")
 
-            # # Move to start position if requested (use parameter if provided, otherwise use config)
-            # self.config.go_to_start = go_to_start if go_to_start is not None else self.config.go_to_start
-            # if self.config.go_to_start:
-            #     self._go_to_start()
-
-            # Switch to the configured control mode
-            # self._switch_to_control_mode()
-            # Configure control parameters
+            # 6. Configure
             self.configure()
 
         except Exception as e:
             # Cleanup on partial failure
-            try:
-                if self._robot_connected and self._robot is not None:
-                    self._robot.stop_control()
-            except Exception:
-                pass
-            try:
-                for cam in self.cameras.values():
-                    try:
-                        if cam.is_connected:
-                            cam.disconnect()
-                    except:
-                        pass
-            except:
-                pass
-            
+            if self._ws is not None:
+                try:
+                    self._ws.close()
+                except Exception:
+                    pass
+                self._ws = None
+
+            for cam in self.cameras.values():
+                try:
+                    if cam.is_connected:
+                        cam.disconnect()
+                except Exception:
+                    pass
+
+            if self._server_proc is not None and self._server_proc.poll() is None:
+                self._server_proc.terminate()
+                self._server_proc = None
+
             self._robot_connected = False
             self._gripper_connected = False
             self._is_connected = False
@@ -385,90 +483,32 @@ class PylibfrankaResearch3(Robot):
             raise
 
     def _go_to_home(self) -> None:
-        """Move robot to home position smoothly.
-        
-        Same as _go_to_start() - uses smooth interpolation.
-        """
-        # Reuse _go_to_start since they do the same thing
+        """Move robot to home position (delegates to _go_to_start)."""
         self._go_to_start()
 
     def _go_to_start(self) -> None:
-        """Move robot to home position smoothly.
-        
-        The motion generator requires the first command to match the current position.
-        We gradually interpolate from current position to target position.
+        """Move robot to home position via WebSocket move_home command.
+
+        服务端接收 move_home 指令后会：
+        1. 调用 controller.move() 移动到目标关节位置
+        2. 重新切换回 OSC 控制模式
         """
-        if not self._is_connected or self._robot is None:
+        if not self._is_connected or self._ws is None:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
-        logger.info("Moving to home position...")
-        
-        # Target position (radians)
-        target_position = np.array(self.config.robot_home_position, dtype=np.float64)
-        
-        # Start joint position control
-        mod = self._robot.start_joint_position_control(ControllerMode.JointImpedance)
-        
-        # First read to get current position
-        state, duration = mod.readOnce()
-        current_position = np.array(state.q, dtype=np.float64)
-        
-        logger.info(f"Current position: {current_position}")
-        logger.info(f"Target position: {target_position}")
-        
-        # Calculate total distance
-        total_distance = np.linalg.norm(target_position - current_position)
-        
-        # If already at target, just hold position briefly
-        if total_distance < 0.01:  # ~0.5 degrees
-            logger.info("Already at target position")
-            for _ in range(100):  # Hold for ~100ms
-                state, duration = mod.readOnce()
-                joint_positions = JointPositions(current_position)
-                joint_positions.motion_finished = True
-                mod.writeOnce(joint_positions)
-            return
-        
-        # Interpolation parameters
-        # Move at ~0.1 rad/s max, calculate time needed
-        max_speed = 0.3  # rad/s per joint
-        move_time = total_distance / max_speed
-        move_time = max(2.0, min(10.0, move_time))  # Clamp between 2-10 seconds
-        
-        time_elapsed = 0.0
-        
-        logger.info(f"Moving to target in {move_time:.1f} seconds...")
-        
-        while time_elapsed < move_time:
-            state, duration = mod.readOnce()
-            time_elapsed += duration.to_sec()
-            
-            # Smooth interpolation using cosine easing
-            # t goes from 0 to 1 over move_time
-            t = min(1.0, time_elapsed / move_time)
-            # Cosine easing: starts and ends with zero velocity
-            smooth_t = 0.5 * (1 - np.cos(np.pi * t))
-            
-            # Interpolate position
-            interpolated_position = current_position + smooth_t * (target_position - current_position)
-            
-            joint_positions = JointPositions(interpolated_position)
-            
-            # Mark as finished on last iteration
-            if time_elapsed >= move_time:
-                joint_positions.motion_finished = True
-                
-            mod.writeOnce(joint_positions)
-        
-        logger.info("Reached target position")
+        logger.info("Moving to home position via WebSocket...")
+        target = self.config.robot_home_position
+        logger.info(f"Target position: {target}")
+
+        state_data = self._ws_send_recv(
+            {"type": "move_home", "positions": target},
+            timeout=30.0,  # 移动到 home 可能需要较长时间
+        )
+        logger.info(f"Reached target position, q={state_data.get('q', [])}")
 
     def reset_to_initial_position(self) -> None:
-        """Reset robot to initial position based on config.go_to_start.
-
-        If config.go_to_start=True, calls _go_to_start().
-        Otherwise, calls _go_to_home().
-        """
-        if not self._is_connected or self._robot is None:
+        """Reset robot to initial position based on config.go_to_start."""
+        if not self._is_connected or self._ws is None:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         if self.config.go_to_start:
@@ -478,178 +518,157 @@ class PylibfrankaResearch3(Robot):
             logger.info("Resetting to home position (config.go_to_start=False)")
             self._go_to_home()
 
-        # Switch back to control mode after reset
-        self._switch_to_control_mode()
-
     def _switch_to_control_mode(self) -> None:
-        """Switch to the control mode specified in config.
+        """切换控制模式（通过 WebSocket configure 命令）。
 
-        Maps ControlMode to flexivrdk.Mode:
-        - JOINT_IMPEDANCE -> NRT_JOINT_IMPEDANCE (joint impedance control)
-        - CARTESIAN_MOTION_FORCE -> NRT_CARTESIAN_MOTION_FORCE
-
-        Note: Python API uses NRT (Non-Real-Time) modes only.
+        服务端默认使用 OSC 模式。如需切换，可发送 configure 命令:
+          self._ws_send_recv({"type": "configure", "switch_mode": "osc"})
         """
-        if not self._is_connected or self._robot is None:
+        if not self._is_connected or self._ws is None:
             raise DeviceNotConnectedError(f"{self} is not connected.")
-
-        if self.config.control_mode == ControlMode.JOINT_IMPEDANCE:
-            self.active_control = self._robot.start_joint_position_control(ControllerMode.CartesianImpedance)
-        if self.config.control_mode == ControlMode.CARTESIAN_IMPEDANCE:
-            self.active_control = self._robot.start_cartesian_pose_control(ControllerMode.CartesianImpedance)
-
-        if self.active_control is None:
-            raise ValueError(f"Unsupported control_mode: {self.config.control_mode}")
+        logger.debug(f"Control mode: {self.config.control_mode}")
 
     # ======================== Observation ========================
-    
+
     def get_observation(self) -> dict[str, Any]:
-        """Get synchronized observation from robot, gripper, and cameras."""
+        """Get synchronized observation from robot, gripper, and cameras.
+
+        通过 WebSocket 获取机器人状态，结合夹爪位置和相机图像构建完整观测。
+        """
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected")
-        
+
         obs_dict = {}
 
-        # state = self._robot.read_once()
-        # positions = np.array(state.q, dtype=np.float32) # joint position (7D)
-        # velocities = np.array(state.dq, dtype=np.float32) # joint velocity (7D)
-        # ee_pose_matrix = np.array(state.O_T_EE.matrix, dtype=np.float32) # end-effector pose (4x4)
-        # ee_pose = ee_pose_matrix.flatten() # Flattened end-effector pose (16D)
-        # joint_torques = state.tau_J  # joint torque (7D)
-        # filtered_torques = state.tau_ext_hat_filtered  # Filtered joint torque (7D)
-        # ee_force_base = state.O_F_ext_hat_K # end-effector force in base frame (6D)
-        # ee_force_ee = state.K_F_ext_hat_K # end-effector force in end-effector frame (6D)
+        # Get robot state via WebSocket
+        state_data = self._ws_send_recv({"type": "get_state"})
 
         if self.config.control_mode == ControlMode.JOINT_IMPEDANCE:
+            q = state_data.get("q", [0.0] * JOINT_DOF)
+            dq = state_data.get("dq", [0.0] * JOINT_DOF)
+            tau = state_data.get("tau", [0.0] * JOINT_DOF)
             # Joint positions (7D)
-            # for i, key in enumerate(self._joint_pos_keys):
-            #     obs_dict[key] = state.q[i]
-            # # Joint velocities (7D)
-            # for i, key in enumerate(self._joint_vel_keys):
-            #     obs_dict[key] = state.dq[i]
-            # # Joint efforts/torques (7D)
-            # for i, key in enumerate(self._joint_effort_keys):
-            #     obs_dict[key] = state.tau_J[i]
-            pass
+            for i, key in enumerate(self._joint_pos_keys):
+                obs_dict[key] = float(q[i]) if i < len(q) else 0.0
+            # Joint velocities (7D)
+            for i, key in enumerate(self._joint_vel_keys):
+                obs_dict[key] = float(dq[i]) if i < len(dq) else 0.0
+            # Joint efforts/torques (7D)
+            for i, key in enumerate(self._joint_effort_keys):
+                obs_dict[key] = float(tau[i]) if i < len(tau) else 0.0
 
         elif self.config.control_mode == ControlMode.CARTESIAN_IMPEDANCE:
-            # TCP pose from SDK: [r1 r4 r7 px; r2 r5 r8 py; r3 r6 r9 pz; 0 0 0 1]
-            # tcp_pose = self._robot.get_transform().flatten()
-            state = self._robot.state
-            tcp_pose = state['ee'].flatten()  # end-effector pose (16D)
+            # Convert column-major O_T_EE to row-major 4x4 matrix
+            ee_matrix = self._parse_ee_matrix(state_data)
+            rot = ee_matrix[:3, :3]
 
             # Position (3D)
-            obs_dict["tcp.x"] = tcp_pose[3]
-            obs_dict["tcp.y"] = tcp_pose[7]
-            obs_dict["tcp.z"] = tcp_pose[11]
-            # 6D Rotation (r1-r6)
-            obs_dict["tcp.r1"] = tcp_pose[0]
-            obs_dict["tcp.r2"] = tcp_pose[4]
-            obs_dict["tcp.r3"] = tcp_pose[8]
-            obs_dict["tcp.r4"] = tcp_pose[1]
-            obs_dict["tcp.r5"] = tcp_pose[5]
-            obs_dict["tcp.r6"] = tcp_pose[9]
+            obs_dict["tcp.x"] = float(ee_matrix[0, 3])
+            obs_dict["tcp.y"] = float(ee_matrix[1, 3])
+            obs_dict["tcp.z"] = float(ee_matrix[2, 3])
 
-            # if self.config.use_force:
-            #     # + external wrench (6D)
-            #     ext_wrench = state.O_F_ext_hat_K
-            #     for i, key in enumerate(self._wrench_keys):
-            #         obs_dict[key] = ext_wrench[i]
+            # 6D Rotation: first two columns of rotation matrix
+            # r1-r3 = first column, r4-r6 = second column
+            obs_dict["tcp.r1"] = float(rot[0, 0])
+            obs_dict["tcp.r2"] = float(rot[1, 0])
+            obs_dict["tcp.r3"] = float(rot[2, 0])
+            obs_dict["tcp.r4"] = float(rot[0, 1])
+            obs_dict["tcp.r5"] = float(rot[1, 1])
+            obs_dict["tcp.r6"] = float(rot[2, 1])
+
+            if self.config.use_force:
+                ext_wrench = state_data.get("ext_wrench", [0.0] * 6)
+                for i, key in enumerate(self._wrench_keys):
+                    obs_dict[key] = float(ext_wrench[i]) if i < len(ext_wrench) else 0.0
 
         else:
             raise ValueError(f"Unsupported control_mode: {self.config.control_mode}")
-        
+
+        # Gripper
         if self.config.use_gripper:
-            # Get gripper position via REST API
             gripper_position = self._get_gripper_position()
             obs_dict[self._gripper_key] = gripper_position
-        
-        # Get camera observations
+
+        # Cameras
         for cam_name, cam in self.cameras.items():
             obs_dict[cam_name] = cam.async_read()
 
         return obs_dict
 
     def get_current_tcp_pose_euler(self) -> np.ndarray:
-        """Get current TCP 4*4 pose in Euler angles format [x, y, z, roll, pitch, yaw, gripper_pos].
+        """Get current TCP pose in Euler angles format [x, y, z, roll, pitch, yaw, gripper_pos].
 
-        This method can be used for getting the current TCP pose in Euler angles format for initializing teleoperators (e.g., spacemouse) with the robot's
-        current TCP pose. Only available in CARTESIAN_IMPEDANCE mode.
+        This method can be used for initializing teleoperators (e.g., spacemouse)
+        with the robot's current TCP pose. Only available in CARTESIAN_IMPEDANCE mode.
 
         Returns:
             numpy array of shape (7,) with [x, y, z, roll, pitch, yaw, gripper_pos]
         """
-        if not self.is_connected or self._robot is None:
+        if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         if self.config.control_mode != ControlMode.CARTESIAN_IMPEDANCE:
             raise ValueError("get_current_tcp_pose_euler requires CARTESIAN_IMPEDANCE mode")
 
-        # tcp_pose = self._robot.get_pose()
-        state = self._robot.state
-        ee_pose_matrix = state['ee']  # end-effector pose (16D)
-        tcp_pose = matrix_to_pose7d(ee_pose_matrix, output_format="wxyz")
+        state_data = self._ws_send_recv({"type": "get_state"})
+        ee_matrix = self._parse_ee_matrix(state_data)
+        tcp_pose = matrix_to_pose7d(ee_matrix, output_format="wxyz")
         # Convert quaternion to Euler angles
         euler = quaternion_to_euler(tcp_pose[3], tcp_pose[4], tcp_pose[5], tcp_pose[6])
         roll, pitch, yaw = euler[0], euler[1], euler[2]
 
-        # Get gripper position directly from XenseFlare gripper
+        # Get gripper position
         gripper_pos = 0.0
         if self.config.use_gripper:
             gripper_pos = self._get_gripper_position()
 
-        # Return [x, y, z, roll, pitch, yaw, gripper_pos]
         return np.array(
             [tcp_pose[0], tcp_pose[1], tcp_pose[2], roll, pitch, yaw, gripper_pos],
             dtype=np.float32,
         )
 
     def get_current_tcp_pose_quat(self) -> np.ndarray:
-        """Get current TCP 4*4 pose in quaternion format [x, y, z, qw, qx, qy, qz, gripper_pos].
+        """Get current TCP pose in quaternion format [x, y, z, qw, qx, qy, qz, gripper_pos].
 
-        This method can be used for getting the current TCP pose in quaternion format for initializing teleoperators (e.g., pico4) with the robot's
-        current TCP pose. Only available in CARTESIAN_IMPEDANCE mode.
+        This method can be used for initializing teleoperators (e.g., pico4)
+        with the robot's current TCP pose. Only available in CARTESIAN_IMPEDANCE mode.
 
         Returns:
             numpy array of shape (8,) with [x, y, z, qw, qx, qy, qz, gripper_pos]
         """
-        if not self.is_connected or self._robot is None:
+        if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         if self.config.control_mode != ControlMode.CARTESIAN_IMPEDANCE:
             raise ValueError("get_current_tcp_pose_quat requires CARTESIAN_IMPEDANCE mode")
 
-        # tcp_pose = self._robot.get_pose()
-        state = self._robot.state
-        ee_pose_matrix = state['ee']  # end-effector pose (16D)
-        tcp_pose = matrix_to_pose7d(ee_pose_matrix, output_format="wxyz")
+        state_data = self._ws_send_recv({"type": "get_state"})
+        ee_matrix = self._parse_ee_matrix(state_data)
+        tcp_pose = matrix_to_pose7d(ee_matrix, output_format="wxyz")
 
-        # Get gripper position directly from XenseFlare gripper
+        # Get gripper position
         gripper_pos = 0.0
         if self.config.use_gripper:
             gripper_pos = self._get_gripper_position()
 
-        # Return [x, y, z, qw, qx, qy, qz, gripper_pos]
-        return np.array(
-            [*tcp_pose, gripper_pos],
-            dtype=np.float32,
-        )
+        return np.array([*tcp_pose, gripper_pos], dtype=np.float32)
 
     # ======================== Action ========================
+
     def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
         """Send synchronized action to robot and gripper.
-        
+
         Args:
-            action: Dictionary containing:
-                - delta_x, delta_y, delta_z: Cartesian velocity commands (m/s)
-                - gripper: Gripper position (0.0=open, 1.0=closed)
-        
+            action: Dictionary containing pose/joint commands and optional gripper command.
+                For CARTESIAN_IMPEDANCE: tcp.{x,y,z,r1,r2,r3,r4,r5,r6}
+                For JOINT_IMPEDANCE: joint_{1-7}.pos
+                Optional: gripper.pos (0.0=open, 1.0=closed)
+
         Returns:
-            The action that was sent
+            The action that was sent.
         """
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected")
-        
 
         # Send robot arm action
         if self.config.control_mode == ControlMode.JOINT_IMPEDANCE:
@@ -670,128 +689,140 @@ class PylibfrankaResearch3(Robot):
         return result
 
     def _send_joint_position_action(self, action: dict[str, Any]) -> dict[str, Any]:
-        # target_pos = []
-        # for i in range(7):
-        #     # Get velocity command (rad/s) from action dict
-        #     Joint_pos = float(action.get(f'joint_{i}.pos', 0.0))
-        #     # print("velocity",Joint_pos)
-        #     target_pos.append(Joint_pos)
-        try:
-            joint_pos = [action[key] for key in self._action_joint_keys]
-            joint_pos = np.array(joint_pos, dtype=np.float32)
-            joint_positions = JointPositions(joint_pos)
-            self.active_control.writeOnce(joint_positions)
-        except Exception as e:
-            logger.warning(f"Error sending robot action: {e}")
-            self._robot.automatic_error_recovery()
-            logger.info("🚨 Robot recovered from Reflex mode")
-    
-    async def _send_cartesian_pure_motion_action(self, action: dict[str, Any]) -> dict[str, Any]:
-        """Send Cartesian pure motion command with smooth interpolation.
+        """Send joint position action.
 
-        Action keys: action.tcp.{x,y,z,r1,r2,r3,r4,r5,r6}
-
-        Uses cosine easing for smooth motion, similar to _go_to_start().
-        The action uses 6D rotation representation which is converted to quaternion.
+        Note: Server runs in OSC mode by default. Joint position control
+        requires server-side support for joint mode switching.
         """
         try:
-
-            # Extract position
-            x, y, z = action["tcp.x"], action["tcp.y"], action["tcp.z"]
-            # Extract 6D rotation and convert to quaternion
-            r6d = np.array(
-                [
-                    action["tcp.r1"],
-                    action["tcp.r2"],
-                    action["tcp.r3"],
-                    action["tcp.r4"],
-                    action["tcp.r5"],
-                    action["tcp.r6"],
-                ]
-            )
-            quat = rotation_6d_to_quaternion(r6d)  # Returns [qw, qx, qy, qz]
-            # pos = np.array([x, y, z, quat[0], quat[1], quat[2], quat[3]])
-            pos = np.array([x, y, z, 1, 0, 0, 0])
-            current_ee = quaternion_to_matrix(pos, input_format="wxyz")
-            # target_pose = quaternion_to_matrix(pos, input_format="wxyz").T.flatten()
-
-            # self._robot.move_pose(pos, velocity=0.1, mode='impedance')
-            await self._robot_controller.set("ee_desired", current_ee)
-                
+            joint_pos = [float(action[key]) for key in self._action_joint_keys]
+            logger.warning("Joint position action via WebSocket — not yet supported in OSC mode")
+            # TODO: Add "set_joints" command type to ws_teleop_server.py
+            return action
         except Exception as e:
-            logger.warning(f"Error sending robot action: {e}")
-            self._robot.recover()
-            logger.info("🚨 Robot recovered from Reflex mode")
+            logger.warning(f"Error sending joint action: {e}")
+            return action
+
+    def _send_cartesian_pure_motion_action(self, action: dict[str, Any]) -> dict[str, Any]:
+        """Send Cartesian pure motion command via WebSocket.
+
+        Converts 6D rotation representation to quaternion, then to 4x4 matrix,
+        and sends as set_ee command to the server.
+
+        Action keys: tcp.{x,y,z,r1,r2,r3,r4,r5,r6}
+        """
+        try:
+            # Extract position
+            x = float(action["tcp.x"])
+            y = float(action["tcp.y"])
+            z = float(action["tcp.z"])
+
+            # Extract 6D rotation and convert to quaternion → matrix
+            r6d = np.array([
+                action["tcp.r1"], action["tcp.r2"], action["tcp.r3"],
+                action["tcp.r4"], action["tcp.r5"], action["tcp.r6"],
+            ], dtype=np.float64)
+            # print("Received 6D rotation from action:", r6d)
+            quat = rotation_6d_to_quaternion(r6d)  # Returns [qw, qx, qy, qz]
+
+            state_data1 = self._ws_send_recv({"type": "ee_desired"})
+            ee_matrix = self._parse_ee_matrix(state_data1)
+
+            translation_delta = np.array([x, y, z], dtype=np.float64)
+            ee_matrix[:3, 3] = translation_delta
+            ee_matrix[:3, :3] = ee_matrix[:3, :3]
+            # print("Current ee_matrix:\n", ee_matrix)
+
+            # pos7 = np.array([x, y, z, quat[0], quat[1], quat[2], quat[3]])
+            # ee_matrix = quaternion_to_matrix(pos7, input_format="wxyz")
+            # state_data1 = self._ws_send_recv({"type": "ee_desired"})
+            # ee_matrix1 = self._parse_ee_matrix(state_data1)
+            # print("Current ee_matrix:\n", ee_matrix)
+            # ee_matrix33 = ee_matrix[:3, :3]
+            # ee_matrix[:3, :3] = ee_matrix33  # 保持当前旋转不变，只更新位置
+            # print("ee_matrix:\n", ee_matrix)
+
+            # Send to server via WebSocket
+            cmd = {"type": "set_ee", "ee_desired": ee_matrix.tolist()}
+            self._ws_send_recv(cmd)
+            return action
+
+        except Exception as e:
+            logger.warning(f"Error sending cartesian action: {e}")
+            return action
 
     def _send_cartesian_motion_force_action(self, action: dict[str, Any]) -> dict[str, Any]:
-        pass
+        """Send Cartesian motion + force command.
+
+        TODO: Implement force control via WebSocket.
+        """
+        logger.warning("Cartesian motion+force action not yet implemented")
+        return action
 
     def _send_gripper_action(self, action: dict[str, Any]) -> None:
-        # Send gripper action
+        """Send gripper action if gripper is enabled and action contains gripper command."""
+        if not self.config.use_gripper:
+            return
         try:
             if "gripper.pos" in action:
-                target_gripper_position = float(action["gripper.pos"])
-                # Apply safety limits
-                target_gripper_position = np.clip(
-                    target_gripper_position,
+                target = float(action["gripper.pos"])
+                target = float(np.clip(
+                    target,
                     self.config.gripper_min_position,
-                    self.config.gripper_max_position
-                )
-            success = self._send_gripper_position_command(target_gripper_position)
-            if not success:
-                logger.warning("Failed to send action to gripper")
+                    self.config.gripper_max_position,
+                ))
+                success = self._send_gripper_position_command(target)
+                if not success:
+                    logger.warning("Failed to send action to gripper")
         except Exception as e:
             logger.warning(f"Error sending gripper action: {e}")
 
+    # ======================== Disconnect ========================
 
-    # ======================== Reset & Recovery ========================
     def disconnect(self) -> None:
-        """Disconnect from both robot and gripper."""
+        """Disconnect from robot server, gripper, and cameras."""
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected")
-        robot_success = True
-        gripper_success = True
-        # Stop robot motion
-        try:
-            # try:
-            #     self._go_to_home()
-            # except Exception as e:
-            #     logger.warn(f"Failed to move to home before disconnect: {e}")
 
-            if self._robot is not None:
-                self._robot.stop_control()   
+        # Close WebSocket
+        if self._ws is not None:
+            try:
+                self._ws.close()
+            except Exception as e:
+                logger.warning(f"Error closing WebSocket: {e}")
+            self._ws = None
 
-        except Exception as e:
-            logger.warning(f"Error stopping robot before disconnect: {e}")
-            robot_success = False
-
-        # Disconnect gripper
-        try:
-            self._gripper_connected = False
-        except Exception as e:
-            logger.error(f"Failed to disconnect gripper: {e}")
-            gripper_success = False
+        # Terminate server subprocess
+        if self._server_proc is not None:
+            try:
+                self._server_proc.terminate()
+                self._server_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                try:
+                    self._server_proc.kill()
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.warning(f"Error terminating server: {e}")
+            self._server_proc = None
 
         # Disconnect cameras
-        try:
-            for cam in self.cameras.values():
+        for cam in self.cameras.values():
+            try:
                 cam.disconnect()
-        except Exception as e:
-            logger.error(f"Failed to disconnect cameras: {e}")
-        self._robot = None
-        self._is_connected = False
-        self._robot_connected = False
+            except Exception as e:
+                logger.error(f"Failed to disconnect camera: {e}")
+
         self._gripper_connected = False
-        
-        if robot_success and gripper_success:
-            logger.info(f"{self} disconnected successfully")
-        else:
-            logger.warning(f"{self} disconnected with errors")
+        self._robot_connected = False
+        self._is_connected = False
+        self._last_state = None
+        logger.info(f"{self} disconnected successfully")
 
     def __repr__(self) -> str:
         return (
             f"FrankaResearch3("
             f"fci_ip={self.config.fci_ip}, "
-            f"gripper_port={self.config.gripper_server_port}, "
+            f"gripper_port={self.config.gripper_server_port if self.config.use_gripper else 'N/A'}, "
             f"connected={self.is_connected})"
         )

@@ -1,0 +1,150 @@
+"""
+WebSocket 遥操作服务端 — 运行在机器人侧
+接收客户端发来的 gamepad 增量指令，驱动 Franka 机器人，
+并将机器人状态回传给客户端。
+
+用法:
+    python ws_teleop_server.py [--host 0.0.0.0] [--port 8765] [--robot-ip 192.168.99.111]
+"""
+
+import asyncio
+import argparse
+import json
+import time
+
+import numpy as np
+import websockets
+from scipy.spatial.transform import Rotation as R
+
+from aiofranka.robot import RobotInterface
+from aiofranka import FrankaController
+
+class TeleopServer:
+    """WebSocket 遥操作服务端，管理机器人控制器和客户端连接。"""
+
+    def __init__(self, robot_ip: str, host: str = "0.0.0.0", port: int = 8765):
+        self.robot_ip = robot_ip
+        self.host = host
+        self.port = port
+
+        self.robot: RobotInterface = None
+        self.controller: FrankaController = None
+        self.client_connected = False
+
+    # ─── 机器人初始化 ────────────────────────────────────────
+    async def init_robot(self):
+        """初始化机器人并启动控制器，切换到 OSC 模式。"""
+        print(f"[Server] Connecting to robot at {self.robot_ip} ...")
+        self.robot = RobotInterface(self.robot_ip)
+        self.controller = FrankaController(self.robot)
+
+        await self.controller.start()
+        # 移动到初始位姿
+        await self.controller.move([0.0, 0.0, 0.0, -1.57079, 0.0, 1.57079, 0.7853])
+        await asyncio.sleep(1.0)
+
+        # 切换到 OSC 控制
+        self.controller.switch("osc")
+        self.controller.ee_kp = np.array([300.0, 300.0, 300.0, 1000.0, 1000.0, 1000.0])
+        self.controller.ee_kd = np.ones(6) * 10.0
+        self.controller.set_freq(50)  # 50 Hz 指令更新
+        print("[Server] Robot ready, waiting for client ...")
+
+    # ─── 处理单条指令 ───────────────────────────────────────
+    async def apply_command(self, cmd: dict):
+        """将客户端发来的增量指令应用到机器人。
+
+        cmd 格式:
+        {
+            "type": "delta",
+            "translation": [dx, dy, dz],
+            "rotation_euler": [rx, ry, rz]   # 度
+        }
+        或者:
+        {
+            "type": "stop"
+        }
+        """
+        if cmd.get("type") == "stop":
+            print("[Server] Received stop command.")
+            return
+
+        translation_delta = np.array(cmd["translation"], dtype=np.float64)
+        rotation_euler = np.array(cmd["rotation_euler"], dtype=np.float64)
+        rotation_delta = R.from_euler("xyz", rotation_euler, degrees=True).as_matrix()
+
+        with self.controller.state_lock:
+            current_ee = self.controller.ee_desired.copy()
+
+        current_ee[:3, 3] += translation_delta
+        current_ee[:3, :3] = rotation_delta @ current_ee[:3, :3]
+
+        await self.controller.set("ee_desired", current_ee)
+
+    # ─── 获取机器人状态 ─────────────────────────────────────
+    def get_robot_state(self) -> dict:
+        """采集当前机器人状态，序列化为可 JSON 传输的字典。"""
+        state = self.robot.state
+
+        with self.controller.state_lock:
+            ee_desired = self.controller.ee_desired.copy()
+
+        return {
+            "O_T_EE": state["O_T_EE"].tolist(),
+            "q": state["q"].tolist() if "q" in state else [],
+            "dq": state["dq"].tolist() if "dq" in state else [],
+            "tau": state["last_torque"].tolist() if "last_torque" in state else [],
+            "ext_wrench": state["ext_wrench"].tolist(),
+            "ee_desired": ee_desired.tolist(),
+            "timestamp": time.time(),
+        }
+
+    # ─── WebSocket 连接处理 ─────────────────────────────────
+    async def handler(self, websocket):
+        """处理单个 WebSocket 客户端连接。"""
+        remote = websocket.remote_address
+        print(f"[Server] Client connected: {remote}")
+        self.client_connected = True
+
+        try:
+            async for message in websocket:
+                try:
+                    cmd = json.loads(message)
+                except json.JSONDecodeError:
+                    await websocket.send(json.dumps({"error": "invalid JSON"}))
+                    continue
+
+                # 应用指令
+                await self.apply_command(cmd)
+
+                # 回传机器人状态
+                robot_state = self.get_robot_state()
+                await websocket.send(json.dumps(robot_state))
+
+        except websockets.exceptions.ConnectionClosed as e:
+            print(f"[Server] Client disconnected: {remote} ({e})")
+        finally:
+            self.client_connected = False
+
+    # ─── 启动 ──────────────────────────────────────────────
+    async def run(self):
+        await self.init_robot()
+
+        async with websockets.serve(self.handler, self.host, self.port):
+            print(f"[Server] WebSocket server listening on ws://{self.host}:{self.port}")
+            await asyncio.Future()  # run forever
+
+
+def main():
+    parser = argparse.ArgumentParser(description="WebSocket teleop server (robot side)")
+    parser.add_argument("--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)")
+    parser.add_argument("--port", type=int, default=8765, help="Port (default: 8765)")
+    parser.add_argument("--robot-ip", default="192.168.99.111", help="Franka robot IP")
+    args = parser.parse_args()
+
+    server = TeleopServer(robot_ip=args.robot_ip, host=args.host, port=args.port)
+    asyncio.run(server.run())
+
+
+if __name__ == "__main__":
+    main()

@@ -792,6 +792,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         logging.info(f"Start EEF pose: {robot.get_current_tcp_pose_quat()}")
     else:
         robot.connect()
+        logging.info(f"Start EEF pose: {robot.get_current_tcp_pose_quat()}")
 
     if teleop is not None:
         if cfg.teleop.type == "pico4" and cfg.robot.type == "flexiv_rizon4":

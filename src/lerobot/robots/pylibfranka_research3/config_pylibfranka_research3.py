@@ -35,6 +35,8 @@ class PylibfrankaResearch3Config(RobotConfig):
     
     # FCI (Fast Communication Interface) IP for Franka control
     fci_ip: str = "192.168.99.111"
+    port: int = 8765
+    # fci_ip: str = None
     
     # control_mode: str = "joint_impedance"  # Options: joint_impedance, cartesian_impedance
     control_mode: ControlMode = ControlMode.CARTESIAN_IMPEDANCE
@@ -60,7 +62,8 @@ class PylibfrankaResearch3Config(RobotConfig):
     # Home position for robot (7 joint angles in radians)
     # robot_home_position: list = field(default_factory=lambda: [-0.030264, -0.523095, -0.091621, -2.812467, -0.089465,  2.25039,   0.709976])
     # robot_home_position: list = field(default_factory=lambda: [-0.08211147, -0.6067168,  -0.03138583, -2.7927575,  -0.02443479,  2.211011, 0.67388374])
-    robot_home_position: list = field(default_factory=lambda: [-0.82917076, 0.04384267, -0.03789382, -2.4083676, -0.01327341, 2.4243426, -0.10018315])
+    # robot_home_position: list = field(default_factory=lambda: [-0.82917076, 0.04384267, -0.03789382, -2.4083676, -0.01327341, 2.4243426, -0.10018315])
+    robot_home_position: list = field(default_factory=lambda: [0.0, 0.0, 0.0, -1.57079, 0.0, 1.57079, 0.7853])
     
     # ======================== Xense Gripper Configuration ========================
 
