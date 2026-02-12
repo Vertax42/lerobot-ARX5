@@ -51,7 +51,7 @@ SERVER_SCRIPT = Path(__file__).parent / "ws_teleop_server.py"
 
 class PylibfrankaResearch3(Robot):
     config_class = PylibfrankaResearch3Config
-    name = "franka_research3"
+    name = "pylibfranka_research3"
 
     def __init__(self, config: PylibfrankaResearch3Config):
         super().__init__(config)
@@ -83,6 +83,7 @@ class PylibfrankaResearch3(Robot):
         self._is_connected = False
         self._robot_connected = False
         self._gripper_connected = False
+        self._is_resetting = False  # Flag to block actions during reset
 
         logger.info(f"Initialized {self.name}")
         logger.info(f"  Robot: Franka Follower at {config.fci_ip}")
@@ -506,26 +507,37 @@ class PylibfrankaResearch3(Robot):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         logger.info("Moving to home position via WebSocket...")
-        target = self.config.robot_home_position
-        logger.info(f"Target position: {target}")
+        target_joint = self.config.robot_home_position
+        logger.info(f"Target position: {target_joint}")
 
         state_data = self._ws_send_recv(
-            {"type": "move_home", "positions": target},
+            {"type": "reset"},
             timeout=30.0,  # 移动到 home 可能需要较长时间
         )
         logger.info(f"Reached target position, q={state_data.get('q', [])}")
 
     def reset_to_initial_position(self) -> None:
-        """Reset robot to initial position based on config.go_to_start."""
+        """Reset robot to initial position based on config.go_to_start.
+
+        在 reset 期间设置 _is_resetting 标志，send_action 会忽略所有指令，
+        防止手柄残留的旧位姿在 move_home 后瞬间发到机械臂导致抽动。
+        """
         if not self._is_connected or self._ws is None:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
-        if self.config.go_to_start:
-            logger.info("Resetting to start position (config.go_to_start=True)")
-            self._go_to_start()
-        else:
-            logger.info("Resetting to home position (config.go_to_start=False)")
-            self._go_to_home()
+        self._is_resetting = True
+        try:
+            if self.config.go_to_start:
+                logger.info("Resetting to start position (config.go_to_start=True)")
+                self._go_to_start()
+            else:
+                logger.info("Resetting to home position (config.go_to_start=False)")
+                self._go_to_home()
+
+            # Switch back to control mode after reset
+            self._switch_to_control_mode()
+        finally:
+            self._is_resetting = False
 
     def _switch_to_control_mode(self) -> None:
         """切换控制模式（通过 WebSocket configure 命令）。
@@ -678,6 +690,11 @@ class PylibfrankaResearch3(Robot):
         """
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected")
+
+        # Block actions during reset to prevent stale teleop values from causing jerks
+        if self._is_resetting:
+            logger.debug("Skipping action during reset")
+            return action
 
         # Send robot arm action
         if self.config.control_mode == ControlMode.JOINT_IMPEDANCE:
