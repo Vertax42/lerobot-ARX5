@@ -28,7 +28,9 @@ from lerobot.utils.robot_utils import (
     rotation_6d_to_quaternion,
     xyz_rpy_to_matrix,
     normalize_quaternion,
+    quaternion_to_matrix,
 )
+from scipy.spatial.transform import Rotation as R
 
 class GripperAction(IntEnum):
     CLOSE = 1
@@ -91,6 +93,7 @@ class BtgamepadTeleop(Teleoperator):
 
         # Initialize start pose (will be updated when grip is pressed)
         self._start_pos = current_tcp_pose_quat[:3].copy()
+        self._start_quat = self._target_quat.copy()
 
     def get_action(self) -> dict[str, Any]:
         # Update the controller to get fresh inputs
@@ -102,20 +105,29 @@ class BtgamepadTeleop(Teleoperator):
         scaled_rel_pos = rel_pos * self.config.pos_sensitivity
         target_pos = self._start_pos + scaled_rel_pos
         self._start_pos = target_pos
-        pos = np.array([target_pos[0], target_pos[1], target_pos[2], delta_rx, delta_ry, delta_rz], dtype=np.float32)
-        # Create action from gamepad input
-        gamepad_action = xyz_rpy_to_matrix(pos).flatten()
+
+        # quaternion update
+        rotation_delta = np.array([delta_rx, delta_ry, delta_rz]) * self.config.rot_sensitivity
+        rotation_delta = R.from_euler('xyz', rotation_delta).as_matrix()
+        self._start_matrix = quaternion_to_matrix(
+            np.array([0,0,0,self._start_quat[0],self._start_quat[1],self._start_quat[2],self._start_quat[3]]),
+            input_format="wxyz"
+            )
+
+        current_ee_matrix = rotation_delta @ self._start_matrix[:3, :3] #3x3
+        current_ee_quat9d = np.array(current_ee_matrix).flatten() # 9d
+        self._start_quat = rotation_6d_to_quaternion(current_ee_quat9d[:6])
 
         action_dict = {
-            "tcp.x": gamepad_action[3],
-            "tcp.y": gamepad_action[7],
-            "tcp.z": gamepad_action[11],
-            "tcp.r1": gamepad_action[0],
-            "tcp.r2": gamepad_action[4],
-            "tcp.r3": gamepad_action[8],
-            "tcp.r4": gamepad_action[1],
-            "tcp.r5": gamepad_action[5],
-            "tcp.r6": gamepad_action[9],
+            "tcp.x": target_pos[0],
+            "tcp.y": target_pos[1],
+            "tcp.z": target_pos[2],
+            "tcp.r1": current_ee_matrix[0, 0],
+            "tcp.r2": current_ee_matrix[1, 0],
+            "tcp.r3": current_ee_matrix[2, 0],
+            "tcp.r4": current_ee_matrix[0, 1],
+            "tcp.r5": current_ee_matrix[1, 1],
+            "tcp.r6": current_ee_matrix[2, 1],
         }
 
         # Default gripper action is to stay

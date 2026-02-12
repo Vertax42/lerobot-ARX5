@@ -24,3 +24,4 @@ from ..config import TeleoperatorConfig
 class BtgamepadTeleopConfig(TeleoperatorConfig):
     use_gripper: bool = True
     pos_sensitivity: float = 0.005  # Scale factor for position delta (1.0 = 1:1 mapping, 0.5 = half speed)
+    rot_sensitivity: float = 0.02  # Scale factor for rotation delta (radians per step)

@@ -322,13 +322,13 @@ class BtgamepadController(InputController):
             delta_y = y_input * self.y_step_size  # Left/right
             delta_z = -z_input * self.z_step_size  # Up/down
 
-            rx_input = 0
+            delta_rx = 0
             # ry_input = np.pi # flexiv
-            ry_input = 0 # franka
-            # rz_input = self.joystick.get_axis(self.Axis.RX.value)  # Rotation around Z
-            rz_input = 0
+            delta_ry = 0 # franka
+            delta_rz = self.joystick.get_axis(self.Axis.RX.value)  # Rotation around Z
+            # delta_rz = 0
 
-            return delta_x, delta_y, delta_z, rx_input, ry_input, rz_input
+            return delta_x, delta_y, delta_z, delta_rx, delta_ry, delta_rz
 
         except pygame.error:
             logging.error("Error reading gamepad. Is it still connected?")
