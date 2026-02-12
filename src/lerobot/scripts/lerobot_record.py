@@ -678,14 +678,27 @@ def record_loop(
                 teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
                 # Skip this loop iteration (don't send action after reset)
                 continue
+        if teleop.name == "btgamepad" and robot.name == "pylibfranka_research3":
+            # Check for reset button (uses cached A button state from get_action)
+            reset_button = teleop.get_reset_button()
+            if reset_button:
+                # Reset robot to initial position
+                if hasattr(robot, "reset_to_initial_position"):
+                    robot.reset_to_initial_position()
+                logging.info("Reset to initial position (A button pressed)")
 
+                # Always reset teleop state (both dryrun and normal mode)
+                current_pose_quat = robot.get_current_tcp_pose_quat()
+                teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
+                # Skip this loop iteration (don't send action after reset)
+                continue
         # Send action to robot
         # Action can eventually be clipped using `max_relative_target`,
         # so action actually sent is saved in the dataset. action = postprocessor.process(action)
         # TODO(steven, pepijn, adil): we should use a pipeline step to clip the action, so the sent action is the action that we input to the robot.
         _sent_action = robot.send_action(robot_action_to_send)
 
-        print(f"Action to send: {robot_action_to_send}")
+        # print(f"Action to send: {robot_action_to_send}")
 
         # Write to dataset
         if dataset is not None:
