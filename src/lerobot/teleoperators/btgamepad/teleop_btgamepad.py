@@ -95,6 +95,9 @@ class BtgamepadTeleop(Teleoperator):
         self._start_pos = current_tcp_pose_quat[:3].copy()
         self._start_quat = self._target_quat.copy()
 
+        # Reset button edge detection state
+        self._was_back_button_pressed = False
+
     def get_action(self) -> dict[str, Any]:
         # Update the controller to get fresh inputs
         self.gamepad.update()
@@ -138,6 +141,56 @@ class BtgamepadTeleop(Teleoperator):
             action_dict["gripper.pos"] = gripper_action
 
         return action_dict
+
+    def reset_to_pose(self, pose_7d: np.ndarray, gripper_pos: float = 0.0) -> None:
+        """
+        Reset target pose to a specific pose (e.g., home pose).
+
+        Resets the internal start position/quaternion so that subsequent
+        incremental deltas are accumulated from this new pose.
+
+        Args:
+            pose_7d: 7D EEF pose [x, y, z, qw, qx, qy, qz] in robot frame (wxyz quaternion format)
+            gripper_pos: Gripper position (0.0=open, 1.0=closed)
+        """
+        self._target_pos = np.array(pose_7d[:3], dtype=np.float32).copy()
+        self._target_quat = normalize_quaternion(pose_7d[3:7], input_format="wxyz")
+        self._target_gripper_pos = float(gripper_pos)
+
+        # Reset start pose so deltas accumulate from the new pose
+        self._start_pos = self._target_pos.copy()
+        self._start_quat = self._target_quat.copy()
+
+        # Reset edge detection state
+        self._was_back_button_pressed = False
+
+        import logging
+        logging.info(
+            f"[btgamepad] Reset target pose to: pos={pose_7d[:3]}, quat={pose_7d[3:7]}, gripper={gripper_pos}"
+        )
+
+    def get_reset_button(self) -> bool:
+        """Get the state of the reset button (BACK button) with edge detection.
+
+        Only returns True on the rising edge (button just pressed), not while held.
+
+        Returns:
+            True if BACK button was just pressed (rising edge), False otherwise.
+        """
+        if self.gamepad is None or self.gamepad.joystick is None:
+            return False
+
+        import pygame
+        try:
+            current_pressed = self.gamepad.joystick.get_button(
+                self.gamepad.Button.BACK.value
+            )
+        except pygame.error:
+            return False
+
+        just_pressed = current_pressed and not self._was_back_button_pressed
+        self._was_back_button_pressed = current_pressed
+        return just_pressed
 
     def get_teleop_events(self) -> dict[str, Any]:
         """
