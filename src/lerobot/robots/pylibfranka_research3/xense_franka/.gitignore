@@ -1,0 +1,2 @@
+*.egg-info/
+xense_franka/__pycache__/
