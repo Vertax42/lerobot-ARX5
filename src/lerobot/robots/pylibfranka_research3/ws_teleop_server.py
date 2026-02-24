@@ -19,8 +19,8 @@ import numpy as np
 import websockets
 from scipy.spatial.transform import Rotation as R
 
-from aiofranka.robot import RobotInterface
-from aiofranka import FrankaController
+from xense_franka.robot import RobotInterface
+from xense_franka import FrankaController
 
 
 # 初始关节位置 (安全位置)

@@ -3,7 +3,7 @@
 PylibfrankaResearch3 — Franka Research3 robot driver via WebSocket
 
 通过 WebSocket 客户端-服务端架构控制 Franka 机械臂。
-服务端 (ws_teleop_server.py) 运行在机器人侧，直接管理 aiofranka 控制器。
+服务端 (ws_teleop_server.py) 运行在机器人侧，直接管理 Franka 控制器。
 客户端 (本模块) 通过 WebSocket 发送指令并接收状态反馈。
 
 指令协议:
@@ -41,6 +41,7 @@ from lerobot.utils.robot_utils import (
 
 from ..robot import Robot
 from .config_pylibfranka_research3 import ControlMode, PylibfrankaResearch3Config
+from scipy.spatial.transform import Rotation as R, Slerp
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,7 @@ class PylibfrankaResearch3(Robot):
         """在本机后台启动 ws_teleop_server.py，返回子进程对象。
 
         服务端负责：
-        1. 连接 Franka 机器人 (aiofranka)
+        1. 连接 Franka 机器人
         2. 移动到初始位姿
         3. 切换到 OSC 控制模式
         4. 启动 WebSocket 监听
@@ -507,14 +508,50 @@ class PylibfrankaResearch3(Robot):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         logger.info("Moving to home position via WebSocket...")
-        target_joint = self.config.robot_home_position
-        logger.info(f"Target position: {target_joint}")
 
-        state_data = self._ws_send_recv(
-            {"type": "reset"},
-            timeout=30.0,  # 移动到 home 可能需要较长时间
-        )
-        logger.info(f"Reached target position, q={state_data.get('q', [])}")
+        if self.config.control_mode == ControlMode.JOINT_IMPEDANCE:
+            target_joint = self.config.robot_home_position
+            logger.info(f"Target position: {target_joint}")
+            cmd = {"type": "move_home", "positions": target_joint}
+            self._ws_send_recv(cmd, timeout=30.0)
+
+
+        elif self.config.control_mode == ControlMode.CARTESIAN_IMPEDANCE:
+            now_pose = self.get_current_tcp_pose_quat()[:7]
+            target_pose = self.config.robot_tcp_home_position  # TCP  (x, y, z, w, x, y, z)
+            vel = 0.2  # m/s
+            delta = np.linalg.norm(np.array(target_pose[:3]) - np.array(now_pose[:3]))
+            timeout = delta / vel
+            hz = 50.0
+            """Move the robot to the goal position with linear interpolation."""
+            steps = int(timeout * hz)
+            print(f"Moving to start position with {steps} steps over {timeout:.2f} seconds...")
+            # positional linear interpolation from now_pose to target_pose
+            pos_path = np.linspace(now_pose[:3], target_pose[:3], steps)
+            # SLERP rotation from now_pose to target_pose
+            r0 = R.from_quat(now_pose[3:7])
+            r1 = R.from_quat(target_pose[3:7])
+
+            key_times = [0, 1]
+            key_rots = R.concatenate([r0, r1])
+            slerp = Slerp(key_times, key_rots)
+
+            interp_times = np.linspace(0, 1, steps)
+            rot_path = slerp(interp_times)
+
+            # Combine into complete path
+            path = np.zeros((steps, 7))
+            path[:, :3] = pos_path
+            path[:, 3:7] = rot_path.as_quat()
+
+            print(path)
+            for p in path:
+                # Send absolute pose as cartesian_absolute command
+                ee_matrix = quaternion_to_matrix(p, input_format="wxyz")
+                cmd = {"type": "cartesian_absolute", "pose": ee_matrix.tolist()}
+                self._ws_send_recv(cmd)
+                time.sleep(1 / hz)
+        
 
     def reset_to_initial_position(self) -> None:
         """Reset robot to initial position based on config.go_to_start.

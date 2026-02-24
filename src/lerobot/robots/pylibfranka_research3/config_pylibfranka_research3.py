@@ -65,6 +65,7 @@ class PylibfrankaResearch3Config(RobotConfig):
     # robot_home_position: list = field(default_factory=lambda: [-0.82917076, 0.04384267, -0.03789382, -2.4083676, -0.01327341, 2.4243426, -0.10018315])
     robot_home_position: list = field(default_factory=lambda: [0.0, 0.0, 0.0, -1.57079, 0.0, 1.57079, 0.7853])
     
+    robot_tcp_home_position: list = field(default_factory=lambda: [0.5592, -0.0073, 0.5123, 0.0, 1.0, 0.0, 0.0]) # x,y,z,w,x,y,z (wxyz)
     # ======================== Xense Gripper Configuration ========================
 
     # Whether to use the gripper
