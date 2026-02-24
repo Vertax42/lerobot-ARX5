@@ -14,6 +14,11 @@ from lerobot.utils.robot_utils import (
 from scipy.spatial.transform import Rotation as R
 import time
 
+
+import asyncio 
+import numpy as np 
+from xense_franka import RobotInterface, FrankaController
+
 # pos_sensitivity = 0.005  # m/step (最大平移速度)
 # start_pos = np.array([0.5, 0, 0.5], dtype=np.float32) # 初始位置
 # start_quat = np.array([1, 0, 0, 0], dtype=np.float32) # 初始姿态 (wxyz)
