@@ -67,12 +67,14 @@ from lerobot.datasets.utils import (
 )
 from lerobot.datasets.video_utils import (
     VideoFrame,
+    StreamingVideoEncoder,
     concatenate_video_files,
     decode_video_frames,
     encode_video_frames,
     get_safe_default_codec,
     get_video_duration_in_s,
     get_video_info,
+    resolve_vcodec,
 )
 from lerobot.utils.constants import HF_LEROBOT_HOME
 
@@ -553,6 +555,10 @@ class LeRobotDataset(torch.utils.data.Dataset):
         download_videos: bool = True,
         video_backend: str | None = None,
         batch_encoding_size: int = 1,
+        vcodec: str = "libsvtav1",
+        streaming_encoding: bool = False,
+        encoder_queue_maxsize: int = 30,
+        encoder_threads: int | None = None,
     ):
         """
         2 modes are available for instantiating this class, depending on 2 different use cases:
@@ -685,6 +691,12 @@ class LeRobotDataset(torch.utils.data.Dataset):
         self.writer = None
         self.latest_episode = None
         self._current_file_start_frame = None  # Track the starting frame index of the current parquet file
+        # Streaming encoder attributes (populated by create(), or here for resume)
+        self._streaming_encoder = None
+        self.vcodec = resolve_vcodec(vcodec)
+        self._encoder_threads = encoder_threads
+        self._streaming_encoding = streaming_encoding
+        self._encoder_queue_maxsize = encoder_queue_maxsize
 
         self.root.mkdir(exist_ok=True, parents=True)
 
@@ -697,6 +709,19 @@ class LeRobotDataset(torch.utils.data.Dataset):
         self._lazy_loading = False
         self._recorded_frames = self.meta.total_frames
         self._writer_closed_for_reading = False
+
+        # Initialize streaming encoder for resume mode if requested
+        if self._streaming_encoding and len(self.meta.video_keys) > 0:
+            self._streaming_encoder = StreamingVideoEncoder(
+                fps=self.meta.fps,
+                vcodec=self.vcodec,
+                pix_fmt="yuv420p",
+                g=2,
+                crf=30,
+                preset=None,
+                queue_maxsize=self._encoder_queue_maxsize,
+                encoder_threads=self._encoder_threads,
+            )
 
         # Load actual data
         try:
@@ -1093,6 +1118,13 @@ class LeRobotDataset(torch.utils.data.Dataset):
         self.episode_buffer["timestamp"].append(timestamp)
         self.episode_buffer["task"].append(frame.pop("task"))  # Remove task from frame after processing
 
+        # Start streaming encoder on the first frame of the episode
+        if frame_index == 0 and self._streaming_encoder is not None:
+            self._streaming_encoder.start_episode(
+                video_keys=list(self.meta.video_keys),
+                temp_dir=self.root,
+            )
+
         # Add frame features to episode_buffer
         for key in frame:
             if key not in self.features:
@@ -1100,7 +1132,11 @@ class LeRobotDataset(torch.utils.data.Dataset):
                     f"An element of the frame is not in the features. '{key}' not in '{self.features.keys()}'."
                 )
 
-            if self.features[key]["dtype"] in ["image", "video"]:
+            if self.features[key]["dtype"] == "video" and self._streaming_encoder is not None:
+                # Feed directly to the streaming encoder; store a placeholder in the buffer
+                self._streaming_encoder.feed_frame(key, frame[key])
+                self.episode_buffer[key].append(None)
+            elif self.features[key]["dtype"] in ["image", "video"]:
                 img_path = self._get_image_file_path(
                     episode_index=self.episode_buffer["episode_index"], image_key=key, frame_index=frame_index
                 )
@@ -1120,6 +1156,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         Video encoding is handled automatically based on batch_encoding_size:
         - If batch_encoding_size == 1: Videos are encoded immediately after each episode
         - If batch_encoding_size > 1: Videos are encoded in batches.
+        - If streaming_encoding is enabled: Videos are encoded in real-time during recording.
 
         Args:
             episode_data (dict | None, optional): Dict containing the episode data to save. If None, this will
@@ -1154,20 +1191,45 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
         # Wait for image writer to end, so that episode stats over images can be computed
         self._wait_image_writer()
-        ep_stats = compute_episode_stats(episode_buffer, self.features)
+
+        has_video_keys = len(self.meta.video_keys) > 0
+        use_streaming = has_video_keys and self._streaming_encoder is not None
+
+        if use_streaming:
+            # Compute stats only for non-video features; video stats come from the streaming encoder
+            non_video_buffer = {
+                k: v for k, v in episode_buffer.items()
+                if self.features.get(k, {}).get("dtype") != "video"
+            }
+            non_video_features = {k: v for k, v in self.features.items() if v["dtype"] != "video"}
+            ep_stats = compute_episode_stats(non_video_buffer, non_video_features)
+        else:
+            ep_stats = compute_episode_stats(episode_buffer, self.features)
 
         ep_metadata = self._save_episode_data(episode_buffer)
-        has_video_keys = len(self.meta.video_keys) > 0
         use_batched_encoding = self.batch_encoding_size > 1
 
-        if has_video_keys and not use_batched_encoding:
+        if use_streaming:
+            # finish_episode() waits for encoder threads and returns (temp_path, stats) per key
+            streaming_results = self._streaming_encoder.finish_episode()
+            for video_key in self.meta.video_keys:
+                temp_path, video_stats = streaming_results[video_key]
+                if video_stats is not None:
+                    # Normalize uint8 stats to [0, 1] and reshape to (C, 1, 1)
+                    ep_stats[video_key] = {
+                        k: v if k == "count"
+                        else np.squeeze(v.reshape(1, -1, 1, 1) / 255.0, axis=0)
+                        for k, v in video_stats.items()
+                    }
+                ep_metadata.update(self._save_episode_video(video_key, episode_index, temp_path=temp_path))
+        elif has_video_keys and not use_batched_encoding:
             for video_key in self.meta.video_keys:
                 ep_metadata.update(self._save_episode_video(video_key, episode_index))
 
         # `meta.save_episode` need to be executed after encoding the videos
         self.meta.save_episode(episode_index, episode_length, episode_tasks, ep_stats, ep_metadata)
 
-        if has_video_keys and use_batched_encoding:
+        if has_video_keys and not use_streaming and use_batched_encoding:
             # Check if we should trigger batch encoding
             self.episodes_since_last_encoding += 1
             if self.episodes_since_last_encoding == self.batch_encoding_size:
@@ -1327,9 +1389,12 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
         return metadata
 
-    def _save_episode_video(self, video_key: str, episode_index: int) -> dict:
-        # Encode episode frames into a temporary video
-        ep_path = self._encode_temporary_episode_video(video_key, episode_index)
+    def _save_episode_video(self, video_key: str, episode_index: int, temp_path: Path | None = None) -> dict:
+        # Encode episode frames into a temporary video (unless already encoded by streaming encoder)
+        if temp_path is not None:
+            ep_path = temp_path
+        else:
+            ep_path = self._encode_temporary_episode_video(video_key, episode_index)
         ep_size_in_mb = get_file_size_in_mb(ep_path)
         ep_duration_in_s = get_video_duration_in_s(ep_path)
 
@@ -1400,6 +1465,10 @@ class LeRobotDataset(torch.utils.data.Dataset):
         return metadata
 
     def clear_episode_buffer(self, delete_images: bool = True) -> None:
+        # Cancel streaming encoder for this episode if it was active
+        if self._streaming_encoder is not None:
+            self._streaming_encoder.cancel_episode()
+
         # Clean up image files for the current episode buffer
         if delete_images:
             # Wait for the async image writer to finish
@@ -1449,7 +1518,12 @@ class LeRobotDataset(torch.utils.data.Dataset):
         """
         temp_path = Path(tempfile.mkdtemp(dir=self.root)) / f"{video_key}_{episode_index:03d}.mp4"
         img_dir = self._get_image_file_dir(episode_index, video_key)
-        encode_video_frames(img_dir, temp_path, self.fps, overwrite=True)
+        vcodec = getattr(self, "vcodec", "libsvtav1")
+        encoder_threads = getattr(self, "_encoder_threads", None)
+        encode_video_frames(
+            img_dir, temp_path, self.fps,
+            vcodec=vcodec, overwrite=True, encoder_threads=encoder_threads,
+        )
         shutil.rmtree(img_dir)
         return temp_path
 
@@ -1467,6 +1541,10 @@ class LeRobotDataset(torch.utils.data.Dataset):
         image_writer_threads: int = 0,
         video_backend: str | None = None,
         batch_encoding_size: int = 1,
+        vcodec: str = "libsvtav1",
+        streaming_encoding: bool = False,
+        encoder_queue_maxsize: int = 30,
+        encoder_threads: int | None = None,
     ) -> "LeRobotDataset":
         """Create a LeRobot Dataset from scratch in order to record data."""
         obj = cls.__new__(cls)
@@ -1485,9 +1563,24 @@ class LeRobotDataset(torch.utils.data.Dataset):
         obj.image_writer = None
         obj.batch_encoding_size = batch_encoding_size
         obj.episodes_since_last_encoding = 0
+        obj.vcodec = resolve_vcodec(vcodec)
+        obj._encoder_threads = encoder_threads
+        obj._streaming_encoder = None
 
         if image_writer_processes or image_writer_threads:
             obj.start_image_writer(image_writer_processes, image_writer_threads)
+
+        if streaming_encoding and len(obj.meta.video_keys) > 0:
+            obj._streaming_encoder = StreamingVideoEncoder(
+                fps=fps,
+                vcodec=obj.vcodec,
+                pix_fmt="yuv420p",
+                g=2,
+                crf=30,
+                preset=None,
+                queue_maxsize=encoder_queue_maxsize,
+                encoder_threads=encoder_threads,
+            )
 
         # TODO(aliberts, rcadene, alexander-soare): Merge this with OnlineBuffer/DataBuffer
         obj.episode_buffer = obj.create_episode_buffer()
