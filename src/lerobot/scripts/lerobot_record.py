@@ -60,7 +60,6 @@ from lerobot.robots import (  # noqa: F401
     flexiv_rizon4,  # noqa: F401
     make_robot_from_config,
     xense_flare,  # noqa: F401
-    franka_research3,  # noqa: F401
     pylibfranka_research3,  # noqa: F401
 )
 from lerobot.teleoperators import (  # noqa: F401
@@ -859,13 +858,10 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         elif cfg.teleop.type == "btgamepad" and cfg.robot.type == "flexiv_rizon4":
             teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
             print("Teleop initialized with robot EEF pose.")
-        elif cfg.teleop.type == "btgamepad" and cfg.robot.type == "franka_research3":
+        elif cfg.teleop.type == "pico4" and cfg.robot.type == "pylibfranka_research3":
             teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
             print("Teleop initialized with robot EEF pose.")
         elif cfg.teleop.type == "btgamepad" and cfg.robot.type == "pylibfranka_research3":
-            teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
-            print("Teleop initialized with robot EEF pose.")
-        elif cfg.teleop.type == "pico4" and cfg.robot.type == "pylibfranka_research3":
             teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
             print("Teleop initialized with robot EEF pose.")
         else:

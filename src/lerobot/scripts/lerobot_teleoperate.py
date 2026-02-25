@@ -42,7 +42,6 @@ from lerobot.robots import (  # noqa: F401
     make_robot_from_config,
     xense_flare,  # noqa: F401
     xense_multisensor,  # noqa: F401
-    franka_research3,  # noqa: F401
 )
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
