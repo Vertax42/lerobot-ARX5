@@ -13,24 +13,392 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import contextlib
 import glob
 import importlib
 import logging
+import queue
 import shutil
 import tempfile
+import threading
 import warnings
 from dataclasses import dataclass, field
+from fractions import Fraction
 from pathlib import Path
 from threading import Lock
 from typing import Any, ClassVar
 
 import av
 import fsspec
+import numpy as np
 import pyarrow as pa
 import torch
 import torchvision
 from datasets.features.features import register_feature
 from PIL import Image
+
+HW_ENCODERS = [
+    "h264_videotoolbox",  # macOS
+    "hevc_videotoolbox",  # macOS
+    "h264_nvenc",         # NVIDIA GPU
+    "hevc_nvenc",         # NVIDIA GPU
+    "h264_vaapi",         # Linux Intel/AMD
+    "h264_qsv",           # Intel Quick Sync
+]
+
+VALID_VIDEO_CODECS = {"h264", "hevc", "libsvtav1", "auto"} | set(HW_ENCODERS)
+
+
+def _get_codec_options(vcodec: str, g: int | None, crf: int | None, preset: str | None) -> dict:
+    """Build PyAV options dict for the given encoder."""
+    options = {}
+    if "videotoolbox" in vcodec:
+        if g is not None:
+            options["g"] = str(g)
+        if crf is not None:
+            options["q:v"] = str(crf)
+    elif "nvenc" in vcodec:
+        options["rc"] = "constqp"
+        if crf is not None:
+            options["qp"] = str(crf)
+        if preset is not None:
+            options["preset"] = str(preset)
+    elif "vaapi" in vcodec:
+        if crf is not None:
+            options["qp"] = str(crf)
+    elif "qsv" in vcodec:
+        if crf is not None:
+            options["global_quality"] = str(crf)
+        if preset is not None:
+            options["preset"] = str(preset)
+    else:
+        # libsvtav1, h264, hevc (software encoders)
+        if g is not None:
+            options["g"] = str(g)
+        if crf is not None:
+            options["crf"] = str(crf)
+        if preset is not None:
+            options["preset"] = str(preset)
+    return options
+
+
+def detect_available_hw_encoders() -> list[str]:
+    """Probe the system for available hardware video encoders."""
+    available = []
+    for name in HW_ENCODERS:
+        try:
+            av.codec.Codec(name, "w")
+            available.append(name)
+        except Exception:
+            pass
+    return available
+
+
+def resolve_vcodec(vcodec: str) -> str:
+    """Validate and resolve vcodec, expanding 'auto' to the best available encoder."""
+    if vcodec not in VALID_VIDEO_CODECS:
+        raise ValueError(
+            f"Unsupported video codec: '{vcodec}'. "
+            f"Supported codecs are: {sorted(VALID_VIDEO_CODECS)}"
+        )
+    if vcodec == "auto":
+        hw = detect_available_hw_encoders()
+        if hw:
+            resolved = hw[0]
+            logging.info(f"vcodec='auto' resolved to hardware encoder: {resolved}")
+        else:
+            resolved = "libsvtav1"
+            logging.info("vcodec='auto': no hardware encoder found, falling back to libsvtav1")
+        return resolved
+    return vcodec
+
+
+class _CameraEncoderThread(threading.Thread):
+    """Background thread that encodes frames for a single camera into an MP4 file."""
+
+    def __init__(
+        self,
+        video_path: Path,
+        fps: int,
+        vcodec: str,
+        pix_fmt: str,
+        g: int | None,
+        crf: int | None,
+        preset: str | None,
+        frame_queue: queue.Queue,
+        result_queue: queue.Queue,
+        stop_event: threading.Event,
+        encoder_threads: int | None,
+    ):
+        super().__init__(daemon=True)
+        self.video_path = Path(video_path)
+        self.fps = fps
+        self.vcodec = vcodec
+        self.pix_fmt = pix_fmt
+        self.g = g
+        self.crf = crf
+        self.preset = preset
+        self.frame_queue = frame_queue
+        self.result_queue = result_queue
+        self.stop_event = stop_event
+        self.encoder_threads = encoder_threads
+
+    def run(self) -> None:
+        from lerobot.datasets.compute_stats import RunningQuantileStats, auto_downsample_height_width
+
+        output_container = None
+        output_stream = None
+        stats_tracker = RunningQuantileStats()
+        frame_count = 0
+
+        try:
+            while not self.stop_event.is_set():
+                try:
+                    frame = self.frame_queue.get(timeout=1.0)
+                except queue.Empty:
+                    continue
+
+                if frame is None:  # sentinel — end of episode
+                    break
+
+                # Initialize the MP4 container on the first frame
+                if output_container is None:
+                    height, width = frame.shape[:2]
+                    video_options = _get_codec_options(self.vcodec, self.g, self.crf, self.preset)
+
+                    # Apply encoder_threads setting
+                    if self.encoder_threads is not None:
+                        if self.vcodec == "libsvtav1":
+                            existing = video_options.get("svtav1-params", "")
+                            lp_param = f"lp={self.encoder_threads}"
+                            video_options["svtav1-params"] = (
+                                f"{existing}:{lp_param}" if existing else lp_param
+                            )
+                        elif self.vcodec in ["h264", "hevc"]:
+                            video_options["threads"] = str(self.encoder_threads)
+
+                    self.video_path.parent.mkdir(parents=True, exist_ok=True)
+                    output_container = av.open(str(self.video_path), "w")
+                    output_stream = output_container.add_stream(
+                        self.vcodec, self.fps, options=video_options
+                    )
+                    output_stream.pix_fmt = self.pix_fmt
+                    output_stream.width = width
+                    output_stream.height = height
+                    output_stream.time_base = Fraction(1, self.fps)
+
+                # Compute running per-channel statistics (uint8 values, normalised later)
+                chw_frame = frame.transpose(2, 0, 1)  # HWC → CHW
+                chw_downsampled = auto_downsample_height_width(chw_frame)
+                c, h, w = chw_downsampled.shape
+                # Reshape to (H*W, C) — each pixel is one sample in C-dim space
+                pixels = chw_downsampled.transpose(1, 2, 0).reshape(-1, c).astype(np.float64)
+                try:
+                    stats_tracker.update(pixels)
+                except Exception:
+                    pass  # stats are optional
+
+                # Encode frame
+                pil_image = Image.fromarray(frame.astype(np.uint8))
+                av_frame = av.VideoFrame.from_image(pil_image)
+                av_frame.pts = frame_count
+                av_frame.time_base = Fraction(1, self.fps)
+
+                packets = output_stream.encode(av_frame)
+                if packets:
+                    output_container.mux(packets)
+
+                frame_count += 1
+
+            # Flush encoder
+            if output_stream is not None:
+                packets = output_stream.encode()
+                if packets:
+                    output_container.mux(packets)
+
+            if output_container is not None:
+                output_container.close()
+                output_container = None
+
+            # Collect statistics
+            video_stats = None
+            if stats_tracker._count >= 2:
+                try:
+                    video_stats = stats_tracker.get_statistics()
+                except Exception as e:
+                    logging.warning(f"_CameraEncoderThread: could not compute stats: {e}")
+
+            self.result_queue.put(("ok", (self.video_path, video_stats)))
+
+        except Exception as e:
+            if output_container is not None:
+                with contextlib.suppress(Exception):
+                    output_container.close()
+            logging.error(f"_CameraEncoderThread error for {self.video_path}: {e}")
+            self.result_queue.put(("error", str(e)))
+
+
+class StreamingVideoEncoder:
+    """
+    Encodes video frames in real-time (one thread per camera) while data collection runs.
+
+    Instead of saving frames as PNG files and encoding after the episode, this class
+    accepts raw numpy frames and writes MP4 data immediately, making ``save_episode()``
+    nearly instantaneous.
+    """
+
+    def __init__(
+        self,
+        fps: int,
+        vcodec: str,
+        pix_fmt: str = "yuv420p",
+        g: int | None = 2,
+        crf: int | None = 30,
+        preset: str | None = None,
+        queue_maxsize: int = 30,
+        encoder_threads: int | None = None,
+    ):
+        self.fps = fps
+        self.vcodec = vcodec
+        self.pix_fmt = pix_fmt
+        self.g = g
+        self.crf = crf
+        self.preset = preset
+        self.queue_maxsize = queue_maxsize
+        self.encoder_threads = encoder_threads
+
+        self._threads: dict[str, _CameraEncoderThread] = {}
+        self._queues: dict[str, queue.Queue] = {}
+        self._stop_event = threading.Event()
+        self._episode_active = False
+        self._dropped_frames: dict[str, int] = {}
+
+    def start_episode(self, video_keys: list[str], temp_dir: Path) -> None:
+        """Start encoder threads for a new episode."""
+        if self._episode_active:
+            logging.warning(
+                "StreamingVideoEncoder: episode already active, cancelling previous episode"
+            )
+            self.cancel_episode()
+
+        self._stop_event.clear()
+        self._dropped_frames = {key: 0 for key in video_keys}
+
+        for video_key in video_keys:
+            q: queue.Queue = queue.Queue(maxsize=self.queue_maxsize)
+            result_q: queue.Queue = queue.Queue()
+            # Each camera gets its own temp directory (mirroring _encode_temporary_episode_video)
+            tmp_dir = Path(tempfile.mkdtemp(dir=temp_dir))
+            safe_key = video_key.replace("/", "_").replace(".", "_")
+            temp_path = tmp_dir / f"{safe_key}.mp4"
+
+            thread = _CameraEncoderThread(
+                video_path=temp_path,
+                fps=self.fps,
+                vcodec=self.vcodec,
+                pix_fmt=self.pix_fmt,
+                g=self.g,
+                crf=self.crf,
+                preset=self.preset,
+                frame_queue=q,
+                result_queue=result_q,
+                stop_event=self._stop_event,
+                encoder_threads=self.encoder_threads,
+            )
+            thread.start()
+            self._threads[video_key] = thread
+            self._queues[video_key] = q
+
+        self._episode_active = True
+
+    def feed_frame(self, video_key: str, image: np.ndarray) -> None:
+        """Feed one frame to the encoder thread for ``video_key``."""
+        if not self._episode_active:
+            return
+        q = self._queues.get(video_key)
+        if q is None:
+            return
+        try:
+            q.put(image.copy(), timeout=0.1)
+        except queue.Full:
+            self._dropped_frames[video_key] = self._dropped_frames.get(video_key, 0) + 1
+
+    def finish_episode(self) -> dict[str, tuple[Path, dict | None]]:
+        """Signal end-of-episode, wait for threads, return {video_key: (temp_path, stats)}."""
+        if not self._episode_active:
+            return {}
+
+        # Send sentinel to every encoder thread
+        for q in self._queues.values():
+            q.put(None)
+
+        results: dict[str, tuple[Path, dict | None]] = {}
+        for video_key, thread in self._threads.items():
+            thread.join(timeout=120)
+            if thread.is_alive():
+                logging.warning(
+                    f"StreamingVideoEncoder: thread for '{video_key}' did not finish in 120 s, "
+                    "forcing stop"
+                )
+                self._stop_event.set()
+                thread.join(timeout=5)
+
+            try:
+                status, data = thread.result_queue.get_nowait()
+                if status == "ok":
+                    results[video_key] = data  # (Path, stats | None)
+                else:
+                    logging.error(
+                        f"StreamingVideoEncoder: encoder error for '{video_key}': {data}"
+                    )
+                    results[video_key] = (thread.video_path, None)
+            except queue.Empty:
+                logging.error(
+                    f"StreamingVideoEncoder: no result received for '{video_key}'"
+                )
+                results[video_key] = (thread.video_path, None)
+
+        # Report dropped frames
+        for video_key, count in self._dropped_frames.items():
+            if count > 0:
+                logging.warning(
+                    f"StreamingVideoEncoder: dropped {count} frame(s) for '{video_key}'"
+                )
+
+        self._cleanup()
+        return results
+
+    def cancel_episode(self) -> None:
+        """Abort the current episode, stop encoder threads, and remove temp files."""
+        if not self._episode_active:
+            return
+
+        self._stop_event.set()
+
+        # Try to unblock threads waiting on queue
+        for q in self._queues.values():
+            with contextlib.suppress(Exception):
+                q.put_nowait(None)
+
+        for thread in self._threads.values():
+            thread.join(timeout=5)
+            # Remove the temp directory created for this thread
+            with contextlib.suppress(Exception):
+                if thread.video_path.parent.exists():
+                    shutil.rmtree(str(thread.video_path.parent))
+
+        self._cleanup()
+
+    def close(self) -> None:
+        """Close the encoder, cancelling any active episode."""
+        if self._episode_active:
+            self.cancel_episode()
+
+    def _cleanup(self) -> None:
+        self._threads.clear()
+        self._queues.clear()
+        self._dropped_frames.clear()
+        self._episode_active = False
 
 
 def get_safe_default_codec():
@@ -311,15 +679,12 @@ def encode_video_frames(
     g: int | None = 2,
     crf: int | None = 30,
     fast_decode: int = 0,
-    log_level: int | None = av.logging.ERROR,
+    log_level: int | None = av.logging.WARNING,
     overwrite: bool = False,
+    encoder_threads: int | None = None,
 ) -> None:
     """More info on ffmpeg arguments tuning on `benchmark/video/README.md`"""
-    # Check encoder availability
-    if vcodec not in ["h264", "hevc", "libsvtav1"]:
-        raise ValueError(
-            f"Unsupported video codec: {vcodec}. Supported codecs are: h264, hevc, libsvtav1."
-        )
+    vcodec = resolve_vcodec(vcodec)
 
     video_path = Path(video_path)
     imgs_dir = Path(imgs_dir)
@@ -350,19 +715,22 @@ def encode_video_frames(
     with Image.open(input_list[0]) as dummy_image:
         width, height = dummy_image.size
 
-    # Define video codec options
-    video_options = {}
-
-    if g is not None:
-        video_options["g"] = str(g)
-
-    if crf is not None:
-        video_options["crf"] = str(crf)
+    # Build codec options
+    video_options = _get_codec_options(vcodec, g, crf, preset=None)
 
     if fast_decode:
         key = "svtav1-params" if vcodec == "libsvtav1" else "tune"
         value = f"fast-decode={fast_decode}" if vcodec == "libsvtav1" else "fastdecode"
         video_options[key] = value
+
+    # Handle encoder_threads
+    if encoder_threads is not None:
+        if vcodec == "libsvtav1":
+            existing = video_options.get("svtav1-params", "")
+            lp_param = f"lp={encoder_threads}"
+            video_options["svtav1-params"] = f"{existing}:{lp_param}" if existing else lp_param
+        elif vcodec in ["h264", "hevc"]:
+            video_options["threads"] = str(encoder_threads)
 
     # Set logging level
     if log_level is not None:
@@ -643,29 +1011,37 @@ class VideoEncodingManager:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        # Handle any remaining episodes that haven't been batch encoded
-        if self.dataset.episodes_since_last_encoding > 0:
-            if exc_type is not None:
-                logging.info(
-                    "Exception occurred. Encoding remaining episodes before exit..."
-                )
-            else:
-                logging.info("Recording stopped. Encoding remaining episodes...")
+        has_streaming = getattr(self.dataset, "_streaming_encoder", None) is not None
 
-            start_ep = (
-                self.dataset.num_episodes - self.dataset.episodes_since_last_encoding
-            )
-            end_ep = self.dataset.num_episodes
-            logging.info(
-                f"Encoding remaining {self.dataset.episodes_since_last_encoding} episodes, "
-                f"from episode {start_ep} to {end_ep - 1}"
-            )
-            self.dataset._batch_save_episode_video(start_ep, end_ep)
+        if has_streaming:
+            # Streaming encoder handles its own cleanup
+            if exc_type is not None:
+                self.dataset._streaming_encoder.cancel_episode()
+            self.dataset._streaming_encoder.close()
+        else:
+            # Handle any remaining episodes that haven't been batch encoded
+            if self.dataset.episodes_since_last_encoding > 0:
+                if exc_type is not None:
+                    logging.info(
+                        "Exception occurred. Encoding remaining episodes before exit..."
+                    )
+                else:
+                    logging.info("Recording stopped. Encoding remaining episodes...")
+
+                start_ep = (
+                    self.dataset.num_episodes - self.dataset.episodes_since_last_encoding
+                )
+                end_ep = self.dataset.num_episodes
+                logging.info(
+                    f"Encoding remaining {self.dataset.episodes_since_last_encoding} episodes, "
+                    f"from episode {start_ep} to {end_ep - 1}"
+                )
+                self.dataset._batch_save_episode_video(start_ep, end_ep)
 
         # Finalize the dataset to properly close all writers
         self.dataset.finalize()
 
-        # Clean up episode images if recording was interrupted
+        # Clean up episode images if recording was interrupted (no-op when streaming is used)
         if exc_type is not None:
             interrupted_episode_index = self.dataset.num_episodes
             for key in self.dataset.meta.video_keys:
