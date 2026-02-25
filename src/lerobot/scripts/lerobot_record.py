@@ -133,6 +133,16 @@ class DatasetRecordConfig:
     # Number of episodes to record before batch encoding videos
     # Set to 1 for immediate encoding (default behavior), or higher for batched encoding
     video_encoding_batch_size: int = 1
+    # Video codec to use for encoding. Options: 'h264', 'hevc', 'libsvtav1', 'auto', or HW encoder name.
+    # 'auto' probes the system and picks the best available hardware encoder, falling back to libsvtav1.
+    vcodec: str = "libsvtav1"
+    # Encode frames in real-time while recording (streaming encoding).
+    # Dramatically reduces save_episode() latency. Recommended when hardware encoding is available.
+    streaming_encoding: bool = False
+    # Maximum number of frames to buffer per camera when streaming encoding is active (~1 s @ 30 fps).
+    encoder_queue_maxsize: int = 30
+    # Number of threads per encoder process (None = codec default).
+    encoder_threads: int | None = None
     # Rename map for the observation to override the image and state keys
     rename_map: dict[str, str] = field(default_factory=dict)
 
@@ -544,9 +554,15 @@ def xense_flare_record_loop(
         if prev_observation is not None and dataset is not None:
             # Manual demonstration mode with action shifting
             # Use current frame's action as previous frame's action
-            current_action_frame = build_dataset_frame(dataset.features, current_action, prefix=ACTION)
+            current_action_frame = build_dataset_frame(
+                dataset.features, current_action, prefix=ACTION
+            )
 
-            frame = {**prev_observation_frame, **current_action_frame, "task": single_task}
+            frame = {
+                **prev_observation_frame,
+                **current_action_frame,
+                "task": single_task,
+            }
             dataset.add_frame(frame)
 
         if display_data:
@@ -591,9 +607,7 @@ def record_loop(
         )
 
     if isinstance(teleop, list):
-        raise ValueError(
-            "Multi-teleop mode is not supported in this version."
-        )
+        raise ValueError("Multi-teleop mode is not supported in this version.")
 
     # Reset policy and processor if they are provided
     if policy is not None and preprocessor is not None and postprocessor is not None:
@@ -769,6 +783,10 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             cfg.dataset.repo_id,
             root=cfg.dataset.root,
             batch_encoding_size=cfg.dataset.video_encoding_batch_size,
+            vcodec=cfg.dataset.vcodec,
+            streaming_encoding=cfg.dataset.streaming_encoding,
+            encoder_queue_maxsize=cfg.dataset.encoder_queue_maxsize,
+            encoder_threads=cfg.dataset.encoder_threads,
         )
 
         if hasattr(robot, "cameras") and len(robot.cameras) > 0:
@@ -794,6 +812,16 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             image_writer_threads=cfg.dataset.num_image_writer_threads_per_camera
             * len(robot.cameras),
             batch_encoding_size=cfg.dataset.video_encoding_batch_size,
+            vcodec=cfg.dataset.vcodec,
+            streaming_encoding=cfg.dataset.streaming_encoding,
+            encoder_queue_maxsize=cfg.dataset.encoder_queue_maxsize,
+            encoder_threads=cfg.dataset.encoder_threads,
+        )
+
+    if not cfg.dataset.streaming_encoding:
+        logging.info(
+            "Streaming encoding is disabled. For faster episode saving, consider enabling: "
+            "--dataset.streaming_encoding=true --dataset.encoder_threads=2"
         )
 
     # Load pretrained policy

@@ -1,20 +1,25 @@
 # ARX5 SDK
+
 conda install ros-humble-kdl-parser ros-humble-ament-cmake cxx-compiler cmake ninja orocos-kdl eigen boost spdlog pybind11 numpy click pyzmq pynput pip conda-forge::soem=1.4.0 -c robostack-staging -c conda-forge
 
 pip install atomics spnav@https://github.com/cheng-chi/spnav/archive/c1c938ebe3cc542db4685e0d13850ff1abfdb943.tar.gz pyrealsense2
 
     sudo setcap cap_sys_nice=ep $(readlink -f $CONDA_PREFIX/bin/python)
 
-# for openpi-client compatibility
+## for openpi-client compatibility
+
 <!-- pip install opencv-python==4.9.0.80 4.10.0.84
 pip install opencv-python-headless==4.9.0.80 -->
 <!-- pip install numpy==2.2.6 -, 1.26.4 -->
 
 sudo setcap cap_sys_nice+ep $(readlink -f $(which python))
 
-# C++ ABI version issue
+## C++ ABI version issue
+
 /home/vertax/miniconda3/envs/${CONDA_PREFIX}/lib/${python_version}/site-packages/sitecustomize.py
+
 ```python
+
 """
 Sitecustomize for conda environment.
 
@@ -37,7 +42,7 @@ if conda_prefix:
             pass
 ```
 
-# ARX_X5 CAN Bus Diagram
+## ARX_X5 CAN Bus Diagram
 
 ```
 ┌─────────────────┐    CAN Bus    ┌─────────────────┐
@@ -57,7 +62,7 @@ if conda_prefix:
 └─────────────────┘               └─────────────────┘
 ```
 
-# default configurations X5 in ` include/app/config.h `
+## default configurations X5 in ` include/app/config.h `
 
 ```cpp
 // joint_names: [0: joint1, 1: joint2, 2: joint3, 3: joint4, 4: joint5, 5: joint6]

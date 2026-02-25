@@ -63,7 +63,7 @@ lerobot-teleoperate \
     --dryrun=true
 ```
 
-## Flexiv Rizon4 Robot with Flare Gripper lerobot-record by Pico4 command 
+## Flexiv Rizon4 Robot with Flare Gripper lerobot-record by Pico4 command
 
 ```python
 lerobot-record \
@@ -122,6 +122,8 @@ lerobot-record \
     --dataset.num_episodes=50 \
     --dataset.single_task="pick up cubes in rgb order from the table and place them in the blue box" \
     --dataset.fps=20 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
     --display_data=false \
     --resume=false \
     --dataset.push_to_hub=true
@@ -135,6 +137,8 @@ lerobot-record \
     --dataset.num_episodes=20 \
     --dataset.single_task="open the lock with the key" \
     --dataset.fps=20 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
     --display_data=false \
     --resume=false \
     --dataset.push_to_hub=true
@@ -148,6 +152,8 @@ lerobot-record \
     --dataset.num_episodes=20 \
     --dataset.single_task="wipe the vase" \
     --dataset.fps=20 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
     --display_data=false \
     --resume=false \
     --dataset.push_to_hub=true
@@ -161,6 +167,8 @@ lerobot-record \
     --dataset.num_episodes=50 \
     --dataset.single_task="pick up cubes in rgb order from the table and place them in the blue box" \
     --dataset.fps=20 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
     --display_data=false \
     --resume=false \
     --dataset.push_to_hub=true
@@ -174,6 +182,8 @@ lerobot-record \
     --dataset.num_episodes=3 \
     --dataset.single_task="peel a cucumber with a vegetable peeler" \
     --dataset.fps=20 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
     --display_data=false \
     --resume=false \
     --dataset.push_to_hub=true
@@ -187,6 +197,8 @@ lerobot-record \
     --dataset.num_episodes=2 \
     --dataset.single_task="xense flare traj replay test" \
     --dataset.fps=20 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
     --display_data=false \
     --resume=false \
     --dataset.push_to_hub=true
@@ -203,6 +215,8 @@ lerobot-record \
     --dataset.single_task="tie shoelaces" \
     --dataset.fps=30 \
     --dataset.episode_time_s=300 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
     --display_data=false \
     --resume=true \
     --dataset.push_to_hub=true
@@ -218,6 +232,8 @@ lerobot-record \
     --dataset.single_task="tie shoelaces" \
     --dataset.fps=30 \
     --dataset.episode_time_s=300 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
     --display_data=false \
     --resume=false \
     --dataset.push_to_hub=true
@@ -230,9 +246,11 @@ lerobot-record \
     --teleop.type=mock_teleop \
     --dataset.repo_id=Vertax/xense_bi_arx5_tie_shoelaces_tactile \
     --dataset.num_episodes=100 \
-    --dataset.single_task="tie shoelaces"
+    --dataset.single_task="tie shoelaces" \
     --dataset.fps=30 \
     --dataset.episode_time_s=300 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
     --display_data=false \
     --resume=false \
     --dataset.push_to_hub=true
@@ -247,6 +265,8 @@ lerobot-record \
     --dataset.single_task="tie shoelaces" \
     --dataset.fps=30 \
     --dataset.episode_time_s=300 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
     --display_data=false \
     --resume=true \
     --dataset.push_to_hub=true
@@ -261,6 +281,8 @@ lerobot-record \
     --dataset.single_task="tie shoelaces" \
     --dataset.fps=30 \
     --dataset.episode_time_s=300 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
     --display_data=false \
     --resume=true \
     --dataset.push_to_hub=true
@@ -275,6 +297,8 @@ lerobot-record \
     --dataset.single_task="tie shoelaces" \
     --dataset.fps=30 \
     --dataset.episode_time_s=300 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
     --display_data=false \
     --resume=true \
     --dataset.push_to_hub=true
@@ -289,6 +313,8 @@ lerobot-record \
     --dataset.single_task="tie shoelaces" \
     --dataset.fps=30 \
     --dataset.episode_time_s=300 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
     --display_data=false \
     --resume=true \
     --dataset.push_to_hub=true
@@ -304,6 +330,8 @@ lerobot-record \
     --dataset.single_task="test" \
     --dataset.fps=30 \
     --dataset.episode_time_s=300 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
     --display_data=false \
     --resume=false \
     --dataset.push_to_hub=true
@@ -321,9 +349,26 @@ lerobot-record \
     --dataset.single_task="pick up a potato chip and place it into the chips container" \
     --dataset.fps=30 \
     --dataset.episode_time_s=60 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
     --display_data=false \
     --resume=false \
     --dataset.push_to_hub=true
+```
+
+```python
+lerobot-record \
+    --robot.type=bi_arx5 \
+    --robot.enable_tactile_sensors=true \
+    --teleop.type=mock_teleop \
+    --dataset.repo_id=Vertax/bi_arx5_video_encode_test \
+    --dataset.single_task="test video encoding" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=30 \
+    --dataset.reset_time_s=10 \
+    --dataset.num_episodes=5 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto
 ```
 
 ## BiARX5 Robot lerobot-replay command
@@ -396,6 +441,8 @@ lerobot-record  \
   --robot.id=bi_arx5 \
   --dataset.fps=30 \
   --dataset.episode_time_s=600 \
+  --dataset.streaming_encoding=true \
+  --dataset.vcodec=auto \
   --display_data=false \
   --dataset.repo_id=Vertax/eval_diffusion_bi_arx5_pick_and_place_cube \
   --dataset.single_task="pick and place cube" \
