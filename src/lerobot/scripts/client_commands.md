@@ -309,6 +309,21 @@ lerobot-record \
     --dataset.push_to_hub=true
 ```
 
+```python
+lerobot-record \
+    --robot.type=bi_arx5 \
+    --robot.enable_tactile_sensors=true \
+    --teleop.type=mock_teleop \
+    --dataset.repo_id=Vertax/bi_arx5_video_encode_test \
+    --dataset.single_task="test video encoding" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=30 \
+    --dataset.reset_time_s=10 \
+    --dataset.num_episodes=5 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto
+```
+
 ## BiARX5 Robot lerobot-replay command
 
 ```python
