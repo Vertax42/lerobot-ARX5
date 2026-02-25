@@ -1,0 +1,238 @@
+# Streaming Video Encoding
+
+## Overview
+
+By default, LeRobot saves each camera frame as a PNG file during an episode, then encodes all PNGs into an MP4 at the end of the episode (inside `save_episode()`). For a 60-second episode at 30 fps with 4 cameras this means encoding ~7200 frames, which can take **5–20 seconds per episode** on a CPU-only system.
+
+**Streaming encoding** runs the MP4 encoder in a background thread *while* data collection is happening. When `save_episode()` is called, the video is already encoded and the call returns almost instantly.
+
+```
+Traditional:  record → save_episode [encode 7200 PNGs → MP4 ≈ 10s] → next episode
+Streaming:    record │ (background: encode frames in real-time)
+              save_episode [wait for flush ≈ 0.1s] → next episode
+```
+
+Additional benefits:
+- **Hardware encoder support** — `h264_nvenc` (NVIDIA), `h264_vaapi` (Intel/AMD), `h264_videotoolbox` (macOS) dramatically reduce CPU usage.
+- **No PNG intermediary** — disk I/O is reduced; only the final MP4 is written.
+- **vcodec="auto"** — automatically selects the best available encoder on the current machine.
+
+---
+
+## Quick Start
+
+```bash
+# Auto-detect best encoder (HW if available, otherwise libsvtav1)
+python -m lerobot.scripts.lerobot_record \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
+    --dataset.encoder_threads=2 \
+    ...
+
+# Explicitly use NVIDIA GPU encoder
+python -m lerobot.scripts.lerobot_record \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=h264_nvenc \
+    ...
+
+# Resume a previous recording with streaming enabled
+python -m lerobot.scripts.lerobot_record \
+    --resume=true \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
+    --dataset.encoder_threads=2 \
+    ...
+```
+
+---
+
+## Configuration Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--dataset.streaming_encoding` | `false` | Enable real-time background encoding |
+| `--dataset.vcodec` | `libsvtav1` | Video codec (`h264`, `hevc`, `libsvtav1`, `auto`, or any HW name) |
+| `--dataset.encoder_threads` | `None` (auto) | CPU threads per encoder instance |
+| `--dataset.encoder_queue_maxsize` | `30` | Max frames buffered per camera before dropping (~1 s @ 30 fps) |
+
+---
+
+## Codec Selection
+
+### `vcodec="auto"` (Recommended)
+
+Probes the system at startup and picks the first available hardware encoder from the priority list below, falling back to `libsvtav1` if none are found.
+
+```python
+from lerobot.datasets.video_utils import detect_available_hw_encoders, resolve_vcodec
+
+print(detect_available_hw_encoders())  # e.g. ['h264_nvenc', 'hevc_nvenc']
+print(resolve_vcodec("auto"))          # e.g. 'h264_nvenc'
+```
+
+### Hardware Encoder Reference
+
+| Encoder | Platform | Hardware | `vcodec` value |
+|---------|----------|----------|----------------|
+| H.264 VideoToolbox | macOS | Apple Silicon / Intel Mac | `h264_videotoolbox` |
+| HEVC VideoToolbox | macOS | Apple Silicon / Intel Mac | `hevc_videotoolbox` |
+| H.264 NVENC | Linux / Windows | NVIDIA GPU (Kepler+) | `h264_nvenc` |
+| HEVC NVENC | Linux / Windows | NVIDIA GPU (Maxwell+) | `hevc_nvenc` |
+| H.264 VAAPI | Linux | Intel / AMD iGPU | `h264_vaapi` |
+| H.264 QSV | Linux / Windows | Intel Quick Sync | `h264_qsv` |
+
+### Software Codec Reference
+
+| Encoder | `vcodec` value | Notes |
+|---------|----------------|-------|
+| SVT-AV1 | `libsvtav1` | Default; best compression, highest CPU |
+| H.264 | `h264` | Fast, widely compatible |
+| H.265 / HEVC | `hevc` | Better compression than H.264 |
+
+---
+
+## Performance Tuning
+
+### `encoder_threads`
+
+Controls how many CPU threads each encoder instance uses.
+
+| Scenario | Recommendation |
+|----------|----------------|
+| HW encoder (nvenc / vaapi) | `1` or `2` — GPU does the work, threads only feed data |
+| libsvtav1, many cameras | `2`–`4` per encoder thread, limited by core count |
+| libsvtav1, 1–2 cameras | `None` (let SVT-AV1 auto-detect) |
+
+> **Rule of thumb:** `encoder_threads × num_cameras ≤ (total_cores / 2)` to leave headroom for the control loop.
+
+### `encoder_queue_maxsize`
+
+The frame queue per camera. When the encoder thread falls behind, excess frames are **dropped** (with a warning), never blocking the control loop.
+
+| Value | Meaning |
+|-------|---------|
+| `30` (default) | ~1 s buffer at 30 fps — good balance |
+| `60` | ~2 s buffer — use with slower encoders |
+| `10` | Minimal RAM use — only for fast HW encoders |
+
+### Impact by Resolution and Camera Count
+
+| Resolution | Cameras | Recommended codec | `encoder_threads` |
+|------------|---------|-------------------|-------------------|
+| 480p | 1–2 | `libsvtav1` or `h264` | `2` |
+| 480p | 4+ | `h264_nvenc` / `h264_vaapi` | `1` |
+| 720p | 1–2 | `libsvtav1` | `4` |
+| 720p | 4+ | `h264_nvenc` | `1`–`2` |
+| 1080p | any | HW encoder strongly recommended | `1`–`2` |
+
+---
+
+## Recommended Configurations
+
+### High-End System (12+ cores, NVIDIA GPU)
+
+```bash
+python -m lerobot.scripts.lerobot_record \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=h264_nvenc \
+    --dataset.encoder_threads=1 \
+    --dataset.encoder_queue_maxsize=30 \
+    ...
+```
+
+### Mid-Range System (8 cores, no dedicated GPU)
+
+```bash
+python -m lerobot.scripts.lerobot_record \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=libsvtav1 \
+    --dataset.encoder_threads=2 \
+    ...
+```
+
+### Intel NUC / Embedded System (4 cores, Intel iGPU)
+
+```bash
+python -m lerobot.scripts.lerobot_record \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=h264_vaapi \
+    --dataset.encoder_threads=1 \
+    ...
+```
+
+### macOS (Apple Silicon)
+
+```bash
+python -m lerobot.scripts.lerobot_record \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=h264_videotoolbox \
+    --dataset.encoder_threads=1 \
+    ...
+```
+
+---
+
+## How It Works
+
+### Architecture
+
+Each video key (camera) gets its own `_CameraEncoderThread`. All threads are started at the beginning of each episode (`add_frame()` on the first frame) and run until `save_episode()` signals end-of-episode.
+
+```
+add_frame()
+  ├─ frame_index == 0 → start_episode() → spawn one thread per camera
+  └─ frame_index > 0  → feed_frame(key, image) → put into per-camera queue
+
+[Background threads: queue → PyAV encode → write to temp MP4 + compute pixel stats]
+
+save_episode()
+  └─ finish_episode() → send sentinel → join threads → collect (temp_path, stats)
+     └─ _save_episode_video(temp_path=...) → move / concat into final MP4
+```
+
+### Episode Statistics
+
+The encoder thread computes per-channel pixel statistics (min, max, mean, std, quantiles) **inline** while encoding, using `RunningQuantileStats`. The stats are normalized to `[0, 1]` and shaped `(C, 1, 1)`, matching the format produced by the traditional PNG-based path.
+
+### Cancellation
+
+If `clear_episode_buffer()` is called (e.g., user requests a re-record), `cancel_episode()` is invoked: the stop event is set, threads are joined (5 s timeout), and all temporary files are deleted.
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| `StreamingVideoEncoder: dropped N frame(s)` | Encoder can't keep up with fps | Use HW encoder or reduce `encoder_threads` contention |
+| `thread did not finish in 120 s` | Encoder hung or system overloaded | Check GPU/CPU utilization; reduce resolution or camera count |
+| `Unsupported video codec` | Codec not in `VALID_VIDEO_CODECS` | Run `detect_available_hw_encoders()` to see what's available |
+| `Error: no result received for 'key'` | Encoder thread crashed | Check logs for root cause; file a bug with the error message |
+| High CPU despite HW encoder | `encoder_threads` too high | Set `encoder_threads=1` for HW codecs |
+| FPS drops during recording | Image writer + encoder contention | Reduce `num_image_writer_threads_per_camera` or use `vcodec=auto` |
+
+### Verify your setup
+
+```python
+from lerobot.datasets.video_utils import detect_available_hw_encoders, resolve_vcodec
+
+# List all HW encoders available on this machine
+print(detect_available_hw_encoders())
+
+# Confirm what 'auto' resolves to
+print(resolve_vcodec("auto"))
+```
+
+---
+
+## Disabling Streaming Encoding
+
+Streaming encoding is **opt-in** and defaults to `False`. Omitting `--dataset.streaming_encoding` (or setting it to `false`) uses the traditional PNG → MP4 path, which is identical to the pre-PR behavior.
+
+```bash
+# Traditional encoding (default, unchanged behavior)
+python -m lerobot.scripts.lerobot_record \
+    --dataset.repo_id=my/dataset \
+    --dataset.single_task="Pick the cube" \
+    ...
+```
