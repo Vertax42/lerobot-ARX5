@@ -76,8 +76,8 @@ lerobot-record \
     --dataset.single_task="pick up cubes in rgb order from the table and place them in the blue box" \
     --dataset.fps=10 \
     --resume=false \
-    --dataset.push_to_hub=false
-    --display_data=true \
+    --dataset.push_to_hub=false \
+    --display_data=true
 ```
 
 ## Flexiv Rizon4 Robot with Flare Gripper lerobot-record by Beitong Gamepad command 
@@ -93,8 +93,8 @@ lerobot-record \
     --dataset.single_task="pick up cubes in rgb order from the table and place them in the blue box" \
     --dataset.fps=10 \
     --resume=false \
-    --dataset.push_to_hub=false
-    --display_data=true \
+    --dataset.push_to_hub=false \
+    --display_data=true
 ```
 
 ## xense_flare Robot teleoperate by Mock Teleop command
@@ -432,4 +432,16 @@ lerobot-record \
   --display_data=true
 ```
 
-
+```python
+lerobot-record \
+    --robot.type=pylibfranka_research3 \
+    --robot.control_mode=cartesian_impedance \
+    --teleop.type=pico4 \
+    --dataset.repo_id=flexiv_pico4/ceshi20260225 \
+    --dataset.num_episodes=2 \
+    --dataset.single_task="pick" \
+    --dataset.fps=10 \
+    --resume=false \
+    --dataset.push_to_hub=false \
+    --display_data=true
+```

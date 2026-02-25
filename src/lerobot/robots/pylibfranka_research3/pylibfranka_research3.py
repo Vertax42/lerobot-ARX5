@@ -544,7 +544,6 @@ class PylibfrankaResearch3(Robot):
             path[:, :3] = pos_path
             path[:, 3:7] = rot_path.as_quat()
 
-            print(path)
             for p in path:
                 # Send absolute pose as cartesian_absolute command
                 ee_matrix = quaternion_to_matrix(p, input_format="wxyz")

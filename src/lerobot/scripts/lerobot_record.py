@@ -678,6 +678,20 @@ def record_loop(
                 teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
                 # Skip this loop iteration (don't send action after reset)
                 continue
+        if teleop.name == "pico4" and robot.name == "pylibfranka_research3":
+            # Check for reset button (uses cached A button state from get_action)
+            reset_button = teleop.get_reset_button()
+            if reset_button:
+                # Reset robot to initial position
+                if hasattr(robot, "reset_to_initial_position"):
+                    robot.reset_to_initial_position()
+                logging.info("Reset to initial position (A button pressed)")
+
+                # Always reset teleop state (both dryrun and normal mode)
+                current_pose_quat = robot.get_current_tcp_pose_quat()
+                teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
+                # Skip this loop iteration (don't send action after reset)
+                continue
         if teleop.name == "btgamepad" and robot.name == "pylibfranka_research3":
             # Check for reset button (uses cached A button state from get_action)
             reset_button = teleop.get_reset_button()
@@ -803,6 +817,9 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     if cfg.teleop.type == "pico4" and cfg.robot.type == "flexiv_rizon4":
         robot.connect(go_to_start=False)
         logging.info(f"Start EEF pose: {robot.get_current_tcp_pose_quat()}")
+    elif cfg.teleop.type == "pico4" and cfg.robot.type == "pylibfranka_research3":
+        robot.connect(go_to_start=False)
+        logging.info(f"Start EEF pose: {robot.get_current_tcp_pose_quat()}")
     else:
         robot.connect()
         logging.info(f"Start EEF pose: {robot.get_current_tcp_pose_quat()}")
@@ -818,6 +835,9 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
             print("Teleop initialized with robot EEF pose.")
         elif cfg.teleop.type == "btgamepad" and cfg.robot.type == "pylibfranka_research3":
+            teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
+            print("Teleop initialized with robot EEF pose.")
+        elif cfg.teleop.type == "pico4" and cfg.robot.type == "pylibfranka_research3":
             teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
             print("Teleop initialized with robot EEF pose.")
         else:
