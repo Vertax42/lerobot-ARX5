@@ -2,18 +2,18 @@
 """
 PylibfrankaResearch3 — Franka Research3 robot driver via WebSocket
 
-通过 WebSocket 客户端-服务端架构控制 Franka 机械臂。
-服务端 (ws_teleop_server.py) 运行在机器人侧，直接管理 Franka 控制器。
-客户端 (本模块) 通过 WebSocket 发送指令并接收状态反馈。
+WebSocket client-server architecture for controlling the Franka robot.
+The server (ws_teleop_server.py) runs on the robot side, directly managing the Franka controller.
+The client (this module) sends commands and receives state feedback via WebSocket.
 
-指令协议:
-  - get_state           : 获取机器人状态
-  - cartesian_absolute  : 设置绝对末端位姿 (4x4 矩阵)
-  - joint_absolute      : 设置绝对关节位置 (7 float)
-  - move_home           : 移动到指定关节位置
-  - configure           : 配置控制器参数
-  - reset               : 重置到初始位置
-  - stop                : 停止
+Command protocol:
+  - get_state           : Get robot state
+  - cartesian_absolute  : Set absolute end-effector pose (4x4 matrix)
+  - joint_absolute      : Set absolute joint positions (7 floats)
+  - move_home           : Move to specified joint positions
+  - configure           : Configure controller parameters
+  - reset               : Reset to initial position
+  - stop                : Stop
 """
 
 import atexit
@@ -96,13 +96,13 @@ class PylibfrankaResearch3(Robot):
     # ======================== Server Management ========================
 
     def _launch_server(self, robot_ip: str, port: int) -> subprocess.Popen:
-        """在本机后台启动 ws_teleop_server.py，返回子进程对象。
+        """Launch ws_teleop_server.py in the background on the local machine, returning the subprocess object.
 
-        服务端负责：
-        1. 连接 Franka 机器人
-        2. 移动到初始位姿
-        3. 切换到 OSC 控制模式
-        4. 启动 WebSocket 监听
+        The server is responsible for:
+        1. Connecting to the Franka robot
+        2. Moving to the initial pose
+        3. Switching to OSC control mode
+        4. Starting WebSocket listening
         """
         # Map ControlMode enum to server CLI argument
         mode_map = {
@@ -125,7 +125,7 @@ class PylibfrankaResearch3(Robot):
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
         )
 
-        # 退出时自动清理服务端
+        # Automatically clean up the server on exit
         def cleanup():
             if proc.poll() is None:
                 print("[Client] Shutting down server ...")
@@ -136,7 +136,7 @@ class PylibfrankaResearch3(Robot):
                     proc.kill()
         atexit.register(cleanup)
 
-        # 等待服务端就绪（服务端输出 "listening" 或 "waiting" 表示就绪）
+        # Wait for the server to be ready (server outputs "listening" or "waiting" when ready)
         print("[Client] Waiting for server to be ready ...")
         deadline = time.monotonic() + 120
         while time.monotonic() < deadline:
@@ -153,24 +153,24 @@ class PylibfrankaResearch3(Robot):
     # ======================== WebSocket Communication ========================
 
     def _ws_send_recv(self, cmd: dict, timeout: float = 5.0) -> dict:
-        """通过 WebSocket 发送指令并接收服务端返回的机器人状态。
+        """Send a command via WebSocket and receive the robot state from the server.
 
         Args:
-            cmd: 指令字典，必须包含 "type" 字段
-            timeout: 接收超时（秒）
+            cmd: Command dictionary, must contain the "type" field
+            timeout: Receive timeout (seconds)
 
         Returns:
-            服务端返回的状态字典，包含:
-            - O_T_EE: 末端位姿 (16 float, 列主序)
-            - q: 关节位置 (7 float)
-            - dq: 关节速度 (7 float)
-            - tau: 关节力矩 (7 float)
-            - ext_wrench: 外部力/力矩 (6 float)
-            - ee_desired: 期望末端位姿 (4x4 嵌套列表)
-            - timestamp: 时间戳
+            State dictionary returned by the server, containing:
+            - O_T_EE: End-effector pose (16 floats, column-major)
+            - q: Joint positions (7 floats)
+            - dq: Joint velocities (7 floats)
+            - tau: Joint torques (7 floats)
+            - ext_wrench: External wrench (6 floats)
+            - ee_desired: Desired end-effector pose (4x4 nested list)
+            - timestamp: Timestamp
         """
         if self._ws is None:
-            raise DeviceNotConnectedError(f"{self} WebSocket 未连接")
+            raise DeviceNotConnectedError(f"{self} WebSocket not connected")
 
         self._ws.send(json.dumps(cmd))
         response = self._ws.recv(timeout=timeout)
@@ -183,15 +183,15 @@ class PylibfrankaResearch3(Robot):
         return state_data
 
     def _parse_ee_matrix(self, state_data: dict) -> np.ndarray:
-        """从服务端状态中解析末端位姿为 4x4 行主序矩阵。
+        """Parse end-effector pose from server state into a 4x4 row-major matrix.
 
-        服务端返回 ee_desired 为 16 元素列主序数组（Franka 标准格式），
-        需要 reshape(4,4).T 转换为行主序：
-          列主序: [r11, r21, r31, 0, r12, r22, r32, 0, r13, r23, r33, 0, px, py, pz, 1]
-          行主序: [[r11, r12, r13, px],
-                   [r21, r22, r23, py],
-                   [r31, r32, r33, pz],
-                   [0,   0,   0,   1]]
+        The server returns ee_desired as a 16-element column-major array (Franka standard format),
+        which needs to be reshaped and transposed to row-major:
+          Column-major: [r11, r21, r31, 0, r12, r22, r32, 0, r13, r23, r33, 0, px, py, pz, 1]
+          Row-major: [[r11, r12, r13, px],
+                      [r21, r22, r23, py],
+                      [r31, r32, r33, pz],
+                      [0,   0,   0,   1]]
         """
         ee_desired = np.array(state_data.get("ee_desired", []), dtype=np.float64)
         # print("Received ee_desired from server:", ee_desired)
@@ -333,20 +333,20 @@ class PylibfrankaResearch3(Robot):
         try:
             response = requests.get(f"{self.gripper_url}/get_pos", timeout=self.config.gripper_timeout)
             if response.status_code != 200:
-                logger.warning(f"获取夹爪位置失败: HTTP {response.status_code}")
+                logger.warning(f"Failed to get gripper position: HTTP {response.status_code}")
                 return self.config.gripper_home_position
             data = response.json()
             min_w = float(self.config.gripper_min_width_mm)
             max_w = float(self.config.gripper_max_width_mm)
             width = data.get("position", 0.0)
             width = max(min_w, min(max_w, width))
-            # 映射: width (mm) -> closed_ratio (0-1)
+            # Map: width (mm) -> closed_ratio (0-1)
             closed_ratio = 1.0 - (width - min_w) / (max_w - min_w)
             position = float(np.clip(closed_ratio, self.config.gripper_min_position, self.config.gripper_max_position))
-            logger.debug(f"获取夹爪位置: width_mm={width:.1f} -> closed_ratio={position:.3f}")
+            logger.debug(f"Gripper position: width_mm={width:.1f} -> closed_ratio={position:.3f}")
             return position
         except Exception as e:
-            logger.error(f"获取夹爪位置错误: {e}")
+            logger.error(f"Failed to get gripper position: {e}")
             return self.config.gripper_home_position
 
     def _send_gripper_position_command(self, position: float) -> bool:
@@ -355,11 +355,11 @@ class PylibfrankaResearch3(Robot):
             min_w = float(self.config.gripper_min_width_mm)
             max_w = float(self.config.gripper_max_width_mm)
 
-            # 映射: closed_ratio -> width
+            # Map: closed_ratio -> width
             target_width = min_w + (1.0 - position) * (max_w - min_w)
             target_width = float(np.clip(target_width, min_w, max_w))
 
-            logger.debug(f"转换夹爪位置: closed_ratio={position:.3f} -> width_mm={target_width:.1f}")
+            logger.debug(f"Gripper command: closed_ratio={position:.3f} -> width_mm={target_width:.1f}")
 
             response = requests.post(
                 f"{self.gripper_url}/move",
@@ -374,11 +374,11 @@ class PylibfrankaResearch3(Robot):
             if response.status_code == 200:
                 return True
             else:
-                logger.warning(f"发送夹爪命令失败: HTTP {response.status_code}")
+                logger.warning(f"Failed to send gripper command: HTTP {response.status_code}")
                 return False
 
         except Exception as e:
-            logger.error(f"发送夹爪位置命令错误: {e}")
+            logger.error(f"Failed to send gripper position command: {e}")
             return False
 
     # ======================== Connection Management ========================
@@ -409,12 +409,13 @@ class PylibfrankaResearch3(Robot):
     def connect(self, calibrate: bool = True, go_to_start: bool = True) -> None:
         """Connect to Franka robot via WebSocket server and gripper via REST.
 
-        流程:
-        1. 启动服务端子进程（初始化机器人、移动到初始位姿、切换 OSC 模式）
-        2. 建立 WebSocket 连接
-        3. 发送 get_state 验证连接
-        4. 连接夹爪（REST）
-        5. 连接相机
+        Steps:
+        1. Launch server subprocess (initializes robot, moves to home)
+        2. Open WebSocket connection (with retry)
+        3. Verify connection by getting state
+        4. Connect gripper (if enabled)
+        5. Connect cameras
+        6. Configure controller parameters
         """
         if self.is_connected:
             raise DeviceAlreadyConnectedError(f"{self} already connected")
@@ -500,9 +501,9 @@ class PylibfrankaResearch3(Robot):
     def _go_to_start(self) -> None:
         """Move robot to home position via WebSocket move_home command.
 
-        服务端接收 move_home 指令后会：
-        1. 调用 controller.move() 移动到目标关节位置
-        2. 重新切换回 OSC 控制模式
+        After receiving the move_home command, the server will:
+        1. Call controller.move() to move to the target joint positions
+        2. Switch back to OSC control mode
         """
         if not self._is_connected or self._ws is None:
             raise DeviceNotConnectedError(f"{self} is not connected.")
@@ -555,8 +556,8 @@ class PylibfrankaResearch3(Robot):
     def reset_to_initial_position(self) -> None:
         """Reset robot to initial position based on config.go_to_start.
 
-        在 reset 期间设置 _is_resetting 标志，send_action 会忽略所有指令，
-        防止手柄残留的旧位姿在 move_home 后瞬间发到机械臂导致抽动。
+        During reset, the _is_resetting flag is set, and send_action will ignore all commands,
+        preventing old poses from the controller from being sent to the robot immediately after move_home, causing jerks.
         """
         if not self._is_connected or self._ws is None:
             raise DeviceNotConnectedError(f"{self} is not connected.")
@@ -576,9 +577,9 @@ class PylibfrankaResearch3(Robot):
             self._is_resetting = False
 
     def _switch_to_control_mode(self) -> None:
-        """切换控制模式（通过 WebSocket configure 命令）。
+        """Switch control mode (via WebSocket configure command).   
 
-        服务端默认使用 OSC 模式。如需切换，可发送 configure 命令:
+        The server defaults to OSC mode. To switch, send a configure command:
           self._ws_send_recv({"type": "configure", "switch_mode": "osc"})
         """
         if not self._is_connected or self._ws is None:
@@ -590,7 +591,7 @@ class PylibfrankaResearch3(Robot):
     def get_observation(self) -> dict[str, Any]:
         """Get synchronized observation from robot, gripper, and cameras.
 
-        通过 WebSocket 获取机器人状态，结合夹爪位置和相机图像构建完整观测。
+        Get robot state via WebSocket, and combine with gripper position and camera images to construct a complete observation.
         """
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected")
