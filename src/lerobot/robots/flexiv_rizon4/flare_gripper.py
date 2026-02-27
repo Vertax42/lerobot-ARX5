@@ -34,6 +34,7 @@ class FlareGripper:
         self._config = config
         self._mac_addr = config.mac_addr
         self._cam_size = config.cam_size
+        self._enable_sensor = config.enable_sensor
         self._rectify_size = config.rectify_size
         self._sensor_output_type = config.sensor_output_type
         self._sensor_keys = config.sensor_keys
@@ -49,17 +50,20 @@ class FlareGripper:
         self._sensors: dict[str, Sensor] = {}
 
         self._available_sensors: dict = {}
-        self._logger.info(f"Scanning for sensors on device {self._mac_addr}...")
-        try:
-            sensor_sns = call_service(f"master_{self._mac_addr}", "scan_sensor_sn")
-            if not sensor_sns:
-                raise RuntimeError("No sensors found")
-            self._logger.info(f"Found {len(sensor_sns)} sensor(s):")
-            for sn, info in sensor_sns.items():
-                self._logger.info(f"  - {sn}: {info}")
-            self._available_sensors = sensor_sns
-        except Exception as e:
-            raise RuntimeError(f"Error scanning sensors: {e}") from e
+        if self._enable_sensor:
+            self._logger.info(f"Scanning for sensors on device {self._mac_addr}...")
+            try:
+                sensor_sns = call_service(f"master_{self._mac_addr}", "scan_sensor_sn")
+                if not sensor_sns:
+                    raise RuntimeError("No sensors found")
+                self._logger.info(f"Found {len(sensor_sns)} sensor(s):")
+                for sn, info in sensor_sns.items():
+                    self._logger.info(f"  - {sn}: {info}")
+                self._available_sensors = sensor_sns
+            except Exception as e:
+                raise RuntimeError(f"Error scanning sensors: {e}") from e
+        else:
+            self._logger.info("Tactile sensors disabled by config.")
 
     def connect(self) -> None:
         """Connect to the Flare Gripper."""
@@ -67,18 +71,20 @@ class FlareGripper:
             raise DeviceAlreadyConnectedError(f"{self} already connected")
 
         self._logger.info(f"Connecting to Flare Gripper: {self._mac_addr}")
-        try:
-            # connect sensors
-            if self._available_sensors:
-                for sn in self._available_sensors:
-                    self._sensors[sn] = Sensor.create(
-                        sn, mac_addr=self._mac_addr, rectify_size=self._rectify_size
-                    )
-                self._logger.info(f"✅ {len(self._sensors)} tactile sensors successfully connected.")
-            else:
-                self._logger.warn("No tactile sensors found")
-        except Exception as e:
-            raise RuntimeError(f"Error connecting to Flare Gripper tactile sensors: {e}") from e
+        if self._enable_sensor:
+            try:
+                if self._available_sensors:
+                    for sn in self._available_sensors:
+                        self._sensors[sn] = Sensor.create(
+                            sn, mac_addr=self._mac_addr, rectify_size=self._rectify_size
+                        )
+                    self._logger.info(f"✅ {len(self._sensors)} tactile sensors successfully connected.")
+                else:
+                    self._logger.warn("No tactile sensors found")
+            except Exception as e:
+                raise RuntimeError(f"Error connecting to Flare Gripper tactile sensors: {e}") from e
+        else:
+            self._logger.info("Skipping tactile sensor connection (disabled).")
 
         try:
             # connect camera
@@ -159,7 +165,7 @@ class FlareGripper:
             Dictionary mapping sensor_keys names (e.g., "left_tactile", "right_tactile")
             to their rectify data (numpy arrays).
         """
-        if not self._is_connected:
+        if not self._is_connected or not self._enable_sensor:
             return {}
 
         sensor_data = {}
