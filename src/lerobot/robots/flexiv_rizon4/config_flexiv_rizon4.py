@@ -22,6 +22,7 @@ from enum import Enum
 import flexivrdk
 
 from lerobot.cameras.configs import CameraConfig
+from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.robots.config import RobotConfig
 from lerobot.robots.flexiv_rizon4.config_flare_gripper import FlareGripperConfig, SensorOutputType
 
@@ -167,7 +168,7 @@ class FlexivRizon4Config(RobotConfig):
     # Start position parameters (for MoveJ primitive)
     # Joint positions in degrees (factory-defined home position)
     start_position_degree: list[float] = field(
-        default_factory=lambda: [0.0, -40.0, 0.0, 90.0, 0.0, 40.0, 0.0]
+        default_factory=lambda: [-1.70, 4.48, 1.54, 136.22, 0.12, 41.74, -0.18]
     )
     # Joint velocity scale for moving to start position (1-100, default 30)
     start_vel_scale: int = 30
@@ -209,6 +210,9 @@ class FlexivRizon4Config(RobotConfig):
 
     # Initialize gripper to fully open on connect
     flare_gripper_init_open: bool = True
+
+    # force to use joint observation
+    use_joint_observation: bool = True
 
     # Auto-created in __post_init__ from flare_gripper_* parameters (do not set directly)
     flare_gripper: FlareGripperConfig | None = field(default=None, init=False)
@@ -259,3 +263,10 @@ class FlexivRizon4Config(RobotConfig):
             )
         else:
             self.flare_gripper = None
+
+        # Camera configuration for realsense cameras
+        self.cameras = {
+            "top": RealSenseCameraConfig(
+                serial_number_or_name="135522074323", fps=30, width=640, height=480
+            ),
+        }
