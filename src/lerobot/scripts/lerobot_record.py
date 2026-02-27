@@ -310,6 +310,15 @@ def apply_velocity_limits(
     return limited_action
 
 
+def extract_flexiv_joint_features(obs):
+    """提取关节位置、速度、力矩
+    """
+    joint_features = {}
+    for key, value in obs.items():
+        if key.endswith(".pos") or key.endswith(".vel") or key.endswith(".effort"):
+            joint_features[key] = value
+    return joint_features
+
 @safe_stop_image_writer
 def bi_arx5_record_loop(
     robot: Robot,
@@ -465,11 +474,11 @@ def bi_arx5_record_loop(
 
                 # Apply velocity limits to ensure consistency with inference-time clipping
                 prev_action = extract_joint_positions(prev_observation)
-                limited_action = apply_velocity_limits(
+                limited_current_action = apply_velocity_limits(
                     current_action, prev_action, 1.0 / fps, robot
                 )
                 action_frame = build_dataset_frame(
-                    dataset.features, limited_action, prefix=ACTION
+                    dataset.features, limited_current_action, prefix=ACTION
                 )
                 frame = {**prev_observation_frame, **action_frame, "task": single_task}
                 dataset.add_frame(frame)
@@ -573,6 +582,121 @@ def xense_flare_record_loop(
 
         timestamp = time.perf_counter() - start_episode_t
 
+
+@safe_stop_image_writer
+def flexiv_rizon4_record_loop(
+    robot: Robot,
+    events: dict,
+    fps: int,
+    dataset: LeRobotDataset | None = None,
+    teleop: Teleoperator | list[Teleoperator] | None = None,
+    policy: PreTrainedPolicy | None = None,
+    preprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]] | None = None,
+    postprocessor: PolicyProcessorPipeline[PolicyAction, PolicyAction] | None = None,
+    control_time_s: int | None = None,
+    single_task: str | None = None,
+    display_data: bool = False,
+):
+    if dataset is not None and dataset.fps != fps:
+        raise ValueError(
+            f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
+        )
+
+    if isinstance(teleop, list):
+        raise ValueError("Multi-teleop mode is not supported in this version.")
+
+    # Reset policy and processor if they are provided
+    if policy is not None and preprocessor is not None and postprocessor is not None:
+        policy.reset()
+        preprocessor.reset()
+        postprocessor.reset()
+
+    timestamp = 0
+    start_episode_t = time.perf_counter()
+
+    # Variables for action shifting (only used in manual demonstration mode)
+    prev_observation = None
+    prev_observation_frame = None
+
+    while timestamp < control_time_s:
+        start_loop_t = time.perf_counter()
+
+        if events["exit_early"]:
+            events["exit_early"] = False
+            break
+
+        # Get robot observation
+        current_observation = robot.get_observation()
+        current_observation_frame = None
+
+        if dataset is not None:
+            current_observation_frame = build_dataset_frame(
+                dataset.features, current_observation, prefix=OBS_STR
+            )
+
+        if policy is None and isinstance(teleop, Teleoperator):
+            act = teleop.get_action()
+
+            act_processed_teleop = act
+
+        else:
+            logging.info(
+                "No policy or teleoperator provided, skipping action generation."
+                "This is likely to happen when resetting the environment without a teleop device."
+                "The robot won't be at its rest position at the start of the next episode."
+            )
+            continue
+
+        # Applies a pipeline to the action, default is IdentityProcessor
+        if policy is not None and act_processed_policy is not None:
+            action_values = act_processed_policy
+            robot_action_to_send = act_processed_policy
+        else:
+            robot_action_to_send = act_processed_teleop
+
+        if teleop.name == "pico4" and robot.name == "flexiv_rizon4":
+            # Check for reset button (uses cached A button state from get_action)
+            reset_button = teleop.get_reset_button()
+            if reset_button:
+                # Reset robot to initial position
+                if hasattr(robot, "reset_to_initial_position"):
+                    robot.reset_to_initial_position()
+                logging.info("Reset to initial position (A button pressed)")
+
+                # Always reset teleop state (both dryrun and normal mode)
+                current_pose_quat = robot.get_current_tcp_pose_quat()
+                teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
+                # Skip this loop iteration (don't send action after reset)
+                continue
+
+        # Send action to robot
+        # Action can eventually be clipped using `max_relative_target`,
+        # so action actually sent is saved in the dataset. action = postprocessor.process(action)
+        # TODO(steven, pepijn, adil): we should use a pipeline step to clip the action, so the sent action is the action that we input to the robot.
+        _sent_action = robot.send_action(robot_action_to_send)
+
+        current_action = extract_flexiv_joint_features(current_observation)
+        # Action shifting logic: from second frame onwards, create dataset entries
+        if prev_observation is not None and dataset is not None:
+            # Manual demonstration mode with action shifting
+            # Use current frame's joint positions as previous frame's action
+            action_frame = build_dataset_frame(
+                dataset.features, current_action, prefix=ACTION
+            )
+            frame = {**prev_observation_frame, **action_frame, "task": single_task}
+            dataset.add_frame(frame)
+
+        if display_data:
+            log_rerun_data(observation=current_observation, action=current_action)
+
+        # Update for next iteration
+        prev_observation = current_observation
+        prev_observation_frame = current_observation_frame
+
+        dt_s = time.perf_counter() - start_loop_t
+        busy_wait(1 / fps - dt_s)
+
+        timestamp = time.perf_counter() - start_episode_t
 
 @safe_stop_image_writer
 def record_loop(
@@ -728,22 +852,40 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         make_default_processors()
     )
 
-    dataset_features = combine_feature_dicts(
-        aggregate_pipeline_dataset_features(
-            pipeline=teleop_action_processor,
-            initial_features=create_initial_features(
-                action=robot.action_features
-            ),  # TODO(steven, pepijn): in future this should be come from teleop or policy
-            use_videos=cfg.dataset.video,
-        ),
-        aggregate_pipeline_dataset_features(
-            pipeline=robot_observation_processor,
-            initial_features=create_initial_features(
-                observation=robot.observation_features
+    if cfg.teleop.type == "pico4" and cfg.robot.type == "flexiv_rizon4":
+        dataset_features = combine_feature_dicts(
+            aggregate_pipeline_dataset_features(
+                pipeline=teleop_action_processor,
+                initial_features=create_initial_features(
+                    action=robot._proprioception_ft
+                ),
+                use_videos=cfg.dataset.video,
             ),
-            use_videos=cfg.dataset.video,
-        ),
-    )
+            aggregate_pipeline_dataset_features(
+                pipeline=robot_observation_processor,
+                initial_features=create_initial_features(
+                    observation=robot.observation_features
+                ),
+                use_videos=cfg.dataset.video,
+            ),
+        )
+    else:
+        dataset_features = combine_feature_dicts(
+            aggregate_pipeline_dataset_features(
+                pipeline=teleop_action_processor,
+                initial_features=create_initial_features(
+                    action=robot.action_features
+                ),  # TODO(steven, pepijn): in future this should be come from teleop or policy
+                use_videos=cfg.dataset.video,
+            ),
+            aggregate_pipeline_dataset_features(
+                pipeline=robot_observation_processor,
+                initial_features=create_initial_features(
+                    observation=robot.observation_features
+                ),
+                use_videos=cfg.dataset.video,
+            ),
+        )
 
     if cfg.resume:
         dataset = LeRobotDataset(
@@ -810,7 +952,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
     # robot.connect()
     if cfg.teleop.type == "pico4" and cfg.robot.type == "flexiv_rizon4":
-        robot.connect(go_to_start=False)
+        robot.connect(go_to_start=True)
         logging.info(f"Start EEF pose: {robot.get_current_tcp_pose_quat()}")
     else:
         robot.connect()
@@ -818,7 +960,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     if teleop is not None:
         if cfg.teleop.type == "pico4" and cfg.robot.type == "flexiv_rizon4":
             teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
-            print("Teleop initialized with robot EEF pose.")
+            logging.info("Teleop initialized with robot EEF pose.")
         else:
             teleop.connect()
 
@@ -853,6 +995,20 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         teleop_action_processor=teleop_action_processor,
                         robot_action_processor=robot_action_processor,
                         robot_observation_processor=robot_observation_processor,
+                        teleop=teleop,
+                        policy=policy,
+                        preprocessor=preprocessor,
+                        postprocessor=postprocessor,
+                        dataset=dataset,
+                        control_time_s=cfg.dataset.episode_time_s,
+                        single_task=cfg.dataset.single_task,
+                        display_data=cfg.display_data,
+                    )
+                elif cfg.robot.type == "flexiv_rizon4":
+                    flexiv_rizon4_record_loop(
+                        robot=robot,
+                        events=events,
+                        fps=cfg.dataset.fps,
                         teleop=teleop,
                         policy=policy,
                         preprocessor=preprocessor,
@@ -908,6 +1064,16 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                             single_task=cfg.dataset.single_task,
                             display_data=cfg.display_data,
                         )
+                    elif cfg.robot.type == "flexiv_rizon4":
+                        flexiv_rizon4_record_loop(
+                            robot=robot,
+                            events=events,
+                            fps=cfg.dataset.fps,
+                            teleop=teleop,
+                            control_time_s=cfg.dataset.reset_time_s,
+                            single_task=cfg.dataset.single_task,
+                            display_data=cfg.display_data,
+                        )
                     else:
                         record_loop(
                             robot=robot,
@@ -936,7 +1102,8 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     except KeyboardInterrupt:
         logging.info("\nKeyboardInterrupt received. Stopping recording...")
     except Exception as e:
-        logging.error(f"Error during recording: {e}")
+        import traceback
+        logging.error(f"Error during recording: {e}\n{traceback.format_exc()}")
     finally:
         # Always disconnect robot and teleop safely
         try:

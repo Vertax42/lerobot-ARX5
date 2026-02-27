@@ -84,7 +84,7 @@ class XenseFlareConfig(RobotConfig):
 
     # Component enable flags
     enable_gripper: bool = True
-    enable_sensor: bool = True
+    enable_sensor: bool = False
     enable_camera: bool = True
     enable_vive: bool = True  # Set to False when mounted on robot arm (pose from arm)
 
@@ -92,7 +92,7 @@ class XenseFlareConfig(RobotConfig):
     gripper_max_pos: float = 85.0
 
     # HACK: Need to set the maximum readout after calibration, so we can normalize the gripper position
-    gripper_max_readout: float = 83
+    gripper_max_readout: float = 81
     # Sensor SN to feature key mapping
     # If a sensor SN is not in this dict, it will use "sensor_{sn}" as key
     # Example: {"OG000344": "tactile_thumb", "OG000337": "tactile_finger"}
