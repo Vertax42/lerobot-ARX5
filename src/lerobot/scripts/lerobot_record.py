@@ -702,6 +702,119 @@ def flexiv_rizon4_record_loop(
         timestamp = time.perf_counter() - start_episode_t
 
 @safe_stop_image_writer
+def pylibfranka_research3_record_loop(
+    robot: Robot,
+    events: dict,
+    fps: int,
+    dataset: LeRobotDataset | None = None,
+    teleop: Teleoperator | list[Teleoperator] | None = None,
+    control_time_s: int | None = None,
+    single_task: str | None = None,
+    display_data: bool = False,
+):
+    if dataset is not None and dataset.fps != fps:
+        raise ValueError(
+            f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
+        )
+
+    if isinstance(teleop, list):
+        raise ValueError("Multi-teleop mode is not supported in this version.")
+
+    timestamp = 0
+    start_episode_t = time.perf_counter()
+
+    # Variables for action shifting (only used in manual demonstration mode)
+    prev_observation = None
+    prev_observation_frame = None
+
+    while timestamp < control_time_s:
+        start_loop_t = time.perf_counter()
+
+        if events["exit_early"]:
+            events["exit_early"] = False
+            break
+
+        # Get robot observation
+        current_observation = robot.get_observation()
+        current_observation_frame = None
+
+        if dataset is not None:
+            current_observation_frame = build_dataset_frame(
+                dataset.features, current_observation, prefix=OBS_STR
+            )
+
+        if isinstance(teleop, Teleoperator):
+            act = teleop.get_action()
+        else:
+            logger.info(
+                "No policy or teleoperator provided, skipping action generation."
+                "This is likely to happen when resetting the environment without a teleop device."
+                "The robot won't be at its rest position at the start of the next episode."
+            )
+            continue
+
+        robot_action_to_send = act
+
+        if teleop.name == "pico4" and robot.name == "pylibfranka_research3":
+            # Check for reset button (uses cached A button state from get_action)
+            reset_button = teleop.get_reset_button()
+            if reset_button:
+                # Reset robot to initial position
+                if hasattr(robot, "reset_to_initial_position"):
+                    robot.reset_to_initial_position()
+                logger.info("Reset to initial position (A button pressed)")
+
+                # Always reset teleop state (both dryrun and normal mode)
+                current_pose_quat = robot.get_current_tcp_pose_quat()
+                teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
+                # Skip this loop iteration (don't send action after reset)
+                continue
+
+        if teleop.name == "btgamepad" and robot.name == "pylibfranka_research3":
+            # Check for reset button (uses cached A button state from get_action)
+            reset_button = teleop.get_reset_button()
+            if reset_button:
+                # Reset robot to initial position
+                if hasattr(robot, "reset_to_initial_position"):
+                    robot.reset_to_initial_position()
+                logger.info("Reset to initial position (A button pressed)")
+
+                # Always reset teleop state (both dryrun and normal mode)
+                current_pose_quat = robot.get_current_tcp_pose_quat()
+                teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
+                # Skip this loop iteration (don't send action after reset)
+                continue
+
+        # Send action to robot
+        # Action can eventually be clipped using `max_relative_target`,
+        # so action actually sent is saved in the dataset. action = postprocessor.process(action)
+        # TODO(steven, pepijn, adil): we should use a pipeline step to clip the action, so the sent action is the action that we input to the robot.
+        _sent_action = robot.send_action(robot_action_to_send)
+
+        current_action = extract_flexiv_joint_features(current_observation)
+        # Action shifting logic: from second frame onwards, create dataset entries
+        if prev_observation is not None and dataset is not None:
+            # Manual demonstration mode with action shifting
+            # Use current frame's joint positions as previous frame's action
+            action_frame = build_dataset_frame(
+                dataset.features, current_action, prefix=ACTION
+            )
+            frame = {**prev_observation_frame, **action_frame, "task": single_task}
+            dataset.add_frame(frame)
+
+        if display_data:
+            log_rerun_data(observation=current_observation, action=current_action)
+
+        # Update for next iteration
+        prev_observation = current_observation
+        prev_observation_frame = current_observation_frame
+
+        dt_s = time.perf_counter() - start_loop_t
+        busy_wait(1 / fps - dt_s)
+
+        timestamp = time.perf_counter() - start_episode_t
+
+@safe_stop_image_writer
 def record_loop(
     robot: Robot,
     events: dict,
@@ -801,48 +914,6 @@ def record_loop(
             action_values = act_processed_teleop
             robot_action_to_send = robot_action_processor((act_processed_teleop, obs))
 
-        if teleop.name == "pico4" and robot.name == "flexiv_rizon4":
-            # Check for reset button (uses cached A button state from get_action)
-            reset_button = teleop.get_reset_button()
-            if reset_button:
-                # Reset robot to initial position
-                if hasattr(robot, "reset_to_initial_position"):
-                    robot.reset_to_initial_position()
-                logger.info("Reset to initial position (A button pressed)")
-
-                # Always reset teleop state (both dryrun and normal mode)
-                current_pose_quat = robot.get_current_tcp_pose_quat()
-                teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
-                # Skip this loop iteration (don't send action after reset)
-                continue
-        if teleop.name == "pico4" and robot.name == "pylibfranka_research3":
-            # Check for reset button (uses cached A button state from get_action)
-            reset_button = teleop.get_reset_button()
-            if reset_button:
-                # Reset robot to initial position
-                if hasattr(robot, "reset_to_initial_position"):
-                    robot.reset_to_initial_position()
-                logging.info("Reset to initial position (A button pressed)")
-
-                # Always reset teleop state (both dryrun and normal mode)
-                current_pose_quat = robot.get_current_tcp_pose_quat()
-                teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
-                # Skip this loop iteration (don't send action after reset)
-                continue
-        if teleop.name == "btgamepad" and robot.name == "pylibfranka_research3":
-            # Check for reset button (uses cached A button state from get_action)
-            reset_button = teleop.get_reset_button()
-            if reset_button:
-                # Reset robot to initial position
-                if hasattr(robot, "reset_to_initial_position"):
-                    robot.reset_to_initial_position()
-                logging.info("Reset to initial position (A button pressed)")
-
-                # Always reset teleop state (both dryrun and normal mode)
-                current_pose_quat = robot.get_current_tcp_pose_quat()
-                teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
-                # Skip this loop iteration (don't send action after reset)
-                continue
         # Send action to robot
         # Action can eventually be clipped using `max_relative_target`,
         # so action actually sent is saved in the dataset. action = postprocessor.process(action)
@@ -883,7 +954,10 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         make_default_processors()
     )
 
-    if cfg.teleop.type == "pico4" and cfg.robot.type == "flexiv_rizon4":
+    if (
+        cfg.teleop.type == "pico4"
+        and cfg.robot.type in ["flexiv_rizon4", "pylibfranka_research3"]
+    ):
         dataset_features = combine_feature_dicts(
             aggregate_pipeline_dataset_features(
                 pipeline=teleop_action_processor,
@@ -1062,6 +1136,17 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         single_task=cfg.dataset.single_task,
                         display_data=cfg.display_data,
                     )
+                elif cfg.robot.type == "pylibfranka_research3":
+                    pylibfranka_research3_record_loop(
+                        robot=robot,
+                        events=events,
+                        fps=cfg.dataset.fps,
+                        teleop=teleop,
+                        dataset=dataset,
+                        control_time_s=cfg.dataset.episode_time_s,
+                        single_task=cfg.dataset.single_task,
+                        display_data=cfg.display_data,
+                    )
                 else:
                     record_loop(
                         robot=robot,
@@ -1110,6 +1195,16 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         )
                     elif cfg.robot.type == "flexiv_rizon4":
                         flexiv_rizon4_record_loop(
+                            robot=robot,
+                            events=events,
+                            fps=cfg.dataset.fps,
+                            teleop=teleop,
+                            control_time_s=cfg.dataset.reset_time_s,
+                            single_task=cfg.dataset.single_task,
+                            display_data=cfg.display_data,
+                        )
+                    elif cfg.robot.type == "pylibfranka_research3":
+                        pylibfranka_research3_record_loop(
                             robot=robot,
                             events=events,
                             fps=cfg.dataset.fps,
