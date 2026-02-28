@@ -195,28 +195,25 @@ class FlexivRizon4(Robot):
             "tcp.wz",
         )
 
-        # TCP pose action keys (same as observation keys for 6D rotation)
-        self._action_tcp_pose_keys = self._tcp_pose_keys
+        self._joint_pos_keys = tuple(f"joint_{i}.pos" for i in range(1, JOINT_DOF + 1))
+        self._joint_vel_keys = tuple(f"joint_{i}.vel" for i in range(1, JOINT_DOF + 1))
+        self._joint_effort_keys = tuple(f"joint_{i}.effort" for i in range(1, JOINT_DOF + 1))
+
+        # Joint action keys: joint_{1-7}.pos
+        self._action_joint_keys = tuple(f"joint_{i}.pos" for i in range(1, JOINT_DOF + 1))
 
         # Pre-cache max contact wrench (always needed in Cartesian mode for safety)
         self._max_contact_wrench = self.config.max_contact_wrench
 
         # Initialize force-related keys if use_force is enabled
+        # TCP pose action keys (same as observation keys for 6D rotation)
+        self._action_tcp_pose_keys = self._tcp_pose_keys
+
         if self.config.use_force:
             # Wrench keys: tcp.{fx, fy, fz, mx, my, mz}
             # Used for both observation (external wrench) and action (target wrench)
-            self._wrench_keys = (
-                "tcp.fx",
-                "tcp.fy",
-                "tcp.fz",
-                "tcp.mx",
-                "tcp.my",
-                "tcp.mz",
-            )
-            # Action wrench keys are the same as observation wrench keys
+            self._wrench_keys = tuple(f"tcp.{axis}" for axis in ["fx", "fy", "fz", "mx", "my", "mz"])
             self._action_wrench_keys = self._wrench_keys
-
-            # Pre-cache force control axis
             self._force_control_axis = tuple(self.config.force_control_axis)
 
     @property
@@ -268,11 +265,19 @@ class FlexivRizon4(Robot):
             features.update(dict.fromkeys(self._joint_effort_keys, float))
 
         elif self.config.control_mode == ControlMode.CARTESIAN_MOTION_FORCE:
-            # TCP pose (9D: xyz + 6D rotation)
-            features.update(dict.fromkeys(self._tcp_pose_keys, float))
-            if self.config.use_force:
-                # + external wrench (6D)
-                features.update(dict.fromkeys(self._wrench_keys, float))
+            if self.config.use_joint_observation:
+                # Joint positions (7D)
+                features.update(dict.fromkeys(self._joint_pos_keys, float))
+                # Joint velocities (7D)
+                features.update(dict.fromkeys(self._joint_vel_keys, float))
+                # Joint efforts/torques (7D)
+                features.update(dict.fromkeys(self._joint_effort_keys, float))
+            else:
+                # TCP pose (9D: xyz + 6D rotation)
+                features.update(dict.fromkeys(self._tcp_pose_keys, float))
+                if self.config.use_force:
+                    # + external wrench (6D)
+                    features.update(dict.fromkeys(self._wrench_keys, float))
 
         else:
             raise ValueError(f"Unsupported control_mode: {self.config.control_mode}")
@@ -292,16 +297,17 @@ class FlexivRizon4(Robot):
                 self._flare_gripper._config.cam_size[0],
                 3,
             )
-            features["left_tactile"] = (
-                self._flare_gripper._config.rectify_size[1],
-                self._flare_gripper._config.rectify_size[0],
-                3,
-            )
-            features["right_tactile"] = (
-                self._flare_gripper._config.rectify_size[1],
-                self._flare_gripper._config.rectify_size[0],
-                3,
-            )
+            if self._flare_gripper._config.enable_sensor:
+                features["left_tactile"] = (
+                    self._flare_gripper._config.rectify_size[1],
+                    self._flare_gripper._config.rectify_size[0],
+                    3,
+                )
+                features["right_tactile"] = (
+                    self._flare_gripper._config.rectify_size[1],
+                    self._flare_gripper._config.rectify_size[0],
+                    3,
+                )
 
         # External cameras (e.g., scene cameras)
         for cam in self.cameras:
@@ -337,7 +343,7 @@ class FlexivRizon4(Robot):
         self.logger.info("Flexiv Rizon4 is factory calibrated, no runtime calibration needed.")
 
     def zero_ft_sensor(self) -> None:
-        """Zero force-torque sensor offset.
+        """Zero force-torque senstor offset.
 
         IMPORTANT: Robot must not contact anything during zeroing.
         This method should be called before using force control.
@@ -706,7 +712,7 @@ class FlexivRizon4(Robot):
             for i, key in enumerate(self._joint_effort_keys):
                 obs_dict[key] = states.tau[i]
 
-        elif self.config.control_mode == ControlMode.CARTESIAN_MOTION_FORCE:
+        elif self.config.control_mode == ControlMode.CARTESIAN_MOTION_FORCE and not self.config.use_joint_observation:
             # TCP pose from SDK: [x, y, z, qw, qx, qy, qz]
             tcp_pose = states.tcp_pose
 
@@ -731,20 +737,37 @@ class FlexivRizon4(Robot):
                 for i, key in enumerate(self._wrench_keys):
                     obs_dict[key] = ext_wrench[i]
 
+        elif self.config.control_mode == ControlMode.CARTESIAN_MOTION_FORCE and self.config.use_joint_observation:
+            # Joint positions (7D)
+            for i, key in enumerate(self._joint_pos_keys):
+                obs_dict[key] = states.q[i]
+
+            # Joint velocities (7D)
+            for i, key in enumerate(self._joint_vel_keys):
+                obs_dict[key] = states.dq[i]
+
+            # Joint efforts/torques (7D)
+            for i, key in enumerate(self._joint_effort_keys):
+                obs_dict[key] = states.tau[i]
+
         else:
             raise ValueError(f"Unsupported control_mode: {self.config.control_mode}")
 
         # Get data from Flare Gripper (gripper + wrist_cam + tactile sensors)
         if self._flare_gripper is not None and self.config.use_gripper:
             # Read sensors (keys are mapped from SN to sensor_keys names)
-            sensor_data = self._flare_gripper.get_sensor_data()
-            for key, data in sensor_data.items():
-                obs_dict[key] = data
+            if self._flare_gripper._enable_sensor:
+                sensor_data = self._flare_gripper.get_sensor_data()
+                for key, data in sensor_data.items():
+                    obs_dict[key] = data
 
-            # Read wrist camera
+            # Read wrist camera (always provide key so dataset schema is satisfied)
             camera_frame = self._flare_gripper.get_camera_frame()
             if camera_frame is not None:
                 obs_dict["wrist_cam"] = camera_frame
+            else:
+                h, w = self._flare_gripper._config.cam_size[1], self._flare_gripper._config.cam_size[0]
+                obs_dict["wrist_cam"] = np.zeros((h, w, 3), dtype=np.uint8)
 
             # Read gripper position
             obs_dict[self._gripper_key] = self._flare_gripper.get_gripper_position()
