@@ -267,6 +267,6 @@ class FlexivRizon4Config(RobotConfig):
         # Camera configuration for realsense cameras
         self.cameras = {
             "top": RealSenseCameraConfig(
-                serial_number_or_name="135522074323", fps=30, width=640, height=480
+                serial_number_or_name="135522074323", fps=30, width=1280, height=720
             ),
         }
