@@ -219,6 +219,11 @@ class PylibfrankaResearch3(Robot):
 
         Reference: "On the Continuity of Rotation Representations in Neural Networks"
         """
+        # Joint state keys (needed for proprioception even in Cartesian mode)
+        self._joint_pos_keys = tuple(f"joint_{i}.pos" for i in range(1, JOINT_DOF + 1))
+        self._joint_vel_keys = tuple(f"joint_{i}.vel" for i in range(1, JOINT_DOF + 1))
+        self._joint_effort_keys = tuple(f"joint_{i}.effort" for i in range(1, JOINT_DOF + 1))
+
         # TCP pose observation/action keys: tcp.{x, y, z, r1, r2, r3, r4, r5, r6}
         # 6D rotation: r1-r3 = first column, r4-r6 = second column of rotation matrix
         self._tcp_pose_keys = (
@@ -295,6 +300,41 @@ class PylibfrankaResearch3(Robot):
         if self.config.use_gripper:
             action_dict[self._gripper_key] = float
         return action_dict
+
+    @property
+    def _proprioception_ft(self) -> dict[str, type]:
+        """Return observation features based on control_mode and use_force.
+
+        Observation space (all include gripper):
+        - JOINT_IMPEDANCE: joint pos (7D) + vel (7D) + effort (7D) + gripper pos (1D) = 22D
+        - CARTESIAN_MOTION_FORCE + use_force=False: TCP pose (9D: xyz + 6D rotation) + gripper (1D) = 10D
+        - CARTESIAN_MOTION_FORCE + use_force=True: TCP pose (9D) + wrench (6D) + gripper (1D) = 16D
+        """
+        features = {}
+
+        if self.config.control_mode == ControlMode.JOINT_IMPEDANCE:
+            # Joint positions (7D)
+            features.update(dict.fromkeys(self._joint_pos_keys, float))
+            # Joint velocities (7D)
+            features.update(dict.fromkeys(self._joint_vel_keys, float))
+            # Joint efforts/torques (7D)
+            features.update(dict.fromkeys(self._joint_effort_keys, float))
+
+        elif self.config.control_mode == ControlMode.CARTESIAN_IMPEDANCE:
+            # Joint positions (7D)
+            features.update(dict.fromkeys(self._joint_pos_keys, float))
+            # Joint velocities (7D)
+            features.update(dict.fromkeys(self._joint_vel_keys, float))
+            # Joint efforts/torques (7D)
+            features.update(dict.fromkeys(self._joint_effort_keys, float))
+        else:
+            raise ValueError(f"Unsupported control_mode: {self.config.control_mode}")
+
+        # Gripper position
+        if self.config.use_gripper:
+            features[self._gripper_key] = float
+        return features
+
 
     # ======================== Robot State ========================
 
@@ -616,6 +656,20 @@ class PylibfrankaResearch3(Robot):
                 obs_dict[key] = float(tau[i]) if i < len(tau) else 0.0
 
         elif self.config.control_mode == ControlMode.CARTESIAN_IMPEDANCE:
+
+            q = state_data.get("q", [0.0] * JOINT_DOF)
+            dq = state_data.get("dq", [0.0] * JOINT_DOF)
+            tau = state_data.get("tau", [0.0] * JOINT_DOF)
+            # Joint positions (7D)
+            for i, key in enumerate(self._joint_pos_keys):
+                obs_dict[key] = float(q[i]) if i < len(q) else 0.0
+            # Joint velocities (7D)
+            for i, key in enumerate(self._joint_vel_keys):
+                obs_dict[key] = float(dq[i]) if i < len(dq) else 0.0
+            # Joint efforts/torques (7D)
+            for i, key in enumerate(self._joint_effort_keys):
+                obs_dict[key] = float(tau[i]) if i < len(tau) else 0.0
+
             # Convert column-major O_T_EE to row-major 4x4 matrix
             ee_matrix = self._parse_ee_matrix(state_data)
             rot = ee_matrix[:3, :3]
