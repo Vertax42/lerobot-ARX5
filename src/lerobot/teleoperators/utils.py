@@ -29,6 +29,7 @@ class TeleopEvents(Enum):
     RERECORD_EPISODE = "rerecord_episode"
     IS_INTERVENTION = "is_intervention"
     TERMINATE_EPISODE = "terminate_episode"
+    BACK_HOME = "back_home"
 
 
 def make_teleoperator_from_config(config: TeleoperatorConfig) -> Teleoperator:
@@ -45,6 +46,10 @@ def make_teleoperator_from_config(config: TeleoperatorConfig) -> Teleoperator:
         from .gamepad.teleop_gamepad import GamepadTeleop
 
         return GamepadTeleop(config)
+    elif config.type == "btgamepad":
+        from .btgamepad.teleop_btgamepad import BtgamepadTeleop
+
+        return BtgamepadTeleop(config)
     elif config.type == "keyboard_ee":
         from .keyboard.teleop_keyboard import KeyboardEndEffectorTeleop
 

@@ -34,6 +34,7 @@ from lerobot.robots import (  # noqa: F401
     bi_arx5,
     flexiv_rizon4,  # noqa: F401
     make_robot_from_config,
+    pylibfranka_research3,  # noqa: F401
 )
 from lerobot.utils.constants import ACTION
 from lerobot.utils.import_utils import register_third_party_devices

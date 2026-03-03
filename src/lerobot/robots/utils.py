@@ -40,6 +40,10 @@ def make_robot_from_config(config: RobotConfig) -> Robot:
         from .xense_flare import XenseFlare
 
         return XenseFlare(config)
+    elif config.type == "pylibfranka_research3":
+        from .pylibfranka_research3 import PylibfrankaResearch3
+
+        return PylibfrankaResearch3(config)
     else:
         try:
             return cast(Robot, make_device_from_device_class(config))

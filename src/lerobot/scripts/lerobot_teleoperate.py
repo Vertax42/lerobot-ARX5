@@ -47,6 +47,7 @@ from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
     TeleoperatorConfig,
     gamepad,
+    btgamepad,  # noqa: F401
     make_teleoperator_from_config,
     mock_teleop,
     pico4,
