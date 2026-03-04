@@ -23,6 +23,7 @@ import traceback
 from dataclasses import asdict, dataclass
 from pprint import pformat
 
+import numpy as np
 import rerun as rr
 
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
@@ -39,6 +40,7 @@ from lerobot.robots import (  # noqa: F401
     arx5_follower,
     bi_arx5,
     flexiv_rizon4,  # noqa: F401
+    flexiv_rizon4_rt,  # noqa: F401
     make_robot_from_config,
     xense_flare,  # noqa: F401
     xense_multisensor,  # noqa: F401
@@ -432,15 +434,21 @@ def spacemouse_teleop_loop(
     start = time.perf_counter()
     timing_stats = {"obs_times": [], "loop_times": []}
 
-    # Check if this is Flexiv Rizon4 robot in CARTESIAN_MOTION_FORCE mode (needs special conversion)
+    # Check if this is Flexiv Rizon4 robot in Cartesian mode (needs special conversion)
+    # Matches both NRT driver (flexiv_rizon4) and RT driver (flexiv_rizon4_rt)
     from lerobot.robots.flexiv_rizon4.config_flexiv_rizon4 import ControlMode
 
-    is_flexiv = (
+    is_flexiv_nrt = (
         robot.name == "flexiv_rizon4"
         and hasattr(robot.config, "control_mode")
         and robot.config.control_mode == ControlMode.CARTESIAN_MOTION_FORCE
-        and teleop.name == "spacemouse"
     )
+    is_flexiv_rt = robot.name == "flexiv_rizon4_rt"  # RT driver is always Cartesian
+    is_flexiv = (is_flexiv_nrt or is_flexiv_rt) and teleop.name == "spacemouse"
+
+    # Track RT trajectory state for teleop sync after reset
+    _prev_rt_moving = False
+    _reset_display_cleared = False
 
     while True:
         loop_start = time.perf_counter()
@@ -471,11 +479,17 @@ def spacemouse_teleop_loop(
                     # In dryrun mode, just reset teleop's internal state
                     if hasattr(teleop, "_start_pose_6d") and hasattr(teleop, "_start_gripper_pos"):
                         teleop.reset_to_pose(teleop._start_pose_6d, teleop._start_gripper_pos)
-                elif is_flexiv and hasattr(robot, "reset_to_initial_position"):
+                elif is_flexiv_rt and hasattr(robot, "reset_to_initial_position"):
                     try:
-                        # First, reset robot to initial position
+                        # RT driver: non-blocking, idempotent. Starts trajectory and returns immediately.
+                        # Teleop reference will be synced AFTER trajectory completes (below).
                         robot.reset_to_initial_position()
-                        # Then, get robot's current actual position and update teleop target pose
+                    except Exception as e:
+                        logger.error(f"Failed to reset robot position: {e}\n{traceback.format_exc()}")
+                elif is_flexiv_nrt and hasattr(robot, "reset_to_initial_position"):
+                    try:
+                        # NRT driver: blocking. Robot is at start position when this returns.
+                        robot.reset_to_initial_position()
                         current_pose_euler = robot.get_current_tcp_pose_euler()
                         teleop.reset_to_pose(current_pose_euler[:6], current_pose_euler[6])
                         teleop._start_pose_6d = current_pose_euler[:6].copy()
@@ -488,8 +502,55 @@ def spacemouse_teleop_loop(
                     if hasattr(teleop, "_start_pose_6d") and hasattr(teleop, "_start_gripper_pos"):
                         teleop.reset_to_pose(teleop._start_pose_6d, teleop._start_gripper_pos)
                         logger.info("Reset to initial position triggered by both buttons")
-                # Skip sending action this cycle
+                # Skip sending action this cycle, but keep displaying observations
+                if display_data and obs is not None:
+                    log_rerun_data(observation=obs)
+                if obs is not None:
+                    if not _reset_display_cleared:
+                        print("\033[2J\033[H", end="", flush=True)
+                        _reset_display_cleared = True
+                    _obs_keys = [k for k, v in obs.items() if not isinstance(v, np.ndarray)]
+                    _obs_len = max((len(k) for k in _obs_keys), default=display_len)
+                    print("\n" + "-" * (_obs_len + 18))
+                    print(f"{'NAME':<{_obs_len}} | {'OBS':>10}  ⟳ RESETTING")
+                    for k in _obs_keys:
+                        print(f"{k:<{_obs_len}} | {float(obs[k]):>10.4f}")
+                    move_cursor_up(len(_obs_keys) + 5)
                 continue
+
+        # While RT trajectory is running (from non-blocking reset),
+        # keep displaying observations but skip sending actions.
+        if is_flexiv_rt and hasattr(robot, 'rt_moving') and robot.rt_moving:
+            if display_data and obs is not None:
+                log_rerun_data(observation=obs)
+            if obs is not None:
+                if not _reset_display_cleared:
+                    print("\033[2J\033[H", end="", flush=True)
+                    _reset_display_cleared = True
+                _obs_keys = [k for k, v in obs.items() if not isinstance(v, np.ndarray)]
+                _obs_len = max((len(k) for k in _obs_keys), default=display_len)
+                print("\n" + "-" * (_obs_len + 18))
+                print(f"{'NAME':<{_obs_len}} | {'OBS':>10}  ⟳ MOVING")
+                for k in _obs_keys:
+                    print(f"{k:<{_obs_len}} | {float(obs[k]):>10.4f}")
+                move_cursor_up(len(_obs_keys) + 5)
+            _prev_rt_moving = True
+            continue
+
+        # Trajectory just completed: sync teleop reference to robot's actual pose
+        # so spacemouse commands start from the correct position.
+        if _prev_rt_moving:
+            _prev_rt_moving = False
+            _reset_display_cleared = False
+            try:
+                current_pose_euler = robot.get_current_tcp_pose_euler()
+                teleop.reset_to_pose(current_pose_euler[:6], current_pose_euler[6])
+                teleop._start_pose_6d = current_pose_euler[:6].copy()
+                teleop._start_gripper_pos = current_pose_euler[6]
+                logger.info("Teleop synced to robot pose after reset complete")
+            except Exception as e:
+                logger.error(f"Failed to sync teleop after reset: {e}")
+            continue
 
         # Process teleop action through pipeline
         teleop_action = teleop_action_processor((raw_action, obs))
@@ -599,6 +660,11 @@ def pico4_teleop_loop(
     display_len = max(len(key) for key in robot.action_features)
     start = time.perf_counter()
 
+    # Detect RT driver for trajectory-aware handling
+    is_flexiv_rt = robot.name == "flexiv_rizon4_rt"
+    _prev_rt_moving = False
+    _reset_display_cleared = False
+
     while True:
         loop_start = time.perf_counter()
 
@@ -612,22 +678,73 @@ def pico4_teleop_loop(
         reset_button = teleop.get_reset_button()
         if reset_button:
             try:
-                if not dryrun:
-                    # Reset robot to initial position
-                    if hasattr(robot, "reset_to_initial_position"):
-                        robot.reset_to_initial_position()
-                    logger.info("Reset to initial position (A button pressed)")
-                else:
+                if dryrun:
                     logger.info(
                         "[DRYRUN] Reset to initial position (A button pressed) - robot movement skipped"
                     )
-
-                # Always reset teleop state (both dryrun and normal mode)
-                current_pose_quat = robot.get_current_tcp_pose_quat()
-                teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
+                    # In dryrun mode, just reset teleop's internal state
+                    current_pose_quat = robot.get_current_tcp_pose_quat()
+                    teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
+                elif is_flexiv_rt and hasattr(robot, "reset_to_initial_position"):
+                    # RT driver: non-blocking, idempotent. Starts trajectory and returns immediately.
+                    # Teleop reference will be synced AFTER trajectory completes (below).
+                    robot.reset_to_initial_position()
+                    logger.info("Reset to initial position (A button pressed) — RT non-blocking")
+                else:
+                    # NRT driver: blocking. Robot is at start position when this returns.
+                    if hasattr(robot, "reset_to_initial_position"):
+                        robot.reset_to_initial_position()
+                    logger.info("Reset to initial position (A button pressed)")
+                    # Immediately sync teleop since NRT reset is blocking
+                    current_pose_quat = robot.get_current_tcp_pose_quat()
+                    teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
             except Exception as e:
                 logger.error(f"Failed to reset robot position: {e}\n{traceback.format_exc()}")
+            # Display obs during reset (with clear screen on first frame)
+            if display_data:
+                log_rerun_data(observation=obs)
+            if not _reset_display_cleared:
+                print("\033[2J\033[H", end="", flush=True)
+                _reset_display_cleared = True
+            _obs_keys = [k for k, v in obs.items() if not isinstance(v, np.ndarray)]
+            _obs_len = max((len(k) for k in _obs_keys), default=display_len)
+            print("\n" + "-" * (_obs_len + 18))
+            print(f"{'NAME':<{_obs_len}} | {'OBS':>10}  ⟳ RESETTING")
+            for k in _obs_keys:
+                print(f"{k:<{_obs_len}} | {float(obs[k]):>10.4f}")
+            move_cursor_up(len(_obs_keys) + 5)
             # Skip this loop iteration (don't send action after reset)
+            continue
+
+        # While RT trajectory is running (from non-blocking reset),
+        # keep displaying observations but skip sending actions.
+        if is_flexiv_rt and hasattr(robot, 'rt_moving') and robot.rt_moving:
+            if display_data:
+                log_rerun_data(observation=obs)
+            if not _reset_display_cleared:
+                print("\033[2J\033[H", end="", flush=True)
+                _reset_display_cleared = True
+            _obs_keys = [k for k, v in obs.items() if not isinstance(v, np.ndarray)]
+            _obs_len = max((len(k) for k in _obs_keys), default=display_len)
+            print("\n" + "-" * (_obs_len + 18))
+            print(f"{'NAME':<{_obs_len}} | {'OBS':>10}  ⟳ MOVING")
+            for k in _obs_keys:
+                print(f"{k:<{_obs_len}} | {float(obs[k]):>10.4f}")
+            move_cursor_up(len(_obs_keys) + 5)
+            _prev_rt_moving = True
+            continue
+
+        # Trajectory just completed: sync teleop reference to robot's actual pose
+        # so Pico4 commands start from the correct position.
+        if _prev_rt_moving:
+            _prev_rt_moving = False
+            _reset_display_cleared = False
+            try:
+                current_pose_quat = robot.get_current_tcp_pose_quat()
+                teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
+                logger.info("Teleop synced to robot pose after reset complete")
+            except Exception as e:
+                logger.error(f"Failed to sync teleop after reset: {e}")
             continue
 
         # Process teleop action through pipeline (usually identity)
@@ -1577,8 +1694,9 @@ def teleoperate(cfg: TeleoperateConfig):
             # Connect to robot with error handling
             try:
                 robot.connect(go_to_start=True)
-                logger.info(f"Start EEF pose: {robot.get_current_tcp_pose_euler()}")
-                logger.info(f"Start TCP pose: {robot.get_current_tcp_pose_quat()}")
+                start_obs = robot.get_observation()
+                tcp_keys = [k for k in start_obs if k.startswith("tcp.")]
+                logger.info("Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys))
             except Exception as e:
                 logger.error(f"Failed to connect to robot: {e}\n{traceback.format_exc()}")
                 raise
@@ -1647,6 +1765,186 @@ def teleoperate(cfg: TeleoperateConfig):
                     logger.error(f"Error disconnecting robot: {e}\n{traceback.format_exc()}")
                     # Force cleanup even if disconnect fails
                     try:
+                        if hasattr(robot, "_robot") and robot._robot is not None:
+                            robot._robot.Stop()
+                    except Exception:
+                        pass
+    # Check if this is Flexiv Rizon4 RT robot with spacemouse
+    elif cfg.robot.type == "flexiv_rizon4_rt" and cfg.teleop.type == "spacemouse":
+        logger.info("Detected Flexiv Rizon4 RT robot with Spacemouse, using specialized RT teleop loop")
+
+        robot = None
+        teleop = None
+
+        try:
+            # Create RT robot instance
+            robot = make_robot_from_config(cfg.robot)
+
+            # Connect to robot (RT mode — starts C++ RT thread internally)
+            try:
+                robot.connect(go_to_start=True)
+                start_obs = robot.get_observation()
+                tcp_keys = [k for k in start_obs if k.startswith("tcp.")]
+                logger.info("Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys))
+            except Exception as e:
+                logger.error(f"Failed to connect to robot: {e}\n{traceback.format_exc()}")
+                raise
+
+            (
+                teleop_action_processor,
+                robot_action_processor,
+                robot_observation_processor,
+            ) = make_default_processors()
+
+            # Connect to teleoperator with error handling
+            try:
+                teleop = make_teleoperator_from_config(cfg.teleop)
+                teleop.connect(current_tcp_pose_euler=robot.get_current_tcp_pose_euler())
+                logger.info("Connected to Spacemouse")
+            except Exception as e:
+                logger.error(f"Failed to connect to Spacemouse: {e}\n{traceback.format_exc()}")
+                raise
+
+            # Run teleoperation loop
+            try:
+                spacemouse_teleop_loop(
+                    teleop=teleop,
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    teleop_action_processor=teleop_action_processor,
+                    robot_action_processor=robot_action_processor,
+                    robot_observation_processor=robot_observation_processor,
+                    dryrun=cfg.dryrun,
+                    debug_timing=cfg.debug_timing,
+                    no_obs=cfg.no_obs,
+                )
+            except KeyboardInterrupt:
+                logger.info("Teleoperation interrupted by user")
+            except Exception as e:
+                logger.error(f"Error during teleoperation loop: {e}\n{traceback.format_exc()}")
+                raise
+
+        except Exception as e:
+            logger.error(f"Error in RT teleoperation setup or execution: {e}\n{traceback.format_exc()}")
+            logger.error(f"RT Teleoperation failed\n{traceback.format_exc()}")
+        finally:
+            # Safe disconnect - ensure both robot and teleop are disconnected
+            if cfg.display_data:
+                try:
+                    rr.rerun_shutdown()
+                except Exception as e:
+                    logger.warn(f"Error shutting down rerun: {e}")
+
+            if teleop is not None:
+                try:
+                    if teleop.is_connected:
+                        teleop.disconnect()
+                        logger.info("Spacemouse disconnected")
+                except Exception as e:
+                    logger.error(f"Error disconnecting Spacemouse: {e}\n{traceback.format_exc()}")
+
+            if robot is not None:
+                try:
+                    if robot.is_connected:
+                        robot.disconnect()
+                        logger.info("Robot safely disconnected (RT)")
+                except Exception as e:
+                    logger.error(f"Error disconnecting robot: {e}\n{traceback.format_exc()}")
+                    # Force cleanup even if disconnect fails
+                    try:
+                        if hasattr(robot, "_cc") and robot._cc is not None:
+                            robot._cc.stop()
+                        if hasattr(robot, "_robot") and robot._robot is not None:
+                            robot._robot.Stop()
+                    except Exception:
+                        pass
+    # Check if this is Flexiv Rizon4 RT robot with pico4
+    elif cfg.robot.type == "flexiv_rizon4_rt" and cfg.teleop.type == "pico4":
+        logger.info("Detected Flexiv Rizon4 RT robot with Pico4, using specialized RT teleop loop")
+
+        robot = None
+        teleop = None
+
+        try:
+            # Create RT robot instance
+            robot = make_robot_from_config(cfg.robot)
+
+            # Connect to robot (RT mode — starts C++ RT thread internally)
+            try:
+                robot.connect(go_to_start=True)
+                start_obs = robot.get_observation()
+                tcp_keys = [k for k in start_obs if k.startswith("tcp.")]
+                logger.info("Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys))
+            except Exception as e:
+                logger.error(f"Failed to connect to robot: {e}\n{traceback.format_exc()}")
+                raise
+
+            (
+                teleop_action_processor,
+                robot_action_processor,
+                robot_observation_processor,
+            ) = make_default_processors()
+
+            # Connect to teleoperator with error handling
+            try:
+                teleop = make_teleoperator_from_config(cfg.teleop)
+                teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
+                logger.info("Connected to Pico4")
+            except Exception as e:
+                logger.error(f"Failed to connect to Pico4: {e}\n{traceback.format_exc()}")
+                raise
+
+            # Run teleoperation loop
+            try:
+                pico4_teleop_loop(
+                    teleop=teleop,
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    teleop_action_processor=teleop_action_processor,
+                    robot_action_processor=robot_action_processor,
+                    robot_observation_processor=robot_observation_processor,
+                    dryrun=cfg.dryrun,
+                )
+            except KeyboardInterrupt:
+                logger.info("Teleoperation interrupted by user")
+            except Exception as e:
+                logger.error(f"Error during teleoperation loop: {e}\n{traceback.format_exc()}")
+                raise
+
+        except Exception as e:
+            logger.error(f"Error in RT teleoperation setup or execution: {e}\n{traceback.format_exc()}")
+            logger.error(f"RT Teleoperation failed\n{traceback.format_exc()}")
+        finally:
+            # Safe disconnect - ensure both robot and teleop are disconnected
+            if cfg.display_data:
+                try:
+                    rr.rerun_shutdown()
+                except Exception as e:
+                    logger.warn(f"Error shutting down rerun: {e}")
+
+            if teleop is not None:
+                try:
+                    if teleop.is_connected:
+                        teleop.disconnect()
+                        logger.info("Pico4 disconnected")
+                except Exception as e:
+                    logger.error(f"Error disconnecting Pico4: {e}\n{traceback.format_exc()}")
+
+            if robot is not None:
+                try:
+                    if robot.is_connected:
+                        robot.disconnect()
+                        logger.info("Robot safely disconnected (RT)")
+                except Exception as e:
+                    logger.error(f"Error disconnecting robot: {e}\n{traceback.format_exc()}")
+                    # Force cleanup even if disconnect fails
+                    try:
+                        if hasattr(robot, "_cc") and robot._cc is not None:
+                            robot._cc.stop()
                         if hasattr(robot, "_robot") and robot._robot is not None:
                             robot._robot.Stop()
                     except Exception:

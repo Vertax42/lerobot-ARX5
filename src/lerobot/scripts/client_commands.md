@@ -34,6 +34,9 @@ lerobot-teleoperate \
     --fps=30 \
     --display_data=true \
     --debug_timing=true
+
+sudo -E env "PATH=$PATH" $(which python) src/lerobot/scripts/lerobot_teleoperate.py     --robot.type=flexiv_rizon4_rt     --robot.use_gripper=false     --teleop.type=spacemouse     --fps=200     --display_data=true     --debug_timing=false
+
 ```
 
 ## Flexiv Rizon4 Robot with Flare Gripper teleoperate by Pico4 command
