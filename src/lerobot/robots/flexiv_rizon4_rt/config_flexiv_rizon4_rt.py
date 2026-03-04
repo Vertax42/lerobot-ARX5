@@ -14,11 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Configuration for Flexiv Rizon4 RT robot (real-time via flexiv_bindings)."""
+"""Configuration for Flexiv Rizon4 RT robot (real-time via flexiv_rt)."""
 
 from dataclasses import dataclass, field
 
-import flexiv_bindings
+import flexiv_rt
 
 from lerobot.cameras.configs import CameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
@@ -29,9 +29,9 @@ from lerobot.robots.flexiv_rizon4.config_flare_gripper import FlareGripperConfig
 @RobotConfig.register_subclass("flexiv_rizon4_rt")
 @dataclass
 class FlexivRizon4RTConfig(RobotConfig):
-    """Configuration for Flexiv Rizon4 robot with real-time control via flexiv_bindings.
+    """Configuration for Flexiv Rizon4 robot with real-time control via flexiv_rt.
 
-    This driver uses the RT backend (flexiv_bindings) instead of the NRT backend (flexivrdk).
+    This driver uses the RT backend (flexiv_rt) instead of the NRT backend (flexivrdk).
     The C++ RT thread runs at 1 kHz via rdk::Scheduler with SCHED_FIFO priority.
     Python send_action() (30-100 Hz) writes to shared memory, which the RT thread
     reads every 1 ms for deterministic streaming.
@@ -62,7 +62,7 @@ class FlexivRizon4RTConfig(RobotConfig):
         start_vel_scale: Joint velocity scale for MoveJ (1-100)
         zero_ft_sensor_on_connect: Zero force-torque sensors on connect
 
-        connect_retries: Number of connection retries for flexiv_bindings.Robot
+        connect_retries: Number of connection retries for flexiv_rt.Robot
         retry_interval_sec: Seconds between connection retries
     """
 
@@ -87,7 +87,7 @@ class FlexivRizon4RTConfig(RobotConfig):
     damping_ratio: list[float] = field(default_factory=lambda: [0.7] * 6)
 
     # Force control settings
-    force_control_frame: flexiv_bindings.CoordType = flexiv_bindings.CoordType.WORLD
+    force_control_frame: flexiv_rt.CoordType = flexiv_rt.CoordType.WORLD
     force_control_axis: list[bool] = field(
         default_factory=lambda: [False, False, False, False, False, False]
     )
@@ -114,7 +114,7 @@ class FlexivRizon4RTConfig(RobotConfig):
     # Logging
     log_level: str = "INFO"
 
-    # flexiv_bindings.Robot connection
+    # flexiv_rt.Robot connection
     connect_retries: int = 3
     retry_interval_sec: float = 1.0
 

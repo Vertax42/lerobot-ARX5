@@ -17,7 +17,7 @@
 """Flexiv Rizon4 RT robot implementation for LeRobot.
 
 This module provides real-time (RT) integration with Flexiv Rizon4 7-DOF collaborative robot
-using flexiv_bindings (libflexiv-python), which spawns a C++ RT thread at 1 kHz via
+using flexiv_rt (libpyflexiv), which spawns a C++ RT thread at 1 kHz via
 rdk::Scheduler with SCHED_FIFO priority.
 
 Control Architecture:
@@ -39,7 +39,7 @@ Control Mode: RT_CARTESIAN_MOTION_FORCE only (for now)
       Observation: joint states (21D) or TCP pose (9D) + wrench (6D) + gripper (1D)
 
 Key Differences from NRT Driver (flexiv_rizon4):
-    - Uses flexiv_bindings.Robot instead of flexivrdk.Robot
+    - Uses flexiv_rt.Robot instead of flexivrdk.Robot
     - RT mode: RT_CARTESIAN_MOTION_FORCE (not NRT_CARTESIAN_MOTION_FORCE)
     - connect() starts cc = robot.start_cartesian_control() -> spawns C++ RT thread
     - send_action() -> cc.set_target_pose(pose, wrench) (writes to SHM)
@@ -60,7 +60,7 @@ import time
 from functools import cached_property
 from typing import Any
 
-import flexiv_bindings as fb
+import flexiv_rt as frt
 import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
@@ -85,7 +85,7 @@ POSE_SIZE_6D = 9  # Pose size with 6D rotation [x,y,z,r1..r6]
 class FlexivRizon4RT(Robot):
     """Flexiv Rizon4 7-DOF collaborative robot with real-time control.
 
-    Uses flexiv_bindings (libflexiv-python) to achieve 1 kHz deterministic control
+    Uses flexiv_rt (libpyflexiv) to achieve 1 kHz deterministic control
     via a C++ RT thread with SCHED_FIFO scheduling.
 
     Python-side send_action() writes target poses to shared memory at 30-100 Hz.
@@ -120,8 +120,8 @@ class FlexivRizon4RT(Robot):
         self.logger = get_logger("FlexivRizon4RT", loglevel=config.log_level)
 
         # Robot interface (initialized on connect)
-        self._robot: fb.Robot | None = None
-        self._cc: fb.CartesianMotionForceControl | None = None  # RT control handle
+        self._robot: frt.Robot | None = None
+        self._cc: frt.CartesianMotionForceControl | None = None  # RT control handle
         self._is_connected = False
 
         # Flare gripper (independent of arm backend)
@@ -307,7 +307,7 @@ class FlexivRizon4RT(Robot):
         """Connect to the Flexiv robot and start RT Cartesian control thread.
 
         Steps:
-        1. Create flexiv_bindings.Robot (with retry logic)
+        1. Create flexiv_rt.Robot (with retry logic)
         2. Clear faults + enable robot + wait for operational
         3. Connect Flare Gripper and external cameras
         4. Move to start position via MoveJ (using busy() polling)
@@ -328,7 +328,7 @@ class FlexivRizon4RT(Robot):
             self.logger.info(f"Connecting to Flexiv robot (RT): {self.config.robot_sn}")
 
             # --- 1. Create robot interface ---
-            self._robot = fb.Robot(
+            self._robot = frt.Robot(
                 self.config.robot_sn,
                 connect_retries=self.config.connect_retries,
                 retry_interval_sec=self.config.retry_interval_sec,
@@ -545,7 +545,7 @@ class FlexivRizon4RT(Robot):
         if not self._is_connected or self._robot is None:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
-        target_mode = fb.Mode.RT_CARTESIAN_MOTION_FORCE
+        target_mode = frt.Mode.RT_CARTESIAN_MOTION_FORCE
         current_mode = self._robot.mode()
 
         if current_mode == target_mode:
@@ -583,7 +583,7 @@ class FlexivRizon4RT(Robot):
         """Move robot to factory home position using PLAN-Home.
 
         Uses NRT_PLAN_EXECUTION + ExecutePlan("PLAN-Home") + busy() polling,
-        which is the recommended pattern for flexiv_bindings (no primitive_states).
+        which is the recommended pattern for flexiv_rt (no primitive_states).
         """
         if not self._is_connected or self._robot is None:
             raise DeviceNotConnectedError(f"{self} is not connected.")
@@ -592,7 +592,7 @@ class FlexivRizon4RT(Robot):
 
         self._robot.Stop()
 
-        self._robot.SwitchMode(fb.Mode.NRT_PLAN_EXECUTION)
+        self._robot.SwitchMode(frt.Mode.NRT_PLAN_EXECUTION)
         self._robot.ExecutePlan("PLAN-Home")
 
         # Initialize gripper position during move
@@ -640,7 +640,7 @@ class FlexivRizon4RT(Robot):
         # Stop any stale motion from a previous (possibly Ctrl-C'd) session
         self._robot.Stop()
 
-        self._robot.SwitchMode(fb.Mode.NRT_PRIMITIVE_EXECUTION)
+        self._robot.SwitchMode(frt.Mode.NRT_PRIMITIVE_EXECUTION)
 
         self._robot.ExecutePrimitive(
             "MoveJ",
@@ -702,8 +702,8 @@ class FlexivRizon4RT(Robot):
         self.logger.warn("Zeroing force-torque sensors, make sure nothing is in contact with the robot")
 
         # Skip redundant mode switch if already in NRT_PRIMITIVE_EXECUTION (e.g. after MoveJ)
-        if self._robot.mode() != fb.Mode.NRT_PRIMITIVE_EXECUTION:
-            self._robot.SwitchMode(fb.Mode.NRT_PRIMITIVE_EXECUTION)
+        if self._robot.mode() != frt.Mode.NRT_PRIMITIVE_EXECUTION:
+            self._robot.SwitchMode(frt.Mode.NRT_PRIMITIVE_EXECUTION)
         self._robot.ExecutePrimitive("ZeroFTSensor", {})
 
         # Poll primitive_states()["terminated"] for completion (per Flexiv SDK example)
