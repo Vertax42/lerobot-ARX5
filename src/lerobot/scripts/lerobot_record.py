@@ -984,7 +984,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     )
 
     if (
-        cfg.teleop.type == "pico4"
+        cfg.teleop.type in ["pico4", "btgamepad"]
         and cfg.robot.type in ["flexiv_rizon4", "pylibfranka_research3"]
     ):
         dataset_features = combine_feature_dicts(

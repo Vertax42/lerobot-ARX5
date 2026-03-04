@@ -28,7 +28,8 @@ lerobot-teleoperate \
 ```bash
 lerobot-teleoperate \
     --robot.type=flexiv_rizon4 \
-    --robot.flare_gripper_mac_addr="e2b26adbb104" \
+    --robot.gripper_mac_addr="e2b26adbb104" \
+    --robot.gripper_type="flare_gripper" \
     --robot.control_mode=cartesian_motion_force_control \
     --teleop.type=spacemouse \
     --fps=30 \
@@ -44,7 +45,8 @@ sudo -E env "PATH=$PATH" $(which python) src/lerobot/scripts/lerobot_teleoperate
 ```bash
 lerobot-teleoperate \
     --robot.type=flexiv_rizon4 \
-    --robot.flare_gripper_mac_addr="e2b26adbb104" \
+    --robot.gripper_mac_addr="e2b26adbb104" \
+    --robot.gripper_type="flare_gripper" \
     --robot.control_mode=cartesian_motion_force_control \
     --teleop.type=pico4 \
     --fps=30 \
@@ -57,7 +59,8 @@ lerobot-teleoperate \
 ```bash
 lerobot-teleoperate \
     --robot.type=flexiv_rizon4 \
-    --robot.flare_gripper_mac_addr="e2b26adbb104" \
+    --robot.gripper_mac_addr="e2b26adbb104" \
+    --robot.gripper_type="flare_gripper" \
     --robot.control_mode=cartesian_motion_force_control \
     --teleop.type=xense_flare \
     --teleop.mac_addr="6ebbc5f53240" \
@@ -71,7 +74,8 @@ lerobot-teleoperate \
 ```python
 lerobot-record \
     --robot.type=flexiv_rizon4 \
-    --robot.flare_gripper_mac_addr="e2b26adbb104" \
+    --robot.gripper_mac_addr="e2b26adbb104" \
+    --robot.gripper_type="flare_gripper" \
     --robot.control_mode=cartesian_motion_force_control \
     --teleop.type=pico4 \
     --dataset.repo_id=flexiv_pico4/ceshi20260202 \
@@ -88,7 +92,8 @@ lerobot-record \
 ```python
 lerobot-record \
     --robot.type=flexiv_rizon4 \
-    --robot.flare_gripper_mac_addr="e2b26adbb104" \
+    --robot.gripper_mac_addr="e2b26adbb104" \
+    --robot.gripper_type="flare_gripper" \
     --robot.control_mode=cartesian_motion_force_control \
     --teleop.type=btgamepad \
     --dataset.repo_id=flexiv_pico4/ceshi20260204 \

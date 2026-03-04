@@ -118,7 +118,7 @@ class BtgamepadTeleop(Teleoperator):
             )
 
         current_ee_matrix = rotation_delta @ self._start_matrix[:3, :3] #3x3
-        current_ee_quat9d = np.array(current_ee_matrix).flatten() # 9d
+        current_ee_quat9d = np.array(current_ee_matrix).T.flatten() # 9d
         self._start_quat = rotation_6d_to_quaternion(current_ee_quat9d[:6])
 
         action_dict = {
