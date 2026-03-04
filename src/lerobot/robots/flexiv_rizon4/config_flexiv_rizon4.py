@@ -18,13 +18,19 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Union
 
 import flexivrdk
 
 from lerobot.cameras.configs import CameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
+from lerobot.cameras.opencv import OpenCVCamera
+from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig, ColorMode, Cv2Rotation
+
+
 from lerobot.robots.config import RobotConfig
 from lerobot.robots.flexiv_rizon4.config_flare_gripper import FlareGripperConfig, SensorOutputType
+from lerobot.robots.flexiv_rizon4.config_xense_gripper import GripperConfig, SensorOutputType
 
 
 class ControlMode(str, Enum):
@@ -81,7 +87,7 @@ class FlexivRizon4Config(RobotConfig):
     """
 
     # Robot identification
-    robot_sn: str = "Rizon4-063423"  # Robot serial number
+    robot_sn: str = "Rizon4-062855"  # Robot serial number
 
     # Control settings
     # control_mode: JOINT_IMPEDANCE or CARTESIAN_MOTION_FORCE
@@ -186,36 +192,38 @@ class FlexivRizon4Config(RobotConfig):
     use_gripper: bool = True
 
     # Gripper identification (MAC address / serial number)
-    flare_gripper_mac_addr: str = "e2b26adbb104"
+    gripper_mac_addr: str = "bef1504b5391"
 
     # Camera settings (wrist camera resolution)
-    flare_gripper_cam_size: tuple[int, int] = (640, 480)
+    gripper_cam_size: tuple[int, int] = (640, 480)
 
     # Tactile sensor settings
-    flare_gripper_rectify_size: tuple[int, int] = (400, 700)
-    flare_gripper_sensor_output_type: SensorOutputType = SensorOutputType.RECTIFY
-    flare_gripper_sensor_keys: dict[str, str] = field(
+    gripper_rectify_size: tuple[int, int] = (400, 700)
+    gripper_sensor_output_type: SensorOutputType = SensorOutputType.RECTIFY
+    gripper_sensor_keys: dict[str, str] = field(
         default_factory=lambda: {
-            "OG000657": "right_tactile",
-            "OG000450": "left_tactile",
+            "OG000619": "right_tactile",
+            "OG000628": "left_tactile",
         }
     )
 
     # Gripper normalization: raw_pos / gripper_max_pos -> [0, 1]
-    flare_gripper_max_pos: float = 85.0
-
+    gripper_max_pos: float = 85.0
+    gripper_min_pos: float = 0.0
+    
     # Gripper control parameters for set_position()
-    flare_gripper_v_max: float = 80.0  # Maximum velocity mm/s
-    flare_gripper_f_max: float = 20.0  # Maximum force N
-
+    gripper_v_max: float = 80.0  # Maximum velocity mm/s
+    gripper_f_max: float = 20.0  # Maximum force N
     # Initialize gripper to fully open on connect
-    flare_gripper_init_open: bool = True
+    gripper_init_open: bool = True
 
     # force to use joint observation
     use_joint_observation: bool = True
 
-    # Auto-created in __post_init__ from flare_gripper_* parameters (do not set directly)
-    flare_gripper: FlareGripperConfig | None = field(default=None, init=False)
+    # Auto-created in __post_init__ from gripper_* parameters (do not set directly)
+    gripper: Union[GripperConfig, FlareGripperConfig] | None = field(default=None, init=False)
+
+    gripper_type: str = "xense_gripper"  # Options: "flare_gripper", "xense_gripper"
 
     def __post_init__(self):
         super().__post_init__()
@@ -248,25 +256,53 @@ class FlexivRizon4Config(RobotConfig):
         if not 1 <= self.start_vel_scale <= 100:
             raise ValueError(f"start_vel_scale must be between 1 and 100, got {self.start_vel_scale}")
 
-        # Create FlareGripperConfig from exposed parameters (only if use_gripper=True)
-        if self.use_gripper:
-            self.flare_gripper = FlareGripperConfig(
-                mac_addr=self.flare_gripper_mac_addr,
-                cam_size=self.flare_gripper_cam_size,
-                rectify_size=self.flare_gripper_rectify_size,
-                sensor_output_type=self.flare_gripper_sensor_output_type,
-                sensor_keys=self.flare_gripper_sensor_keys,
-                gripper_max_pos=self.flare_gripper_max_pos,
-                gripper_v_max=self.flare_gripper_v_max,
-                gripper_f_max=self.flare_gripper_f_max,
-                init_open=self.flare_gripper_init_open,
+        # Create GripperConfig from exposed parameters (only if use_gripper=True)
+        if self.use_gripper and self.gripper_type == "flare_gripper": 
+            self.gripper = FlareGripperConfig(
+                mac_addr=self.gripper_mac_addr,
+                cam_size=self.gripper_cam_size,
+                rectify_size=self.gripper_rectify_size,
+                sensor_output_type=self.gripper_sensor_output_type,
+                sensor_keys=self.gripper_sensor_keys,
+                gripper_max_pos=self.gripper_max_pos,
+                gripper_v_max=self.gripper_v_max,
+                gripper_f_max=self.gripper_f_max,
+                init_open=self.gripper_init_open,
+            )
+
+        elif self.use_gripper and self.gripper_type == "xense_gripper":
+            self.gripper = GripperConfig(
+                mac_addr=self.gripper_mac_addr,
+                rectify_size=self.gripper_rectify_size,
+                sensor_output_type=self.gripper_sensor_output_type,
+                sensor_keys=self.gripper_sensor_keys,
+                gripper_min_pos=self.gripper_min_pos,
+                gripper_max_pos=self.gripper_max_pos,
+                gripper_v_max=self.gripper_v_max,
+                gripper_f_max=self.gripper_f_max,
+                init_open=self.gripper_init_open,
             )
         else:
-            self.flare_gripper = None
+            raise ValueError(f"Invalid gripper configuration: use_gripper={self.use_gripper}, gripper_type={self.gripper_type}")
+        
+        # # Camera configuration for realsense cameras
+        # self.cameras = {
+        #     "top": RealSenseCameraConfig(
+        #         serial_number_or_name="135522074323", fps=30, width=640, height=480
+        #     ),
+        #   }
 
-        # Camera configuration for realsense cameras
         self.cameras = {
-            "top": RealSenseCameraConfig(
-                serial_number_or_name="135522074323", fps=30, width=640, height=480
-            ),
-        }
+        "image": OpenCVCameraConfig(
+            index_or_path='/dev/video_cam2',
+            fps=30,
+            width=640,
+            height=480,
+        ),
+        "wrist_image": OpenCVCameraConfig(
+            index_or_path='/dev/video_cam3',
+            fps=30,
+            width=640,
+            height=480,
+        )
+    }
