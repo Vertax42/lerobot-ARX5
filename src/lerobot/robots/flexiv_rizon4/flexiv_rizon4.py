@@ -1010,7 +1010,23 @@ class FlexivRizon4(Robot):
         # Build target pose for SDK: [x, y, z, qw, qx, qy, qz]
         target_pose = [x, y, z, quat[0], quat[1], quat[2], quat[3]]
 
-        # Send command using NRT API (pure motion - no wrench parameter needed)
+        # Stale-translation diagnostic — only runs when DEBUG logging is active (1 = spdlog DEBUG)
+        if self.logger.should_log(1):
+            current_tcp = self._robot.states().tcp_pose
+            pos_diff = np.linalg.norm(np.array(target_pose[:3]) - np.array(current_tcp[:3]))
+            quat_dot = abs(np.dot(np.array(target_pose[3:]), np.array(current_tcp[3:])))
+            rot_diff_deg = np.degrees(2.0 * np.arccos(np.clip(quat_dot, 0.0, 1.0)))
+            self.logger.debug(
+                f"[SEND] target=[{x:.4f}, {y:.4f}, {z:.4f}], "
+                f"current=[{current_tcp[0]:.4f}, {current_tcp[1]:.4f}, {current_tcp[2]:.4f}], "
+                f"pos_diff={pos_diff:.5f}m, rot_diff={rot_diff_deg:.2f}°"
+            )
+            if pos_diff < 1e-5 and rot_diff_deg > 0.5:
+                self.logger.warn(
+                    f"[STALE_POS] Translation frozen but rotation changing! "
+                    f"pos_diff={pos_diff:.6f}m, rot_diff={rot_diff_deg:.2f}°"
+                )
+
         self._robot.SendCartesianMotionForce(target_pose)
 
         return action

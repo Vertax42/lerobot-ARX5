@@ -20,18 +20,33 @@ import spdlog
 
 SPDLOG_PATTERN = "[%D %T] [%n] [%^%l%$] %v"
 
-def get_logger(name: str) -> spdlog.ConsoleLogger:
+_SPDLOG_LEVEL_MAP = {
+    "TRACE": spdlog.LogLevel.TRACE,
+    "DEBUG": spdlog.LogLevel.DEBUG,
+    "INFO": spdlog.LogLevel.INFO,
+    "WARN": spdlog.LogLevel.WARN,
+    "WARNING": spdlog.LogLevel.WARN,
+    "ERR": spdlog.LogLevel.ERR,
+    "ERROR": spdlog.LogLevel.ERR,
+    "CRITICAL": spdlog.LogLevel.CRITICAL,
+    "OFF": spdlog.LogLevel.OFF,
+}
+
+
+def get_logger(name: str, loglevel: str = "INFO") -> spdlog.ConsoleLogger:
     """Create a spdlog ConsoleLogger with unified format and colors.
 
     Args:
         name: Logger name
+        loglevel: Log level string, one of TRACE/DEBUG/INFO/WARN/ERR/CRITICAL/OFF
 
     Returns:
         Configured spdlog.ConsoleLogger instance with colored output
     """
     logger = spdlog.ConsoleLogger(name, colored=True, multithreaded=True)
     logger.set_pattern(SPDLOG_PATTERN)
-    logger.set_level(spdlog.LogLevel.INFO)
+    level = _SPDLOG_LEVEL_MAP.get(loglevel.upper(), spdlog.LogLevel.INFO)
+    logger.set_level(level)
     return logger
 
 

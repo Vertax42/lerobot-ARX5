@@ -293,16 +293,7 @@ class FlexivRizon4Config(RobotConfig):
         #   }
 
         self.cameras = {
-        "image": OpenCVCameraConfig(
-            index_or_path='/dev/video_cam2',
-            fps=30,
-            width=640,
-            height=480,
-        ),
-        "wrist_image": OpenCVCameraConfig(
-            index_or_path='/dev/video_cam3',
-            fps=30,
-            width=640,
-            height=480,
-        )
-    }
+            "top": RealSenseCameraConfig(
+                serial_number_or_name="135522074323", fps=30, width=1280, height=720
+            ),
+        }

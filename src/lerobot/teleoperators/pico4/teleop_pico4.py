@@ -543,22 +543,39 @@ class Pico4(Teleoperator):
         if self._last_raw_pose is not None and self.config.position_jump_threshold > 0:
             pos_delta = np.linalg.norm(controller_pose_raw[:3] - self._last_raw_pose[:3])
             if pos_delta > self.config.position_jump_threshold:
-                # Jump detected - use last frame's position, keep current orientation
                 self._jump_filter_count += 1
+                self.logger.warn(
+                    f"[JUMP] Position jump #{self._jump_filter_count}: "
+                    f"delta={pos_delta:.4f}m > threshold={self.config.position_jump_threshold}m, "
+                    f"raw_pos={controller_pose_raw[:3]}, last_pos={self._last_raw_pose[:3]}. "
+                    f"Clamping position to last frame."
+                )
                 controller_pose_raw[:3] = self._last_raw_pose[:3]
         self._last_raw_pose = controller_pose_raw.copy()
 
         # Step 2: Check enable state with hysteresis (grip as enable button)
-        # This prevents flickering when grip value is near threshold
+        prev_enabled = self._enabled
         if self._enabled:
-            # Currently enabled: only disable if grip drops below low threshold
             self._enabled = controller_grip > self.config.grip_disable_threshold
         else:
-            # Currently disabled: only enable if grip exceeds high threshold
             self._enabled = controller_grip > self.config.grip_enable_threshold
+        if self._enabled != prev_enabled:
+            self.logger.info(
+                f"[ENABLE] State changed: {prev_enabled} -> {self._enabled}, "
+                f"grip={controller_grip:.3f} "
+                f"(enable_thresh={self.config.grip_enable_threshold}, "
+                f"disable_thresh={self.config.grip_disable_threshold})"
+            )
 
         # Step 3: Apply window filter to raw pose data (in Pico4 frame)
+        raw_pos_pico = controller_pose_raw[:3].copy()
         filtered_pos_pico, filtered_quat_pico = self._filter_raw_pose(controller_pose_raw)
+        filter_pos_delta = np.linalg.norm(filtered_pos_pico - raw_pos_pico)
+        if filter_pos_delta > 0.01:
+            self.logger.debug(
+                f"[FILTER] Large filter delta: {filter_pos_delta:.4f}m, "
+                f"raw={raw_pos_pico}, filtered={filtered_pos_pico}"
+            )
 
         # Step 4: Transform from Pico4 coordinate system to Flexiv coordinate system
         filtered_pos_flexiv, filtered_quat_flexiv = self._transform_pico_to_flexiv_coordinate(
@@ -570,8 +587,11 @@ class Pico4(Teleoperator):
         just_enabled = self._enabled and not self._was_enabled
 
         if just_enabled or self._ref_pos is None:
-            # When grip is first pressed, establish the mapping between controller and robot
-            # Position: record reference position for relative control
+            self.logger.info(
+                f"[REF_RESET] {'just_enabled' if just_enabled else 'ref_pos is None'}: "
+                f"ref_pos={filtered_pos_flexiv}, start_pos={self._target_pos}, "
+                f"filtered_quat={filtered_quat_flexiv}"
+            )
             self._ref_pos = filtered_pos_flexiv.copy()
             self._start_pos = self._target_pos.copy()
 
@@ -633,10 +653,16 @@ class Pico4(Teleoperator):
         # Only update target pose when enabled (grip is held)
         if self._enabled:
             # === Position: Relative accumulation (always active) ===
-            # target_pos = start_pos + (current_pos - ref_pos) * sensitivity
             rel_pos = filtered_pos_flexiv - self._ref_pos
             scaled_rel_pos = rel_pos * self.config.pos_sensitivity
             self._target_pos = self._start_pos + scaled_rel_pos
+
+            rel_pos_norm = np.linalg.norm(rel_pos)
+            if rel_pos_norm < 1e-6:
+                self.logger.debug(
+                    f"[POS] rel_pos is near ZERO ({rel_pos_norm:.6f}m): "
+                    f"filtered={filtered_pos_flexiv}, ref={self._ref_pos}"
+                )
 
             # === Orientation: Absolute mapping with offset (only if offset is within threshold) ===
             if self._orientation_control_active:
@@ -664,10 +690,13 @@ class Pico4(Teleoperator):
         self._target_gripper_pos = 1.0 - float(controller_trigger) * self.config.gripper_width
 
         # Step 7: Return in Flexiv Rizon4 action format with 6D rotation
-        # Format: {tcp.x, tcp.y, tcp.z, tcp.r1-r6, gripper.pos}
-        # _target_quat is in [qw, qx, qy, qz] format, convert to 6D rotation
         r6d = quaternion_to_rotation_6d(
             self._target_quat[0], self._target_quat[1], self._target_quat[2], self._target_quat[3]
+        )
+        self.logger.debug(
+            f"[ACTION] pos=[{self._target_pos[0]:.4f}, {self._target_pos[1]:.4f}, {self._target_pos[2]:.4f}], "
+            f"quat=[{self._target_quat[0]:.3f}, {self._target_quat[1]:.3f}, {self._target_quat[2]:.3f}, {self._target_quat[3]:.3f}], "
+            f"gripper={self._target_gripper_pos:.3f}, enabled={self._enabled}, ori_active={self._orientation_control_active}"
         )
         return {
             "tcp.x": self._target_pos[0],

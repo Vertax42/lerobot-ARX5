@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The XenseRobotics Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,9 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .config import RobotConfig
-from .robot import Robot
-from .utils import make_robot_from_config
+import flexiv_bindings
 
-# Re-export subpackages so `from lerobot.robots import flexiv_rizon4_rt` works
-from . import flexiv_rizon4_rt  # noqa: F401
+from .config_flexiv_rizon4_rt import FlexivRizon4RTConfig  # noqa: F401
+from .flexiv_rizon4_rt import FlexivRizon4RT  # noqa: F401
+
+# Export flexiv_bindings types for direct access
+Mode = flexiv_bindings.Mode  # noqa: F401
+CoordType = flexiv_bindings.CoordType  # noqa: F401
