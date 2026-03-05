@@ -17,6 +17,7 @@
 """Configuration for Flexiv Rizon4 RT robot (real-time via flexiv_rt)."""
 
 from dataclasses import dataclass, field
+from typing import Union
 
 import flexiv_rt
 
@@ -24,6 +25,7 @@ from lerobot.cameras.configs import CameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.robots.config import RobotConfig
 from lerobot.robots.flexiv_rizon4.config_flare_gripper import FlareGripperConfig, SensorOutputType
+from lerobot.robots.flexiv_rizon4.config_xense_gripper import GripperConfig
 
 
 @RobotConfig.register_subclass("flexiv_rizon4_rt")
@@ -118,25 +120,28 @@ class FlexivRizon4RTConfig(RobotConfig):
     connect_retries: int = 3
     retry_interval_sec: float = 1.0
 
-    # ========== Flare Gripper (end-effector) settings ==========
+    # ========== Gripper (end-effector) settings ==========
     use_gripper: bool = True
-    flare_gripper_mac_addr: str = "e2b26adbb104"
-    flare_gripper_cam_size: tuple[int, int] = (640, 480)
-    flare_gripper_rectify_size: tuple[int, int] = (400, 700)
-    flare_gripper_sensor_output_type: SensorOutputType = SensorOutputType.RECTIFY
-    flare_gripper_sensor_keys: dict[str, str] = field(
+    gripper_type: str = "flare_gripper"  # Options: "flare_gripper", "xense_gripper"
+
+    gripper_mac_addr: str = "e2b26adbb104"
+    gripper_cam_size: tuple[int, int] = (640, 480)
+    gripper_rectify_size: tuple[int, int] = (400, 700)
+    gripper_sensor_output_type: SensorOutputType = SensorOutputType.RECTIFY
+    gripper_sensor_keys: dict[str, str] = field(
         default_factory=lambda: {
             "OG000657": "right_tactile",
             "OG000450": "left_tactile",
         }
     )
-    flare_gripper_max_pos: float = 85.0
-    flare_gripper_v_max: float = 80.0  # mm/s
-    flare_gripper_f_max: float = 20.0  # N
-    flare_gripper_init_open: bool = True
+    gripper_min_pos: float = 0.0
+    gripper_max_pos: float = 85.0
+    gripper_v_max: float = 80.0  # mm/s
+    gripper_f_max: float = 20.0  # N
+    gripper_init_open: bool = True
 
-    # Auto-created in __post_init__
-    flare_gripper: FlareGripperConfig | None = field(default=None, init=False)
+    # Auto-created in __post_init__ from gripper_* parameters (do not set directly)
+    gripper: Union[GripperConfig, FlareGripperConfig] | None = field(default=None, init=False)
 
     def __post_init__(self):
         super().__post_init__()
@@ -169,21 +174,33 @@ class FlexivRizon4RTConfig(RobotConfig):
                 f"start_vel_scale must be between 1 and 100, got {self.start_vel_scale}"
             )
 
-        # Create FlareGripperConfig from exposed parameters
-        if self.use_gripper:
-            self.flare_gripper = FlareGripperConfig(
-                mac_addr=self.flare_gripper_mac_addr,
-                cam_size=self.flare_gripper_cam_size,
-                rectify_size=self.flare_gripper_rectify_size,
-                sensor_output_type=self.flare_gripper_sensor_output_type,
-                sensor_keys=self.flare_gripper_sensor_keys,
-                gripper_max_pos=self.flare_gripper_max_pos,
-                gripper_v_max=self.flare_gripper_v_max,
-                gripper_f_max=self.flare_gripper_f_max,
-                init_open=self.flare_gripper_init_open,
+        # Create gripper config from exposed parameters
+        if self.use_gripper and self.gripper_type == "flare_gripper":
+            self.gripper = FlareGripperConfig(
+                mac_addr=self.gripper_mac_addr,
+                cam_size=self.gripper_cam_size,
+                rectify_size=self.gripper_rectify_size,
+                sensor_output_type=self.gripper_sensor_output_type,
+                sensor_keys=self.gripper_sensor_keys,
+                gripper_max_pos=self.gripper_max_pos,
+                gripper_v_max=self.gripper_v_max,
+                gripper_f_max=self.gripper_f_max,
+                init_open=self.gripper_init_open,
+            )
+        elif self.use_gripper and self.gripper_type == "xense_gripper":
+            self.gripper = GripperConfig(
+                mac_addr=self.gripper_mac_addr,
+                rectify_size=self.gripper_rectify_size,
+                sensor_output_type=self.gripper_sensor_output_type,
+                sensor_keys=self.gripper_sensor_keys,
+                gripper_min_pos=self.gripper_min_pos,
+                gripper_max_pos=self.gripper_max_pos,
+                gripper_v_max=self.gripper_v_max,
+                gripper_f_max=self.gripper_f_max,
+                init_open=self.gripper_init_open,
             )
         else:
-            self.flare_gripper = None
+            self.gripper = None
 
         # # Camera configuration for realsense cameras
         # self.cameras = {

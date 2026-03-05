@@ -65,6 +65,7 @@ import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
 from lerobot.robots.flexiv_rizon4.flare_gripper import FlareGripper
+from lerobot.robots.flexiv_rizon4.xense_gripper import Gripper
 from lerobot.robots.flexiv_rizon4_rt.config_flexiv_rizon4_rt import FlexivRizon4RTConfig
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
@@ -124,10 +125,14 @@ class FlexivRizon4RT(Robot):
         self._cc: frt.CartesianMotionForceControl | None = None  # RT control handle
         self._is_connected = False
 
-        # Flare gripper (independent of arm backend)
-        self._flare_gripper: FlareGripper | None = None
-        if config.use_gripper:
-            self._flare_gripper = FlareGripper(config.flare_gripper)
+        # Gripper (independent of arm control backend)
+        self._gripper: FlareGripper | Gripper | None = None
+        if config.use_gripper and config.gripper_type == "flare_gripper":
+            self._gripper = FlareGripper(config.gripper)
+        elif config.use_gripper and config.gripper_type == "xense_gripper":
+            self._gripper = Gripper(config.gripper)
+        else:
+            self.logger.info("No gripper configured, proceeding without gripper.")
 
         # Home TCP pose - stored after moving to home position
         # Format: [x, y, z, qw, qx, qy, qz] (7D) - SDK format
@@ -242,24 +247,25 @@ class FlexivRizon4RT(Robot):
 
     @property
     def _cameras_ft(self) -> dict[str, tuple]:
-        """Return camera/image features from Flare Gripper and external cameras."""
+        """Return camera/image features from gripper and external cameras."""
         features = {}
 
-        if self._flare_gripper and self.config.use_gripper:
-            features["wrist_cam"] = (
-                self._flare_gripper._config.cam_size[1],
-                self._flare_gripper._config.cam_size[0],
-                3,
-            )
-            if self._flare_gripper._config.enable_sensor:
+        if self._gripper and self.config.use_gripper:
+            if self.config.gripper_type == "flare_gripper":
+                features["wrist_cam"] = (
+                    self._gripper._config.cam_size[1],
+                    self._gripper._config.cam_size[0],
+                    3,
+                )
+            if self._gripper._config.enable_sensor:
                 features["left_tactile"] = (
-                    self._flare_gripper._config.rectify_size[1],
-                    self._flare_gripper._config.rectify_size[0],
+                    self._gripper._config.rectify_size[1],
+                    self._gripper._config.rectify_size[0],
                     3,
                 )
                 features["right_tactile"] = (
-                    self._flare_gripper._config.rectify_size[1],
-                    self._flare_gripper._config.rectify_size[0],
+                    self._gripper._config.rectify_size[1],
+                    self._gripper._config.rectify_size[0],
                     3,
                 )
 
@@ -354,9 +360,9 @@ class FlexivRizon4RT(Robot):
             self.logger.info("Robot is now operational.")
 
             # --- 3. Connect Flare Gripper + cameras ---
-            if self._flare_gripper and self.config.use_gripper:
+            if self._gripper and self.config.use_gripper:
                 self.logger.info("Connecting Flare Gripper...")
-                self._flare_gripper.connect()
+                self._gripper.connect()
 
             for cam in self.cameras.values():
                 cam.connect()
@@ -400,11 +406,19 @@ class FlexivRizon4RT(Robot):
             mode_desc = "RT_CARTESIAN_MOTION_FORCE"
             mode_desc += " (force enabled)" if self.config.use_force else " (motion only)"
 
-            gripper_status = (
-                "with Flare Gripper (gripper + wrist_cam + tactile)"
-                if (self._flare_gripper and self.config.use_gripper)
-                else "no gripper"
-            )
+            if self._gripper and self.config.use_gripper:
+                if self.config.gripper_type == "flare_gripper":
+                    gripper_devices = ["gripper", "wrist_cam"]
+                    if self._gripper._config.enable_sensor:
+                        gripper_devices.append("tactile")
+                    gripper_status = f"with FlareGripper ({' + '.join(gripper_devices)})"
+                elif self.config.gripper_type == "xense_gripper":
+                    gripper_devices = ["gripper"]
+                    if self._gripper._config.enable_sensor:
+                        gripper_devices.append("tactile")
+                    gripper_status = f"with XenseGripper ({' + '.join(gripper_devices)})"
+            else:
+                gripper_status = "no gripper"
             self.logger.info(f"Flexiv Rizon4 RT connected and ready in {mode_desc} mode ({gripper_status}).")
 
         except Exception as e:
@@ -461,9 +475,9 @@ class FlexivRizon4RT(Robot):
                     self.logger.warn(f"Error calling robot.Stop(): {e}")
 
             # 4. Disconnect gripper + cameras
-            if self._flare_gripper and self.config.use_gripper:
+            if self._gripper and self.config.use_gripper:
                 try:
-                    self._flare_gripper.disconnect()
+                    self._gripper.disconnect()
                 except Exception as e:
                     self.logger.warn(f"Error disconnecting gripper: {e}")
 
@@ -483,7 +497,7 @@ class FlexivRizon4RT(Robot):
                     pass
             self._robot = None
             self._cc = None
-            self._flare_gripper = None
+            self._gripper = None
             self._is_connected = False
             self.logger.info("Flexiv Rizon4 RT disconnected.")
 
@@ -596,18 +610,18 @@ class FlexivRizon4RT(Robot):
         self._robot.ExecutePlan("PLAN-Home")
 
         # Initialize gripper position during move
-        if self._flare_gripper is not None:
-            if self.config.flare_gripper_init_open:
-                self._flare_gripper._gripper.set_position_sync(
-                    self.config.flare_gripper_max_pos,
-                    vmax=self.config.flare_gripper_v_max / 2,
-                    fmax=self.config.flare_gripper_f_max / 2,
+        if self._gripper is not None:
+            if self.config.gripper_init_open:
+                self._gripper._gripper.set_position_sync(
+                    self.config.gripper_max_pos,
+                    vmax=self.config.gripper_v_max / 2,
+                    fmax=self.config.gripper_f_max / 2,
                 )
             else:
-                self._flare_gripper._gripper.set_position_sync(
+                self._gripper._gripper.set_position_sync(
                     0.0,
-                    vmax=self.config.flare_gripper_v_max / 2,
-                    fmax=self.config.flare_gripper_f_max / 2,
+                    vmax=self.config.gripper_v_max / 2,
+                    fmax=self.config.gripper_f_max / 2,
                 )
 
         # Wait for plan to finish
@@ -652,18 +666,18 @@ class FlexivRizon4RT(Robot):
         self.logger.info("MoveJ command sent, waiting for completion...")
 
         # Initialize gripper position during move
-        if self._flare_gripper is not None:
-            if self.config.flare_gripper_init_open:
-                self._flare_gripper._gripper.set_position_sync(
-                    self.config.flare_gripper_max_pos,
-                    vmax=self.config.flare_gripper_v_max / 2,
-                    fmax=self.config.flare_gripper_f_max / 2,
+        if self._gripper is not None:
+            if self.config.gripper_init_open:
+                self._gripper._gripper.set_position_sync(
+                    self.config.gripper_max_pos,
+                    vmax=self.config.gripper_v_max / 2,
+                    fmax=self.config.gripper_f_max / 2,
                 )
             else:
-                self._flare_gripper._gripper.set_position_sync(
+                self._gripper._gripper.set_position_sync(
                     0.0,
-                    vmax=self.config.flare_gripper_v_max / 2,
-                    fmax=self.config.flare_gripper_f_max / 2,
+                    vmax=self.config.gripper_v_max / 2,
+                    fmax=self.config.gripper_f_max / 2,
                 )
 
         # Wait for MoveJ to complete.
@@ -687,8 +701,8 @@ class FlexivRizon4RT(Robot):
             time.sleep(0.1)
 
         self.logger.info("Robot at start position.")
-        if self._flare_gripper is not None:
-            self.logger.info(f"Gripper position: {self._flare_gripper.get_gripper_position()}")
+        if self._gripper is not None:
+            self.logger.info(f"Gripper position: {self._gripper.get_gripper_position()}")
 
     def _zero_ft_sensor(self) -> None:
         """Zero force-torque sensor offset.
@@ -815,21 +829,22 @@ class FlexivRizon4RT(Robot):
                     for i, key in enumerate(self._wrench_keys):
                         obs_dict[key] = ext_wrench[i]
 
-        # --- Flare Gripper data (gripper + wrist_cam + tactile) ---
-        if self._flare_gripper is not None and self.config.use_gripper:
-            if self._flare_gripper._enable_sensor:
-                sensor_data = self._flare_gripper.get_sensor_data()
+        # --- Gripper data (gripper + wrist_cam + tactile) ---
+        if self._gripper is not None and self.config.use_gripper:
+            if self._gripper._enable_sensor:
+                sensor_data = self._gripper.get_sensor_data()
                 for key, data in sensor_data.items():
                     obs_dict[key] = data
 
-            camera_frame = self._flare_gripper.get_camera_frame()
-            if camera_frame is not None:
-                obs_dict["wrist_cam"] = camera_frame
-            else:
-                h, w = self._flare_gripper._config.cam_size[1], self._flare_gripper._config.cam_size[0]
-                obs_dict["wrist_cam"] = np.zeros((h, w, 3), dtype=np.uint8)
+            if self.config.gripper_type == "flare_gripper":
+                camera_frame = self._gripper.get_camera_frame()
+                if camera_frame is not None:
+                    obs_dict["wrist_cam"] = camera_frame
+                else:
+                    h, w = self._gripper._config.cam_size[1], self._gripper._config.cam_size[0]
+                    obs_dict["wrist_cam"] = np.zeros((h, w, 3), dtype=np.uint8)
 
-            obs_dict[self._gripper_key] = self._flare_gripper.get_gripper_position()
+            obs_dict[self._gripper_key] = self._gripper.get_gripper_position()
 
         # --- External cameras ---
         for cam_key, cam in self.cameras.items():
@@ -903,17 +918,17 @@ class FlexivRizon4RT(Robot):
         return action
 
     def _send_gripper_action(self, action: dict[str, Any]) -> None:
-        """Send gripper command using Flare Gripper.
+        """Send gripper command.
 
         Action key: gripper.pos (normalized 0-1)
         """
-        if not self._flare_gripper or not self.config.use_gripper:
+        if not self._gripper or not self.config.use_gripper:
             return
 
         if self._gripper_key not in action:
             return
 
-        self._flare_gripper.set_gripper_position(action[self._gripper_key])
+        self._gripper.set_gripper_position(action[self._gripper_key])
 
     # =========================================================================
     # RT thread management
@@ -1063,8 +1078,8 @@ class FlexivRizon4RT(Robot):
         euler = quaternion_to_euler(tcp_pose[3], tcp_pose[4], tcp_pose[5], tcp_pose[6])
 
         gripper_pos = 0.0
-        if self._flare_gripper and self.config.use_gripper:
-            gripper_pos = self._flare_gripper.get_gripper_position()
+        if self._gripper and self.config.use_gripper:
+            gripper_pos = self._gripper.get_gripper_position()
 
         return np.array(
             [tcp_pose[0], tcp_pose[1], tcp_pose[2], euler[0], euler[1], euler[2], gripper_pos],
@@ -1088,8 +1103,8 @@ class FlexivRizon4RT(Robot):
             tcp_pose = self._robot.states().tcp_pose
 
         gripper_pos = 0.0
-        if self._flare_gripper and self.config.use_gripper:
-            gripper_pos = self._flare_gripper.get_gripper_position()
+        if self._gripper and self.config.use_gripper:
+            gripper_pos = self._gripper.get_gripper_position()
 
         return np.array(
             [*tcp_pose, gripper_pos],
