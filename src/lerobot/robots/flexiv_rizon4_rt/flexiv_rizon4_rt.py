@@ -414,8 +414,6 @@ class FlexivRizon4RT(Robot):
                     gripper_status = f"with FlareGripper ({' + '.join(gripper_devices)})"
                 elif self.config.gripper_type == "xense_gripper":
                     gripper_devices = ["gripper"]
-                    if self.config.cameras:
-                        gripper_devices.append("wrist_cam")
                     if self._gripper._config.enable_sensor:
                         gripper_devices.append("tactile")
                     gripper_status = f"with XenseGripper ({' + '.join(gripper_devices)})"
