@@ -159,7 +159,7 @@ kinematics = ["lerobot[placo-dep]"]
 #   conda install -c robostack-jazzy ros-jazzy-kdl-parser
 # Then build ARX5 Python bindings from source (src/lerobot/robots/bi_arx5/ARX5_SDK/).
 arx5 = [
-    "pybind11",
+    "pyarx",
     "click",
     "pyzmq>=26.2.1,<28.0.0",
     "atomics",
