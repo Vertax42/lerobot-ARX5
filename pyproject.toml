@@ -152,6 +152,19 @@ unitree_g1 = [
 ]
 reachy2 = ["reachy2_sdk>=1.0.15,<1.1.0"]
 kinematics = ["lerobot[placo-dep]"]
+# Xense fork: ARX5 robot arm pip-installable dependencies.
+# Conda-only deps (install via conda activate arx-py312):
+#   conda install -c conda-forge spdlog==1.14.1 pybind11 orocos-kdl eigen boost ninja
+#   conda install -c conda-forge soem=1.4.0  # x86_64 only; see arx-py312.yaml for aarch64 instructions
+#   conda install -c robostack-jazzy ros-jazzy-kdl-parser
+# Then build ARX5 Python bindings from source (src/lerobot/robots/bi_arx5/ARX5_SDK/).
+arx5 = [
+    "pybind11",
+    "click",
+    "pyzmq>=26.2.1,<28.0.0",
+    "atomics",
+    "spnav @ https://github.com/cheng-chi/spnav/archive/c1c938ebe3cc542db4685e0d13850ff1abfdb943.tar.gz",
+]
 intelrealsense = [
     "pyrealsense2>=2.55.1.6486,<2.57.0 ; sys_platform != 'darwin'",
     "pyrealsense2-macosx>=2.54,<2.57.0 ; sys_platform == 'darwin'",
