@@ -8,20 +8,19 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON) # global PIC
 
 # ---------------------------------------------------------------------------
-# Prefer conda environment packages over system packages.
-# Set CONDA_PREFIX in the shell before invoking cmake, or pass
-#   -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
+# For spdlog we need the system spdlog 1.14.1 (at /usr/local) rather than
+# the conda PyPI spdlog 2.0.6 package which wraps spdlog 1.10.0 headers.
+# Append (not prepend) CONDA_PREFIX so /usr/local/lib/cmake/spdlog wins.
 # ---------------------------------------------------------------------------
 if(DEFINED ENV{CONDA_PREFIX})
-    list(PREPEND CMAKE_PREFIX_PATH $ENV{CONDA_PREFIX})
+    list(APPEND CMAKE_PREFIX_PATH $ENV{CONDA_PREFIX})
 endif()
 
-# ---------------------------------------------------------------------------
-# Use spdlog's bundled fmt (fmt::v11 in spdlog 1.14.1) instead of any
-# separately installed system libfmt. This avoids ABI mismatches caused by
-# mixing fmt::v8 (old system) with fmt::v11 (spdlog 1.14.1 bundle).
-# MUST be set before find_package(spdlog).
-# ---------------------------------------------------------------------------
+# Force system spdlog 1.14.1 include dir to come first so its fmt::v10
+# bundled headers are used rather than the PyPI spdlog 1.10.0 (fmt::v8).
+include_directories(BEFORE /usr/local/include)
+
+# Use spdlog's bundled fmt. MUST be set before find_package(spdlog).
 set(SPDLOG_FMT_EXTERNAL OFF CACHE BOOL "Use spdlog bundled fmt, not system fmt" FORCE)
 
 find_package(Threads REQUIRED)

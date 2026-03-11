@@ -1,15 +1,19 @@
 cmake_minimum_required( VERSION 3.16.3 )
 
 # ---------------------------------------------------------------------------
-# Prefer conda environment packages over system packages.
+# Prefer conda environment packages over system packages — EXCEPT for spdlog.
+# The conda PyPI spdlog package installs spdlog 1.10.0 C++ headers at
+#   $CONDA_PREFIX/include/python3.12/spdlog/
+# which shadow the system spdlog 1.14.1 at /usr/local/include/spdlog/.
+# We deliberately do NOT prepend CONDA_PREFIX so that cmake finds the system
+# spdlog 1.14.1 first via /usr/local/lib/cmake/spdlog.
 # ---------------------------------------------------------------------------
 if(DEFINED ENV{CONDA_PREFIX})
-    list(PREPEND CMAKE_PREFIX_PATH $ENV{CONDA_PREFIX})
+    list(APPEND CMAKE_PREFIX_PATH $ENV{CONDA_PREFIX})
 endif()
 
 # ---------------------------------------------------------------------------
-# Use spdlog's bundled fmt (spdlog 1.14.1 bundles fmt 11.x).
-# Prevents ABI mismatch with any separately installed system libfmt.
+# Use spdlog's bundled fmt (spdlog 1.14.1 bundles fmt 10.x).
 # MUST be set before find_package(spdlog).
 # ---------------------------------------------------------------------------
 set(SPDLOG_FMT_EXTERNAL OFF CACHE BOOL "Use spdlog bundled fmt, not system fmt" FORCE)
@@ -23,13 +27,21 @@ find_package(kdl_parser REQUIRED)
 find_package(spdlog REQUIRED)
 
 # ---------------------------------------------------------------------------
-# RPATH: embed conda lib dir so arx5_interface.so finds spdlog at runtime.
+# RPATH: embed conda lib dir so arx5_interface.so finds its deps at runtime.
 # ---------------------------------------------------------------------------
 set(CMAKE_BUILD_RPATH   "$ENV{CONDA_PREFIX}/lib")
 set(CMAKE_INSTALL_RPATH "$ENV{CONDA_PREFIX}/lib")
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-pybind11_add_module(arx5_interface
+# ---------------------------------------------------------------------------
+# Force system spdlog 1.14.1 headers (fmt::v10) to come before conda's
+# python3.12/spdlog headers (fmt::v8 from PyPI spdlog 2.0.6/1.10.0).
+# Pybind11 adds -isystem $CONDA_PREFIX/include/python3.12 which would
+# otherwise shadow /usr/local/include/spdlog and cause an ABI mismatch.
+# ---------------------------------------------------------------------------
+include_directories(BEFORE /usr/local/include)
+
+pybind11_add_module(_arx5_interface
 arx5_pybind.cpp
 ${CMAKE_CURRENT_SOURCE_DIR}/../src/app/joint_controller.cpp
 ${CMAKE_CURRENT_SOURCE_DIR}/../src/app/cartesian_controller.cpp
@@ -51,7 +63,7 @@ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(AMD64)|(^i686)")
     set(LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../lib/x86_64)
 endif()
 
-target_link_libraries(arx5_interface PRIVATE
+target_link_libraries(_arx5_interface PRIVATE
 ${LIB_DIR}/libhardware.so
 ${LIB_DIR}/libsolver.so
     spdlog::spdlog
@@ -62,12 +74,12 @@ ${LIB_DIR}/libsolver.so
     pthread
     soem
 )
-target_include_directories(arx5_interface PUBLIC ${EIGEN3_INCLUDE_DIRS})
+target_include_directories(_arx5_interface PUBLIC ${EIGEN3_INCLUDE_DIRS})
 
 # Hack for py310
-target_include_directories(arx5_interface PUBLIC $ENV{CONDA_PREFIX}/include/kdl_parser  $ENV{CONDA_PREFIX}/include/urdfdom_headers)
+target_include_directories(_arx5_interface PUBLIC $ENV{CONDA_PREFIX}/include/kdl_parser  $ENV{CONDA_PREFIX}/include/urdfdom_headers)
 
-# Optional: set the output directory for the built module
-set_target_properties(arx5_interface PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
-set_target_properties(arx5_interface PROPERTIES PREFIX "")
-set_target_properties(arx5_interface PROPERTIES OUTPUT_NAME "arx5_interface")
+# Output to pyarx/ package directory (one level up from python/)
+set_target_properties(_arx5_interface PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../pyarx")
+set_target_properties(_arx5_interface PROPERTIES PREFIX "")
+set_target_properties(_arx5_interface PROPERTIES OUTPUT_NAME "_arx5_interface")
