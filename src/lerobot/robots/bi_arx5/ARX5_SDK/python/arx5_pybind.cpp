@@ -13,7 +13,7 @@ namespace py = pybind11;
 using namespace arx;
 using Pose6d = Eigen::Matrix<double, 6, 1>;
 using VecDoF = Eigen::VectorXd;
-PYBIND11_MODULE(arx5_interface, m)
+PYBIND11_MODULE(_arx5_interface, m)
 {
     py::enum_<spdlog::level::level_enum>(m, "LogLevel")
         .value("TRACE", spdlog::level::level_enum::trace)
