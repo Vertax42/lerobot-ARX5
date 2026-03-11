@@ -91,6 +91,9 @@ dependencies = [
     "deepdiff>=7.0.1,<9.0.0",
     "imageio[ffmpeg]>=2.34.0,<3.0.0",
     "termcolor>=2.4.0,<4.0.0",
+
+    # Xense fork: spdlog is used by our robot_utils.get_logger() (always available)
+    "spdlog",
 ]
 
 # Optional dependencies
@@ -105,6 +108,26 @@ can-dep = ["python-can>=4.2.0,<5.0.0"]
 peft-dep = ["peft>=0.18.0,<1.0.0"]
 scipy-dep = ["scipy>=1.14.0,<2.0.0"]
 qwen-vl-utils-dep = ["qwen-vl-utils>=0.0.11,<0.1.0"]
+
+# Xense fork: XenseSdk (hand/glove hardware). xensesdk requires numpy<=1.26.4 which
+# conflicts with upstream numpy>=2; install in a separate venv or relax if compatible.
+# NOTE: numpy pin here is advisory only; remove if your env resolves correctly without it.
+xense = ["xensesdk>=1.7.0"]
+
+# Xense fork: hardware drivers not on PyPI (installed from local wheels or source)
+# List them here so tooling can document the requirements.
+hardware = [
+    # Flexiv NRT SDK (Non-Real-Time): required for flexiv_rizon4 robot
+    # Install from: https://github.com/flexivrobotics/flexiv_rdk
+    "flexivrdk",
+    # Flexiv RT SDK (Real-Time): required for flexiv_rizon4_rt and bi_flexiv_rizon4_rt
+    # Install from internal Flexiv RT SDK wheel
+    "flexiv-rt",
+    # VR Tracker: required for vive_tracker teleoperator
+    "pysurvive",
+    # 3D SpaceMouse: required for spacemouse teleoperator
+    "pyspacemouse",
+]
 matplotlib-dep = ["matplotlib>=3.10.3,<4.0.0", "contourpy>=1.3.0,<2.0.0"] # NOTE: Explicitly listing contourpy helps the resolver converge faster.
 
 # Motors
@@ -227,6 +250,7 @@ lerobot-find-joint-limits="lerobot.scripts.lerobot_find_joint_limits:main"
 lerobot-imgtransform-viz="lerobot.scripts.lerobot_imgtransform_viz:main"
 lerobot-edit-dataset="lerobot.scripts.lerobot_edit_dataset:main"
 lerobot-setup-can="lerobot.scripts.lerobot_setup_can:main"
+lerobot-annotate-reward="lerobot.scripts.lerobot_annotate_reward:main"
 
 # ---------------- Tool Configurations ----------------
 [tool.setuptools.package-data]

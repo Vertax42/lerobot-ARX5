@@ -15,7 +15,7 @@
 """
 Simple script to control a robot from teleoperation.
 
-Example:
+Example (SO-101):
 
 ```shell
 lerobot-teleoperate \
@@ -29,24 +29,47 @@ lerobot-teleoperate \
     --display_data=true
 ```
 
-Example teleoperation with bimanual so100:
+Example (Flexiv Rizon4 RT + Pico4):
 
 ```shell
 lerobot-teleoperate \
-  --robot.type=bi_so_follower \
-  --robot.left_arm_config.port=/dev/tty.usbmodem5A460822851 \
-  --robot.right_arm_config.port=/dev/tty.usbmodem5A460814411 \
-  --robot.id=bimanual_follower \
-  --robot.left_arm_config.cameras='{
-    wrist: {"type": "opencv", "index_or_path": 1, "width": 640, "height": 480, "fps": 30},
-  }' --robot.right_arm_config.cameras='{
-    wrist: {"type": "opencv", "index_or_path": 2, "width": 640, "height": 480, "fps": 30},
-  }' \
-  --teleop.type=bi_so_leader \
-  --teleop.left_arm_config.port=/dev/tty.usbmodem5A460852721 \
-  --teleop.right_arm_config.port=/dev/tty.usbmodem5A460819811 \
-  --teleop.id=bimanual_leader \
-  --display_data=true
+    --robot.type=flexiv_rizon4_rt \
+    --robot.robot_ip=192.168.2.100 \
+    --robot.local_ip=192.168.2.1 \
+    --robot.id=right \
+    --teleop.type=pico4 \
+    --teleop.id=right \
+    --fps=60 \
+    --no_obs=true \
+    --debug_timing=true
+```
+
+Example (Bimanual Flexiv Rizon4 RT + Bi-Pico4):
+
+```shell
+lerobot-teleoperate \
+    --robot.type=bi_flexiv_rizon4_rt \
+    --robot.left_config.robot_ip=192.168.2.100 \
+    --robot.left_config.local_ip=192.168.2.1 \
+    --robot.right_config.robot_ip=192.168.3.100 \
+    --robot.right_config.local_ip=192.168.3.1 \
+    --robot.id=bimanual \
+    --teleop.type=bi_pico4 \
+    --teleop.id=bimanual \
+    --fps=60 \
+    --no_obs=true
+```
+
+Example (XenseFlare + SpaceMouse):
+
+```shell
+lerobot-teleoperate \
+    --robot.type=xense_flare \
+    --robot.id=right \
+    --teleop.type=spacemouse \
+    --teleop.id=right \
+    --fps=30 \
+    --display_data=true
 ```
 
 """
@@ -71,23 +94,33 @@ from lerobot.processor import (
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
+    arx5_follower,
+    bi_arx5,
+    bi_flexiv_rizon4_rt,
     bi_openarm_follower,
     bi_so_follower,
     earthrover_mini_plus,
+    flexiv_rizon4,
+    flexiv_rizon4_rt,
     hope_jr,
     koch_follower,
     make_robot_from_config,
     omx_follower,
     openarm_follower,
+    pylibfranka_research3,
     reachy2,
     so_follower,
     unitree_g1 as unitree_g1_robot,
+    xense_flare as xense_flare_robot,
+    xense_multisensor,
 )
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
     TeleoperatorConfig,
     bi_openarm_leader,
+    bi_pico4,
     bi_so_leader,
+    btgamepad,
     gamepad,
     homunculus,
     keyboard,
@@ -96,9 +129,13 @@ from lerobot.teleoperators import (  # noqa: F401
     omx_leader,
     openarm_leader,
     openarm_mini,
+    pico4,
     reachy2_teleoperator,
     so_leader,
+    spacemouse,
     unitree_g1,
+    vive_tracker,
+    xense_flare,
 )
 from lerobot.utils.import_utils import register_third_party_plugins
 from lerobot.utils.robot_utils import precise_sleep
@@ -120,8 +157,13 @@ class TeleoperateConfig:
     display_ip: str | None = None
     # Port of the remote Rerun server
     display_port: int | None = None
-    # Whether to  display compressed images in Rerun
+    # Whether to display compressed images in Rerun
     display_compressed_images: bool = False
+    # Skip robot.get_observation() each loop tick for maximum teleop frequency.
+    # Disables display_data and observation-dependent features.
+    no_obs: bool = False
+    # Print per-step timing breakdown instead of action values.
+    debug_timing: bool = False
 
 
 def teleop_loop(
@@ -134,6 +176,8 @@ def teleop_loop(
     display_data: bool = False,
     duration: float | None = None,
     display_compressed_images: bool = False,
+    no_obs: bool = False,
+    debug_timing: bool = False,
 ):
     """
     This function continuously reads actions from a teleoperation device, processes them through optional
@@ -150,24 +194,35 @@ def teleop_loop(
         teleop_action_processor: An optional pipeline to process raw actions from the teleoperator.
         robot_action_processor: An optional pipeline to process actions before they are sent to the robot.
         robot_observation_processor: An optional pipeline to process raw observations from the robot.
+        no_obs: If True, skip robot.get_observation() each loop tick for higher frequency teleop.
+                Disables display_data automatically.
+        debug_timing: If True, print per-step timing breakdown instead of action table.
     """
+    # no_obs mode disables display_data since there's no observation to display
+    if no_obs:
+        display_data = False
 
     display_len = max(len(key) for key in robot.action_features)
     start = time.perf_counter()
+
     while True:
         loop_start = time.perf_counter()
 
-        # Get robot observation
-        # Not really needed for now other than for visualization
-        # teleop_action_processor can take None as an observation
-        # given that it is the identity processor as default
-        obs = robot.get_observation()
+        # Get robot observation (skip if no_obs mode for maximum frequency)
+        obs = None
+        obs_time_ms = 0.0
+        if not no_obs:
+            obs_t0 = time.perf_counter()
+            obs = robot.get_observation()
+            obs_time_ms = (time.perf_counter() - obs_t0) * 1e3
 
         if robot.name == "unitree_g1":
             teleop.send_feedback(obs)
 
         # Get teleop action
+        teleop_t0 = time.perf_counter()
         raw_action = teleop.get_action()
+        teleop_time_ms = (time.perf_counter() - teleop_t0) * 1e3
 
         # Process teleop action through pipeline
         teleop_action = teleop_action_processor((raw_action, obs))
@@ -175,8 +230,10 @@ def teleop_loop(
         # Process action for robot through pipeline
         robot_action_to_send = robot_action_processor((teleop_action, obs))
 
-        # Send processed action to robot (robot_action_processor.to_output should return RobotAction)
+        # Send processed action to robot
+        send_t0 = time.perf_counter()
         _ = robot.send_action(robot_action_to_send)
+        send_time_ms = (time.perf_counter() - send_t0) * 1e3
 
         if display_data:
             # Process robot observation through pipeline
@@ -188,18 +245,32 @@ def teleop_loop(
                 compress_images=display_compressed_images,
             )
 
-            print("\n" + "-" * (display_len + 10))
-            print(f"{'NAME':<{display_len}} | {'NORM':>7}")
-            # Display the final robot action that was sent
-            for motor, value in robot_action_to_send.items():
-                print(f"{motor:<{display_len}} | {value:>7.2f}")
-            move_cursor_up(len(robot_action_to_send) + 3)
+            if not debug_timing:
+                print("\n" + "-" * (display_len + 10))
+                print(f"{'NAME':<{display_len}} | {'VALUE':>9}")
+                for motor, value in robot_action_to_send.items():
+                    print(f"{motor:<{display_len}} | {value:>9.4f}")
+                move_cursor_up(len(robot_action_to_send) + 3)
 
         dt_s = time.perf_counter() - loop_start
         precise_sleep(max(1 / fps - dt_s, 0.0))
         loop_s = time.perf_counter() - loop_start
-        print(f"Teleop loop time: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz)")
-        move_cursor_up(1)
+
+        if debug_timing:
+            print(
+                f"\r\033[K"
+                f"obs: {obs_time_ms:5.1f}ms | "
+                f"teleop: {teleop_time_ms:5.1f}ms | "
+                f"send: {send_time_ms:5.1f}ms | "
+                f"loop: {loop_s * 1e3:5.1f}ms | "
+                f"target: {1e3 / fps:.1f}ms | "
+                f"eff: {(1 / fps) / loop_s * 100:5.1f}%",
+                end="",
+                flush=True,
+            )
+        elif not display_data:
+            print(f"Teleop loop time: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz)")
+            move_cursor_up(1)
 
         if duration is not None and time.perf_counter() - start >= duration:
             return
@@ -209,6 +280,12 @@ def teleop_loop(
 def teleoperate(cfg: TeleoperateConfig):
     init_logging()
     logging.info(pformat(asdict(cfg)))
+
+    # no_obs overrides display_data
+    if cfg.no_obs and cfg.display_data:
+        logging.warning("no_obs=True: disabling display_data")
+        cfg.display_data = False
+
     if cfg.display_data:
         init_rerun(session_name="teleoperation", ip=cfg.display_ip, port=cfg.display_port)
     display_compressed_images = (
@@ -235,6 +312,8 @@ def teleoperate(cfg: TeleoperateConfig):
             robot_action_processor=robot_action_processor,
             robot_observation_processor=robot_observation_processor,
             display_compressed_images=display_compressed_images,
+            no_obs=cfg.no_obs,
+            debug_timing=cfg.debug_timing,
         )
     except KeyboardInterrupt:
         pass
