@@ -4,3 +4,6 @@
 [submodule "src/lerobot/teleoperators/pico4/xensevr-pc-service-pybind/dependencies/XenseVR-PC-Service"]
 	path = src/lerobot/teleoperators/pico4/xensevr-pc-service-pybind/dependencies/XenseVR-PC-Service
 	url = git@github.com:Vertax42/XenseVR-PC-Service.git
+[submodule "src/lerobot/robots/libpyflexiv"]
+	path = src/lerobot/robots/libpyflexiv
+	url = git@github.com:Vertax42/libpyflexiv.git
