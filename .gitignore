@@ -65,6 +65,12 @@ __pycache__/
 .pytype/
 cython_debug/
 
+### CMake Build Artifacts ###
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+_deps/
+
 ### Testing & Coverage ###
 htmlcov/
 .tox/
