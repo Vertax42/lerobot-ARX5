@@ -149,7 +149,7 @@ elif [[ "$1" == "--install" ]]; then
 
     # project root directory
     PROJECT_ROOT=$(pwd)
-    ARX5_SDK_DIR="$PROJECT_ROOT/src/lerobot/robots/bi_arx5/ARX5_SDK"
+    ARX5_SDK_DIR="$PROJECT_ROOT/third_party/ARX5_SDK"
     if [[ -d "$ARX5_SDK_DIR" ]]; then
         # Uninstall pip spdlog before building ARX5 SDK to avoid header conflicts
         # pip spdlog installs headers in $CONDA_PREFIX/include/python3.10/spdlog/ which conflicts
@@ -289,26 +289,17 @@ EOF
     # Save the project root directory
     PROJECT_ROOT=$(pwd)
     XENSEVR_PC_SERVICE_PYBIND_DIR="$PROJECT_ROOT/src/lerobot/teleoperators/pico4/xensevr-pc-service-pybind"
+    XENSEVR_PC_SERVICE_DIR="$PROJECT_ROOT/third_party/XenseVR-PC-Service"
 
-    # Install the required packages
-    cd "$XENSEVR_PC_SERVICE_PYBIND_DIR"
-    mkdir -p dependencies
-    cd dependencies
-
-    # Clone if not already cloned
-    if [ ! -d "XenseVR-PC-Service" ]; then
-        git clone https://github.com/Vertax42/XenseVR-PC-Service.git
-    fi
-    cd XenseVR-PC-Service/RoboticsService/PXREARobotSDK
+    # Build SDK from submodule
+    cd "$XENSEVR_PC_SERVICE_DIR/RoboticsService/PXREARobotSDK"
     bash build.sh
-    
-    # Go back to xensevr-pc-service-pybind directory
-    cd "$XENSEVR_PC_SERVICE_PYBIND_DIR"
-    mkdir -p lib
-    mkdir -p include
 
-    # Copy files from the cloned repo
-    SDK_DIR="$XENSEVR_PC_SERVICE_PYBIND_DIR/dependencies/XenseVR-PC-Service/RoboticsService/PXREARobotSDK"
+    # Copy files into pybind directory
+    cd "$XENSEVR_PC_SERVICE_PYBIND_DIR"
+    mkdir -p lib include
+
+    SDK_DIR="$XENSEVR_PC_SERVICE_DIR/RoboticsService/PXREARobotSDK"
     cp "$SDK_DIR/PXREARobotSDK.h" include/
     cp -r "$SDK_DIR/nlohmann" include/
     cp "$SDK_DIR/build/libPXREARobotSDK.so" lib/

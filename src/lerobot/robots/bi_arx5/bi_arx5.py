@@ -35,7 +35,7 @@ try:
 except ImportError as e:
     raise ImportError(
         "pyarx not found. Build and install it first:\n"
-        "  cd src/lerobot/robots/bi_arx5/ARX5_SDK\n"
+        "  cd third_party/ARX5_SDK\n"
         "  bash build_python.sh"
     ) from e
 
@@ -130,7 +130,7 @@ class BiARX5(Robot):
         }
 
         # Create solver for FK/IK calculations (both arms use same model)
-        urdf_path = os.path.join(current_dir, "ARX5_SDK", "models", f"{config.left_arm_model}.urdf")
+        urdf_path = os.path.join(current_dir, "..", "..", "..", "..", "third_party", "ARX5_SDK", "models", f"{config.left_arm_model}.urdf")
         self._solver = arx5.Arx5Solver(
             urdf_path,
             self.robot_configs["left_config"].joint_dof,
