@@ -22,7 +22,7 @@ The TRLC Leader arm uses Dynamixel xl330-m077 motors for:
 - 1 gripper motor with current-position mode
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..config import TeleoperatorConfig
 
@@ -36,8 +36,21 @@ class TRLCLeaderConfig(TeleoperatorConfig):
     (6 arm joints + 1 gripper). The gripper uses current-position control mode
     and its raw encoder value is normalized to [0, 1].
 
+    Calibration (runs automatically on every connect):
+        On startup the user is prompted to move the arm to `start_joints`.
+        The script reads the encoder values and computes per-joint offsets so
+        that:  joint_angle = sign * (encoder/4096*2π - offset)
+
+        joint_signs: Direction multipliers ±1 per joint — set once based on
+            how each motor is physically mounted (does not change between runs).
+        start_joints: The known arm pose (radians) the user moves to at startup
+            for calibration.  Default is all-zeros.
+
     Attributes:
         port: Serial port for Dynamixel motor bus (e.g. "/dev/ttyUSB0")
+        baudrate: Baud rate for the Dynamixel bus
+        joint_signs: Direction signs (±1) for joints 1-6
+        start_joints: Known reference pose in radians used for calibration
         gripper_open_pos: Raw encoder value when gripper is fully open
         gripper_closed_pos: Raw encoder value when gripper is fully closed
     """
@@ -46,5 +59,7 @@ class TRLCLeaderConfig(TeleoperatorConfig):
 
     port: str = "/dev/ttyACM0"
     baudrate: int = 1_000_000
+    joint_signs: tuple[int, ...] = field(default_factory=lambda: (1, 1, 1, 1, 1, 1))
+    start_joints: tuple[float, ...] = field(default_factory=lambda: (0.0,) * 6)
     gripper_open_pos: int = 3287
     gripper_closed_pos: int = 2682

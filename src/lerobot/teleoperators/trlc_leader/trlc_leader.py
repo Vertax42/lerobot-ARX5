@@ -26,6 +26,7 @@ Action features (7D):
 """
 
 import logging
+import math
 import time
 
 import numpy as np
@@ -39,6 +40,8 @@ from .configuration_trlc_leader import TRLCLeaderConfig
 
 logger = logging.getLogger(__name__)
 
+ARM_JOINTS = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"]
+
 
 class TRLCLeader(Teleoperator):
     """
@@ -46,6 +49,12 @@ class TRLCLeader(Teleoperator):
 
     Uses 7 Dynamixel xl330-m077 motors (6 arm joints + 1 gripper) to capture
     the operator's arm pose and gripper state for robot teleoperation.
+
+    On every connect(), the user is prompted to move the arm to `start_joints`
+    (configured in TRLCLeaderConfig).  The arm's encoder values are read and
+    per-joint assembly offsets are computed so that:
+
+        joint_angle = sign * (encoder / 4096 * 2π  -  offset)
 
     The gripper motor runs in current-position mode and its raw encoder reading
     is normalized to [0, 1] (0 = fully open, 1 = fully closed).
@@ -69,7 +78,7 @@ class TRLCLeader(Teleoperator):
                 "gripper": Motor(7, "xl330-m077", MotorNormMode.DEGREES),
             },
         )
-        # self.bus.default_baudrate = self.config.baudrate
+        self._joint_offsets: list[float] | None = None
 
     @property
     def action_features(self) -> dict[str, type]:
@@ -85,7 +94,7 @@ class TRLCLeader(Teleoperator):
 
     @property
     def is_calibrated(self) -> bool:
-        return True
+        return self._joint_offsets is not None
 
     def connect(self, calibrate: bool = False) -> None:
         if self.is_connected:
@@ -93,10 +102,34 @@ class TRLCLeader(Teleoperator):
 
         self.bus.connect()
         self.configure()
+        self.calibrate()
         logger.info(f"{self} connected.")
 
     def calibrate(self) -> None:
-        pass
+        """
+        Prompt the user to move the arm to `start_joints`, then compute
+        per-joint assembly offsets (snapped to the nearest π/2 multiple):
+
+            offset = raw_rad - sign * target_angle
+        """
+        target = self.config.start_joints
+        signs = self.config.joint_signs
+
+        target_str = "  ".join(f"joint_{i + 1}: {math.degrees(v):+.1f}°" for i, v in enumerate(target))
+        print(f"\n[TRLC Calibration]  Move arm to start pose, then press Enter.")
+        print(f"  {target_str}")
+        input("  >> ")
+
+        # Average 10 readings to reduce noise
+        readings = [self.bus.sync_read(normalize=False, data_name="Present_Position") for _ in range(10)]
+
+        offsets = []
+        for i, motor in enumerate(ARM_JOINTS):
+            raw_rad = np.mean([r[motor] for r in readings]) / 4096 * 2 * math.pi
+            offsets.append(raw_rad - signs[i] * target[i])
+
+        self._joint_offsets = offsets
+        logger.info(f"{self} calibrated: offsets={[f'{o:.4f}' for o in offsets]}")
 
     def configure(self) -> None:
         self.bus.disable_torque()
@@ -129,8 +162,16 @@ class TRLCLeader(Teleoperator):
                 gripper_range = self.config.gripper_open_pos - self.config.gripper_closed_pos
                 action["gripper.pos"] = 1.0 - (val - self.config.gripper_closed_pos) / gripper_range
             else:
-                # Convert raw encoder (0–4096) to radians in [-π, π]
-                action[f"{motor}.pos"] = val / 4096 * 2 * np.pi - np.pi
+                #? gello 的位置校准是以pi/2为单位的
+                # # Search in range ±8π with intervals of π/2 (same as gello_get_offset.py)
+                # for offset in np.linspace(-8 * np.pi, 8 * np.pi, 8 * 4 + 1):
+                #     error = get_error(offset, i, curr_joints)
+                #     if error < best_error:
+                #         best_error = error
+                #         best_offset = offset
+                j = ARM_JOINTS.index(motor)
+                raw_rad = val / 4096 * 2 * math.pi
+                action[f"{motor}.pos"] = self.config.joint_signs[j] * (raw_rad - self._joint_offsets[j])
 
         dt_ms = (time.perf_counter() - start) * 1e3
         logger.debug(f"{self} read action: {dt_ms:.1f}ms")
@@ -144,5 +185,6 @@ class TRLCLeader(Teleoperator):
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
+        self._joint_offsets = None
         self.bus.disconnect()
         logger.info(f"{self} disconnected.")
