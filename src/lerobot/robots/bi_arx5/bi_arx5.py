@@ -30,23 +30,14 @@ from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import get_logger
 
-# Add ARX5 SDK path to Python path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-arx5_sdk_path = os.path.join(current_dir, "ARX5_SDK", "python")
-if arx5_sdk_path not in sys.path:
-    sys.path.insert(0, arx5_sdk_path)
-
 try:
-    import arx5_interface as arx5
+    import pyarx as arx5
 except ImportError as e:
-    if "LogLevel" in str(e) and "already registered" in str(e):
-        # LogLevel already registered, try to get the existing module
-        if "arx5_interface" in sys.modules:
-            arx5 = sys.modules["arx5_interface"]
-        else:
-            raise e
-    else:
-        raise e
+    raise ImportError(
+        "pyarx not found. Build and install it first:\n"
+        "  cd src/lerobot/robots/bi_arx5/ARX5_SDK\n"
+        "  bash build_python.sh"
+    ) from e
 
 
 class BiARX5(Robot):
