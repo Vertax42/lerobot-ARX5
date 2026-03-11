@@ -7,13 +7,36 @@ set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON) # global PIC
 
+# ---------------------------------------------------------------------------
+# Prefer conda environment packages over system packages.
+# Set CONDA_PREFIX in the shell before invoking cmake, or pass
+#   -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
+# ---------------------------------------------------------------------------
+if(DEFINED ENV{CONDA_PREFIX})
+    list(PREPEND CMAKE_PREFIX_PATH $ENV{CONDA_PREFIX})
+endif()
+
+# ---------------------------------------------------------------------------
+# Use spdlog's bundled fmt (fmt::v11 in spdlog 1.14.1) instead of any
+# separately installed system libfmt. This avoids ABI mismatches caused by
+# mixing fmt::v8 (old system) with fmt::v11 (spdlog 1.14.1 bundle).
+# MUST be set before find_package(spdlog).
+# ---------------------------------------------------------------------------
+set(SPDLOG_FMT_EXTERNAL OFF CACHE BOOL "Use spdlog bundled fmt, not system fmt" FORCE)
+
 find_package(Threads REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(orocos_kdl REQUIRED)
 find_package(kdl_parser REQUIRED)
-find_package(fmt REQUIRED)
 find_package(spdlog REQUIRED)
-find_package(Boost REQUIRED COMPONENTS container)
+
+# ---------------------------------------------------------------------------
+# RPATH: embed conda lib dir so the built .so files find spdlog at runtime
+# without needing LD_LIBRARY_PATH.
+# ---------------------------------------------------------------------------
+set(CMAKE_INSTALL_RPATH "$ENV{CONDA_PREFIX}/lib")
+set(CMAKE_BUILD_RPATH   "$ENV{CONDA_PREFIX}/lib")
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 add_compile_definitions(SDK_ROOT="${CMAKE_BINARY_DIR}/..")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -72,9 +95,9 @@ target_include_directories(ArxCartesianController PUBLIC $ENV{CONDA_PREFIX}/incl
 
 
 add_executable(test_joint_controller examples/test_joint_controller.cpp)
-target_link_libraries(test_joint_controller 
-    ${LIB_DIR}/libhardware.so 
-    ${LIB_DIR}/libsolver.so 
+target_link_libraries(test_joint_controller
+    ${LIB_DIR}/libhardware.so
+    ${LIB_DIR}/libsolver.so
     ArxJointController
     Eigen3::Eigen
     Threads::Threads
@@ -85,8 +108,8 @@ target_link_libraries(test_joint_controller
 )
 
 add_executable(test_cartesian_controller examples/test_cartesian_controller.cpp)
-target_link_libraries(test_cartesian_controller 
-    ${LIB_DIR}/libhardware.so 
+target_link_libraries(test_cartesian_controller
+    ${LIB_DIR}/libhardware.so
     ${LIB_DIR}/libsolver.so
     ArxCartesianController
     spdlog::spdlog
