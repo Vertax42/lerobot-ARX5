@@ -1,9 +1,9 @@
-[submodule "src/lerobot/robots/bi_arx5/ARX5_SDK"]
-	path = src/lerobot/robots/bi_arx5/ARX5_SDK
+[submodule "third_party/ARX5_SDK"]
+	path = third_party/ARX5_SDK
 	url = git@github.com:Vertax42/ARX5_SDK.git
-[submodule "src/lerobot/teleoperators/pico4/xensevr-pc-service-pybind/dependencies/XenseVR-PC-Service"]
-	path = src/lerobot/teleoperators/pico4/xensevr-pc-service-pybind/dependencies/XenseVR-PC-Service
-	url = git@github.com:Vertax42/XenseVR-PC-Service.git
-[submodule "src/lerobot/robots/libpyflexiv"]
-	path = src/lerobot/robots/libpyflexiv
+[submodule "third_party/libpyflexiv"]
+	path = third_party/libpyflexiv
 	url = git@github.com:Vertax42/libpyflexiv.git
+[submodule "third_party/XenseVR-PC-Service"]
+	path = third_party/XenseVR-PC-Service
+	url = git@github.com:Vertax42/XenseVR-PC-Service.git
