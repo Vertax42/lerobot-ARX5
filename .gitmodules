@@ -1,0 +1,3 @@
+[submodule "src/lerobot/robots/bi_arx5/ARX5_SDK"]
+	path = src/lerobot/robots/bi_arx5/ARX5_SDK
+	url = git@github.com:Vertax42/ARX5_SDK.git
