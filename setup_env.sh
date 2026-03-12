@@ -56,11 +56,17 @@ create_environment() {
     # Remove existing environment if it exists
     if $CONDA_CMD env list | grep -q "^$ENV_NAME "; then
         echo "Removing existing environment '$ENV_NAME'..."
-        $CONDA_CMD env remove -n "$ENV_NAME" -y
+        if ! $CONDA_CMD env remove -n "$ENV_NAME" -y; then
+            echo "Error: Failed to remove existing environment '$ENV_NAME'."
+            return 1
+        fi
     fi
 
     # Create new environment from conda_environment.yaml
-    $CONDA_CMD env create -f "$CONDA_ENV_FILE" -n "$ENV_NAME"
+    if ! $CONDA_CMD env create -f "$CONDA_ENV_FILE" -n "$ENV_NAME"; then
+        echo "Error: Failed to create $CONDA_CMD environment '$ENV_NAME' from: $CONDA_ENV_FILE"
+        return 1
+    fi
 
     echo "$CONDA_CMD environment '$ENV_NAME' created from: $CONDA_ENV_FILE"
 
@@ -358,8 +364,23 @@ install_xense() {
 
     fix_udev_discovery
 
-    # Install xensesdk from local submodule (branch: feature/v1.7.0rc0)
-    uv pip install -e "$SDK_DIR"
+    # Install xensesdk dependencies explicitly so the shared ARX5/Robostack
+    # environment can stay on numpy 1.26.x. The vendored xensesdk metadata
+    # still asks for numpy>=2, so install the local source without re-resolving.
+    uv pip install \
+        "numpy>=1.26.4,<2.3.0" \
+        "opencv-python>=4.10" \
+        "pillow>=12.0" \
+        "cryptography>=46.0" \
+        "PyYAML>=6.0" \
+        "h5py>=3.10" \
+        "scipy>=1.14" \
+        "lz4>=4.0" \
+        "psutil>=7.0" \
+        "spdlog>=2.0" \
+        "pyudev; platform_system=='Linux'"
+    # Install xensesdk from local submodule (branch: feature/v1.7.0rc0).
+    uv pip install -e "$SDK_DIR" --no-deps
     # Install xensegripper from local submodule (package name: xgripper).
     # xgripper bundles pysurvive from vendored libsurvive source, and xensesdk
     # has already been installed from the local submodule above. Avoid resolving
@@ -431,7 +452,7 @@ if [[ "$1" == "--conda" ]]; then
         echo "Conda initialization script not found. Please install Miniconda3 or Anaconda3 or Miniforge3."
         exit 1
     fi
-    create_environment "conda" "$ENV_NAME"
+    create_environment "conda" "$ENV_NAME" || exit 1
 
 # Check if the --mamba parameter is passed
 elif [[ "$1" == "--mamba" ]]; then
@@ -450,7 +471,7 @@ elif [[ "$1" == "--mamba" ]]; then
     elif [ -f "$HOME/mambaforge/etc/profile.d/mamba.sh" ]; then
         . "$HOME/mambaforge/etc/profile.d/mamba.sh"
     fi
-    create_environment "mamba" "$ENV_NAME"
+    create_environment "mamba" "$ENV_NAME" || exit 1
 
 # Check if the --install parameter is passed
 elif [[ "$1" == "--install" ]]; then
@@ -470,7 +491,10 @@ elif [[ "$1" == "--install" ]]; then
     fi
 
     echo "[INFO] Updating conda environment '$ENV_NAME' from: $CONDA_ENV_FILE"
-    $CONDA_CMD env update -f "$CONDA_ENV_FILE" -n "$ENV_NAME"
+    if ! $CONDA_CMD env update -f "$CONDA_ENV_FILE" -n "$ENV_NAME"; then
+        echo "[ERROR] Failed to update conda environment '$ENV_NAME' from: $CONDA_ENV_FILE"
+        exit 1
+    fi
 
     echo -e "\n[INFO] Conda dependencies installed/updated for '$ENV_NAME'.\n"
     uv pip install --upgrade pip

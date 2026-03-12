@@ -66,7 +66,7 @@ dependencies = [
     "accelerate>=1.10.0,<2.0.0",
 
     # Core dependencies
-    "numpy>=2.0.0,<2.3.0", # NOTE: Explicitly listing numpy helps the resolver converge faster. Upper bound imposed by opencv-python-headless.
+    "numpy>=1.26.4,<2.3.0", # NOTE: Keep compatible with both Robostack (numpy 1.26) and newer pip-only installs.
     "cmake>=3.29.0.1,<4.2.0",
     "packaging>=24.2",
 
@@ -108,8 +108,8 @@ peft-dep = ["peft>=0.18.0,<1.0.0"]
 scipy-dep = ["scipy>=1.14.0,<2.0.0"]
 qwen-vl-utils-dep = ["qwen-vl-utils>=0.0.11,<0.1.0"]
 
-# Xense fork: XenseSdk (hand/glove hardware). The local xensesdk fork now aligns
-# with the main environment and supports numpy 2.x on Python 3.12.
+# Xense fork: XenseSdk (hand/glove hardware). The local fork works with the
+# shared environment range so ARX5/Robostack and Xense can coexist in one env.
 xense = ["xensesdk>=1.7.0"]
 
 # Xense fork: hardware drivers not on PyPI (installed from local wheels or source)
