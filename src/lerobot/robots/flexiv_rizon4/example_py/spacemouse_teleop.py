@@ -12,7 +12,7 @@ Controls:
 Note: Gripper control is DISABLED by default. Use --gripper flag to enable.
 
 Dependencies:
-    pip install spnav numpy spdlog flexivrdk
+    pip install pyspacemouse numpy spdlog flexivrdk
     Also requires shared_memory module from lerobot or similar project.
 """
 

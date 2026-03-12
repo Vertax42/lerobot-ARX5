@@ -1,0 +1,33 @@
+name: lerobot-xense
+channels:
+  - robostack-jazzy        # ros-jazzy-kdl-parser for ARX5
+  - conda-forge
+  - nvidia
+  - defaults
+dependencies:
+  - python=3.12
+  # ── Build tools (required for ARX5 / Flexiv C++ builds) ──────────────────
+  - cxx-compiler
+  - cmake>=3.25
+  - ninja
+  # ── C++ libraries (ARX5 / Flexiv Python bindings) ─────────────────────────
+  - pybind11
+  - eigen
+  - orocos-kdl
+  - boost
+  - spdlog==1.14.1
+  - ros-jazzy-kdl-parser
+  - conda-forge::soem=1.4.0       # ARX5 EtherCAT; omit on aarch64, build from source
+  - libhidapi
+  - libstdcxx-ng                  # newer CXXABI symbols (xensevr_pc_service_sdk)
+  # ── CUDA (xensesdk / onnxruntime-gpu) ─────────────────────────────────────
+  - nvidia::cuda-toolkit=12.8
+  - nvidia::cudnn
+  # ── Video (torchcodec / av) ────────────────────────────────────────────────
+  - conda-forge::ffmpeg=7.1.1
+  # ── Python base tools ─────────────────────────────────────────────────────
+  - numpy=1.26.4                  # xensesdk constraint; compatible with Python 3.12
+  - pip
+  - wheel
+  - pip:
+      - uv

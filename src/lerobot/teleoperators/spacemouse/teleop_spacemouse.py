@@ -21,11 +21,11 @@ This teleoperator provides 6-DoF absolute pose control (translation + rotation)
 and gripper control via buttons. It outputs accumulated target_pose_6d that can
 be directly sent to a Cartesian controller (e.g., Arx5CartesianController).
 
-The output format matches ARX5 SDK's spacemouse_teleop.py example:
+The output format matches the legacy ARX5 SDK spacemouse example:
 - target_pose_6d: [x, y, z, roll, pitch, yaw] - absolute EEF pose
 - gripper_pos: absolute gripper position in meters
 
-Based on the 3Dconnexion SpaceMouse using the spnav library.
+This implementation uses the modern `pyspacemouse` backend.
 """
 
 import time
