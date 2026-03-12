@@ -26,7 +26,7 @@ dependencies:
   # ── Video (torchcodec / av) ────────────────────────────────────────────────
   - conda-forge::ffmpeg=7.1.1
   # ── Python base tools ─────────────────────────────────────────────────────
-  - numpy=1.26.4                  # xensesdk constraint; compatible with Python 3.12
+  - numpy>=2.0,<2.3               # align conda base packages with lerobot/xensesdk runtime
   - pip
   - wheel
   - pip:
