@@ -171,6 +171,49 @@ print("yes" if actual_release == expected_release else "no")
 PY
 }
 
+ensure_python_package_min_version() {
+    local package_name=$1
+    local min_version=$2
+
+    local current_version
+    current_version="$(python - "$package_name" <<'PY'
+import sys
+from importlib.metadata import PackageNotFoundError, version
+
+package_name = sys.argv[1]
+
+try:
+    print(version(package_name))
+except PackageNotFoundError:
+    print("")
+PY
+)"
+
+    if [[ -z "$current_version" ]]; then
+        echo "[python] Installing missing package: $package_name>=$min_version"
+        uv pip install --upgrade "$package_name>=$min_version"
+        return
+    fi
+
+    local is_compatible
+    is_compatible="$(python - "$current_version" "$min_version" <<'PY'
+import sys
+
+from packaging.version import Version
+
+current_version, min_version = sys.argv[1], sys.argv[2]
+print("yes" if Version(current_version) >= Version(min_version) else "no")
+PY
+)"
+
+    if [[ "$is_compatible" == "yes" ]]; then
+        echo "[python] Keeping $package_name==$current_version"
+    else
+        echo "[python] Upgrading $package_name from $current_version to >=$min_version"
+        uv pip install --upgrade "$package_name>=$min_version"
+    fi
+}
+
 # ── Hardware module: ARX5 ─────────────────────────────────────────────────────
 
 install_arx5() {
@@ -431,8 +474,9 @@ elif [[ "$1" == "--install" ]]; then
 
     echo -e "\n[INFO] Conda dependencies installed/updated for '$ENV_NAME'.\n"
     uv pip install --upgrade pip
-    # Ensure editable installs (PEP 660) work: setuptools must provide build_editable
-    uv pip install --upgrade "setuptools>=71.0.0,<81.0.0" wheel
+    # Ensure editable installs (PEP 660) work without downgrading newer compatible packages.
+    ensure_python_package_min_version setuptools 71.0.0
+    ensure_python_package_min_version wheel 0.40.0
 
     # Workaround for Python ctypes.util.find_library("udev") on conda envs:
     # Hacking the udev library discovery to avoid issues with pyudev/xensesdk.

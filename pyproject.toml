@@ -67,9 +67,8 @@ dependencies = [
 
     # Core dependencies
     "numpy>=2.0.0,<2.3.0", # NOTE: Explicitly listing numpy helps the resolver converge faster. Upper bound imposed by opencv-python-headless.
-    "setuptools>=71.0.0,<81.0.0",
     "cmake>=3.29.0.1,<4.2.0",
-    "packaging>=24.2,<26.0",
+    "packaging>=24.2",
 
     "torch>=2.2.1,<2.11.0",
     "torchcodec>=0.2.1,<0.11.0; sys_platform != 'win32' and (sys_platform != 'linux' or (platform_machine != 'aarch64' and platform_machine != 'arm64' and platform_machine != 'armv7l')) and (sys_platform != 'darwin' or platform_machine != 'x86_64')",
@@ -109,9 +108,8 @@ peft-dep = ["peft>=0.18.0,<1.0.0"]
 scipy-dep = ["scipy>=1.14.0,<2.0.0"]
 qwen-vl-utils-dep = ["qwen-vl-utils>=0.0.11,<0.1.0"]
 
-# Xense fork: XenseSdk (hand/glove hardware). xensesdk requires numpy<=1.26.4 which
-# conflicts with upstream numpy>=2; install in a separate venv or relax if compatible.
-# NOTE: numpy pin here is advisory only; remove if your env resolves correctly without it.
+# Xense fork: XenseSdk (hand/glove hardware). The local xensesdk fork now aligns
+# with the main environment and supports numpy 2.x on Python 3.12.
 xense = ["xensesdk>=1.7.0"]
 
 # Xense fork: hardware drivers not on PyPI (installed from local wheels or source)
