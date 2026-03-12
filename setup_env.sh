@@ -121,6 +121,56 @@ fix_udev_discovery() {
     fi
 }
 
+# TorchCodec follows an explicit compatibility matrix with PyTorch rather than
+# a generic semver rule. Keep the expected version here so setup_env.sh can
+# validate the installed wheel against the active torch release.
+expected_torchcodec_version() {
+    case "$1" in
+        2.10) echo "0.10.0" ;;
+        2.9) echo "0.9.1" ;;
+        2.8) echo "0.7.0" ;;
+        2.7) echo "0.5" ;;
+        2.6) echo "0.2.1" ;;
+        2.5) echo "0.1.1" ;;
+        2.4) echo "0.0.3" ;;
+        *) echo "" ;;
+    esac
+}
+
+get_torch_major_minor() {
+    python - <<'PY'
+import re
+
+try:
+    import torch
+except Exception:
+    print("")
+    raise SystemExit(0)
+
+match = re.match(r"^(\d+)\.(\d+)", torch.__version__)
+print(".".join(match.groups()) if match else "")
+PY
+}
+
+version_matches_expected_release() {
+    python - "$1" "$2" <<'PY'
+import sys
+
+from packaging.version import Version
+
+actual, expected = sys.argv[1], sys.argv[2]
+
+try:
+    actual_release = Version(actual.split("+", 1)[0]).release
+    expected_release = Version(expected).release
+except Exception:
+    print("no")
+    raise SystemExit(0)
+
+print("yes" if actual_release == expected_release else "no")
+PY
+}
+
 # ── Hardware module: ARX5 ─────────────────────────────────────────────────────
 
 install_arx5() {
@@ -267,8 +317,11 @@ install_xense() {
 
     # Install xensesdk from local submodule (branch: feature/v1.7.0rc0)
     uv pip install -e "$SDK_DIR"
-    # Install xensegripper from local submodule (package name: xgripper)
-    uv pip install -e "$GRIPPER_DIR"
+    # Install xensegripper from local submodule (package name: xgripper).
+    # xgripper bundles pysurvive from vendored libsurvive source, and xensesdk
+    # has already been installed from the local submodule above. Avoid resolving
+    # these back to PyPI wheels, which are incomplete for Python 3.12.
+    uv pip install -e "$GRIPPER_DIR" --no-deps
     # xensesdk requires a specific av version
     uv pip install av==15.1.0
 
@@ -400,13 +453,23 @@ elif [[ "$1" == "--install" ]]; then
     TORCHCODEC_VER=$(python -c "import torchcodec; print(torchcodec.__version__)" 2>/dev/null || echo "NOT INSTALLED")
     AV_VER=$(python -c "import av; print(av.__version__)" 2>/dev/null || echo "NOT INSTALLED")
     TORCH_VER=$(python -c "import torch; print(torch.__version__)" 2>/dev/null || echo "NOT INSTALLED")
+    TORCH_MAJOR_MINOR=$(get_torch_major_minor)
+    EXPECTED_TORCHCODEC_VER=$(expected_torchcodec_version "$TORCH_MAJOR_MINOR")
     echo "  - torch: $TORCH_VER"
-    echo "  - torchcodec: $TORCHCODEC_VER (should be 0.7.0)"
+    if [[ -n "$EXPECTED_TORCHCODEC_VER" ]]; then
+        echo "  - torchcodec: $TORCHCODEC_VER (should be $EXPECTED_TORCHCODEC_VER for torch $TORCH_MAJOR_MINOR)"
+    else
+        echo "  - torchcodec: $TORCHCODEC_VER (no compatibility override defined for torch $TORCH_VER)"
+    fi
     echo "  - av (pyav): $AV_VER (should be 15.1.0)"
 
-    if [[ "$TORCHCODEC_VER" != "0.7.0" ]]; then
-        echo "[WARN] torchcodec version mismatch! Expected 0.7.0, got $TORCHCODEC_VER"
-        uv pip install torchcodec==0.7.0 --force-reinstall
+    if [[ -n "$EXPECTED_TORCHCODEC_VER" ]]; then
+        if [[ "$(version_matches_expected_release "$TORCHCODEC_VER" "$EXPECTED_TORCHCODEC_VER")" != "yes" ]]; then
+            echo "[WARN] torchcodec version mismatch! Expected $EXPECTED_TORCHCODEC_VER for torch $TORCH_MAJOR_MINOR, got $TORCHCODEC_VER"
+            uv pip install "torchcodec==$EXPECTED_TORCHCODEC_VER" --force-reinstall
+        fi
+    else
+        echo "[WARN] Skipping torchcodec pin verification for unsupported torch version: $TORCH_VER"
     fi
 
     if [[ "$AV_VER" != "15.1.0" ]]; then
