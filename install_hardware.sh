@@ -129,25 +129,38 @@ install_flexiv() {
         echo "  Run: git submodule update --init third_party/libpyflexiv"
         return 1
     fi
-    if [[ ! -d "$RDK_INSTALL" ]]; then
-        echo "ERROR: Flexiv RDK not found at: $RDK_INSTALL"
-        echo "  Download the RDK and install it there, or set RDK_INSTALL_PATH."
+
+    # Stage 1: build ~/rdk_install (only if not already present)
+    if [[ ! -f "$RDK_INSTALL/include/flexiv/rdk/robot.hpp" ]]; then
+        echo ""
+        echo "[flexiv] ~/rdk_install not found or incomplete. Build it first:"
+        echo ""
+        echo "  cd third_party/libpyflexiv"
+        echo "  git submodule update --init flexiv_rdk"
+        echo "  cd flexiv_rdk/thirdparty"
+        echo "  bash build_and_install_dependencies.sh ~/rdk_install \$(nproc)"
+        echo "  cd ../.. && mkdir -p build && cd build"
+        echo "  cmake .. -DCMAKE_INSTALL_PREFIX=~/rdk_install -DCMAKE_PREFIX_PATH=~/rdk_install"
+        echo "  cmake --build . --target install --config Release -j\$(nproc)"
+        echo ""
+        echo "Then rerun: bash install_hardware.sh --flexiv"
         return 1
     fi
 
+    # Stage 2: build Python bindings (inside conda env)
+    # IMPORTANT: only pass ~/rdk_install as CMAKE_PREFIX_PATH.
+    # Do NOT include $CONDA_PREFIX — conda contains a different spdlog version
+    # that will cause header conflicts (see third_party/libpyflexiv/README.md).
     local BUILD_DIR="$LIB_DIR/build"
     rm -rf "$BUILD_DIR"
+    mkdir -p "$BUILD_DIR"
 
     cmake \
         -S "$LIB_DIR" \
         -B "$BUILD_DIR" \
-        -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_PREFIX_PATH="$RDK_INSTALL;$CONDA_PREFIX" \
-        -DCMAKE_BUILD_RPATH="$CONDA_PREFIX/lib" \
-        -DCMAKE_INSTALL_RPATH="$CONDA_PREFIX/lib" \
-        -DCMAKE_INSTALL_RPATH_USE_LINK_PATH=ON \
-        -DPYTHON_EXECUTABLE="$(which python)"
+        -DCMAKE_PREFIX_PATH="$RDK_INSTALL" \
+        -DPython3_EXECUTABLE="$(which python)"
 
     cmake --build "$BUILD_DIR" -j"$(nproc)"
 
@@ -198,12 +211,22 @@ install_pico4() {
 install_xense() {
     echo ""
     echo "══════════════════════════════════════════"
-    echo " xensesdk + xensegripper (PyPI)"
+    echo " xensesdk (submodule) + xensegripper (PyPI)"
     echo "══════════════════════════════════════════"
+
+    local SDK_DIR="$PROJECT_ROOT/third_party/xensesdk"
+    if [[ ! -d "$SDK_DIR" ]]; then
+        echo "ERROR: $SDK_DIR not found."
+        echo "  Run: git submodule update --init third_party/xensesdk"
+        return 1
+    fi
 
     fix_udev_discovery
 
-    uv pip install xensesdk xensegripper
+    # Install xensesdk from local submodule (branch: feature/v1.7.0rc0)
+    "$(which pip)" install -e "$SDK_DIR" --quiet
+    # xensegripper remains on PyPI
+    uv pip install xensegripper
     # xensesdk requires a specific av version
     uv pip install av==15.1.0
 
