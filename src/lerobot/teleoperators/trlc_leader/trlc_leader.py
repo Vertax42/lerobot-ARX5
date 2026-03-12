@@ -116,9 +116,9 @@ class TRLCLeader(Teleoperator):
         signs = self.config.joint_signs
 
         target_str = "  ".join(f"joint_{i + 1}: {math.degrees(v):+.1f}°" for i, v in enumerate(target))
-        print(f"\n[TRLC Calibration]  Move arm to start pose, then press Enter.")
+        print(f"\n[TRLC Calibration] calibrate arm in start pose wirh joints:")
         print(f"  {target_str}")
-        input("  >> ")
+        time.sleep(2)
 
         # Average 10 readings to reduce noise
         readings = [self.bus.sync_read(normalize=False, data_name="Present_Position") for _ in range(10)]

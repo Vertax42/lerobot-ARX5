@@ -2,7 +2,7 @@
 
 ## BiARX5 Robot lerobot-teleoperate command
 
-```python
+```bash
 lerobot-teleoperate \
     --robot.type=bi_arx5 \
     --robot.enable_tactile_sensors=true \
@@ -12,12 +12,43 @@ lerobot-teleoperate \
     --display_data=true
 ```
 
-```python
+```bash
 lerobot-teleoperate \
     --robot.type=arx5_follower \
     --robot.control_mode=cartesian_control \
     --robot.enable_tactile_sensors=false \
     --teleop.type=mock_teleop \
+    --fps=30 \
+    --debug_timing=false \
+    --display_data=true
+```
+
+## ARX5 Robot lerobot-teleoperate command(use trlc_leader teleop)
+
+```bash
+lerobot-teleoperate \
+    --robot.type=arx5_follower \
+    --robot.control_mode=joint_control \
+    --robot.enable_tactile_sensors=false \
+    --teleop.type=trlc_leader \
+    --teleop.port="/dev/ttyACM0" \
+    --teleop.joint_signs "[1,1,1,1,1,1]" \
+    --teleop.start_joints "[0.0,0.0,0.0,0.0,0.0,0.0]" \
+    --fps=30 \
+    --debug_timing=false \
+    --display_data=true
+```
+
+```bash
+lerobot-teleoperate \
+    --robot.type=mock_robot \
+    --robot.control_mode=joint_control \
+    --robot.n_motors=6 \
+    --robot.use_gripper=true \
+    --teleop.type=trlc_leader \
+    --teleop.port="/dev/ttyACM0" \
+    --teleop.joint_signs "[1,1,1,1,1,1]" \
+    --teleop.start_joints "[0.0,0.0,0.0,0.0,0.0,0.0]" \
     --fps=30 \
     --debug_timing=false \
     --display_data=true
