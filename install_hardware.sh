@@ -211,13 +211,20 @@ install_pico4() {
 install_xense() {
     echo ""
     echo "══════════════════════════════════════════"
-    echo " xensesdk (submodule) + xensegripper (PyPI)"
+    echo " xensesdk + xensegripper (submodules)"
     echo "══════════════════════════════════════════"
 
     local SDK_DIR="$PROJECT_ROOT/third_party/xensesdk"
+    local GRIPPER_DIR="$PROJECT_ROOT/third_party/xensegripper"
+
     if [[ ! -d "$SDK_DIR" ]]; then
         echo "ERROR: $SDK_DIR not found."
         echo "  Run: git submodule update --init third_party/xensesdk"
+        return 1
+    fi
+    if [[ ! -d "$GRIPPER_DIR" ]]; then
+        echo "ERROR: $GRIPPER_DIR not found."
+        echo "  Run: git submodule update --init third_party/xensegripper"
         return 1
     fi
 
@@ -225,8 +232,8 @@ install_xense() {
 
     # Install xensesdk from local submodule (branch: feature/v1.7.0rc0)
     "$(which pip)" install -e "$SDK_DIR" --quiet
-    # xensegripper remains on PyPI
-    uv pip install xensegripper
+    # Install xensegripper from local submodule (package name: xgripper)
+    "$(which pip)" install -e "$GRIPPER_DIR" --quiet
     # xensesdk requires a specific av version
     uv pip install av==15.1.0
 
