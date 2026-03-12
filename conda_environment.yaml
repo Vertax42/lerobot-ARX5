@@ -3,7 +3,6 @@ channels:
   - robostack-jazzy        # ros-jazzy-kdl-parser for ARX5
   - conda-forge
   - nvidia
-  - defaults
 dependencies:
   - python=3.12
   # ── Build tools (required for ARX5 / Flexiv C++ builds) ──────────────────
