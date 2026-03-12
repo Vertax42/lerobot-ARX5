@@ -3,6 +3,7 @@ channels:
   - robostack-jazzy        # ros-jazzy-kdl-parser for ARX5
   - conda-forge
   - nvidia
+  - nodefaults
 dependencies:
   - python=3.12
   # ── Build tools (required for ARX5 / Flexiv C++ builds) ──────────────────
@@ -23,9 +24,10 @@ dependencies:
   - nvidia::cuda-toolkit=12.8
   - nvidia::cudnn
   # ── Video (torchcodec / av) ────────────────────────────────────────────────
-  - conda-forge::ffmpeg=7.1.1
+  # PyAV/torchcodec are installed from wheels later in setup_env.sh. Keeping
+  # ffmpeg out of the conda solve avoids ICU/libxml2 conflicts with Robostack.
   # ── Python base tools ─────────────────────────────────────────────────────
-  - numpy>=2.0,<2.3               # align conda base packages with lerobot/xensesdk runtime
+  - numpy>=1.26.4,<2.3.0          # allow pip-only installs to use numpy 2.x while robostack can still resolve to 1.26
   - pip
   - wheel
   - pip:
