@@ -164,7 +164,7 @@ install_flexiv() {
 
     cmake --build "$BUILD_DIR" -j"$(nproc)"
 
-    "$(which pip)" install -e "$LIB_DIR" --no-build-isolation --quiet
+    uv pip install -e "$LIB_DIR" --no-build-isolation --quiet
 
     write_sitecustomize
     echo "[flexiv] Done. Verify with: python -c 'import flexiv_rt; print(flexiv_rt)'"
@@ -201,7 +201,7 @@ install_pico4() {
     cd "$PYBIND_DIR"
     rm -rf build *.egg-info
     pip uninstall -y xensevr_pc_service_sdk 2>/dev/null || true
-    "$(which pip)" install . --no-build-isolation --quiet
+    uv pip install . --no-build-isolation --quiet
 
     echo "[pico4] Done. Verify with: python -c 'import xensevr_pc_service_sdk; print(xensevr_pc_service_sdk)'"
 }
@@ -231,9 +231,9 @@ install_xense() {
     fix_udev_discovery
 
     # Install xensesdk from local submodule (branch: feature/v1.7.0rc0)
-    "$(which pip)" install -e "$SDK_DIR" --quiet
+    uv pip install -e "$SDK_DIR" --quiet
     # Install xensegripper from local submodule (package name: xgripper)
-    "$(which pip)" install -e "$GRIPPER_DIR" --quiet
+    uv pip install -e "$GRIPPER_DIR" --quiet
     # xensesdk requires a specific av version
     uv pip install av==15.1.0
 
