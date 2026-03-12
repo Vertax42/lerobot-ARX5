@@ -40,10 +40,11 @@ from lerobot.robots import (  # noqa: F401
     arx5_follower,
     bi_arx5,
     flexiv_rizon4,  # noqa: F401
-    flexiv_rizon4_rt,  # noqa: F401
+    # flexiv_rizon4_rt,  # noqa: F401
     make_robot_from_config,
     xense_flare,  # noqa: F401
     xense_multisensor,  # noqa: F401
+    mock_robot,  # noqa: F401
 )
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
@@ -56,6 +57,7 @@ from lerobot.teleoperators import (  # noqa: F401
     spacemouse,
     vive_tracker,
     xense_flare,
+    trlc_leader,  # noqa: F401
 )
 from lerobot.utils.import_utils import register_third_party_devices
 from lerobot.utils.robot_utils import busy_wait, get_logger, rotation_6d_to_quaternion
@@ -152,6 +154,106 @@ def teleop_loop(
         busy_wait(1 / fps - dt_s)
         loop_s = time.perf_counter() - loop_start
         print(f"\ntime: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz)")
+
+        if duration is not None and time.perf_counter() - start >= duration:
+            return
+
+
+def mock_robot_teleop_loop(
+    teleop: Teleoperator,
+    robot: Robot,
+    fps: int,
+    teleop_action_processor: RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction],
+    robot_action_processor: RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction],
+    robot_observation_processor: RobotProcessorPipeline[RobotObservation, RobotObservation],
+    display_data: bool = False,
+    duration: float | None = None,
+    dryrun: bool = False,
+    debug_timing: bool = False,
+):
+    """
+    Dedicated teleoperation loop for Mock Robot.
+
+    This loop keeps the same processor pipeline as the default path but adds:
+    - Action key filtering to robot.action_features
+    - Dedicated timing/terminal display for mock robot teleoperation
+    """
+    display_len = max(len(key) for key in robot.action_features)
+    start = time.perf_counter()
+    robot_action_keys = set(robot.action_features.keys())
+    warned_unmapped_keys = False
+
+    while True:
+        loop_start = time.perf_counter()
+
+        obs_start = time.perf_counter()
+        obs = robot.get_observation()
+        obs_dt_ms = (time.perf_counter() - obs_start) * 1e3
+
+        raw_action = teleop.get_action()
+        teleop_action = teleop_action_processor((raw_action, obs))
+
+        # Keep only keys known by mock robot action schema.
+        filtered_action = {k: v for k, v in teleop_action.items() if k in robot_action_keys}
+        if not filtered_action and teleop_action:
+            filtered_action = teleop_action
+        elif len(filtered_action) != len(teleop_action) and not warned_unmapped_keys:
+            dropped = sorted(set(teleop_action) - robot_action_keys)
+            logger.warn(f"Action keys not present in mock robot action schema, dropping: {dropped}")
+            warned_unmapped_keys = True
+
+        robot_action_to_send = robot_action_processor((filtered_action, obs))
+
+        if not dryrun:
+            _ = robot.send_action(robot_action_to_send)
+
+        dt_s = time.perf_counter() - loop_start
+        busy_wait(1 / fps - dt_s)
+        loop_s = time.perf_counter() - loop_start
+
+        if display_data:
+            obs_transition = robot_observation_processor(obs)
+            log_rerun_data(observation=obs_transition, action=teleop_action)
+
+            ordered_keys = [k for k in robot.action_features if k in robot_action_to_send]
+            ordered_keys.extend(k for k in robot_action_to_send if k not in ordered_keys)
+
+            panel_lines = []
+            panel_lines.append("-" * (display_len + 38))
+            panel_lines.append(f"{'NAME':<{display_len}} | {'CMD':>8} | {'OBS':>8} | {'ERR':>8}")
+            for motor in ordered_keys:
+                cmd = float(robot_action_to_send[motor])
+                obs_val = obs.get(motor, None)
+                if obs_val is None or isinstance(obs_val, np.ndarray):
+                    panel_lines.append(f"{motor:<{display_len}} | {cmd:>8.4f} | {'-':>8} | {'-':>8}")
+                    continue
+
+                obs_num = float(obs_val)
+                err = cmd - obs_num
+                panel_lines.append(f"{motor:<{display_len}} | {cmd:>8.4f} | {obs_num:>8.4f} | {err:>+8.4f}")
+
+            panel_lines.append(
+                f"{'timing':<{display_len}} | {'loop':>8} | {loop_s * 1e3:>6.2f}ms | {obs_dt_ms:>6.2f}ms"
+            )
+
+            # Redraw full panel each frame to avoid cursor-up corruption with logger output.
+            print("\033[H\033[J" + "\n".join(panel_lines), end="", flush=True)
+
+        if debug_timing and not display_data:
+            dryrun_tag = " | DRYRUN" if dryrun else ""
+            print(
+                f"\r\033[KMOCK obs: {obs_dt_ms:5.1f}ms | loop: {loop_s * 1e3:5.1f}ms ({1 / loop_s:4.0f}Hz){dryrun_tag}",
+                end="",
+                flush=True,
+            )
+        elif not display_data:
+            action_summary = " ".join(f"{k}={float(v):+.3f}" for k, v in robot_action_to_send.items())
+            dryrun_tag = "[DRYRUN] " if dryrun else ""
+            print(
+                f"\r\033[K{dryrun_tag}{loop_s * 1e3:5.1f}ms ({1 / loop_s:4.0f}Hz) | {action_summary}",
+                end="",
+                flush=True,
+            )
 
         if duration is not None and time.perf_counter() - start >= duration:
             return
@@ -406,6 +508,107 @@ def arx5_teleop_loop(
                         print(f"{cam_key} - avg: {avg_cam_time:.2f}ms")
             return
 
+def arx5_trlc_leader_teleop_loop(
+    teleop: Teleoperator,
+    robot: Robot,
+    fps: int,
+    teleop_action_processor: RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction],
+    robot_action_processor: RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction],
+    robot_observation_processor: RobotProcessorPipeline[RobotObservation, RobotObservation],
+    display_data: bool = False,
+    duration: float | None = None,
+    dryrun: bool = False,
+    debug_timing: bool = False,
+):
+    """
+    Dedicated teleoperation loop for ARX5 + TRLC leader.
+
+    TRLC leader outputs joint-space actions (`joint_i.pos` + `gripper.pos`), so this loop
+    validates key compatibility with the robot's action schema and then sends commands.
+    """
+    # ARX5 trlc leader loop currently supports single-arm follower only.
+    if hasattr(robot, "left_arm") and hasattr(robot, "right_arm"):
+        raise ValueError("TRLC leader teleoperation currently supports arx5_follower only, not bi_arx5.")
+
+    display_len = max(len(key) for key in robot.action_features)
+    start = time.perf_counter()
+    robot_action_keys = set(robot.action_features.keys())
+    warned_unmapped_keys = False
+
+    while True:
+        loop_start = time.perf_counter()
+
+        obs_start = time.perf_counter()
+        obs = robot.get_observation()
+        obs_dt_ms = (time.perf_counter() - obs_start) * 1e3
+
+        raw_action = teleop.get_action()
+        teleop_action = teleop_action_processor((raw_action, obs))
+
+        filtered_action = {k: v for k, v in teleop_action.items() if k in robot_action_keys}
+        if len(filtered_action) != len(teleop_action) and not warned_unmapped_keys:
+            dropped = sorted(set(teleop_action) - robot_action_keys)
+            logger.warn(f"TRLC action keys not present in ARX5 action schema, dropping: {dropped}")
+            warned_unmapped_keys = True
+
+        if not filtered_action:
+            raise ValueError(
+                "No overlapping action keys between TRLC leader output and ARX5 action schema. "
+                "Check robot.control_mode (TRLC requires joint-style keys like joint_i.pos, gripper.pos)."
+            )
+
+        robot_action_to_send = robot_action_processor((filtered_action, obs))
+
+        if not dryrun:
+            _ = robot.send_action(robot_action_to_send)
+
+        dt_s = time.perf_counter() - loop_start
+        busy_wait(1 / fps - dt_s)
+        loop_s = time.perf_counter() - loop_start
+
+        if display_data:
+            obs_transition = robot_observation_processor(obs)
+            log_rerun_data(observation=obs_transition, action=teleop_action)
+
+            ordered_keys = [k for k in robot.action_features if k in robot_action_to_send]
+            ordered_keys.extend(k for k in robot_action_to_send if k not in ordered_keys)
+
+            panel_lines = []
+            panel_lines.append("-" * (display_len + 38))
+            panel_lines.append(f"{'NAME':<{display_len}} | {'CMD':>8} | {'OBS':>8} | {'ERR':>8}")
+            for motor in ordered_keys:
+                cmd = float(robot_action_to_send[motor])
+                obs_val = obs.get(motor, None)
+                if obs_val is None or isinstance(obs_val, np.ndarray):
+                    panel_lines.append(f"{motor:<{display_len}} | {cmd:>8.4f} | {'-':>8} | {'-':>8}")
+                    continue
+
+                obs_num = float(obs_val)
+                err = cmd - obs_num
+                panel_lines.append(f"{motor:<{display_len}} | {cmd:>8.4f} | {obs_num:>8.4f} | {err:>+8.4f}")
+
+            panel_lines.append(
+                f"{'timing':<{display_len}} | {'loop':>8} | {loop_s * 1e3:>6.2f}ms | {obs_dt_ms:>6.2f}ms"
+            )
+            print("\033[H\033[J" + "\n".join(panel_lines), end="", flush=True)
+        elif debug_timing:
+            dryrun_tag = " | DRYRUN" if dryrun else ""
+            print(
+                f"\r\033[KARX5+TRLC obs: {obs_dt_ms:5.1f}ms | loop: {loop_s * 1e3:5.1f}ms ({1 / loop_s:4.0f}Hz){dryrun_tag}",
+                end="",
+                flush=True,
+            )
+        else:
+            action_summary = " ".join(f"{k}={float(v):+.3f}" for k, v in robot_action_to_send.items())
+            dryrun_tag = "[DRYRUN] " if dryrun else ""
+            print(
+                f"\r\033[K{dryrun_tag}{loop_s * 1e3:5.1f}ms ({1 / loop_s:4.0f}Hz) | {action_summary}",
+                end="",
+                flush=True,
+            )
+
+        if duration is not None and time.perf_counter() - start >= duration:
+            return
 
 def spacemouse_teleop_loop(
     teleop: Teleoperator,
@@ -1560,6 +1763,30 @@ def teleoperate(cfg: TeleoperateConfig):
                     rr.rerun_shutdown()
                 robot.disconnect()
                 teleop.disconnect()
+        elif cfg.teleop.type == "trlc_leader":
+            teleop = make_teleoperator_from_config(cfg.teleop)
+            teleop.connect()
+            logger.info("Connected to TRLC Leader")
+            try:
+                arx5_trlc_leader_teleop_loop(
+                    teleop=teleop,
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    teleop_action_processor=teleop_action_processor,
+                    robot_action_processor=robot_action_processor,
+                    robot_observation_processor=robot_observation_processor,
+                    dryrun=cfg.dryrun,
+                    debug_timing=cfg.debug_timing,
+                )
+            except KeyboardInterrupt:
+                pass
+            finally:
+                if cfg.display_data:
+                    rr.rerun_shutdown()
+                robot.disconnect()
+                teleop.disconnect()
         else:
             try:
                 arx5_teleop_loop(
@@ -2147,6 +2374,38 @@ def teleoperate(cfg: TeleoperateConfig):
                             robot._robot.Stop()
                     except Exception:
                         pass
+    elif cfg.robot.type == "mock_robot":
+        logger.info("Detected Mock Robot, using mock_robot_teleop_loop")
+
+        teleop = make_teleoperator_from_config(cfg.teleop)
+        robot = make_robot_from_config(cfg.robot)
+        teleop_action_processor, robot_action_processor, robot_observation_processor = (
+            make_default_processors()
+        )
+
+        teleop.connect()
+        robot.connect()
+
+        try:
+            mock_robot_teleop_loop(
+                teleop=teleop,
+                robot=robot,
+                fps=cfg.fps,
+                display_data=cfg.display_data,
+                duration=cfg.teleop_time_s,
+                teleop_action_processor=teleop_action_processor,
+                robot_action_processor=robot_action_processor,
+                robot_observation_processor=robot_observation_processor,
+                dryrun=cfg.dryrun,
+                debug_timing=cfg.debug_timing,
+            )
+        except KeyboardInterrupt:
+            pass
+        finally:
+            if cfg.display_data:
+                rr.rerun_shutdown()
+            teleop.disconnect()
+            robot.disconnect()
     else:
         teleop = make_teleoperator_from_config(cfg.teleop)
         robot = make_robot_from_config(cfg.robot)
