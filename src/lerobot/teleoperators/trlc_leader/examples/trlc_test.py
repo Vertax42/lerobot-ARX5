@@ -21,7 +21,7 @@ Connects to a single TRLC Leader arm and streams joint positions
 to the terminal at ~50 Hz, showing per-read latency statistics.
 
 Usage:
-    python trlc_test.py --port /dev/ttyUSB0
+    python trlc_test.py --port /dev/ttyACM0
 
 Press Ctrl+C to stop and print a summary report.
 """

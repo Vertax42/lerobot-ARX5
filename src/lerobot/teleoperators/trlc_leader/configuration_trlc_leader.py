@@ -58,8 +58,7 @@ class TRLCLeaderConfig(TeleoperatorConfig):
     id: str = "trlc_leader"
 
     port: str = "/dev/ttyACM0"
-    baudrate: int = 1_000_000
-    joint_signs: tuple[int, ...] = field(default_factory=lambda: (1, 1, 1, 1, 1, 1))
-    start_joints: tuple[float, ...] = field(default_factory=lambda: (0.0,) * 6)
+    joint_signs: list[int] = field(default_factory=lambda: [1, 1, 1, 1, 1, 1])
+    start_joints: list[float] = field(default_factory=lambda: [0.0] * 6)
     gripper_open_pos: int = 3287
     gripper_closed_pos: int = 2682
