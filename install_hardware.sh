@@ -164,7 +164,7 @@ install_flexiv() {
 
     cmake --build "$BUILD_DIR" -j"$(nproc)"
 
-    uv pip install -e "$LIB_DIR" --no-build-isolation --quiet
+    uv pip install -e "$LIB_DIR" --no-build-isolation
 
     write_sitecustomize
     echo "[flexiv] Done. Verify with: python -c 'import flexiv_rt; print(flexiv_rt)'"
@@ -201,7 +201,7 @@ install_pico4() {
     cd "$PYBIND_DIR"
     rm -rf build *.egg-info
     pip uninstall -y xensevr_pc_service_sdk 2>/dev/null || true
-    uv pip install . --no-build-isolation --quiet
+    uv pip install . --no-build-isolation
 
     echo "[pico4] Done. Verify with: python -c 'import xensevr_pc_service_sdk; print(xensevr_pc_service_sdk)'"
 }
@@ -231,9 +231,9 @@ install_xense() {
     fix_udev_discovery
 
     # Install xensesdk from local submodule (branch: feature/v1.7.0rc0)
-    uv pip install -e "$SDK_DIR" --quiet
+    uv pip install -e "$SDK_DIR"
     # Install xensegripper from local submodule (package name: xgripper)
-    uv pip install -e "$GRIPPER_DIR" --quiet
+    uv pip install -e "$GRIPPER_DIR"
     # xensesdk requires a specific av version
     uv pip install av==15.1.0
 
@@ -244,7 +244,7 @@ install_xense() {
     local ONNX_SO="${CONDA_PREFIX}/lib/python${PY_VER}/site-packages/onnxruntime/capi/libonnxruntime_providers_cuda.so"
     if [[ -f "$ONNX_SO" ]]; then
         echo "[xense] Fixing onnxruntime-gpu RPATH..."
-        uv pip install patchelf --quiet
+        uv pip install patchelf
         patchelf --set-rpath "${CONDA_PREFIX}/lib" "$ONNX_SO"
         echo "[xense] RPATH set: $(patchelf --print-rpath "$ONNX_SO")"
     fi
