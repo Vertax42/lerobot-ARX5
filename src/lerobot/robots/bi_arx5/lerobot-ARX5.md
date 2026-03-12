@@ -1,8 +1,8 @@
 # ARX5 SDK
 
-conda install ros-humble-kdl-parser ros-humble-ament-cmake cxx-compiler cmake ninja orocos-kdl eigen boost spdlog pybind11 numpy click pyzmq pynput pip conda-forge::soem=1.4.0 -c robostack-staging -c conda-forge
+conda install ros-humble-kdl-parser ros-humble-ament-cmake cxx-compiler cmake ninja orocos-kdl eigen boost spdlog pybind11 numpy click pyzmq pip conda-forge::soem=1.4.0 -c robostack-staging -c conda-forge
 
-pip install atomics spnav@https://github.com/cheng-chi/spnav/archive/c1c938ebe3cc542db4685e0d13850ff1abfdb943.tar.gz pyrealsense2
+pip install atomics pyrealsense2
 
     sudo setcap cap_sys_nice=ep $(readlink -f $CONDA_PREFIX/bin/python)
 

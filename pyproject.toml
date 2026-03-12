@@ -79,7 +79,6 @@ dependencies = [
     "opencv-python-headless>=4.9.0,<4.14.0",
     "av>=15.0.0,<16.0.0",
     "jsonlines>=4.0.0,<5.0.0",
-    "pynput>=1.7.8,<1.9.0",
     "pyserial>=3.5,<4.0",
 
     "wandb>=0.24.0,<0.25.0",
@@ -101,6 +100,7 @@ dependencies = [
 
 # Common
 pygame-dep = ["pygame>=2.5.1,<2.7.0"]
+keyboard-dep = ["pynput>=1.7.8,<1.9.0"]
 placo-dep = ["placo>=0.9.6,<0.9.17"]
 transformers-dep = ["transformers>=5.3.0,<6.0.0"]
 grpcio-dep = ["grpcio==1.73.1", "protobuf>=6.31.1,<6.32.0"]
@@ -163,7 +163,6 @@ arx5 = [
     "click",
     "pyzmq>=26.2.1,<28.0.0",
     "atomics",
-    "spnav @ https://github.com/cheng-chi/spnav/archive/c1c938ebe3cc542db4685e0d13850ff1abfdb943.tar.gz",
 ]
 intelrealsense = [
     "pyrealsense2>=2.55.1.6486,<2.57.0 ; sys_platform != 'darwin'",
