@@ -26,33 +26,77 @@
 
 ## Quick Start
 
-LeRobot can be installed directly from PyPI.
+This fork is installed from source and is currently tested on Ubuntu 22.04. The recommended path is `Miniforge` or `Mambaforge`, then `setup_env.sh`.
+
+### 1. Clone the repository
 
 ```bash
+cd /path/to/workspace
 git clone \
-  --branch feature/v5.1_dev \
-  --depth 1 \
   --recurse-submodules \
   git@github.com:Vertax42/lerobot-xense.git \
-  lerobot-xense-install-test
+  lerobot-xense
 
+cd lerobot-xense
 
-  # 如果你已经 clone 过主仓库，但想把所有 submodule 补齐并递归更新：
-
-cd lerobot-xense-install-test
+# If you already cloned the repo without submodules:
 git submodule update --init --recursive
-
-  # 如果你想指定到 ~/Downloads：
-
-cd ~/Downloads
-git clone --branch feature/v5.1_dev --recurse-submodules git@github.com:Vertax42/lerobot-xense.git lerobot-xense-install-test
-cd lerobot-xense-install-test
-git submodule update --init --recursive
-
 ```
 
+### 2. Create the conda/mamba environment
+
+`setup_env.sh` supports both `conda` and `mamba`, but `mamba` is the expected default on Miniforge/Mambaforge.
+
+```bash
+bash setup_env.sh --mamba
+```
+
+### 3. Activate the environment
+
+```bash
+mamba activate lerobot-xense
+```
+
+If your shell has not loaded conda/mamba yet, initialize it first:
+
+```bash
+source ~/miniforge3/etc/profile.d/conda.sh
+source ~/miniforge3/etc/profile.d/mamba.sh
+mamba activate lerobot-xense
+```
+
+### 4. Install LeRobot-Xense and all local hardware SDK bindings
+
+```bash
+bash setup_env.sh --install
+```
+
+This step will:
+
+- update the conda environment from `conda_environment.yaml`
+- install the main package from `pyproject.toml`
+- build and install local `third_party` packages, including `pyarx`, `flexiv_rt`, `xensevr_pc_service_sdk`, `xensesdk`, `xensegripper`, and `pyxensexu`
+
+### 5. Verify the installation
+
+After `bash setup_env.sh --install` completes, verify that the local hardware SDK bindings can be imported:
+
+```bash
+python -c 'import pyarx; print("pyarx OK ->", pyarx.__file__)'
+python -c 'import flexiv_rt; print("flexiv_rt OK ->", flexiv_rt.__file__)'
+python -c 'import xensevr_pc_service_sdk; print("xensevr_pc_service_sdk OK ->", xensevr_pc_service_sdk.__file__)'
+python -c 'import xensesdk; print("xensesdk OK ->", xensesdk.__file__)'
+python -c 'import xensegripper; print("xensegripper OK ->", xensegripper.__file__)'
+python -c 'from xensesdk.utils.flashRW import xense_flash_manager; print("pyxensexu available ->", xense_flash_manager.is_available)'
+```
+
+Expected result:
+
+- each package imports without error
+- `pyxensexu available -> True`
+
 > [!IMPORTANT]
-> For detailed installation guide, please see the [Installation Documentation](https://huggingface.co/docs/lerobot/installation).
+> The script is designed around this repository layout and its vendored `third_party` modules. Run it from the repository root.
 
 ## Robots & Control
 
