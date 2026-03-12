@@ -350,6 +350,7 @@ install_xense() {
 
     local SDK_DIR="$PROJECT_ROOT/third_party/xensesdk"
     local GRIPPER_DIR="$PROJECT_ROOT/third_party/xensegripper"
+    local XU_DIR="$SDK_DIR/xense_xu/cpp"
 
     if [[ ! -d "$SDK_DIR" ]]; then
         echo "ERROR: $SDK_DIR not found."
@@ -359,6 +360,11 @@ install_xense() {
     if [[ ! -d "$GRIPPER_DIR" ]]; then
         echo "ERROR: $GRIPPER_DIR not found."
         echo "  Run: git submodule update --init third_party/xensegripper"
+        return 1
+    fi
+    if [[ ! -d "$XU_DIR" ]]; then
+        echo "ERROR: $XU_DIR not found."
+        echo "  Run: git submodule update --init third_party/xensesdk"
         return 1
     fi
 
@@ -381,6 +387,8 @@ install_xense() {
         "pyudev; platform_system=='Linux'"
     # Install xensesdk from local submodule (branch: feature/v1.7.0rc0).
     uv pip install -e "$SDK_DIR" --no-deps
+    echo "[xense] Building pyxensexu companion module..."
+    bash "$XU_DIR/build_python.sh"
     # Install xensegripper from local submodule (package name: xgripper).
     # xgripper bundles pysurvive from vendored libsurvive source, and xensesdk
     # has already been installed from the local submodule above. Avoid resolving
@@ -406,6 +414,17 @@ install_xense() {
     if [[ -f "$QXCB" ]]; then
         echo "[xense] Removing OpenCV bundled Qt plugin: $QXCB"
         rm -f "$QXCB"
+    fi
+
+    if python - <<'PY'
+from xensesdk.utils.flashRW import xense_flash_manager
+raise SystemExit(0 if xense_flash_manager.is_available else 1)
+PY
+    then
+        echo "[xense] pyxensexu flash reader is available."
+    else
+        echo "[xense] ERROR: pyxensexu build or import verification failed."
+        return 1
     fi
 
     echo "[xense] Done. Verify with: python -c 'import xensesdk; print(xensesdk)'"
