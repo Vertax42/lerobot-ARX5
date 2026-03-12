@@ -19,4 +19,4 @@ from .robot import Robot
 from .utils import make_robot_from_config
 
 # Re-export subpackages so `from lerobot.robots import flexiv_rizon4_rt` works
-from . import flexiv_rizon4_rt  # noqa: F401
+# from . import flexiv_rizon4_rt  # noqa: F401
