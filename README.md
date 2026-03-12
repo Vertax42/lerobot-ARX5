@@ -29,8 +29,26 @@
 LeRobot can be installed directly from PyPI.
 
 ```bash
-pip install lerobot
-lerobot-info
+git clone \
+  --branch feature/v5.1_dev \
+  --depth 1 \
+  --recurse-submodules \
+  git@github.com:Vertax42/lerobot-xense.git \
+  lerobot-xense-install-test
+
+
+  # 如果你已经 clone 过主仓库，但想把所有 submodule 补齐并递归更新：
+
+cd lerobot-xense-install-test
+git submodule update --init --recursive
+
+  # 如果你想指定到 ~/Downloads：
+
+cd ~/Downloads
+git clone --branch feature/v5.1_dev --recurse-submodules git@github.com:Vertax42/lerobot-xense.git lerobot-xense-install-test
+cd lerobot-xense-install-test
+git submodule update --init --recursive
+
 ```
 
 > [!IMPORTANT]
