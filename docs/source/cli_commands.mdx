@@ -1,0 +1,321 @@
+# CLI Command Reference
+
+Quick reference for `lerobot-teleoperate` and `lerobot-record` commands
+for all Xense-supported robots.
+
+---
+
+## lerobot-teleoperate
+
+### Generic robots (SO-101, Koch, etc.)
+
+```bash
+lerobot-teleoperate \
+    --robot.type=so101_follower \
+    --robot.port=/dev/tty.usbmodem58760431541 \
+    --robot.cameras="{ front: {type: opencv, index_or_path: 0, width: 1920, height: 1080, fps: 30}}" \
+    --robot.id=black \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/tty.usbmodem58760431551 \
+    --teleop.id=blue \
+    --display_data=true
+```
+
+### ARX5 single-arm (teach mode)
+
+```bash
+lerobot-teleoperate \
+    --robot.type=arx5_follower \
+    --robot.arm_port=can0 \
+    --robot.id=right \
+    --teleop.type=btgamepad \
+    --teleop.id=right \
+    --fps=30 \
+    --display_data=true
+```
+
+### ARX5 single-arm + SpaceMouse
+
+```bash
+lerobot-teleoperate \
+    --robot.type=arx5_follower \
+    --robot.arm_port=can0 \
+    --robot.id=right \
+    --teleop.type=spacemouse \
+    --teleop.id=right \
+    --fps=30
+```
+
+### ARX5 bimanual (teach mode)
+
+```bash
+lerobot-teleoperate \
+    --robot.type=bi_arx5 \
+    --robot.left_config.arm_port=can0 \
+    --robot.right_config.arm_port=can1 \
+    --robot.id=bimanual \
+    --teleop.type=btgamepad \
+    --teleop.id=bimanual \
+    --fps=30
+```
+
+### Flexiv Rizon4 (NRT) + Pico4
+
+```bash
+lerobot-teleoperate \
+    --robot.type=flexiv_rizon4 \
+    --robot.robot_ip=192.168.2.100 \
+    --robot.local_ip=192.168.2.1 \
+    --robot.id=right \
+    --teleop.type=pico4 \
+    --teleop.id=right \
+    --fps=60
+```
+
+### Flexiv Rizon4 (NRT) + SpaceMouse
+
+```bash
+lerobot-teleoperate \
+    --robot.type=flexiv_rizon4 \
+    --robot.robot_ip=192.168.2.100 \
+    --robot.local_ip=192.168.2.1 \
+    --robot.id=right \
+    --teleop.type=spacemouse \
+    --teleop.id=right \
+    --fps=30 \
+    --display_data=true
+```
+
+### Flexiv Rizon4 (NRT) + Vive Tracker
+
+```bash
+lerobot-teleoperate \
+    --robot.type=flexiv_rizon4 \
+    --robot.robot_ip=192.168.2.100 \
+    --robot.local_ip=192.168.2.1 \
+    --robot.id=right \
+    --teleop.type=vive_tracker \
+    --teleop.id=right \
+    --fps=60
+```
+
+### Flexiv Rizon4 (NRT) + Xense Flare teleoperator
+
+```bash
+lerobot-teleoperate \
+    --robot.type=flexiv_rizon4 \
+    --robot.robot_ip=192.168.2.100 \
+    --robot.local_ip=192.168.2.1 \
+    --robot.id=right \
+    --teleop.type=xense_flare \
+    --teleop.id=right \
+    --fps=60
+```
+
+### Flexiv Rizon4 RT + Pico4
+
+```bash
+lerobot-teleoperate \
+    --robot.type=flexiv_rizon4_rt \
+    --robot.robot_ip=192.168.2.100 \
+    --robot.local_ip=192.168.2.1 \
+    --robot.id=right \
+    --teleop.type=pico4 \
+    --teleop.id=right \
+    --fps=60 \
+    --debug_timing=true
+```
+
+### Flexiv Rizon4 RT + SpaceMouse
+
+```bash
+lerobot-teleoperate \
+    --robot.type=flexiv_rizon4_rt \
+    --robot.robot_ip=192.168.2.100 \
+    --robot.local_ip=192.168.2.1 \
+    --robot.id=right \
+    --teleop.type=spacemouse \
+    --teleop.id=right \
+    --fps=30 \
+    --display_data=true
+```
+
+### Bimanual Flexiv Rizon4 RT + Bi-Pico4
+
+```bash
+lerobot-teleoperate \
+    --robot.type=bi_flexiv_rizon4_rt \
+    --robot.left_config.robot_ip=192.168.2.100 \
+    --robot.left_config.local_ip=192.168.2.1 \
+    --robot.right_config.robot_ip=192.168.3.100 \
+    --robot.right_config.local_ip=192.168.3.1 \
+    --robot.id=bimanual \
+    --teleop.type=bi_pico4 \
+    --teleop.id=bimanual \
+    --fps=60
+```
+
+### Xense Flare gripper (data collection, no teleop needed)
+
+```bash
+lerobot-teleoperate \
+    --robot.type=xense_flare \
+    --robot.id=right \
+    --teleop.type=btgamepad \
+    --teleop.id=right \
+    --fps=30 \
+    --display_data=true
+```
+
+### Xense Multisensor (data collection, no teleop needed)
+
+```bash
+lerobot-teleoperate \
+    --robot.type=xense_multisensor \
+    --robot.id=sensor \
+    --teleop.type=btgamepad \
+    --teleop.id=sensor \
+    --fps=30 \
+    --display_data=true
+```
+
+---
+
+## lerobot-record
+
+> Replace `<my_username>/<my_dataset_name>` with your actual HuggingFace repo path.
+
+### Generic robots (SO-100, SO-101, Koch, etc.)
+
+```bash
+lerobot-record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/tty.usbmodem58760431541 \
+    --robot.id=black \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/tty.usbmodem58760431551 \
+    --teleop.id=blue \
+    --dataset.repo_id=<my_username>/<my_dataset_name> \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="Pick up the cube" \
+    --dataset.episode_time_s=60 \
+    --dataset.reset_time_s=30 \
+    --dataset.streaming_encoding=true \
+    --dataset.encoder_threads=2 \
+    --display_data=true
+```
+
+### ARX5 single-arm (teach mode)
+
+```bash
+lerobot-record \
+    --robot.type=arx5_follower \
+    --robot.arm_port=can0 \
+    --robot.id=right \
+    --teleop.type=btgamepad \
+    --teleop.id=right \
+    --dataset.repo_id=<my_username>/<my_dataset_name> \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="Pick up the cube" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=60 \
+    --dataset.reset_time_s=30 \
+    --dataset.streaming_encoding=true \
+    --dataset.encoder_threads=2
+```
+
+### Flexiv Rizon4 (NRT) + Pico4
+
+```bash
+lerobot-record \
+    --robot.type=flexiv_rizon4 \
+    --robot.robot_ip=192.168.2.100 \
+    --robot.local_ip=192.168.2.1 \
+    --robot.id=right \
+    --teleop.type=pico4 \
+    --teleop.id=right \
+    --dataset.repo_id=<my_username>/<my_dataset_name> \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="Pick up the cube" \
+    --dataset.fps=60 \
+    --dataset.episode_time_s=60 \
+    --dataset.reset_time_s=30 \
+    --dataset.streaming_encoding=true \
+    --dataset.encoder_threads=2
+```
+
+### Flexiv Rizon4 RT + Pico4
+
+```bash
+lerobot-record \
+    --robot.type=flexiv_rizon4_rt \
+    --robot.robot_ip=192.168.2.100 \
+    --robot.local_ip=192.168.2.1 \
+    --robot.id=right \
+    --teleop.type=pico4 \
+    --teleop.id=right \
+    --dataset.repo_id=<my_username>/<my_dataset_name> \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="Pick up the cube" \
+    --dataset.fps=60 \
+    --dataset.episode_time_s=60 \
+    --dataset.reset_time_s=30 \
+    --dataset.streaming_encoding=true \
+    --dataset.encoder_threads=2
+```
+
+### Bimanual Flexiv Rizon4 RT + Bi-Pico4
+
+```bash
+lerobot-record \
+    --robot.type=bi_flexiv_rizon4_rt \
+    --robot.left_config.robot_ip=192.168.2.100 \
+    --robot.left_config.local_ip=192.168.2.1 \
+    --robot.right_config.robot_ip=192.168.3.100 \
+    --robot.right_config.local_ip=192.168.3.1 \
+    --robot.id=bimanual \
+    --teleop.type=bi_pico4 \
+    --teleop.id=bimanual \
+    --dataset.repo_id=<my_username>/<my_dataset_name> \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="Pick up the cube" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=60 \
+    --dataset.reset_time_s=30 \
+    --dataset.streaming_encoding=true \
+    --dataset.encoder_threads=2
+```
+
+### Xense Flare gripper (data collection)
+
+```bash
+lerobot-record \
+    --robot.type=xense_flare \
+    --robot.id=right \
+    --teleop.type=btgamepad \
+    --teleop.id=right \
+    --dataset.repo_id=<my_username>/<my_dataset_name> \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="Pick up the cube" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=60 \
+    --dataset.reset_time_s=30 \
+    --display_data=true
+```
+
+### Xense Multisensor (data collection)
+
+```bash
+lerobot-record \
+    --robot.type=xense_multisensor \
+    --robot.id=sensor \
+    --teleop.type=btgamepad \
+    --teleop.id=sensor \
+    --dataset.repo_id=<my_username>/<my_dataset_name> \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="Pick up the cube" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=60 \
+    --dataset.reset_time_s=30 \
+    --display_data=true
+```
