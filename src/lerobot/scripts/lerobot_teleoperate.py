@@ -60,8 +60,7 @@ Example (Flexiv Rizon4 + Pico4):
 ```shell
 lerobot-teleoperate \
     --robot.type=flexiv_rizon4 \
-    --robot.robot_ip=192.168.2.100 \
-    --robot.local_ip=192.168.2.1 \
+    --robot.robot_sn=Rizon4-062855 \
     --robot.id=right \
     --teleop.type=pico4 \
     --teleop.id=right \
@@ -73,8 +72,7 @@ Example (Flexiv Rizon4 + SpaceMouse):
 ```shell
 lerobot-teleoperate \
     --robot.type=flexiv_rizon4 \
-    --robot.robot_ip=192.168.2.100 \
-    --robot.local_ip=192.168.2.1 \
+    --robot.robot_sn=Rizon4-062855 \
     --robot.id=right \
     --teleop.type=spacemouse \
     --teleop.id=right \
@@ -87,8 +85,7 @@ Example (Flexiv Rizon4 + Vive Tracker):
 ```shell
 lerobot-teleoperate \
     --robot.type=flexiv_rizon4 \
-    --robot.robot_ip=192.168.2.100 \
-    --robot.local_ip=192.168.2.1 \
+    --robot.robot_sn=Rizon4-062855 \
     --robot.id=right \
     --teleop.type=vive_tracker \
     --teleop.id=right \
@@ -100,8 +97,7 @@ Example (Flexiv Rizon4 + Xense Flare teleoperator):
 ```shell
 lerobot-teleoperate \
     --robot.type=flexiv_rizon4 \
-    --robot.robot_ip=192.168.2.100 \
-    --robot.local_ip=192.168.2.1 \
+    --robot.robot_sn=Rizon4-062855 \
     --robot.id=right \
     --teleop.type=xense_flare \
     --teleop.id=right \
@@ -113,8 +109,7 @@ Example (Flexiv Rizon4 RT + Pico4):
 ```shell
 lerobot-teleoperate \
     --robot.type=flexiv_rizon4_rt \
-    --robot.robot_ip=192.168.2.100 \
-    --robot.local_ip=192.168.2.1 \
+    --robot.robot_sn=Rizon4-063423 \
     --robot.id=right \
     --teleop.type=pico4 \
     --teleop.id=right \
@@ -127,8 +122,7 @@ Example (Flexiv Rizon4 RT + SpaceMouse):
 ```shell
 lerobot-teleoperate \
     --robot.type=flexiv_rizon4_rt \
-    --robot.robot_ip=192.168.2.100 \
-    --robot.local_ip=192.168.2.1 \
+    --robot.robot_sn=Rizon4-063423 \
     --robot.id=right \
     --teleop.type=spacemouse \
     --teleop.id=right \
@@ -141,10 +135,8 @@ Example (Bimanual Flexiv Rizon4 RT + Bi-Pico4):
 ```shell
 lerobot-teleoperate \
     --robot.type=bi_flexiv_rizon4_rt \
-    --robot.left_config.robot_ip=192.168.2.100 \
-    --robot.left_config.local_ip=192.168.2.1 \
-    --robot.right_config.robot_ip=192.168.3.100 \
-    --robot.right_config.local_ip=192.168.3.1 \
+    --robot.left_robot_sn=Rizon4-063423 \
+    --robot.right_robot_sn=Rizon4-063424 \
     --robot.id=bimanual \
     --teleop.type=bi_pico4 \
     --teleop.id=bimanual \
