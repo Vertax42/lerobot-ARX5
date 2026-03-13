@@ -300,7 +300,13 @@ install_flexiv() {
     uv pip install -e "$LIB_DIR" --no-build-isolation
 
     write_sitecustomize
-    echo "[flexiv] Done. Verify with: python -c 'import flexiv_rt; print(flexiv_rt)'"
+    echo "[flexiv] RT SDK done. Verify with: python -c 'import flexiv_rt; print(flexiv_rt)'"
+
+    # Install Flexiv NRT Python SDK from PyPI
+    echo ""
+    echo "[flexiv] Installing NRT SDK (flexivrdk)..."
+    uv pip install "flexivrdk==1.8.0"
+    echo "[flexiv] NRT SDK done. Verify with: python -c 'import flexivrdk; print(flexivrdk)'"
 }
 
 # ── Hardware module: Pico4 ────────────────────────────────────────────────────
@@ -428,6 +434,18 @@ PY
     fi
 
     echo "[xense] Done. Verify with: python -c 'import xensesdk; print(xensesdk)'"
+}
+
+# ── Hardware module: Franka Research 3 ───────────────────────────────────────
+
+install_franka() {
+    echo ""
+    echo "══════════════════════════════════════════"
+    echo " Franka Research 3 (pylibfranka)  →  websockets"
+    echo "══════════════════════════════════════════"
+
+    uv pip install "websockets>=12.0"
+    echo "[franka] Done. Verify with: python -c 'import websockets; print(websockets.__version__)'"
 }
 
 # ── Hardware module: SpaceMouse ───────────────────────────────────────────────
@@ -570,6 +588,7 @@ elif [[ "$1" == "--install" ]]; then
 
     install_arx5      || echo "[WARN] arx5 installation skipped or failed (see above)"
     install_flexiv    || echo "[WARN] flexiv installation skipped or failed (see above)"
+    install_franka    || echo "[WARN] franka installation skipped or failed (see above)"
     ( install_pico4 ) || echo "[WARN] pico4 installation skipped or failed (see above)"
     install_xense     || echo "[WARN] xense installation skipped or failed (see above)"
     install_spacemouse || echo "[WARN] spacemouse installation skipped or failed (see above)"
