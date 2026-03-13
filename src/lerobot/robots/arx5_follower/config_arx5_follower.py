@@ -56,7 +56,9 @@ class ARX5FollowerConfig(RobotConfig):
 
     # Control parameters
     controller_dt: float = 0.005  # 200Hz low-level control frequency
-    interpolation_controller_dt: float = 0.02  # 50Hz high-level interpolation control frequency
+    interpolation_controller_dt: float = (
+        0.02  # 50Hz high-level interpolation control frequency
+    )
 
     # default control mode is teach mode
     control_mode: ARX5ControlMode = ARX5ControlMode.CARTESIAN_CONTROL
@@ -79,17 +81,22 @@ class ARX5FollowerConfig(RobotConfig):
         default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     )
 
-    # default start position is [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.0]
-    # modified cartesian start position is [0.0, 0.967, 1.290, -0.970, 0.0, 0.0, 0.0]
-    if control_mode == ARX5ControlMode.CARTESIAN_CONTROL:
-        start_position = [0.0, 0.967, 1.290, -0.970, 0.0, 0.0, 0.0]
-    else:
-        start_position = [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.0]
+    # Start position; set in __post_init__ from control_mode.
+    start_position: list[float] = field(
+        default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    )
 
     # Camera configuration
     cameras: dict[str, CameraConfig] = field(default_factory=lambda: {})
 
     def __post_init__(self):
+        # Set start_position from control_mode
+        # default start position is [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.0]
+        # modified cartesian start position is [0.0, 0.967, 1.290, -0.970, 0.0, 0.0, 0.0]
+        if self.control_mode == ARX5ControlMode.CARTESIAN_CONTROL:
+            self.start_position = [0.0, 0.967, 1.290, -0.970, 0.0, 0.0, 0.0]
+        else:
+            self.start_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         # Default camera configuration if not provided
         # if not self.cameras:
         #     self.cameras = {
@@ -106,4 +113,3 @@ class ARX5FollowerConfig(RobotConfig):
         #             height=480,
         #         ),
         #     }
-        pass

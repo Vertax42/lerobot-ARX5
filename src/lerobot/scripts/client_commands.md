@@ -31,7 +31,7 @@ lerobot-teleoperate \
     --robot.control_mode=joint_control \
     --robot.enable_tactile_sensors=false \
     --teleop.type=trlc_leader \
-    --teleop.port="/dev/ttyACM0" \
+    --teleop.port="/dev/ttyTRLC0" \
     --teleop.joint_signs "[1,1,1,1,1,1]" \
     --teleop.start_joints "[0.0,0.0,0.0,0.0,0.0,0.0]" \
     --fps=30 \
@@ -46,7 +46,7 @@ lerobot-teleoperate \
     --robot.n_motors=6 \
     --robot.use_gripper=true \
     --teleop.type=trlc_leader \
-    --teleop.port="/dev/ttyACM0" \
+    --teleop.port="/dev/ttyTRLC0" \
     --teleop.joint_signs "[1,1,1,1,1,1]" \
     --teleop.start_joints "[0.0,0.0,0.0,0.0,0.0,0.0]" \
     --fps=30 \
@@ -118,7 +118,7 @@ lerobot-record \
     --display_data=true
 ```
 
-## Flexiv Rizon4 Robot with Flare Gripper lerobot-record by Beitong Gamepad command 
+## Flexiv Rizon4 Robot with Flare Gripper lerobot-record by Beitong Gamepad command
 
 ```python
 lerobot-record \
