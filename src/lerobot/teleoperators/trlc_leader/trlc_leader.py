@@ -160,7 +160,7 @@ class TRLCLeader(Teleoperator):
         for motor, val in raw.items():
             if motor == "gripper":
                 gripper_range = self.config.gripper_open_pos - self.config.gripper_closed_pos
-                action["gripper.pos"] = 1.0 - (val - self.config.gripper_closed_pos) / gripper_range
+                action["gripper.pos"] = np.clip(1.0 - (val - self.config.gripper_closed_pos) / gripper_range, 0.0, 1.0)
             else:
                 #? gello 的位置校准是以pi/2为单位的
                 # # Search in range ±8π with intervals of π/2 (same as gello_get_offset.py)
