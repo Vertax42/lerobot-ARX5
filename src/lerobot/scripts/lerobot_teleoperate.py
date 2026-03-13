@@ -29,6 +29,85 @@ lerobot-teleoperate \
     --display_data=true
 ```
 
+Example (ARX5 single-arm, teach mode data collection):
+
+```shell
+lerobot-teleoperate \
+    --robot.type=arx5_follower \
+    --robot.arm_port=can0 \
+    --robot.id=right \
+    --teleop.type=btgamepad \
+    --teleop.id=right \
+    --fps=30 \
+    --display_data=true
+```
+
+Example (Bimanual ARX5, teach mode data collection):
+
+```shell
+lerobot-teleoperate \
+    --robot.type=bi_arx5 \
+    --robot.left_config.arm_port=can0 \
+    --robot.right_config.arm_port=can1 \
+    --robot.id=bimanual \
+    --teleop.type=btgamepad \
+    --teleop.id=bimanual \
+    --fps=30
+```
+
+Example (Flexiv Rizon4 + Pico4):
+
+```shell
+lerobot-teleoperate \
+    --robot.type=flexiv_rizon4 \
+    --robot.robot_ip=192.168.2.100 \
+    --robot.local_ip=192.168.2.1 \
+    --robot.id=right \
+    --teleop.type=pico4 \
+    --teleop.id=right \
+    --fps=60
+```
+
+Example (Flexiv Rizon4 + SpaceMouse):
+
+```shell
+lerobot-teleoperate \
+    --robot.type=flexiv_rizon4 \
+    --robot.robot_ip=192.168.2.100 \
+    --robot.local_ip=192.168.2.1 \
+    --robot.id=right \
+    --teleop.type=spacemouse \
+    --teleop.id=right \
+    --fps=30 \
+    --display_data=true
+```
+
+Example (Flexiv Rizon4 + Vive Tracker):
+
+```shell
+lerobot-teleoperate \
+    --robot.type=flexiv_rizon4 \
+    --robot.robot_ip=192.168.2.100 \
+    --robot.local_ip=192.168.2.1 \
+    --robot.id=right \
+    --teleop.type=vive_tracker \
+    --teleop.id=right \
+    --fps=60
+```
+
+Example (Flexiv Rizon4 + Xense Flare teleoperator):
+
+```shell
+lerobot-teleoperate \
+    --robot.type=flexiv_rizon4 \
+    --robot.robot_ip=192.168.2.100 \
+    --robot.local_ip=192.168.2.1 \
+    --robot.id=right \
+    --teleop.type=xense_flare \
+    --teleop.id=right \
+    --fps=60
+```
+
 Example (Flexiv Rizon4 RT + Pico4):
 
 ```shell
@@ -41,6 +120,20 @@ lerobot-teleoperate \
     --teleop.id=right \
     --fps=60 \
     --debug_timing=true
+```
+
+Example (Flexiv Rizon4 RT + SpaceMouse):
+
+```shell
+lerobot-teleoperate \
+    --robot.type=flexiv_rizon4_rt \
+    --robot.robot_ip=192.168.2.100 \
+    --robot.local_ip=192.168.2.1 \
+    --robot.id=right \
+    --teleop.type=spacemouse \
+    --teleop.id=right \
+    --fps=30 \
+    --display_data=true
 ```
 
 Example (Bimanual Flexiv Rizon4 RT + Bi-Pico4):
@@ -58,14 +151,26 @@ lerobot-teleoperate \
     --fps=60
 ```
 
-Example (XenseFlare + SpaceMouse):
+Example (Xense Flare gripper, data collection — no teleoperator needed):
 
 ```shell
 lerobot-teleoperate \
     --robot.type=xense_flare \
     --robot.id=right \
-    --teleop.type=spacemouse \
+    --teleop.type=btgamepad \
     --teleop.id=right \
+    --fps=30 \
+    --display_data=true
+```
+
+Example (Xense Multisensor, data collection — no teleoperator needed):
+
+```shell
+lerobot-teleoperate \
+    --robot.type=xense_multisensor \
+    --robot.id=sensor \
+    --teleop.type=btgamepad \
+    --teleop.id=sensor \
     --fps=30 \
     --display_data=true
 ```
