@@ -517,3 +517,27 @@ lerobot-record \
     --dataset.push_to_hub=false \
     --display_data=true
 ```
+
+## ARX5 Robot lerobot-record command (use trlc_leader teleop)
+
+```bash
+lerobot-record \
+    --robot.type=arx5_follower \
+    --robot.control_mode=joint_control \
+    --robot.arm_port=can3 \
+    --teleop.type=trlc_leader \
+    --teleop.port="/dev/ttyTRLC0" \
+    --teleop.joint_signs "[1,1,1,1,1,1]" \
+    --teleop.start_joints "[0.0,0.0,0.0,0.0,0.0,0.0]" \
+    --dataset.repo_id=Vertax/arx5_trlc_pick_and_place \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="pick up the cube and place it in the box" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=60 \
+    --dataset.reset_time_s=15 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
+    --resume=false \
+    --dataset.push_to_hub=false \
+    --display_data=true
+```

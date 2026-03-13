@@ -55,7 +55,7 @@ from lerobot.processor.rename_processor import rename_stats
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
-    # arx5_follower,
+    arx5_follower,  # noqa: F401
     # bi_arx5,
     flexiv_rizon4,  # noqa: F401
     make_robot_from_config,
@@ -66,6 +66,7 @@ from lerobot.teleoperators import (  # noqa: F401
     pico4,
     gamepad,
     btgamepad,
+    trlc_leader,
     Teleoperator,
     TeleoperatorConfig,
     make_teleoperator_from_config,
@@ -968,6 +969,138 @@ def record_loop(
         timestamp = time.perf_counter() - start_episode_t
 
 
+@safe_stop_image_writer
+def arx5_trlc_record_loop(
+    robot: Robot,
+    teleop: Teleoperator | None,
+    events: dict,
+    fps: int,
+    teleop_action_processor: RobotProcessorPipeline[
+        tuple[RobotAction, RobotObservation], RobotAction
+    ],
+    robot_action_processor: RobotProcessorPipeline[
+        tuple[RobotAction, RobotObservation], RobotAction
+    ],
+    robot_observation_processor: RobotProcessorPipeline[
+        RobotObservation, RobotObservation
+    ],
+    dataset: LeRobotDataset | None = None,
+    policy: PreTrainedPolicy | None = None,
+    preprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]] | None = None,
+    postprocessor: PolicyProcessorPipeline[PolicyAction, PolicyAction] | None = None,
+    control_time_s: int | None = None,
+    single_task: str | None = None,
+    display_data: bool = False,
+):
+    """
+    Record loop for ARX5 follower robot teleoperated with TRLC leader, with optional policy inference.
+
+    Teleop mode:
+    - TRLC action keys are filtered to match robot.action_features.
+    - Raw gripper value is converted: gripper_cmd = (1 - raw_gripper) * 1.57.
+    - Observation and the actually sent action are recorded each frame (no action shifting).
+
+    Policy mode:
+    - Standard policy inference via predict_action().
+    - Observation and sent action are recorded each frame (no action shifting).
+    """
+    if dataset is not None and dataset.fps != fps:
+        raise ValueError(
+            f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
+        )
+
+    if policy is not None and preprocessor is not None and postprocessor is not None:
+        policy.reset()
+        preprocessor.reset()
+        postprocessor.reset()
+
+    robot_action_keys = set(robot.action_features.keys())
+    warned_unmapped_keys = False
+
+    timestamp = 0
+    start_episode_t = time.perf_counter()
+
+    while timestamp < control_time_s:
+        loop_start = time.perf_counter()
+
+        if events["exit_early"]:
+            events["exit_early"] = False
+            break
+
+        if events["rerecord_episode"]:
+            logger.info("Re-record episode requested, exiting record loop early")
+            break
+
+        obs = robot.get_observation()
+        obs_processed = robot_observation_processor(obs)
+
+        if dataset is not None:
+            observation_frame = build_dataset_frame(
+                dataset.features, obs_processed, prefix=OBS_STR
+            )
+
+        if policy is not None and preprocessor is not None and postprocessor is not None:
+            action_values = predict_action(
+                observation=observation_frame,
+                policy=policy,
+                device=get_safe_torch_device(policy.config.device),
+                preprocessor=preprocessor,
+                postprocessor=postprocessor,
+                use_amp=policy.config.use_amp,
+                task=single_task,
+                robot_type=robot.robot_type,
+            )
+            robot_action_to_send = robot_action_processor(
+                (make_robot_action(action_values, dataset.features), obs)
+            )
+        elif teleop is not None:
+            raw_action = teleop.get_action()
+            for k in list(raw_action.keys()):
+                if "gripper" in k:
+                    raw_action[k] = (1 - raw_action[k]) * 1.57
+
+            teleop_action = teleop_action_processor((raw_action, obs))
+            filtered_action = {k: v for k, v in teleop_action.items() if k in robot_action_keys}
+
+            if len(filtered_action) != len(teleop_action) and not warned_unmapped_keys:
+                dropped = sorted(set(teleop_action) - robot_action_keys)
+                logger.warn(
+                    f"TRLC action keys not present in ARX5 action schema, dropping: {dropped}"
+                )
+                warned_unmapped_keys = True
+
+            if not filtered_action:
+                raise ValueError(
+                    "No overlapping action keys between TRLC leader output and ARX5 action schema. "
+                    "Check robot.control_mode (TRLC requires joint-style keys like joint_i.pos, gripper.pos)."
+                )
+
+            robot_action_to_send = robot_action_processor((filtered_action, obs))
+        else:
+            logger.warning("No policy or teleop provided, skipping action.")
+            dt_s = time.perf_counter() - loop_start
+            busy_wait(1 / fps - dt_s)
+            timestamp = time.perf_counter() - start_episode_t
+            continue
+
+        sent_action = robot.send_action(robot_action_to_send)
+
+        if dataset is not None:
+            action_frame = build_dataset_frame(
+                dataset.features, sent_action, prefix=ACTION
+            )
+            frame = {**observation_frame, **action_frame, "task": single_task}
+            dataset.add_frame(frame)
+
+        if display_data:
+            log_rerun_data(observation=obs_processed, action=robot_action_to_send)
+
+        dt_s = time.perf_counter() - loop_start
+        busy_wait(1 / fps - dt_s)
+
+        timestamp = time.perf_counter() - start_episode_t
+
+
 @parser.wrap()
 def record(cfg: RecordConfig) -> LeRobotDataset:
     logger.info(pformat(asdict(cfg)))
@@ -984,7 +1117,8 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     )
 
     if (
-        cfg.teleop.type in ["pico4", "btgamepad"]
+        cfg.teleop is not None
+        and cfg.teleop.type in ["pico4", "btgamepad"]
         and cfg.robot.type in ["flexiv_rizon4", "pylibfranka_research3"]
     ):
         dataset_features = combine_feature_dicts(
@@ -1093,7 +1227,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         logger.info(f"Start EEF pose: {robot.get_current_tcp_pose_quat()}")
     else:
         robot.connect()
-        logger.info(f"Start EEF pose: {robot.get_current_tcp_pose_quat()}")
+        # logger.info(f"Start EEF pose: {robot.get_current_tcp_pose_quat()}")
 
     if teleop is not None:
         if cfg.teleop.type == "pico4" and cfg.robot.type == "flexiv_rizon4":
@@ -1176,6 +1310,23 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         single_task=cfg.dataset.single_task,
                         display_data=cfg.display_data,
                     )
+                elif cfg.robot.type == "arx5_follower":
+                    arx5_trlc_record_loop(
+                        robot=robot,
+                        teleop=teleop,
+                        events=events,
+                        fps=cfg.dataset.fps,
+                        teleop_action_processor=teleop_action_processor,
+                        robot_action_processor=robot_action_processor,
+                        robot_observation_processor=robot_observation_processor,
+                        dataset=dataset,
+                        policy=policy,
+                        preprocessor=preprocessor,
+                        postprocessor=postprocessor,
+                        control_time_s=cfg.dataset.episode_time_s,
+                        single_task=cfg.dataset.single_task,
+                        display_data=cfg.display_data,
+                    )
                 else:
                     record_loop(
                         robot=robot,
@@ -1238,6 +1389,19 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                             events=events,
                             fps=cfg.dataset.fps,
                             teleop=teleop,
+                            control_time_s=cfg.dataset.reset_time_s,
+                            single_task=cfg.dataset.single_task,
+                            display_data=cfg.display_data,
+                        )
+                    elif cfg.robot.type == "arx5_follower":
+                        arx5_trlc_record_loop(
+                            robot=robot,
+                            teleop=teleop,
+                            events=events,
+                            fps=cfg.dataset.fps,
+                            teleop_action_processor=teleop_action_processor,
+                            robot_action_processor=robot_action_processor,
+                            robot_observation_processor=robot_observation_processor,
                             control_time_s=cfg.dataset.reset_time_s,
                             single_task=cfg.dataset.single_task,
                             display_data=cfg.display_data,
