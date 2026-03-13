@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 XenseRobotics Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,7 +40,6 @@ lerobot-teleoperate \
     --teleop.type=pico4 \
     --teleop.id=right \
     --fps=60 \
-    --no_obs=true \
     --debug_timing=true
 ```
 
@@ -56,8 +55,7 @@ lerobot-teleoperate \
     --robot.id=bimanual \
     --teleop.type=bi_pico4 \
     --teleop.id=bimanual \
-    --fps=60 \
-    --no_obs=true
+    --fps=60
 ```
 
 Example (XenseFlare + SpaceMouse):
@@ -74,11 +72,12 @@ lerobot-teleoperate \
 
 """
 
-import logging
 import time
+import traceback
 from dataclasses import asdict, dataclass
 from pprint import pformat
 
+import numpy as np
 import rerun as rr
 
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
@@ -138,9 +137,12 @@ from lerobot.teleoperators import (  # noqa: F401
     xense_flare,
 )
 from lerobot.utils.import_utils import register_third_party_plugins
-from lerobot.utils.robot_utils import precise_sleep
-from lerobot.utils.utils import init_logging, move_cursor_up
+from lerobot.utils.robot_utils import get_logger, precise_sleep, rotation_6d_to_quaternion
+from lerobot.utils.utils import move_cursor_up
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
+
+
+logger = get_logger("Teleoperate")
 
 
 @dataclass
@@ -159,11 +161,62 @@ class TeleoperateConfig:
     display_port: int | None = None
     # Whether to display compressed images in Rerun
     display_compressed_images: bool = False
-    # Skip robot.get_observation() each loop tick for maximum teleop frequency.
-    # Disables display_data and observation-dependent features.
-    no_obs: bool = False
     # Print per-step timing breakdown instead of action values.
     debug_timing: bool = False
+    # Dryrun mode: print actions but do not send to robot
+    dryrun: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Helper utilities
+# ---------------------------------------------------------------------------
+
+
+def _safe_disconnect(obj, name: str) -> None:
+    if obj is None:
+        return
+    try:
+        if obj.is_connected:
+            obj.disconnect()
+            logger.info(f"{name} disconnected")
+    except Exception as e:
+        logger.error(f"Error disconnecting {name}: {e}\n{traceback.format_exc()}")
+
+
+def _cleanup(robot, teleop, display_data: bool) -> None:
+    if display_data:
+        try:
+            rr.rerun_shutdown()
+        except Exception as e:
+            logger.warn(f"Error shutting down rerun: {e}")
+    _safe_disconnect(teleop, teleop.__class__.__name__ if teleop else "teleop")
+    _safe_disconnect(robot, robot.__class__.__name__ if robot else "robot")
+
+
+def _check_cartesian_mode(robot, teleop_name: str) -> None:
+    from lerobot.robots.flexiv_rizon4.config_flexiv_rizon4 import ControlMode
+
+    if robot.config.control_mode != ControlMode.CARTESIAN_MOTION_FORCE:
+        raise ValueError(
+            f"{teleop_name} requires CARTESIAN_MOTION_FORCE mode, "
+            f"got {robot.config.control_mode}"
+        )
+
+
+def _print_obs_state(obs: dict, display_len: int, status: str) -> None:
+    """Print scalar observation values with a status tag (used during reset/moving)."""
+    scalar_keys = [k for k, v in obs.items() if not isinstance(v, np.ndarray)]
+    col = max((len(k) for k in scalar_keys), default=display_len)
+    print("\n" + "-" * (col + 18))
+    print(f"{'NAME':<{col}} | {'OBS':>10}  {status}")
+    for k in scalar_keys:
+        print(f"{k:<{col}} | {float(obs[k]):>10.4f}")
+    move_cursor_up(len(scalar_keys) + 5)
+
+
+# ---------------------------------------------------------------------------
+# Generic teleop loop (upstream)
+# ---------------------------------------------------------------------------
 
 
 def teleop_loop(
@@ -176,7 +229,6 @@ def teleop_loop(
     display_data: bool = False,
     duration: float | None = None,
     display_compressed_images: bool = False,
-    no_obs: bool = False,
     debug_timing: bool = False,
 ):
     """
@@ -194,27 +246,18 @@ def teleop_loop(
         teleop_action_processor: An optional pipeline to process raw actions from the teleoperator.
         robot_action_processor: An optional pipeline to process actions before they are sent to the robot.
         robot_observation_processor: An optional pipeline to process raw observations from the robot.
-        no_obs: If True, skip robot.get_observation() each loop tick for higher frequency teleop.
-                Disables display_data automatically.
         debug_timing: If True, print per-step timing breakdown instead of action table.
     """
-    # no_obs mode disables display_data since there's no observation to display
-    if no_obs:
-        display_data = False
-
     display_len = max(len(key) for key in robot.action_features)
     start = time.perf_counter()
 
     while True:
         loop_start = time.perf_counter()
 
-        # Get robot observation (skip if no_obs mode for maximum frequency)
-        obs = None
-        obs_time_ms = 0.0
-        if not no_obs:
-            obs_t0 = time.perf_counter()
-            obs = robot.get_observation()
-            obs_time_ms = (time.perf_counter() - obs_t0) * 1e3
+        # Get robot observation
+        obs_t0 = time.perf_counter()
+        obs = robot.get_observation()
+        obs_time_ms = (time.perf_counter() - obs_t0) * 1e3
 
         if robot.name == "unitree_g1":
             teleop.send_feedback(obs)
@@ -276,15 +319,10 @@ def teleop_loop(
             return
 
 
+
 @parser.wrap()
 def teleoperate(cfg: TeleoperateConfig):
-    init_logging()
-    logging.info(pformat(asdict(cfg)))
-
-    # no_obs overrides display_data
-    if cfg.no_obs and cfg.display_data:
-        logging.warning("no_obs=True: disabling display_data")
-        cfg.display_data = False
+    logger.info(pformat(asdict(cfg)))
 
     if cfg.display_data:
         init_rerun(session_name="teleoperation", ip=cfg.display_ip, port=cfg.display_port)
@@ -294,34 +332,34 @@ def teleoperate(cfg: TeleoperateConfig):
         else cfg.display_compressed_images
     )
 
-    teleop = make_teleoperator_from_config(cfg.teleop)
-    robot = make_robot_from_config(cfg.robot)
-    teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
-
-    teleop.connect()
-    robot.connect()
+    robot = None
+    teleop = None
 
     try:
-        teleop_loop(
-            teleop=teleop,
-            robot=robot,
-            fps=cfg.fps,
-            display_data=cfg.display_data,
-            duration=cfg.teleop_time_s,
-            teleop_action_processor=teleop_action_processor,
-            robot_action_processor=robot_action_processor,
-            robot_observation_processor=robot_observation_processor,
-            display_compressed_images=display_compressed_images,
-            no_obs=cfg.no_obs,
-            debug_timing=cfg.debug_timing,
-        )
-    except KeyboardInterrupt:
-        pass
+        teleop = make_teleoperator_from_config(cfg.teleop)
+        robot = make_robot_from_config(cfg.robot)
+        teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
+        teleop.connect()
+        robot.connect()
+        try:
+            teleop_loop(
+                teleop=teleop,
+                robot=robot,
+                fps=cfg.fps,
+                display_data=cfg.display_data,
+                duration=cfg.teleop_time_s,
+                teleop_action_processor=teleop_action_processor,
+                robot_action_processor=robot_action_processor,
+                robot_observation_processor=robot_observation_processor,
+                display_compressed_images=display_compressed_images,
+                debug_timing=cfg.debug_timing,
+            )
+        except KeyboardInterrupt:
+            pass
+    except Exception as e:
+        logger.error(f"Error in teleoperation: {e}\n{traceback.format_exc()}")
     finally:
-        if cfg.display_data:
-            rr.rerun_shutdown()
-        teleop.disconnect()
-        robot.disconnect()
+        _cleanup(robot, teleop, cfg.display_data)
 
 
 def main():
