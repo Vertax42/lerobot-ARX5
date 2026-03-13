@@ -1369,14 +1369,23 @@ def xense_multisensor_teleop_loop(
 
 
 
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
+
+
 @parser.wrap()
 def teleoperate(cfg: TeleoperateConfig):
     logger.info(pformat(asdict(cfg)))
+    if cfg.dryrun:
+        logger.warn("DRYRUN MODE ENABLED - Actions will be printed but NOT sent to robot")
 
     if cfg.display_data:
         teleop_name = cfg.teleop.type if cfg.teleop else "none"
         session_name = f"teleop_{cfg.robot.type}_{teleop_name}"
         init_rerun(session_name=session_name, ip=cfg.display_ip, port=cfg.display_port)
+
     display_compressed_images = (
         True
         if (cfg.display_data and cfg.display_ip is not None and cfg.display_port is not None)
@@ -1387,26 +1396,297 @@ def teleoperate(cfg: TeleoperateConfig):
     teleop = None
 
     try:
-        teleop = make_teleoperator_from_config(cfg.teleop)
-        robot = make_robot_from_config(cfg.robot)
-        teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
-        teleop.connect()
-        robot.connect()
-        try:
-            teleop_loop(
-                teleop=teleop,
-                robot=robot,
-                fps=cfg.fps,
-                display_data=cfg.display_data,
-                duration=cfg.teleop_time_s,
-                teleop_action_processor=teleop_action_processor,
-                robot_action_processor=robot_action_processor,
-                robot_observation_processor=robot_observation_processor,
-                display_compressed_images=display_compressed_images,
-                debug_timing=cfg.debug_timing,
-            )
-        except KeyboardInterrupt:
-            pass
+        # --- xense_flare (robot-only, data collection) ---
+        if cfg.robot.type == "xense_flare":
+            logger.info("Detected Xense Flare data collection gripper")
+            robot = make_robot_from_config(cfg.robot)
+            robot.connect()
+            logger.info(f"Xense Flare connected — MAC: {robot.config.mac_addr}")
+
+            _, _, robot_observation_processor = make_default_processors()
+            try:
+                xense_flare_teleop_loop(
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    robot_observation_processor=robot_observation_processor,
+                    debug_timing=cfg.debug_timing,
+                )
+            except KeyboardInterrupt:
+                logger.info("Data collection interrupted by user")
+
+        # --- xense_multisensor (robot-only, data collection) ---
+        elif cfg.robot.type == "xense_multisensor":
+            logger.info("Detected Xense Multisensor data collection device")
+            robot = make_robot_from_config(cfg.robot)
+            robot.connect()
+            logger.info(f"Xense Multisensor connected — cameras: {list(robot.cameras.keys())}")
+
+            _, _, robot_observation_processor = make_default_processors()
+            try:
+                xense_multisensor_teleop_loop(
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    robot_observation_processor=robot_observation_processor,
+                    debug_timing=cfg.debug_timing,
+                )
+            except KeyboardInterrupt:
+                logger.info("Data collection interrupted by user")
+
+        # --- arx5_follower / bi_arx5 + spacemouse ---
+        elif cfg.robot.type in ("bi_arx5", "arx5_follower") and cfg.teleop.type == "spacemouse":
+            mode = "bimanual" if cfg.robot.type == "bi_arx5" else "single-arm"
+            logger.info(f"Detected ARX5 ({mode}) + SpaceMouse")
+            robot = make_robot_from_config(cfg.robot)
+            robot.connect()
+            teleop = make_teleoperator_from_config(cfg.teleop)
+            logger.info(f"Start EEF pose: {robot.get_start_eef_pose()}")
+            teleop.connect(start_eef_pose=robot.get_start_eef_pose())
+            teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
+            try:
+                spacemouse_teleop_loop(
+                    teleop=teleop,
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    teleop_action_processor=teleop_action_processor,
+                    robot_action_processor=robot_action_processor,
+                    robot_observation_processor=robot_observation_processor,
+                    dryrun=cfg.dryrun,
+                    debug_timing=cfg.debug_timing,
+                )
+            except KeyboardInterrupt:
+                pass
+
+        # --- arx5_follower / bi_arx5 (other teleops) ---
+        elif cfg.robot.type in ("bi_arx5", "arx5_follower"):
+            mode = "bimanual" if cfg.robot.type == "bi_arx5" else "single-arm"
+            logger.info(f"Detected ARX5 ({mode}), using ARX5 teleop loop")
+            robot = make_robot_from_config(cfg.robot)
+            robot.connect()
+            teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
+            try:
+                arx5_teleop_loop(
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    teleop_action_processor=teleop_action_processor,
+                    robot_action_processor=robot_action_processor,
+                    robot_observation_processor=robot_observation_processor,
+                    debug_timing=cfg.debug_timing,
+                )
+            except KeyboardInterrupt:
+                pass
+
+        # --- flexiv_rizon4 + pico4 ---
+        elif cfg.robot.type == "flexiv_rizon4" and cfg.teleop.type == "pico4":
+            logger.info("Detected Flexiv Rizon4 + Pico4")
+            robot = make_robot_from_config(cfg.robot)
+            _check_cartesian_mode(robot, "Pico4")
+            robot.connect(go_to_start=True)
+            logger.info(f"Start EEF pose: {robot.get_current_tcp_pose_quat()}")
+            teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
+            teleop = make_teleoperator_from_config(cfg.teleop)
+            teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
+            try:
+                pico4_teleop_loop(
+                    teleop=teleop,
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    teleop_action_processor=teleop_action_processor,
+                    robot_action_processor=robot_action_processor,
+                    robot_observation_processor=robot_observation_processor,
+                    dryrun=cfg.dryrun,
+                )
+            except KeyboardInterrupt:
+                logger.info("Teleoperation interrupted by user")
+
+        # --- flexiv_rizon4 + spacemouse ---
+        elif cfg.robot.type == "flexiv_rizon4" and cfg.teleop.type == "spacemouse":
+            logger.info("Detected Flexiv Rizon4 + SpaceMouse")
+            robot = make_robot_from_config(cfg.robot)
+            _check_cartesian_mode(robot, "SpaceMouse")
+            robot.connect(go_to_start=True)
+            start_obs = robot.get_observation()
+            tcp_keys = [k for k in start_obs if k.startswith("tcp.")]
+            logger.info("Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys))
+            teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
+            teleop = make_teleoperator_from_config(cfg.teleop)
+            teleop.connect(current_tcp_pose_euler=robot.get_current_tcp_pose_euler())
+            try:
+                spacemouse_teleop_loop(
+                    teleop=teleop,
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    teleop_action_processor=teleop_action_processor,
+                    robot_action_processor=robot_action_processor,
+                    robot_observation_processor=robot_observation_processor,
+                    dryrun=cfg.dryrun,
+                    debug_timing=cfg.debug_timing,
+                )
+            except KeyboardInterrupt:
+                logger.info("Teleoperation interrupted by user")
+
+        # --- flexiv_rizon4 + vive_tracker ---
+        elif cfg.robot.type == "flexiv_rizon4" and cfg.teleop.type == "vive_tracker":
+            logger.info("Detected Flexiv Rizon4 + Vive Tracker")
+            robot = make_robot_from_config(cfg.robot)
+            _check_cartesian_mode(robot, "Vive Tracker")
+            robot.connect(go_to_start=False)
+            logger.info(f"Start TCP pose (quat): {robot.get_current_tcp_pose_quat()}")
+            teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
+            teleop = make_teleoperator_from_config(cfg.teleop)
+            current_tcp_pose = robot.get_current_tcp_pose_quat()[:7]
+            teleop.connect(current_tcp_pose_quat=current_tcp_pose)
+            try:
+                vive_tracker_teleop_loop(
+                    teleop=teleop,
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    teleop_action_processor=teleop_action_processor,
+                    robot_action_processor=robot_action_processor,
+                    robot_observation_processor=robot_observation_processor,
+                    dryrun=cfg.dryrun,
+                )
+            except KeyboardInterrupt:
+                logger.info("Teleoperation interrupted by user")
+
+        # --- flexiv_rizon4 + xense_flare (teleop) ---
+        elif cfg.robot.type == "flexiv_rizon4" and cfg.teleop.type == "xense_flare":
+            logger.info("Detected Flexiv Rizon4 + Xense Flare teleoperator")
+            robot = make_robot_from_config(cfg.robot)
+            _check_cartesian_mode(robot, "Xense Flare")
+            robot.connect(go_to_start=False)
+            logger.info(f"Start TCP pose (quat): {robot.get_current_tcp_pose_quat()}")
+            teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
+            teleop = make_teleoperator_from_config(cfg.teleop)
+            current_tcp_pose = robot.get_current_tcp_pose_quat()[:7]
+            teleop.connect(current_tcp_pose_quat=current_tcp_pose)
+            try:
+                xense_flare_flexiv_teleop_loop(
+                    teleop=teleop,
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    teleop_action_processor=teleop_action_processor,
+                    robot_action_processor=robot_action_processor,
+                    robot_observation_processor=robot_observation_processor,
+                    dryrun=cfg.dryrun,
+                    debug_timing=cfg.debug_timing,
+                )
+            except KeyboardInterrupt:
+                logger.info("Teleoperation interrupted by user")
+
+        # --- flexiv_rizon4_rt + spacemouse ---
+        elif cfg.robot.type == "flexiv_rizon4_rt" and cfg.teleop.type == "spacemouse":
+            logger.info("Detected Flexiv Rizon4 RT + SpaceMouse")
+            robot = make_robot_from_config(cfg.robot)
+            robot.connect(go_to_start=True)
+            start_obs = robot.get_observation()
+            tcp_keys = [k for k in start_obs if k.startswith("tcp.")]
+            logger.info("Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys))
+            teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
+            teleop = make_teleoperator_from_config(cfg.teleop)
+            teleop.connect(current_tcp_pose_euler=robot.get_current_tcp_pose_euler())
+            try:
+                spacemouse_teleop_loop(
+                    teleop=teleop,
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    teleop_action_processor=teleop_action_processor,
+                    robot_action_processor=robot_action_processor,
+                    robot_observation_processor=robot_observation_processor,
+                    dryrun=cfg.dryrun,
+                    debug_timing=cfg.debug_timing,
+                )
+            except KeyboardInterrupt:
+                logger.info("Teleoperation interrupted by user")
+
+        # --- flexiv_rizon4_rt + pico4 ---
+        elif cfg.robot.type == "flexiv_rizon4_rt" and cfg.teleop.type == "pico4":
+            logger.info("Detected Flexiv Rizon4 RT + Pico4")
+            robot = make_robot_from_config(cfg.robot)
+            robot.connect(go_to_start=True)
+            start_obs = robot.get_observation()
+            tcp_keys = [k for k in start_obs if k.startswith("tcp.")]
+            logger.info("Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys))
+            teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
+            teleop = make_teleoperator_from_config(cfg.teleop)
+            teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
+            try:
+                pico4_teleop_loop(
+                    teleop=teleop,
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    teleop_action_processor=teleop_action_processor,
+                    robot_action_processor=robot_action_processor,
+                    robot_observation_processor=robot_observation_processor,
+                    dryrun=cfg.dryrun,
+                )
+            except KeyboardInterrupt:
+                logger.info("Teleoperation interrupted by user")
+
+        # --- bi_flexiv_rizon4_rt + bi_pico4 ---
+        elif cfg.robot.type == "bi_flexiv_rizon4_rt" and cfg.teleop.type == "bi_pico4":
+            logger.info("Detected BiFlexivRizon4RT + BiPico4")
+            robot = make_robot_from_config(cfg.robot)
+            robot.connect(go_to_start=True)
+            left_pose, right_pose = robot.get_current_tcp_pose_quat()
+            logger.info(f"Left start pose:  {left_pose}")
+            logger.info(f"Right start pose: {right_pose}")
+            teleop = make_teleoperator_from_config(cfg.teleop)
+            teleop.connect(left_tcp_pose_quat=left_pose, right_tcp_pose_quat=right_pose)
+            try:
+                bi_pico4_teleop_loop(
+                    teleop=teleop,
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    dryrun=cfg.dryrun,
+                )
+            except KeyboardInterrupt:
+                logger.info("Teleoperation interrupted by user")
+
+        # --- generic fallback ---
+        else:
+            teleop = make_teleoperator_from_config(cfg.teleop)
+            robot = make_robot_from_config(cfg.robot)
+            teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
+            teleop.connect()
+            robot.connect()
+            try:
+                teleop_loop(
+                    teleop=teleop,
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    teleop_action_processor=teleop_action_processor,
+                    robot_action_processor=robot_action_processor,
+                    robot_observation_processor=robot_observation_processor,
+                    display_compressed_images=display_compressed_images,
+                    debug_timing=cfg.debug_timing,
+                )
+            except KeyboardInterrupt:
+                pass
+
     except Exception as e:
         logger.error(f"Error in teleoperation: {e}\n{traceback.format_exc()}")
     finally:
