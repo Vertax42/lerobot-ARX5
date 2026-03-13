@@ -265,8 +265,8 @@ def mock_robot_teleop_loop(
                 f"{'timing':<{display_len}} | {'loop':>8} | {loop_s * 1e3:>6.2f}ms | {obs_dt_ms:>6.2f}ms"
             )
 
-            # Redraw full panel each frame to avoid cursor-up corruption with logger output.
-            print("\033[H\033[J" + "\n".join(panel_lines), end="", flush=True)
+            print("\n".join(panel_lines), flush=True)
+            move_cursor_up(len(panel_lines))
 
         if debug_timing and not display_data:
             dryrun_tag = " | DRYRUN" if dryrun else ""
@@ -663,7 +663,8 @@ def arx5_trlc_leader_teleop_loop(
             panel_lines.append(
                 f"{'timing':<{display_len}} | {'loop':>8} | {loop_s * 1e3:>6.2f}ms | {obs_dt_ms:>6.2f}ms"
             )
-            print("\033[H\033[J" + "\n".join(panel_lines), end="", flush=True)
+            print("\n".join(panel_lines), flush=True)
+            move_cursor_up(len(panel_lines))
         elif debug_timing:
             dryrun_tag = " | DRYRUN" if dryrun else ""
             print(
