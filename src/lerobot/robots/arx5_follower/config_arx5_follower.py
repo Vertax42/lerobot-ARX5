@@ -96,20 +96,20 @@ class ARX5FollowerConfig(RobotConfig):
         if self.control_mode == ARX5ControlMode.CARTESIAN_CONTROL:
             self.start_position = [0.0, 0.967, 1.290, -0.970, 0.0, 0.0, 0.0]
         else:
-            self.start_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            self.start_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.57]
         # Default camera configuration if not provided
-        # if not self.cameras:
-        #     self.cameras = {
-        #         "head": RealSenseCameraConfig(
-        #             serial_number_or_name="230322271365",
-        #             fps=60,
-        #             width=640,
-        #             height=480,
-        #         ),
-        #         "wrist": RealSenseCameraConfig(
-        #             serial_number_or_name="230422271416",
-        #             fps=60,
-        #             width=640,
-        #             height=480,
-        #         ),
-        #     }
+        if not self.cameras:
+            self.cameras = {
+                "head": RealSenseCameraConfig(
+                    serial_number_or_name="230322271365",
+                    fps=60,
+                    width=640,
+                    height=480,
+                ),
+                "wrist": RealSenseCameraConfig(
+                    serial_number_or_name="230322274234",
+                    fps=60,
+                    width=640,
+                    height=480,
+                ),
+            }
