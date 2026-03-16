@@ -98,23 +98,25 @@ class BiFlexivRizon4RTConfig(RobotConfig):
 
     # Start position parameters (left arm)
     left_start_position_degree: list[float] = field(
-        default_factory=lambda: [97.56, 57.71, 23.69, 98.39, 35.59, 74.75, -4.65]
+        default_factory=lambda: [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24]
     )
-    # left_TCP : x, y ,z, r, p, y = [1000, 0, -100, -130, 20, -160]
+    # left_TCP : x, y ,z, r, p, y = [955, 150, -110, 70, -170, 50]
+    
     # Start position parameters (right arm)
     right_start_position_degree: list[float] = field(
-        default_factory=lambda: [-42.58, 55.55, -0.28, 116.09, -18.83, 87.84, 17.12]
+        default_factory=lambda: [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.60]
     )
-    # right_TCP : x, y ,z, r, p, y = [-1000, 0, -100, 130, 20, 160]
+    
+    # right_TCP : x, y ,z, r, p, y = [955, -150, -110, -70, 170, -50]
     start_vel_scale: int = 50
 
     # Home position parameters (left arm) - used on disconnect
     left_home_position_degree: list[float] = field(
-        default_factory=lambda: [97.56, 57.71, 23.69, 98.39, 35.59, 74.75, -4.65]
+        default_factory=lambda: [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24]
     )
     # Home position parameters (right arm) - used on disconnect
     right_home_position_degree: list[float] = field(
-        default_factory=lambda: [-42.58, 55.55, -0.28, 116.09, -18.83, 87.84, 17.12]
+        default_factory=lambda: [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.60]
     )
     home_vel_scale: int = 30
 
