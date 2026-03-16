@@ -46,7 +46,7 @@ from lerobot.utils.robot_utils import (
 )
 
 
-class SpacemouseTeleop(Teleoperator):
+class Spacemouse(Teleoperator):
     """
     3D Spacemouse teleoperator for end-effector control.
 
@@ -73,7 +73,7 @@ class SpacemouseTeleop(Teleoperator):
     def __init__(self, config: SpacemouseConfig):
         super().__init__(config)
         self.config = config
-        self.logger = get_logger("SpacemouseTeleop")
+        self.logger = get_logger("Spacemouse")
         self._is_connected = False
         self._spacemouse = None
         self._start_pose_6d: np.ndarray = np.zeros(6, dtype=np.float32)
