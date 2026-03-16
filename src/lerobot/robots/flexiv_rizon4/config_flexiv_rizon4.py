@@ -87,7 +87,7 @@ class FlexivRizon4Config(RobotConfig):
     """
 
     # Robot identification
-    robot_sn: str = "Rizon4-062855"  # Robot serial number
+    robot_sn: str = "Rizon4-063423"  # Robot serial number
 
     # Control settings
     # control_mode: JOINT_IMPEDANCE or CARTESIAN_MOTION_FORCE
@@ -192,7 +192,7 @@ class FlexivRizon4Config(RobotConfig):
     use_gripper: bool = True
 
     # Gripper identification (MAC address / serial number)
-    gripper_mac_addr: str = "bef1504b5391"
+    gripper_mac_addr: str = "e2b26adbb104"
 
     # Camera settings (wrist camera resolution)
     gripper_cam_size: tuple[int, int] = (640, 480)
@@ -202,8 +202,8 @@ class FlexivRizon4Config(RobotConfig):
     gripper_sensor_output_type: SensorOutputType = SensorOutputType.RECTIFY
     gripper_sensor_keys: dict[str, str] = field(
         default_factory=lambda: {
-            "OG000619": "right_tactile",
-            "OG000628": "left_tactile",
+            "OG000450": "right_tactile",
+            "OG000657": "left_tactile",
         }
     )
 
