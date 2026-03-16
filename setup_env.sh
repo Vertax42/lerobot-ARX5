@@ -390,10 +390,9 @@ install_xense() {
         "lz4>=4.0" \
         "psutil>=7.0" \
         "spdlog>=2.0" \
-        "cyclonedds-nightly==2025.7.29" \
         "pyudev; platform_system=='Linux'"
     # Install xensesdk from local submodule (branch: feature/v1.7.0rc0).
-    uv pip install -e "$SDK_DIR" --no-deps
+    uv pip install -e "$SDK_DIR"
     echo "[xense] Building pyxensexu companion module..."
     bash "$XU_DIR/build_python.sh"
     # Install xensegripper from local submodule (package name: xgripper).
