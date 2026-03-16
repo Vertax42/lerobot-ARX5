@@ -634,11 +634,12 @@ class BiFlexivRizon4RT(Robot):
 
         with ThreadPoolExecutor(max_workers=2) as executor:
             left_future = executor.submit(
-                self._go_to_start_arm,
+                self._move_arm_to_position,
                 self._left_robot,
                 self._left_gripper,
                 "left",
                 self.config.left_start_position_degree,
+                self.config.start_vel_scale,
                 self.config.left_use_gripper,
                 self.config.left_gripper_init_open,
                 self.config.left_gripper_max_pos,
@@ -646,11 +647,12 @@ class BiFlexivRizon4RT(Robot):
                 self.config.left_gripper_f_max,
             )
             right_future = executor.submit(
-                self._go_to_start_arm,
+                self._move_arm_to_position,
                 self._right_robot,
                 self._right_gripper,
                 "right",
                 self.config.right_start_position_degree,
+                self.config.start_vel_scale,
                 self.config.right_use_gripper,
                 self.config.right_gripper_init_open,
                 self.config.right_gripper_max_pos,
@@ -665,27 +667,39 @@ class BiFlexivRizon4RT(Robot):
 
         self.logger.info("Both arms at start position.")
 
-    def _go_to_start_arm(
+    def _go_to_home_arm(self, robot: frt.Robot, side: str) -> None:
+        """Move a single arm to home position via MoveJ."""
+        home_deg = (
+            self.config.left_home_position_degree
+            if side == "left"
+            else self.config.right_home_position_degree
+        )
+        self._move_arm_to_position(robot, None, side, home_deg, self.config.home_vel_scale)
+
+    def _move_arm_to_position(
         self,
         robot: frt.Robot,
         gripper: FlareGripper | Gripper | None,
         side: str,
-        start_position_degree: list[float],
-        use_gripper: bool,
-        gripper_init_open: bool,
-        gripper_max_pos: float,
-        gripper_v_max: float,
-        gripper_f_max: float,
+        target_position_degree: list[float],
+        vel_scale: int,
+        use_gripper: bool = False,
+        gripper_init_open: bool = True,
+        gripper_max_pos: float = 85.0,
+        gripper_v_max: float = 80.0,
+        gripper_f_max: float = 20.0,
     ) -> None:
-        """Move a single arm to its start position (blocking). Used for per-arm reset."""
-        self.logger.info(f"{side} arm: moving to start position...")
+        """Move a single arm to a target joint position via MoveJ (blocking)."""
+        if robot is None:
+            return
+        self.logger.info(f"{side} arm: moving to position {target_position_degree}...")
         robot.Stop()
         robot.SwitchMode(frt.Mode.NRT_PRIMITIVE_EXECUTION)
         robot.ExecutePrimitive(
             "MoveJ",
             {
-                "target": start_position_degree,
-                "jntVelScale": self.config.start_vel_scale,
+                "target": target_position_degree,
+                "jntVelScale": vel_scale,
             },
         )
         self.logger.info(f"{side} arm: MoveJ sent, waiting for completion...")
@@ -708,25 +722,7 @@ class BiFlexivRizon4RT(Robot):
                 pass
             time.sleep(0.1)
 
-        self.logger.info(f"{side} arm: at start position.")
-
-    def _go_to_home_arm(self, robot: frt.Robot, side: str) -> None:
-        """Move a single arm to factory home via PLAN-Home."""
-        if robot is None:
-            return
-        self.logger.info(f"{side} arm: moving to home position...")
-        robot.Stop()
-        robot.SwitchMode(frt.Mode.NRT_PLAN_EXECUTION)
-        robot.ExecutePlan("PLAN-Home")
-
-        timeout = 30.0
-        start_time = time.time()
-        while robot.busy():
-            if time.time() - start_time > timeout:
-                raise RuntimeError(f"{side} arm: PLAN-Home did not complete within {timeout}s")
-            time.sleep(0.1)
-
-        self.logger.info(f"{side} arm: at home position.")
+        self.logger.info(f"{side} arm: at position.")
 
     def _zero_ft_sensor_left(self) -> None:
         self._zero_ft_sensor_arm(self._left_robot, "left")
@@ -1096,8 +1092,9 @@ class BiFlexivRizon4RT(Robot):
                     f_max = (
                         self.config.left_gripper_f_max if side == "left" else self.config.right_gripper_f_max
                     )
-                    self._go_to_start_arm(
-                        robot, gripper, side, start_deg, use_gripper, init_open, max_pos, v_max, f_max
+                    self._move_arm_to_position(
+                        robot, gripper, side, start_deg, self.config.start_vel_scale,
+                        use_gripper, init_open, max_pos, v_max, f_max
                     )
                 else:
                     self._go_to_home_arm(robot, side)
