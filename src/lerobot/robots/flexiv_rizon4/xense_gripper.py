@@ -26,8 +26,16 @@ class Gripper:
         self._is_connected = False
         self._gripper: XenseGripper = None
         self._sensors: dict[str, Sensor] = {}
-        
-        self._available_sensors: dict = {}
+        self._available_sensors: dict = {}    
+
+    def connect(self) -> None:
+        """Connect to the Gripper."""
+        if self._is_connected:
+            raise DeviceAlreadyConnectedError(f"{self} already connected")
+
+        self._logger.info(f"Connecting to Gripper server: {self._mac_addr}")
+
+        # Scan for sensors (deferred from __init__ to avoid blocking at construction time)
         if self._enable_sensor:
             self._logger.info(f"Scanning for sensors on device {self._mac_addr}...")
             try:
@@ -41,14 +49,8 @@ class Gripper:
             except Exception as e:
                 raise RuntimeError(f"Error scanning sensors: {e}") from e
         else:
-            self._logger.info("Tactile sensors disabled by config.")    
+            self._logger.info("Tactile sensors disabled by config.")
 
-    def connect(self) -> None:
-        """Connect to the Gripper."""
-        if self._is_connected:
-            raise DeviceAlreadyConnectedError(f"{self} already connected")
-        
-        self._logger.info(f"Connecting to Gripper server: {self._mac_addr}")
         if self._enable_sensor:
             try:
                 # connect sensors
