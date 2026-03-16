@@ -108,6 +108,16 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     # right_TCP : x, y ,z, r, p, y = [-1000, 0, -100, 130, 20, 160]
     start_vel_scale: int = 50
 
+    # Home position parameters (left arm) - used on disconnect
+    left_home_position_degree: list[float] = field(
+        default_factory=lambda: [97.56, 57.71, 23.69, 98.39, 35.59, 74.75, -4.65]
+    )
+    # Home position parameters (right arm) - used on disconnect
+    right_home_position_degree: list[float] = field(
+        default_factory=lambda: [-42.58, 55.55, -0.28, 116.09, -18.83, 87.84, 17.12]
+    )
+    home_vel_scale: int = 30
+
     # FT sensor zeroing
     zero_ft_sensor_on_connect: bool = True
 
@@ -199,6 +209,18 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         if not 1 <= self.start_vel_scale <= 100:
             raise ValueError(
                 f"start_vel_scale must be between 1 and 100, got {self.start_vel_scale}"
+            )
+        if len(self.left_home_position_degree) != 7:
+            raise ValueError(
+                f"left_home_position_degree must have 7 elements, got {len(self.left_home_position_degree)}"
+            )
+        if len(self.right_home_position_degree) != 7:
+            raise ValueError(
+                f"right_home_position_degree must have 7 elements, got {len(self.right_home_position_degree)}"
+            )
+        if not 1 <= self.home_vel_scale <= 100:
+            raise ValueError(
+                f"home_vel_scale must be between 1 and 100, got {self.home_vel_scale}"
             )
 
         # Create left gripper config
