@@ -61,8 +61,8 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     """
 
     # Robot identification
-    left_robot_sn: str = "Rizon4-063423"
-    right_robot_sn: str = "Rizon4-063424"
+    left_robot_sn: str = "Rizon4-063458"
+    right_robot_sn: str = "Rizon4-063670"
 
     # Force control
     use_force: bool = False
@@ -98,13 +98,15 @@ class BiFlexivRizon4RTConfig(RobotConfig):
 
     # Start position parameters (left arm)
     left_start_position_degree: list[float] = field(
-        default_factory=lambda: [-1.70, 4.48, 1.54, 136.22, 0.12, 41.74, -0.18]
+        default_factory=lambda: [97.56, 57.71, 23.69, 98.39, 35.59, 74.75, -4.65]
     )
+    # left_TCP : x, y ,z, r, p, y = [1000, 0, -100, -130, 20, -160]
     # Start position parameters (right arm)
     right_start_position_degree: list[float] = field(
-        default_factory=lambda: [-1.70, 4.48, 1.54, 136.22, 0.12, 41.74, -0.18]
+        default_factory=lambda: [-42.58, 55.55, -0.28, 116.09, -18.83, 87.84, 17.12]
     )
-    start_vel_scale: int = 30
+    # right_TCP : x, y ,z, r, p, y = [-1000, 0, -100, 130, 20, 160]
+    start_vel_scale: int = 50
 
     # FT sensor zeroing
     zero_ft_sensor_on_connect: bool = True
@@ -123,7 +125,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     right_rt_cpu_affinity: int = 3
 
     # ========== Left gripper settings ==========
-    left_use_gripper: bool = True
+    left_use_gripper: bool = False
     left_gripper_type: str = "flare_gripper"  # Options: "flare_gripper", "xense_gripper"
     left_gripper_mac_addr: str = "e2b26adbb104"
     left_gripper_cam_size: tuple[int, int] = (640, 480)
@@ -142,9 +144,9 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     left_gripper_init_open: bool = True
 
     # ========== Right gripper settings ==========
-    right_use_gripper: bool = True
+    right_use_gripper: bool = False
     right_gripper_type: str = "flare_gripper"  # Options: "flare_gripper", "xense_gripper"
-    right_gripper_mac_addr: str = "e2b26adbb105"
+    right_gripper_mac_addr: str = "bef1504b5391"
     right_gripper_cam_size: tuple[int, int] = (640, 480)
     right_gripper_rectify_size: tuple[int, int] = (400, 700)
     right_gripper_sensor_output_type: SensorOutputType = SensorOutputType.RECTIFY
