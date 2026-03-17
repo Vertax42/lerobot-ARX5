@@ -444,6 +444,20 @@ install_franka() {
     echo " Franka Research 3 (pylibfranka)  →  websockets"
     echo "══════════════════════════════════════════"
 
+    local SDK_DIR="$PROJECT_ROOT/third_party/xense_franka"
+
+    if [[ ! -d "$SDK_DIR" ]]; then
+        echo "ERROR: $SDK_DIR not found."
+        echo "  Run: git submodule update --init third_party/xensesdk"
+        return 1
+    fi
+
+    uv pip install \
+        "websockets>=12.0" \
+        "pylibfranka==0.20.3"
+
+    uv pip install -e "$SDK_DIR"
+
     uv pip install "websockets>=12.0"
     echo "[franka] Done. Verify with: python -c 'import websockets; print(websockets.__version__)'"
 }
