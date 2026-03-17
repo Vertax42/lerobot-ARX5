@@ -559,12 +559,20 @@ elif [[ "$1" == "--install" ]]; then
     # causing pyudev/xensesdk to crash with: "OSError: .../lib/udev: Is a directory".
     fix_udev_discovery
 
-    echo "[INFO] Installing Lerobot from pyproject.toml"
     # evdev (pulled in by pynput) generates ecodes.c from /usr/include/linux/ at
-    # build time but the conda cross-compiler only searches its own sysroot headers.
-    # On Ubuntu systems whose linux-libc-dev includes KEY_LINK_PHONE (added in
-    # kernel 6.14) the compilation fails unless we also expose the system headers.
-    if CPATH="/usr/include:${CPATH}" uv pip install -e .; then
+    # build time, then compiles it with the conda cross-compiler which uses its
+    # own sysroot. Ubuntu's linux-libc-dev now ships KEY_LINK_PHONE (added in
+    # Linux 6.14), so evdev references it in ecodes.c, but the conda sysroot's
+    # older kernel headers lack it.  Patch the sysroot header in place so the
+    # conda compiler can find the constant without mixing incompatible glibc headers.
+    _SYSROOT_CODES="${CONDA_PREFIX}/x86_64-conda-linux-gnu/sysroot/usr/include/linux/input-event-codes.h"
+    if [[ -f "$_SYSROOT_CODES" ]] && ! grep -q "KEY_LINK_PHONE" "$_SYSROOT_CODES"; then
+        echo "[INFO] Patching conda sysroot: adding KEY_LINK_PHONE to input-event-codes.h"
+        printf '\n#ifndef KEY_LINK_PHONE\n#define KEY_LINK_PHONE 0x1bf  /* AL Phone Syncing, Linux 6.14 */\n#endif\n' >> "$_SYSROOT_CODES"
+    fi
+
+    echo "[INFO] Installing Lerobot from pyproject.toml"
+    if uv pip install -e .; then
         echo "[INFO] Lerobot installed successfully!"
     else
         echo "[ERROR] Lerobot installation failed. See the error output above."
