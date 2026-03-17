@@ -560,7 +560,11 @@ elif [[ "$1" == "--install" ]]; then
     fix_udev_discovery
 
     echo "[INFO] Installing Lerobot from pyproject.toml"
-    if uv pip install -e .; then
+    # evdev (pulled in by pynput) generates ecodes.c from /usr/include/linux/ at
+    # build time but the conda cross-compiler only searches its own sysroot headers.
+    # On Ubuntu systems whose linux-libc-dev includes KEY_LINK_PHONE (added in
+    # kernel 6.14) the compilation fails unless we also expose the system headers.
+    if CPATH="/usr/include:${CPATH}" uv pip install -e .; then
         echo "[INFO] Lerobot installed successfully!"
     else
         echo "[ERROR] Lerobot installation failed. See the error output above."
