@@ -1,6 +1,6 @@
 name: lerobot-xense
 channels:
-  - robostack-jazzy        # ros-jazzy-kdl-parser for ARX5
+  - robostack-jazzy # ros-jazzy-kdl-parser for ARX5
   - conda-forge
   - nvidia
   - nodefaults
@@ -17,9 +17,10 @@ dependencies:
   - boost
   - spdlog==1.14.1
   - ros-jazzy-kdl-parser
-  - conda-forge::soem=1.4.0       # ARX5 EtherCAT; omit on aarch64, build from source
+  - ros-jazzy-ament-cmake # ARX5 SDK CMake build dependency
+  - conda-forge::soem=1.4.0 # ARX5 EtherCAT; omit on aarch64, build from source
   - libhidapi
-  - libstdcxx-ng                  # newer CXXABI symbols (xensevr_pc_service_sdk)
+  - libstdcxx-ng # newer CXXABI symbols (xensevr_pc_service_sdk)
   # ── CUDA (xensesdk / onnxruntime-gpu) ─────────────────────────────────────
   - nvidia::cuda-toolkit=12.8
   - nvidia::cudnn
@@ -27,7 +28,7 @@ dependencies:
   # PyAV/torchcodec are installed from wheels later in setup_env.sh. Keeping
   # ffmpeg out of the conda solve avoids ICU/libxml2 conflicts with Robostack.
   # ── Python base tools ─────────────────────────────────────────────────────
-  - numpy>=1.26.4,<2.3.0          # allow pip-only installs to use numpy 2.x while robostack can still resolve to 1.26
+  - numpy>=1.26.4,<2.3.0 # allow pip-only installs to use numpy 2.x while robostack can still resolve to 1.26
   - pip
   - wheel
   - pip:
