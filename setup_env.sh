@@ -619,9 +619,36 @@ elif [[ "$1" == "--install" ]]; then
     install_xense     || echo "[WARN] xense installation skipped or failed (see above)"
     install_spacemouse || echo "[WARN] spacemouse installation skipped or failed (see above)"
 
+    # ── Post-install verification ────────────────────────────────────────────
+    echo ""
+    echo "══════════════════════════════════════════"
+    echo " Post-install verification"
+    echo "══════════════════════════════════════════"
+    _VERIFY_FAIL=0
+    while IFS='|' read -r _pkg _import; do
+        _out="$(python -c "$_import" 2>&1)" && \
+            echo "[OK]    $_pkg: $_out" || \
+            { echo "[ERROR] $_pkg: $_out"; _VERIFY_FAIL=1; }
+    done <<'VERIFY'
+lerobot|import lerobot; print(lerobot.__version__)
+pyarx|import pyarx; print(pyarx.__file__)
+flexiv_rt|import flexiv_rt; print(flexiv_rt.__file__)
+xensevr_pc_service_sdk|import xensevr_pc_service_sdk; print(xensevr_pc_service_sdk.__file__)
+xensesdk|import xensesdk; print(xensesdk.__file__)
+xensegripper|import xensegripper; print(xensegripper.__file__)
+pyxensexu (flash)|from xensesdk.utils.flashRW import xense_flash_manager; print("available" if xense_flash_manager.is_available else "NOT available")
+VERIFY
+
+    echo ""
+    if [[ $_VERIFY_FAIL -eq 0 ]]; then
+        echo "[INFO] All packages verified successfully."
+    else
+        echo "[ERROR] Some packages failed verification. Review the [ERROR] lines above."
+    fi
+
     echo ""
     echo "[INFO] Lerobot-Xense installation complete."
-    exit 0
+    exit $_VERIFY_FAIL
 else
     echo "Invalid argument. Usage:"
     echo "  --conda [env_name]   Create a conda environment (requires Miniconda/Anaconda)"
