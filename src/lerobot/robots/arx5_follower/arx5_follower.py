@@ -15,27 +15,26 @@
 # limitations under the License.
 
 import math
+import os
 import time
+from collections.abc import Sequence
 from functools import cached_property
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 import os
 
 from lerobot.cameras.utils import make_cameras_from_configs
+from lerobot.robots.arx5_follower.config_arx5_follower import ARX5ControlMode, ARX5FollowerConfig
+from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import get_logger
-
-from ..robot import Robot
-from .config_arx5_follower import ARX5FollowerConfig, ARX5ControlMode
 
 try:
     import pyarx as arx5
 except ImportError as e:
     raise ImportError(
-        "pyarx not found. Build and install it first:\n"
-        "  cd third_party/ARX5_SDK\n"
-        "  bash build_python.sh"
+        "pyarx not found. Build and install it first:\n  cd third_party/ARX5_SDK\n  bash build_python.sh"
     ) from e
 
 
@@ -87,10 +86,17 @@ class ARX5Follower(Robot):
 
         # Pre-compute action keys for faster lookup (performance optimization)
         if config.control_mode == ARX5ControlMode.CARTESIAN_CONTROL:
-            self._action_keys = ["x", "y", "z", "roll", "pitch", "yaw"]
+            self._action_keys = [
+                "x",
+                "y", 
+                "z", 
+                "roll", 
+                "pitch", 
+                "yaw"
+            ]
             self._gripper_key = "gripper_pos"
         else:
-            self._action_keys = [f"joint_{i+1}.pos" for i in range(6)]
+            self._action_keys = [f"joint_{i + 1}.pos" for i in range(6)]
             self._gripper_key = "gripper.pos"
 
         # Pre-allocate command buffers (initialized in connect based on control mode)
@@ -102,13 +108,10 @@ class ARX5Follower(Robot):
         self._start_position = self.config.start_position
 
         # Robot config
-        self.robot_config = arx5.RobotConfigFactory.get_instance().get_config(
-            config.arm_model
-        )
+        self.robot_config = arx5.RobotConfigFactory.get_instance().get_config(config.arm_model)
+        # Create solver for FK/IK calculations (both arms use same model)
         current_dir = os.path.dirname(__file__)
-        # Create solver for FK/IK calculations
-        urdf_path = os.path.join(
-            current_dir,
+        urdf_path = os.path.join(current_dir,
             "..",
             "..",
             "..",
@@ -116,8 +119,7 @@ class ARX5Follower(Robot):
             "third_party",
             "ARX5_SDK",
             "models",
-            f"{config.arm_model}.urdf",
-        )
+            f"{config.arm_model}.urdf",)
         self._solver = arx5.Arx5Solver(
             urdf_path,
             self.robot_config.joint_dof,
@@ -204,8 +206,7 @@ class ARX5Follower(Robot):
     @property
     def _cameras_ft(self) -> dict[str, tuple]:
         return {
-            cam: (self.config.cameras[cam].height, self.config.cameras[cam].width, 3)
-            for cam in self.cameras
+            cam: (self.config.cameras[cam].height, self.config.cameras[cam].width, 3) for cam in self.cameras
         }
 
     @cached_property
@@ -219,11 +220,7 @@ class ARX5Follower(Robot):
 
     @property
     def is_connected(self) -> bool:
-        return (
-            self._is_connected
-            and self.arm is not None
-            and all(cam.is_connected for cam in self.cameras.values())
-        )
+        return self._is_connected and self.arm is not None and all(cam.is_connected for cam in self.cameras.values())
 
     def is_gravity_compensation_mode(self) -> bool:
         """Check if robot is currently in gravity compensation mode"""
@@ -244,7 +241,7 @@ class ARX5Follower(Robot):
         return self._is_cartesian_control_mode
 
     def connect(self, calibrate: bool = False, go_to_start: bool = True) -> None:
-        if self.is_connected:
+        if self._is_connected:
             raise DeviceAlreadyConnectedError(
                 f"{self} already connected, do not run `robot.connect()` twice."
             )
@@ -309,18 +306,12 @@ class ARX5Follower(Robot):
         self.logger.info("ARX5 Follower Robot connected.")
         if go_to_start:
             self.smooth_go_start(duration=2.0)
-            self.logger.info(
-                "✅ Robot go to start position, arm is now in gravity compensation mode"
-            )
+            self.logger.info("✅ Robot go to start position, arm is now in gravity compensation mode")
         else:
-            self.logger.info(
-                "Robot go to home position, arm is now in gravity compensation mode"
-            )
+            self.logger.info("Robot go to home position, arm is now in gravity compensation mode")
 
         gain = self.arm.get_gain()
-        self.logger.info(
-            f"Current arm gain: {gain.kp()}, {gain.kd()}, {gain.gripper_kp}, {gain.gripper_kd}"
-        )
+        self.logger.info(f"Current arm gain: {gain.kp()}, {gain.kd()}, {gain.gripper_kp}, {gain.gripper_kd}")
 
         if self.config.inference_mode:
             if self.config.control_mode == ARX5ControlMode.CARTESIAN_CONTROL:
@@ -392,9 +383,7 @@ class ARX5Follower(Robot):
 
     def setup_motors(self) -> None:
         """ARX5 motors are pre-configured, no runtime setup needed"""
-        self.logger.info(
-            f"{self} ARX5 motors are pre-configured, no runtime setup needed"
-        )
+        self.logger.info(f"{self} ARX5 motors are pre-configured, no runtime setup needed")
         self.logger.info("Motor IDs are defined in the robot configuration:")
         self.logger.info("  - Joint motors: [1, 2, 4, 5, 6, 7]")
         self.logger.info("  - Gripper motor: 8")
@@ -402,7 +391,7 @@ class ARX5Follower(Robot):
         return
 
     def get_start_eef_pose(self) -> np.ndarray:
-        if not self.is_connected:
+        if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
         if self.config.control_mode != ARX5ControlMode.CARTESIAN_CONTROL:
             raise ValueError("get_start_eef_pose requires CARTESIAN_CONTROL mode")
@@ -426,7 +415,7 @@ class ARX5Follower(Robot):
             joint_state = self.arm.get_joint_state()
             pos = joint_state.pos().copy()
             for i in range(6):  # 6 joints
-                obs_dict[f"joint_{i+1}.pos"] = float(pos[i])
+                obs_dict[f"joint_{i + 1}.pos"] = float(pos[i])
             obs_dict["gripper.pos"] = float(joint_state.gripper_pos)
 
         # Add camera observations
@@ -442,16 +431,10 @@ class ARX5Follower(Robot):
         # Store camera timing info for debugging
         self.last_camera_times = camera_times
 
-        # Print camera read times
-        # camera_summary = ", ".join(
-        #     [f"{k}:{v:.1f}ms" for k, v in sorted(camera_times.items())]
-        # )
-        # self.logger.info(f"📷 Cameras [{parallel_total:.1f}ms total]: {camera_summary}")
-
         return obs_dict
 
     def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
-        if not self.is_connected:
+        if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         if self.config.control_mode == ARX5ControlMode.CARTESIAN_CONTROL:
@@ -533,9 +516,7 @@ class ARX5Follower(Robot):
             segment_durations = [float(d) for d in durations]
 
         if len(trajectory) != len(segment_durations):
-            raise ValueError(
-                "target_joint_poses and durations must have the same length"
-            )
+            raise ValueError("target_joint_poses and durations must have the same length")
 
         # Determine controller timestep (fallback to 10 ms if unavailable)
         controller_dt = getattr(self.config, "interpolation_controller_dt", 0.01)
@@ -593,9 +574,7 @@ class ARX5Follower(Robot):
 
                 current = target
         except KeyboardInterrupt:
-            self.logger.warn(
-                "Joint trajectory interrupted by user. Holding current pose."
-            )
+            self.logger.warn("Joint trajectory interrupted by user. Holding current pose.")
 
     def move_eef_trajectory(
         self,
@@ -655,9 +634,7 @@ class ARX5Follower(Robot):
         def _parse_target(values: Sequence[float], default: np.ndarray) -> np.ndarray:
             arr = np.asarray(values, dtype=np.float64)
             if arr.shape[0] not in (6, 7):
-                raise ValueError(
-                    "Target must provide 6 EEF values (+ optional gripper)"
-                )
+                raise ValueError("Target must provide 6 EEF values (+ optional gripper)")
             if arr.shape[0] == 6:
                 arr = np.concatenate([arr, [default[-1]]])
             return arr
@@ -701,9 +678,7 @@ class ARX5Follower(Robot):
                 current = target
 
         except KeyboardInterrupt:
-            self.logger.warn(
-                "EEF trajectory interrupted by user. Holding current pose."
-            )
+            self.logger.warn("EEF trajectory interrupted by user. Holding current pose.")
 
     def disconnect(self):
         if not self.is_connected:
@@ -751,9 +726,7 @@ class ARX5Follower(Robot):
         }
 
         if level.upper() not in log_level_map:
-            raise ValueError(
-                f"Invalid log level: {level}. Supported levels: {list(log_level_map.keys())}"
-            )
+            raise ValueError(f"Invalid log level: {level}. Supported levels: {list(log_level_map.keys())}")
         log_level = log_level_map[level.upper()]
 
         # Set log level for arm if connected
@@ -775,7 +748,7 @@ class ARX5Follower(Robot):
         2. Resets interpolator to current position (important for Cartesian mode)
         3. Gravity compensation is handled by SDK if controller_config.gravity_compensation=True
         """
-        if not self.is_connected:
+        if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         if self._is_gravity_compensation_mode:
@@ -804,7 +777,7 @@ class ARX5Follower(Robot):
 
     def set_to_normal_position_control(self):
         """Switch from gravity compensation to normal position control or cartesian control mode"""
-        if not self.is_connected:
+        if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         self.logger.info("Switching to normal position control mode...")
@@ -840,7 +813,7 @@ class ARX5Follower(Robot):
 
     def set_to_normal_cartesian_control(self):
         """Switch from gravity compensation to normal cartesian control mode"""
-        if not self.is_connected:
+        if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         self.logger.info("Switching to normal cartesian control mode...")
@@ -909,9 +882,7 @@ class ARX5Follower(Robot):
         self.logger.info(f"Calculated motion duration: {duration:.1f} seconds")
         return duration
 
-    def smooth_go_start(
-        self, duration: float | None = None, easing: str = "ease_in_out_quad"
-    ) -> None:
+    def smooth_go_start(self, duration: float | None = None, easing: str = "ease_in_out_quad") -> None:
         """
         Smoothly move the arm to the start position using trajectory interpolation.
 
@@ -932,7 +903,7 @@ class ARX5Follower(Robot):
         Raises:
             DeviceNotConnectedError: If the robot is not connected.
         """
-        if not self.is_connected:
+        if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         # Calculate duration if not provided
@@ -990,9 +961,7 @@ class ARX5Follower(Robot):
                 f"✅ Successfully going to start position in {self.config.control_mode.value} mode"
             )
 
-    def smooth_go_home(
-        self, duration: float | None = None, easing: str = "ease_in_out_quad"
-    ) -> None:
+    def smooth_go_home(self, duration: float | None = None, easing: str = "ease_in_out_quad") -> None:
         """
         Smoothly move the arm to the home position using trajectory interpolation.
 
@@ -1013,7 +982,7 @@ class ARX5Follower(Robot):
         Raises:
             DeviceNotConnectedError: If the robot is not connected.
         """
-        if not self.is_connected:
+        if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         # Calculate duration if not provided
@@ -1021,9 +990,7 @@ class ARX5Follower(Robot):
             target = np.array(self._home_position)
             duration = self._calculate_motion_duration(target)
 
-        self.logger.info(
-            f"Smoothly returning to home position over {duration:.1f} seconds..."
-        )
+        self.logger.info(f"Smoothly returning to home position over {duration:.1f} seconds...")
 
         if self.config.control_mode == ARX5ControlMode.CARTESIAN_CONTROL:
             # Cartesian mode: use EEF trajectory
@@ -1043,9 +1010,7 @@ class ARX5Follower(Robot):
                 durations=duration,
                 easing=easing,
             )
-            self.logger.info(
-                f"✅ Successfully returned to home position in {self.config.control_mode.value} mode"
-            )
+            self.logger.info(f"✅ Successfully returned to home position in {self.config.control_mode.value} mode")
         else:
             # Joint mode: need to switch modes
             # First, set current position as target to avoid large position error
@@ -1070,6 +1035,4 @@ class ARX5Follower(Robot):
 
             # Switch back to gravity compensation mode (only for joint mode)
             self.set_to_gravity_compensation_mode()
-            self.logger.info(
-                "✅ Successfully returned to home position and switched to gravity compensation mode"
-            )
+            self.logger.info("✅ Successfully returned to home position and switched to gravity compensation mode")
