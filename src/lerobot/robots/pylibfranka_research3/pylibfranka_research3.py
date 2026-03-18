@@ -27,7 +27,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
-import requests
 from websockets.sync.client import connect
 
 from lerobot.cameras.utils import make_cameras_from_configs
@@ -41,6 +40,8 @@ from lerobot.utils.robot_utils import (
 
 from ..robot import Robot
 from .config_pylibfranka_research3 import ControlMode, PylibfrankaResearch3Config
+from .franka_gripper import FrankaGripper
+from .xense_gripper import XenseGripper
 from scipy.spatial.transform import Rotation as R, Slerp
 
 logger = logging.getLogger(__name__)
@@ -65,10 +66,13 @@ class PylibfrankaResearch3(Robot):
         self._server_uri = f"ws://localhost:{config.port}"
 
         # Gripper
-        if config.use_gripper:
-            self.gripper_server_ip = config.gripper_server_ip
-            self.gripper_server_port = config.gripper_server_port
-            self.gripper_url = f"http://{self.gripper_server_ip}:{self.gripper_server_port}"
+        if config.use_gripper and config.gripper_type == "franka_gripper":
+            self._gripper: FrankaGripper | XenseGripper | None = FrankaGripper(config.gripper)
+        elif config.use_gripper and config.gripper_type == "xense_gripper":
+            self._gripper: FrankaGripper | XenseGripper | None = XenseGripper(config.gripper)
+        else:
+            self._gripper = None
+            logger.info("No gripper configured, proceeding without gripper.")
         self._gripper_key = "gripper.pos"
 
         # Initialize keys and buffers based on control mode
@@ -89,7 +93,7 @@ class PylibfrankaResearch3(Robot):
         logger.info(f"Initialized {self.name}")
         logger.info(f"  Robot: Franka Follower at {config.fci_ip}")
         if config.use_gripper:
-            logger.info(f"  Gripper: Xense Hand at {config.gripper_server_ip}:{config.gripper_server_port}")
+            logger.info(f"  Gripper: {config.gripper_type}")
         logger.info(f"  Cameras: {len(self.cameras)} camera(s)")
         logger.info(f"  Control mode: {config.control_mode}")
 
@@ -193,9 +197,9 @@ class PylibfrankaResearch3(Robot):
                       [r31, r32, r33, pz],
                       [0,   0,   0,   1]]
         """
-        ee_desired = np.array(state_data.get("ee_desired", []), dtype=np.float64)
+        ee = np.array(state_data.get("ee", []), dtype=np.float64)
         # print("Received ee_desired from server:", ee_desired)
-        return ee_desired
+        return ee
 
     # ======================== Key Initialization ========================
 
@@ -358,70 +362,6 @@ class PylibfrankaResearch3(Robot):
             logger.error(f"Failed to read robot state: {e}")
             return None
 
-    # ======================== Gripper ========================
-
-    def _gripper_health_check(self) -> bool:
-        """Check if hand server is reachable."""
-        try:
-            response = requests.get(f"{self.gripper_url}/get_pos", timeout=2.0)
-            return response.status_code == 200
-        except Exception as e:
-            logger.error(f"Hand health check failed: {e}")
-            return False
-
-    def _get_gripper_position(self) -> float:
-        """Get normalized gripper position [0.0=open, 1.0=closed]."""
-        try:
-            response = requests.get(f"{self.gripper_url}/get_pos", timeout=self.config.gripper_timeout)
-            if response.status_code != 200:
-                logger.warning(f"Failed to get gripper position: HTTP {response.status_code}")
-                return self.config.gripper_home_position
-            data = response.json()
-            min_w = float(self.config.gripper_min_width_mm)
-            max_w = float(self.config.gripper_max_width_mm)
-            width = data.get("position", 0.0)
-            width = max(min_w, min(max_w, width))
-            # Map: width (mm) -> closed_ratio (0-1)
-            closed_ratio = 1.0 - (width - min_w) / (max_w - min_w)
-            position = float(np.clip(closed_ratio, self.config.gripper_min_position, self.config.gripper_max_position))
-            logger.debug(f"Gripper position: width_mm={width:.1f} -> closed_ratio={position:.3f}")
-            return position
-        except Exception as e:
-            logger.error(f"Failed to get gripper position: {e}")
-            return self.config.gripper_home_position
-
-    def _send_gripper_position_command(self, position: float) -> bool:
-        """position: Normalized target position [0.0, 1.0] 0.0 = open, 1.0 = closed"""
-        try:
-            min_w = float(self.config.gripper_min_width_mm)
-            max_w = float(self.config.gripper_max_width_mm)
-
-            # Map: closed_ratio -> width
-            target_width = min_w + (1.0 - position) * (max_w - min_w)
-            target_width = float(np.clip(target_width, min_w, max_w))
-
-            logger.debug(f"Gripper command: closed_ratio={position:.3f} -> width_mm={target_width:.1f}")
-
-            response = requests.post(
-                f"{self.gripper_url}/move",
-                json={
-                    "pos": float(target_width),
-                    "vmax": self.config.gripper_default_velocity,
-                    "fmax": self.config.gripper_default_force,
-                },
-                timeout=self.config.gripper_timeout,
-            )
-
-            if response.status_code == 200:
-                return True
-            else:
-                logger.warning(f"Failed to send gripper command: HTTP {response.status_code}")
-                return False
-
-        except Exception as e:
-            logger.error(f"Failed to send gripper position command: {e}")
-            return False
-
     # ======================== Connection Management ========================
 
     @property
@@ -489,12 +429,9 @@ class PylibfrankaResearch3(Robot):
             self._robot_connected = True
 
             # 4. Connect gripper
-            if self.config.use_gripper:
-                logger.info(f"Connecting to gripper: {self.gripper_server_ip}:{self.gripper_server_port}")
-                if not self._gripper_health_check():
-                    raise ConnectionError(
-                        f"Cannot reach gripper at {self.gripper_url}"
-                    )
+            if self.config.use_gripper and self._gripper is not None:
+                logger.info(f"Connecting gripper ({self.config.gripper_type})...")
+                self._gripper.connect()
                 self._gripper_connected = True
                 logger.info("Gripper connection successful")
 
@@ -561,7 +498,7 @@ class PylibfrankaResearch3(Robot):
         elif self.config.control_mode == ControlMode.CARTESIAN_IMPEDANCE:
             now_pose = self.get_current_tcp_pose_quat()[:7]
             target_pose = self.config.robot_tcp_home_position  # TCP  (x, y, z, w, x, y, z)
-            vel = 0.2  # m/s
+            vel = 0.1  # m/s
             delta = np.linalg.norm(np.array(target_pose[:3]) - np.array(now_pose[:3]))
             timeout = delta / vel
             hz = 50.0
@@ -657,37 +594,37 @@ class PylibfrankaResearch3(Robot):
                 obs_dict[key] = float(tau[i]) if i < len(tau) else 0.0
 
         elif self.config.control_mode == ControlMode.CARTESIAN_IMPEDANCE:
+            if self.config.use_joint_observation:
+                q = state_data.get("q", [0.0] * JOINT_DOF)
+                dq = state_data.get("dq", [0.0] * JOINT_DOF)
+                tau = state_data.get("tau", [0.0] * JOINT_DOF)
+                # Joint positions (7D)
+                for i, key in enumerate(self._joint_pos_keys):
+                    obs_dict[key] = float(q[i]) if i < len(q) else 0.0
+                # Joint velocities (7D)
+                for i, key in enumerate(self._joint_vel_keys):
+                    obs_dict[key] = float(dq[i]) if i < len(dq) else 0.0
+                # Joint efforts/torques (7D)
+                for i, key in enumerate(self._joint_effort_keys):
+                    obs_dict[key] = float(tau[i]) if i < len(tau) else 0.0
+            else:
+                # Convert column-major O_T_EE to row-major 4x4 matrix
+                ee_matrix = self._parse_ee_matrix(state_data)
+                rot = ee_matrix[:3, :3]
 
-            q = state_data.get("q", [0.0] * JOINT_DOF)
-            dq = state_data.get("dq", [0.0] * JOINT_DOF)
-            tau = state_data.get("tau", [0.0] * JOINT_DOF)
-            # Joint positions (7D)
-            for i, key in enumerate(self._joint_pos_keys):
-                obs_dict[key] = float(q[i]) if i < len(q) else 0.0
-            # Joint velocities (7D)
-            for i, key in enumerate(self._joint_vel_keys):
-                obs_dict[key] = float(dq[i]) if i < len(dq) else 0.0
-            # Joint efforts/torques (7D)
-            for i, key in enumerate(self._joint_effort_keys):
-                obs_dict[key] = float(tau[i]) if i < len(tau) else 0.0
+                # Position (3D)
+                obs_dict["tcp.x"] = float(ee_matrix[0, 3])
+                obs_dict["tcp.y"] = float(ee_matrix[1, 3])
+                obs_dict["tcp.z"] = float(ee_matrix[2, 3])
 
-            # Convert column-major O_T_EE to row-major 4x4 matrix
-            ee_matrix = self._parse_ee_matrix(state_data)
-            rot = ee_matrix[:3, :3]
-
-            # Position (3D)
-            obs_dict["tcp.x"] = float(ee_matrix[0, 3])
-            obs_dict["tcp.y"] = float(ee_matrix[1, 3])
-            obs_dict["tcp.z"] = float(ee_matrix[2, 3])
-
-            # 6D Rotation: first two columns of rotation matrix
-            # r1-r3 = first column, r4-r6 = second column
-            obs_dict["tcp.r1"] = float(rot[0, 0])
-            obs_dict["tcp.r2"] = float(rot[1, 0])
-            obs_dict["tcp.r3"] = float(rot[2, 0])
-            obs_dict["tcp.r4"] = float(rot[0, 1])
-            obs_dict["tcp.r5"] = float(rot[1, 1])
-            obs_dict["tcp.r6"] = float(rot[2, 1])
+                # 6D Rotation: first two columns of rotation matrix
+                # r1-r3 = first column, r4-r6 = second column
+                obs_dict["tcp.r1"] = float(rot[0, 0])
+                obs_dict["tcp.r2"] = float(rot[1, 0])
+                obs_dict["tcp.r3"] = float(rot[2, 0])
+                obs_dict["tcp.r4"] = float(rot[0, 1])
+                obs_dict["tcp.r5"] = float(rot[1, 1])
+                obs_dict["tcp.r6"] = float(rot[2, 1])
 
             if self.config.use_force:
                 ext_wrench = state_data.get("ext_wrench", [0.0] * 6)
@@ -698,9 +635,8 @@ class PylibfrankaResearch3(Robot):
             raise ValueError(f"Unsupported control_mode: {self.config.control_mode}")
 
         # Gripper
-        if self.config.use_gripper:
-            gripper_position = self._get_gripper_position()
-            obs_dict[self._gripper_key] = gripper_position
+        if self.config.use_gripper and self._gripper is not None:
+            obs_dict[self._gripper_key] = self._gripper.get_gripper_position()
 
         # Cameras
         for cam_name, cam in self.cameras.items():
@@ -732,8 +668,8 @@ class PylibfrankaResearch3(Robot):
 
         # Get gripper position
         gripper_pos = 0.0
-        if self.config.use_gripper:
-            gripper_pos = self._get_gripper_position()
+        if self.config.use_gripper and self._gripper is not None:
+            gripper_pos = self._gripper.get_gripper_position()
 
         return np.array(
             [tcp_pose[0], tcp_pose[1], tcp_pose[2], roll, pitch, yaw, gripper_pos],
@@ -761,8 +697,8 @@ class PylibfrankaResearch3(Robot):
 
         # Get gripper position
         gripper_pos = 0.0
-        if self.config.use_gripper:
-            gripper_pos = self._get_gripper_position()
+        if self.config.use_gripper and self._gripper is not None:
+            gripper_pos = self._gripper.get_gripper_position()
 
         return np.array([*tcp_pose, gripper_pos], dtype=np.float32)
 
@@ -866,19 +802,12 @@ class PylibfrankaResearch3(Robot):
 
     def _send_gripper_action(self, action: dict[str, Any]) -> None:
         """Send gripper action if gripper is enabled and action contains gripper command."""
-        if not self.config.use_gripper:
+        if not self._gripper or not self.config.use_gripper:
+            return
+        if self._gripper_key not in action:
             return
         try:
-            if "gripper.pos" in action:
-                target = float(action["gripper.pos"])
-                target = float(np.clip(
-                    target,
-                    self.config.gripper_min_position,
-                    self.config.gripper_max_position,
-                ))
-                success = self._send_gripper_position_command(target)
-                if not success:
-                    logger.warning("Failed to send action to gripper")
+            self._gripper.set_gripper_position(float(action[self._gripper_key]))
         except Exception as e:
             logger.warning(f"Error sending gripper action: {e}")
 
@@ -911,6 +840,13 @@ class PylibfrankaResearch3(Robot):
                 logger.warning(f"Error terminating server: {e}")
             self._server_proc = None
 
+        # Disconnect gripper
+        if self._gripper is not None:
+            try:
+                self._gripper.disconnect()
+            except Exception as e:
+                logger.warning(f"Error disconnecting gripper: {e}")
+
         # Disconnect cameras
         for cam in self.cameras.values():
             try:
@@ -928,6 +864,6 @@ class PylibfrankaResearch3(Robot):
         return (
             f"FrankaResearch3("
             f"fci_ip={self.config.fci_ip}, "
-            f"gripper_port={self.config.gripper_server_port if self.config.use_gripper else 'N/A'}, "
+            f"gripper={self.config.gripper_type if self.config.use_gripper else 'N/A'}, "
             f"connected={self.is_connected})"
         )
