@@ -51,12 +51,11 @@ lerobot-teleoperate \
 ```bash
 lerobot-teleoperate \
     --robot.type=bi_arx5 \
-    --robot.left_config.arm_port=can0 \
-    --robot.right_config.arm_port=can1 \
     --robot.id=bimanual \
-    --teleop.type=btgamepad \
-    --teleop.id=bimanual \
-    --fps=30
+    --teleop.type=mock_teleop \
+    --fps=30 \
+    --debug_timing=false \
+    --display_data=true
 ```
 
 ### Flexiv Rizon4 (NRT) + Pico4
