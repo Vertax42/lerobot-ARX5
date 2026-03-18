@@ -19,7 +19,7 @@ from enum import Enum
 
 from lerobot.cameras import CameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
-from lerobot.cameras.xense import XenseCameraConfig, XenseOutputType
+from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
 from lerobot.robots.config import RobotConfig
 
 
@@ -76,7 +76,7 @@ class BiARX5Config(RobotConfig):
 
     # Gripper calibration (calibrated values from calibrate.py for left and right arms)
     gripper_open_readout: list[float] = field(default_factory=lambda: [-3.4, -3.4])
-    enable_tactile_sensors: bool = False
+    enable_tactile_sensors: bool = True
 
     # Position settings (Joint space: 6 joints + gripper)
     home_position: list[float] = field(
@@ -102,28 +102,28 @@ class BiARX5Config(RobotConfig):
                 "right_wrist": RealSenseCameraConfig(
                     serial_number_or_name="230322274234", fps=60, width=640, height=480
                 ),
-                "right_tactile_0": XenseCameraConfig(
+                "right_tactile_0": XenseTactileCameraConfig(
                     serial_number="OG000339",
                     fps=30,
-                    output_types=[XenseOutputType.DIFFERENCE],
+                    output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
-                "right_tactile_1": XenseCameraConfig(
+                "right_tactile_1": XenseTactileCameraConfig(
                     serial_number="OG000344",
                     fps=30,
-                    output_types=[XenseOutputType.DIFFERENCE],
+                    output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
-                "left_tactile_0": XenseCameraConfig(
+                "left_tactile_0": XenseTactileCameraConfig(
                     serial_number="OG000337",
                     fps=30,
-                    output_types=[XenseOutputType.DIFFERENCE],
+                    output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
-                "left_tactile_1": XenseCameraConfig(
+                "left_tactile_1": XenseTactileCameraConfig(
                     serial_number="OG000352",
                     fps=30,
-                    output_types=[XenseOutputType.DIFFERENCE],
+                    output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
             }
