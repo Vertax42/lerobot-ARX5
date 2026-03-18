@@ -2,7 +2,7 @@ from xensegripper import XenseGripper as xg
 from xensesdk import Sensor, call_service
 
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
-from .config_xense_gripper import XenseGripperConfig
+from .config_xense_gripper import XenseGripperConfig, SensorOutputType
 from lerobot.utils.robot_utils import get_logger
 
 
@@ -137,12 +137,20 @@ class XenseGripper:
                 # If not found in mapping, use SN as fallback
                 key_name = self._sensor_keys.get(sn, sn)
 
-                rectify = sensor_obj.selectSensorInfo(Sensor.OutputType.Rectify)
-                if rectify is not None:
-                    # Convert BGR to RGB
-                    if rectify.ndim == 3 and rectify.shape[2] == 3:
-                        rectify = rectify[:, :, ::-1].copy()
-                    sensor_data[key_name] = rectify
+                if self._sensor_output_type == SensorOutputType.RECTIFY:
+                    rectify = sensor_obj.selectSensorInfo(Sensor.OutputType.Rectify)
+                    if rectify is not None:
+                        # Convert BGR to RGB
+                        if rectify.ndim == 3 and rectify.shape[2] == 3:
+                            rectify = rectify[:, :, ::-1].copy()
+                        sensor_data[key_name] = rectify
+                elif self._sensor_output_type == SensorOutputType.DIFFERENCE:
+                    difference = sensor_obj.selectSensorInfo(Sensor.OutputType.Difference)
+                    if difference is not None:
+                        # Convert BGR to RGB
+                        if difference.ndim == 3 and difference.shape[2] == 3:
+                            difference = difference[:, :, ::-1].copy()
+                        sensor_data[key_name] = difference
             except Exception as e:
                 self._logger.debug(f"Failed to read sensor {sn} rectify data: {e}")
 
@@ -160,10 +168,12 @@ class XenseGripper:
 
         if normalized_pos < 0.0 or normalized_pos > 1.0:
             raise ValueError(f"Gripper position must be between 0 and 1, got {normalized_pos}")
-
-        target_pos = normalized_pos * self._gripper_max_pos
-        print(f"target_pos: {target_pos}")
-        self._gripper.set_position(target_pos, vmax=self._gripper_v_max, fmax=self._gripper_f_max)
+        normalized_pos = max(0.0, min(1.0, normalized_pos))
+        target_width = self._gripper_min_pos + (1.0 - normalized_pos) * (
+            self._gripper_max_pos - self._gripper_min_pos
+        )
+        target_width = max(self._gripper_min_pos, min(self._gripper_max_pos, target_width))
+        self._gripper.set_position(target_width, vmax=self._gripper_v_max, fmax=self._gripper_f_max)
 
     def disconnect(self) -> None:
         """Disconnect from the Flare Gripper."""
