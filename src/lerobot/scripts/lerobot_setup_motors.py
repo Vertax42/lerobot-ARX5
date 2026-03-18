@@ -42,6 +42,7 @@ from lerobot.teleoperators import (  # noqa: F401
     bi_so_leader,
     koch_leader,
     make_teleoperator_from_config,
+    mock_teleop,
     omx_leader,
     openarm_mini,
     so_leader,

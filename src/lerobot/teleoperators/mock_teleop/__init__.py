@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Re-export from canonical location for backward compatibility.
-from lerobot.teleoperators.mock_teleop import MockTeleop, MockTeleopConfig
+from .config_mock_teleop import MockTeleopConfig
+from .teleop_mock import MockTeleop
 
 __all__ = ["MockTeleopConfig", "MockTeleop"]
