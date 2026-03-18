@@ -66,7 +66,7 @@ dependencies = [
     "accelerate>=1.10.0,<2.0.0",
 
     # Core dependencies
-    "numpy>=1.26.4,<2.3.0", # NOTE: Keep compatible with both Robostack (numpy 1.26) and newer pip-only installs.
+    "numpy>=1.26.4", # robostack resolves to 1.26; pip-only installs can use 2.x (tested with 2.2.6)
     "cmake>=3.29.0.1,<4.2.0",
     "packaging>=24.2",
 
