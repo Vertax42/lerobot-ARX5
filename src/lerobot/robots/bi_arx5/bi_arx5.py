@@ -130,6 +130,7 @@ class BiARX5(Robot):
         }
 
         # Create solver for FK/IK calculations (both arms use same model)
+        current_dir = os.path.dirname(__file__)
         urdf_path = os.path.join(current_dir, "..", "..", "..", "..", "third_party", "ARX5_SDK", "models", f"{config.left_arm_model}.urdf")
         self._solver = arx5.Arx5Solver(
             urdf_path,
