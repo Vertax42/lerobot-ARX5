@@ -48,6 +48,10 @@ def make_robot_from_config(config: RobotConfig) -> Robot:
         from .pylibfranka_research3 import PylibfrankaResearch3
 
         return PylibfrankaResearch3(config)
+    elif config.type == "mock_robot":
+        from .mock_robot import MockRobot
+
+        return MockRobot(config)
     else:
         try:
             return cast(Robot, make_device_from_device_class(config))

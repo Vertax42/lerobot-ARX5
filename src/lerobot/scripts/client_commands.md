@@ -2,7 +2,7 @@
 
 ## BiARX5 Robot lerobot-teleoperate command
 
-```python
+```bash
 lerobot-teleoperate \
     --robot.type=bi_arx5 \
     --robot.enable_tactile_sensors=true \
@@ -12,12 +12,43 @@ lerobot-teleoperate \
     --display_data=true
 ```
 
-```python
+```bash
 lerobot-teleoperate \
     --robot.type=arx5_follower \
     --robot.control_mode=cartesian_control \
     --robot.enable_tactile_sensors=false \
     --teleop.type=mock_teleop \
+    --fps=30 \
+    --debug_timing=false \
+    --display_data=true
+```
+
+## ARX5 Robot lerobot-teleoperate command(use trlc_leader teleop)
+
+```bash
+lerobot-teleoperate \
+    --robot.type=arx5_follower \
+    --robot.control_mode=joint_control \
+    --robot.enable_tactile_sensors=false \
+    --teleop.type=trlc_leader \
+    --teleop.port="/dev/ttyTRLC0" \
+    --teleop.joint_signs "[1,1,1,1,1,1]" \
+    --teleop.start_joints "[0.0,0.0,0.0,0.0,0.0,0.0]" \
+    --fps=30 \
+    --debug_timing=false \
+    --display_data=true
+```
+
+```bash
+lerobot-teleoperate \
+    --robot.type=mock_robot \
+    --robot.control_mode=joint_control \
+    --robot.n_motors=6 \
+    --robot.use_gripper=true \
+    --teleop.type=trlc_leader \
+    --teleop.port="/dev/ttyTRLC0" \
+    --teleop.joint_signs "[1,1,1,1,1,1]" \
+    --teleop.start_joints "[0.0,0.0,0.0,0.0,0.0,0.0]" \
     --fps=30 \
     --debug_timing=false \
     --display_data=true
@@ -87,7 +118,7 @@ lerobot-record \
     --display_data=true
 ```
 
-## Flexiv Rizon4 Robot with Flare Gripper lerobot-record by Beitong Gamepad command 
+## Flexiv Rizon4 Robot with Flare Gripper lerobot-record by Beitong Gamepad command
 
 ```python
 lerobot-record \
@@ -482,6 +513,30 @@ lerobot-record \
     --dataset.num_episodes=2 \
     --dataset.single_task="pick" \
     --dataset.fps=10 \
+    --resume=false \
+    --dataset.push_to_hub=false \
+    --display_data=true
+```
+
+## ARX5 Robot lerobot-record command (use trlc_leader teleop)
+
+```bash
+lerobot-record \
+    --robot.type=arx5_follower \
+    --robot.control_mode=joint_control \
+    --robot.arm_port=can3 \
+    --teleop.type=trlc_leader \
+    --teleop.port="/dev/ttyTRLC0" \
+    --teleop.joint_signs "[1,1,1,1,1,1]" \
+    --teleop.start_joints "[0.0,0.0,0.0,0.0,0.0,0.0]" \
+    --dataset.repo_id=Vertax/arx5_trlc_pick_and_place \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="pick up the cube and place it in the box" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=60 \
+    --dataset.reset_time_s=15 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
     --resume=false \
     --dataset.push_to_hub=false \
     --display_data=true
