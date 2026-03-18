@@ -1,11 +1,14 @@
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, Union
 from enum import Enum
 
 from lerobot.cameras.utils import CameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.robots.config import RobotConfig
 from lerobot.cameras.configs import ColorMode
+
+from lerobot.robots.pylibfranka_research3.config_franka_gripper import FrankaGripperConfig
+from lerobot.robots.pylibfranka_research3.config_xense_gripper import XenseGripperConfig
 
 class ControlMode(str, Enum):
     """Control mode for Flexiv Rizon4.
@@ -41,6 +44,8 @@ class PylibfrankaResearch3Config(RobotConfig):
     # control_mode: str = "joint_impedance"  # Options: joint_impedance, cartesian_impedance
     control_mode: ControlMode = ControlMode.CARTESIAN_IMPEDANCE
 
+    use_joint_observation: bool = False # whether to use joint positions/velocities/efforts in observation (only applies to cartesian_impedance mode)
+
     # use_force: Enable force control (only applies to start_torque_control mode)
     use_force: bool = False # joint torque (7D)
     
@@ -66,34 +71,32 @@ class PylibfrankaResearch3Config(RobotConfig):
     robot_home_position: list = field(default_factory=lambda: [0.0, 0.0, 0.0, -1.57079, 0.0, 1.57079, 0.7853])
     
     robot_tcp_home_position: list = field(default_factory=lambda: [0.5592, -0.0073, 0.5123, 0.0, 1.0, 0.0, 0.0]) # x,y,z,w,x,y,z (wxyz)
-    # ======================== Xense Gripper Configuration ========================
+
+    gripper_type: str = "franka_gripper"  # Options: "franka_gripper", "xense_gripper"
 
     # Whether to use the gripper
     use_gripper: bool = True
-    # Hand server communication
+
+    # ======================== Franka Gripper Parameters ========================
+    gripper_ip: str = "192.168.99.111"  # Franka gripper IP (shares FCI connection)
+    gripper_speed: float = 0.5  # m/s
+    gripper_force: float = 60.0  # N
+    gripper_min_pos: float = 0.0  # m (fully closed)
+    gripper_max_pos: float = 0.08  # m (fully open, ~80mm for Franka Hand)
+    gripper_init_open: bool = True
+
+    # ======================== Xense Gripper Parameters ========================
     gripper_server_ip: str = "127.0.0.1"
     gripper_server_port: int = 7001
-    
-    # Gripper hardware identification
     gripper_id: str = "7ec0c7f50ea6"  # USB device ID
-    
-    # Gripper motion parameters
-    gripper_default_velocity: float = 100.0   # vel
-    gripper_default_force: float = 30.0        # force
-    
-    # Gripper position limits (0.0=open, 1.0=closed)
-    gripper_min_position: float = 0.0
-    gripper_max_position: float = 1.0
-    
-    # Gripper home position
-    gripper_home_position: float = 0.0  # Middle position
-    
-    # Physical width mapping (mm)
-    gripper_min_width_mm: float = 0.0    # When open
-    gripper_max_width_mm: float = 85.0   # When closed
-    
-    # Gripper communication timeout (seconds)
-    gripper_timeout: float = 2.0
+    gripper_default_velocity: float = 100.0  # mm/s
+    gripper_default_force: float = 30.0  # N
+    gripper_min_width_mm: float = 0.0  # mm (fully closed)
+    gripper_max_width_mm: float = 85.0  # mm (fully open)
+    gripper_timeout: float = 2.0  # seconds
+
+    # Auto-created in __post_init__ from gripper_* parameters (do not set directly)
+    gripper: Union[FrankaGripperConfig, XenseGripperConfig] | None = field(default=None, init=False)
     
     # ======================== Camera Configuration ========================
     
@@ -124,4 +127,30 @@ class PylibfrankaResearch3Config(RobotConfig):
     
     # Timeout for synchronized actions (seconds)
     action_timeout: float = 0.1
-    
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        # Create gripper config from exposed parameters
+        if self.use_gripper and self.gripper_type == "franka_gripper":
+            self.gripper = FrankaGripperConfig(
+                gripper_ip=self.gripper_ip,
+                gripper_speed=self.gripper_speed,
+                gripper_force=self.gripper_force,
+                gripper_min_pos=self.gripper_min_pos,
+                gripper_max_pos=self.gripper_max_pos,
+                init_open=self.gripper_init_open,
+            )
+        elif self.use_gripper and self.gripper_type == "xense_gripper":
+            self.gripper = XenseGripperConfig(
+                gripper_server_ip=self.gripper_server_ip,
+                gripper_server_port=self.gripper_server_port,
+                gripper_id=self.gripper_id,
+                gripper_default_velocity=self.gripper_default_velocity,
+                gripper_default_force=self.gripper_default_force,
+                gripper_min_width_mm=self.gripper_min_width_mm,
+                gripper_max_width_mm=self.gripper_max_width_mm,
+                gripper_timeout=self.gripper_timeout,
+            )
+        else:
+            self.gripper = None

@@ -220,6 +220,7 @@ class TeleopServer:
             "tau": state["last_torque"].tolist(),
             "ext_wrench": state["ext_wrench"].tolist(),
             "timestamp": time.time(),
+            "ee": state["ee"].tolist(),
         }
 
         if self.control_mode == "cartesian":
