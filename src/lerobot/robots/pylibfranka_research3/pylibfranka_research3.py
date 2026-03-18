@@ -279,6 +279,20 @@ class PylibfrankaResearch3(Robot):
             # Gripper: position (0.0=open, 1.0=closed)
             features[self._gripper_key] = float
 
+        # Tactile sensors from xense gripper
+        if self._gripper and self.config.use_gripper and self.config.gripper_type == "xense_gripper":
+            if self._gripper._config.enable_sensor:
+                features["left_tactile"] = (
+                    self._gripper._config.rectify_size[1],
+                    self._gripper._config.rectify_size[0],
+                    3,
+                )
+                features["right_tactile"] = (
+                    self._gripper._config.rectify_size[1],
+                    self._gripper._config.rectify_size[0],
+                    3,
+                )
+
         # Cameras
         for cam_name, cam_config in self.config.cameras.items():
             features[cam_name] = (cam_config.height, cam_config.width, 3)
@@ -433,7 +447,14 @@ class PylibfrankaResearch3(Robot):
                 logger.info(f"Connecting gripper ({self.config.gripper_type})...")
                 self._gripper.connect()
                 self._gripper_connected = True
-                logger.info("Gripper connection successful")
+
+                if self.config.gripper_type == "xense_gripper":
+                    gripper_devices = ["gripper"]
+                    if self._gripper._config.enable_sensor:
+                        gripper_devices.append("tactile")
+                    logger.info(f"XenseGripper connected ({' + '.join(gripper_devices)})")
+                else:
+                    logger.info("Gripper connection successful")
 
             # 5. Connect cameras
             logger.info("Connecting cameras...")
@@ -636,6 +657,13 @@ class PylibfrankaResearch3(Robot):
 
         # Gripper
         if self.config.use_gripper and self._gripper is not None:
+            # Read tactile sensors (keys are mapped from SN to sensor_keys names)
+            if self._gripper._enable_sensor:
+                sensor_data = self._gripper.get_sensor_data()
+                for key, data in sensor_data.items():
+                    obs_dict[key] = data
+
+            # Read gripper position
             obs_dict[self._gripper_key] = self._gripper.get_gripper_position()
 
         # Cameras
