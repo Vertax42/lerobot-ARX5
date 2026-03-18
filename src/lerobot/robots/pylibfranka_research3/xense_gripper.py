@@ -1,120 +1,192 @@
-"""XenseGripper — HTTP-based xense gripper control for pylibfranka_research3.
+from xensegripper import XenseGripper as xg
+from xensesdk import Sensor, call_service
 
-Communicates with gripper_server_xense.py (FastAPI server) via HTTP requests.
-
-Position convention: 0.0 = open, 1.0 = closed.
-"""
-
-import logging
-
-import numpy as np
-import requests
-
+from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from .config_xense_gripper import XenseGripperConfig
+from lerobot.utils.robot_utils import get_logger
 
 
 class XenseGripper:
-    """XenseGripper via HTTP server with normalized position control.
-
-    Provides the same interface as FrankaGripper:
-    connect/disconnect/get_gripper_position/set_gripper_position.
-    """
-
     config_class = XenseGripperConfig
 
     def __init__(self, config: XenseGripperConfig):
         self._config = config
-        self._server_ip = config.gripper_server_ip
-        self._server_port = config.gripper_server_port
-        self._default_velocity = config.gripper_default_velocity
-        self._default_force = config.gripper_default_force
-        self._min_width_mm = config.gripper_min_width_mm
-        self._max_width_mm = config.gripper_max_width_mm
-        self._timeout = config.gripper_timeout
+        self._mac_addr = config.mac_addr
+        self._rectify_size = config.rectify_size
+        self._enable_sensor = config.enable_sensor
+        self._sensor_output_type = config.sensor_output_type
+        self._sensor_keys = config.sensor_keys
+        self._gripper_max_pos = config.gripper_max_pos
+        self._gripper_min_pos = config.gripper_min_pos
+        self._gripper_v_max = config.gripper_v_max
+        self._gripper_f_max = config.gripper_f_max
+        self._init_open = config.init_open
+        self._logger = get_logger(f"Gripper-{self._mac_addr[:6]}")
 
-        self._base_url = f"http://{self._server_ip}:{self._server_port}"
         self._is_connected = False
-        self._logger = logging.getLogger(f"XenseGripper-{self._server_ip}:{self._server_port}")
+        self._gripper: xg = None
+        self._sensors: dict[str, Sensor] = {}
+        self._available_sensors: dict = {}    
 
     def connect(self) -> None:
-        """Connect to the xense gripper HTTP server (health check)."""
+        """Connect to the Gripper."""
         if self._is_connected:
-            raise RuntimeError("XenseGripper already connected")
+            raise DeviceAlreadyConnectedError(f"{self} already connected")
 
-        self._logger.info(f"Connecting to XenseGripper server at {self._base_url}...")
-        if not self._health_check():
-            raise ConnectionError(f"Cannot reach xense gripper server at {self._base_url}")
+        self._logger.info(f"Connecting to Gripper server: {self._mac_addr}")
+
+        # Scan for sensors (deferred from __init__ to avoid blocking at construction time)
+        if self._enable_sensor:
+            self._logger.info(f"Scanning for sensors on device {self._mac_addr}...")
+            try:
+                sensor_sns = call_service(f"master_{self._mac_addr}", "scan_sensor_sn")
+                if not sensor_sns:
+                    raise RuntimeError("No sensors found")
+                self._logger.info(f"Found {len(sensor_sns)} sensor(s):")
+                for sn, info in sensor_sns.items():
+                    self._logger.info(f"  - {sn}: {info}")
+                self._available_sensors = sensor_sns
+            except Exception as e:
+                raise RuntimeError(f"Error scanning sensors: {e}") from e
+        else:
+            self._logger.info("Tactile sensors disabled by config.")
+
+        if self._enable_sensor:
+            try:
+                # connect sensors
+                if self._available_sensors:
+                    for sn in self._available_sensors:
+                        self._sensors[sn] = Sensor.create(
+                            sn, mac_addr=self._mac_addr, rectify_size=self._rectify_size
+                        )
+                    self._logger.info(f"✅ {len(self._sensors)} tactile sensors successfully connected.")
+                else:
+                    self._logger.warn("No tactile sensors found")
+            except Exception as e:
+                raise RuntimeError(f"Error connecting to Gripper tactile sensors: {e}") from e
+        else:
+            self._logger.info("Skipping tactile sensor connection (disabled).")
+
+
+
+        try:
+            # connect gripper
+            self._gripper = xg.create(self._mac_addr)
+            if self._gripper is not None:
+                self._logger.info("✅ Gripper successfully connected.")
+            else:
+                self._logger.warn("No gripper found")
+        except Exception as e:
+            raise RuntimeError(f"Error connecting to Gripper gripper: {e}") from e
 
         self._is_connected = True
-        self._logger.info("XenseGripper connected.")
+        self._logger.info("✅ Gripper successfully connected.")
+    
+    def get_sensor(self, id: int | str) -> Sensor | None:
+        if isinstance(id, int):
+            if id > len(self._sensors) - 1:
+                self._logger.error(f"Sensor id {id} out of range")
+                return None
+            id = list(self._sensors.keys())[id]
 
-    def disconnect(self) -> None:
-        """Disconnect from the xense gripper HTTP server."""
-        if not self._is_connected:
-            return
-        self._is_connected = False
-        self._logger.info("XenseGripper disconnected.")
+        if id not in self._sensors:
+            self._logger.error(f"Sensor {id} not found, available sensors: {list(self._sensors.keys())}")
+            return None
 
+        return self._sensors[id]
+    
     def get_gripper_position(self) -> float:
-        """Get normalized gripper position [0.0=open, 1.0=closed]."""
-        if not self._is_connected:
+        """
+        Get current gripper position.
+
+        Returns:
+            Gripper position (0=closed, 1=fully open), or 0.0 if not available
+        """
+        if not self._is_connected or self._gripper is None:
             return 0.0
+
         try:
-            response = requests.get(f"{self._base_url}/get_pos", timeout=self._timeout)
-            if response.status_code != 200:
-                self._logger.warning(f"Failed to get gripper position: HTTP {response.status_code}")
+            status = self._gripper.get_gripper_status()
+            if status is not None:
+                raw_pos = float(status.get("position", 0.0))
+                # Normalize to [0, 1] range
+                if raw_pos < self._gripper_min_pos or raw_pos > self._gripper_max_pos:
+                    raw_pos = max(self._gripper_min_pos, min(raw_pos, self._gripper_max_pos))
+                normalized_pos = (raw_pos - self._gripper_min_pos) / (self._gripper_max_pos - self._gripper_min_pos)
+                return max(0.0, min(1.0, normalized_pos))
+            else:
                 return 0.0
-            data = response.json()
-            width = data.get("position", 0.0)
-            width = max(self._min_width_mm, min(self._max_width_mm, width))
-
-            width_range = self._max_width_mm - self._min_width_mm
-            if width_range <= 0:
-                return 0.0
-            # 0.0=open (max_width), 1.0=closed (min_width)
-            closed_ratio = 1.0 - (width - self._min_width_mm) / width_range
-            return float(np.clip(closed_ratio, 0.0, 1.0))
-        except Exception as e:
-            self._logger.error(f"Failed to get gripper position: {e}")
+        except Exception:
             return 0.0
+    
+    def get_sensor_data(self) -> dict[str, any]:
+        """
+        Get sensor rectify data from all connected sensors.
 
-    def set_gripper_position(self, normalized_pos: float) -> None:
-        """Set gripper position.
-
-        Args:
-            normalized_pos: Target position [0.0=open, 1.0=closed]
+        Returns:
+            Dictionary mapping sensor_keys names (e.g., "left_tactile", "right_tactile")
+            to their rectify data (numpy arrays).
         """
         if not self._is_connected:
-            self._logger.warning("Gripper not connected, cannot set position")
-            return
+            return {}
 
-        normalized_pos = max(0.0, min(1.0, normalized_pos))
-        # Convert: 0.0=open (max_width), 1.0=closed (min_width)
-        target_width = self._min_width_mm + (1.0 - normalized_pos) * (
-            self._max_width_mm - self._min_width_mm
-        )
-        target_width = float(np.clip(target_width, self._min_width_mm, self._max_width_mm))
+        sensor_data = {}
+        for sn, sensor_obj in self._sensors.items():
+            try:
+                # Get the human-readable key name from sensor_keys mapping
+                # If not found in mapping, use SN as fallback
+                key_name = self._sensor_keys.get(sn, sn)
 
-        try:
-            response = requests.post(
-                f"{self._base_url}/move",
-                json={
-                    "pos": target_width,
-                    "vmax": self._default_velocity,
-                    "fmax": self._default_force,
-                },
-                timeout=self._timeout,
-            )
-            if response.status_code != 200:
-                self._logger.warning(f"Failed to send gripper command: HTTP {response.status_code}")
-        except Exception as e:
-            self._logger.error(f"Failed to send gripper position command: {e}")
+                rectify = sensor_obj.selectSensorInfo(Sensor.OutputType.Rectify)
+                if rectify is not None:
+                    # Convert BGR to RGB
+                    if rectify.ndim == 3 and rectify.shape[2] == 3:
+                        rectify = rectify[:, :, ::-1].copy()
+                    sensor_data[key_name] = rectify
+            except Exception as e:
+                self._logger.debug(f"Failed to read sensor {sn} rectify data: {e}")
 
-    def _health_check(self) -> bool:
-        """Check if the xense gripper HTTP server is reachable."""
-        try:
-            response = requests.get(f"{self._base_url}/get_pos", timeout=self._timeout)
-            return response.status_code == 200
-        except Exception as e:
-            self._logger.error(f"Health check failed: {e}")
-            return False
+        return sensor_data
+
+    def set_gripper_position(self, normalized_pos: float) -> None:
+        """
+        Set gripper position.
+
+        Args:
+            normalized_pos: Target position in [0, 1] range (0=closed, 1=fully open)
+        """
+        if not self._is_connected or self._gripper is None:
+            raise DeviceNotConnectedError("Gripper not connected")
+
+        if normalized_pos < 0.0 or normalized_pos > 1.0:
+            raise ValueError(f"Gripper position must be between 0 and 1, got {normalized_pos}")
+
+        target_pos = normalized_pos * self._gripper_max_pos
+        print(f"target_pos: {target_pos}")
+        self._gripper.set_position(target_pos, vmax=self._gripper_v_max, fmax=self._gripper_f_max)
+
+    def disconnect(self) -> None:
+        """Disconnect from the Flare Gripper."""
+        if not self._is_connected:
+            raise DeviceNotConnectedError("Flare Gripper not connected")
+
+        self._logger.info("Disconnecting Flare Gripper...")
+
+        # Disconnect sensors
+        for sn, sensor_obj in self._sensors.items():
+            try:
+                sensor_obj.release()
+            except Exception as e:
+                self._logger.debug(f"Error releasing sensor {sn}: {e}")
+        self._sensors.clear()
+
+        # Disconnect gripper
+        if self._gripper is not None:
+            try:
+                self._gripper = None
+            except Exception as e:
+                self._logger.debug(f"Error releasing gripper: {e}")
+            self._gripper = None
+
+        self._is_connected = False
+        self._logger.info("✅ Flare Gripper disconnected.")
