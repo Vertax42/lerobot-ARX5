@@ -28,7 +28,7 @@ dependencies:
   # PyAV/torchcodec are installed from wheels later in setup_env.sh. Keeping
   # ffmpeg out of the conda solve avoids ICU/libxml2 conflicts with Robostack.
   # ── Python base tools ─────────────────────────────────────────────────────
-  - numpy>=1.26.4,<2.3.0 # allow pip-only installs to use numpy 2.x while robostack can still resolve to 1.26
+  - numpy>=1.26.4 # robostack resolves to 1.26; pip-only installs can use 2.x
   - pip
   - wheel
   - pip:
