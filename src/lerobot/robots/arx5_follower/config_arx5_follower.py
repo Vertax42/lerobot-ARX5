@@ -19,8 +19,7 @@ from enum import Enum
 
 from lerobot.cameras import CameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
-
-from ..config import RobotConfig
+from lerobot.robots.config import RobotConfig
 
 
 class ARX5ControlMode(Enum):
@@ -79,31 +78,36 @@ class ARX5FollowerConfig(RobotConfig):
         default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     )
 
-    # default start position is [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.0]
-    # modified cartesian start position is [0.0, 0.967, 1.290, -0.970, 0.0, 0.0, 0.0]
-    if control_mode == ARX5ControlMode.CARTESIAN_CONTROL:
-        start_position = [0.0, 0.967, 1.290, -0.970, 0.0, 0.0, 0.0]
-    else:
-        start_position = [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.0]
+    # Start position; set in __post_init__ from control_mode.
+    start_position: list[float] = field(
+        default_factory=lambda: [0.0, 0.967, 1.290, -0.970, 0.0, 0.0, 0.0]
+    )
 
     # Camera configuration
     cameras: dict[str, CameraConfig] = field(default_factory=lambda: {})
 
     def __post_init__(self):
+        # Set start_position from control_mode
+        # default start position is [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.0]
+        # modified cartesian start position is [0.0, 0.967, 1.290, -0.970, 0.0, 0.0, 0.0]
+        if self.control_mode == ARX5ControlMode.JOINT_CONTROL:
+            self.start_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.57]
+        else:
+            self.start_position = [0.0, 0.967, 1.290, -0.970, 0.0, 0.0, 0.0]
+        
         # Default camera configuration if not provided
-        # if not self.cameras:
-        #     self.cameras = {
-        #         "head": RealSenseCameraConfig(
-        #             serial_number_or_name="230322271365",
-        #             fps=60,
-        #             width=640,
-        #             height=480,
-        #         ),
-        #         "wrist": RealSenseCameraConfig(
-        #             serial_number_or_name="230422271416",
-        #             fps=60,
-        #             width=640,
-        #             height=480,
-        #         ),
-        #     }
-        pass
+        if not self.cameras:
+            self.cameras = {
+                "head": RealSenseCameraConfig(
+                    serial_number_or_name="230322271365",
+                    fps=60,
+                    width=640,
+                    height=480,
+                ),
+                "wrist": RealSenseCameraConfig(
+                    serial_number_or_name="230322274234",
+                    fps=60,
+                    width=640,
+                    height=480,
+                ),
+            }
