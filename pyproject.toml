@@ -155,7 +155,7 @@ kinematics = ["lerobot[placo-dep]"]
 # Conda-only deps (install via conda activate arx-py312):
 #   conda install -c conda-forge spdlog==1.14.1 pybind11 orocos-kdl eigen boost ninja
 #   conda install -c conda-forge soem=1.4.0  # x86_64 only; see arx-py312.yaml for aarch64 instructions
-#   conda install -c robostack-jazzy ros-jazzy-kdl-parser
+#   conda install -c robostack-staging ros-humble-kdl-parser ros-humble-ament-cmake
 # Then build ARX5 Python bindings from source (src/lerobot/robots/bi_arx5/ARX5_SDK/).
 arx5 = [
     "pyarx",
