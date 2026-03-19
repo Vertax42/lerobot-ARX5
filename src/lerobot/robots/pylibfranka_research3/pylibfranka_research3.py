@@ -658,10 +658,11 @@ class PylibfrankaResearch3(Robot):
         # Gripper
         if self.config.use_gripper and self._gripper is not None:
             # Read tactile sensors (keys are mapped from SN to sensor_keys names)
-            if self._gripper._enable_sensor:
-                sensor_data = self._gripper.get_sensor_data()
-                for key, data in sensor_data.items():
-                    obs_dict[key] = data
+            if self.config.gripper_type == "xense_gripper":
+                if self._gripper._enable_sensor:
+                    sensor_data = self._gripper.get_sensor_data()
+                    for key, data in sensor_data.items():
+                        obs_dict[key] = data
 
             # Read gripper position
             obs_dict[self._gripper_key] = self._gripper.get_gripper_position()
