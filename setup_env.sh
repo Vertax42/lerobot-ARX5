@@ -384,11 +384,11 @@ install_pico4() {
 install_xense() {
     echo ""
     echo "══════════════════════════════════════════"
-    echo " xensesdk + xensegripper (submodules)"
+    echo " xensesdk + XGripper (submodules)"
     echo "══════════════════════════════════════════"
 
     local SDK_DIR="$PROJECT_ROOT/third_party/xensesdk"
-    local GRIPPER_DIR="$PROJECT_ROOT/third_party/xensegripper"
+    local GRIPPER_DIR="$PROJECT_ROOT/third_party/XGripper"
     local XU_DIR="$SDK_DIR/xense_xu/cpp"
 
     if [[ ! -d "$SDK_DIR" ]]; then
@@ -398,7 +398,7 @@ install_xense() {
     fi
     if [[ ! -d "$GRIPPER_DIR" ]]; then
         echo "ERROR: $GRIPPER_DIR not found."
-        echo "  Run: git submodule update --init third_party/xensegripper"
+        echo "  Run: git submodule update --init third_party/XGripper"
         return 1
     fi
     if [[ ! -d "$XU_DIR" ]]; then
@@ -428,7 +428,7 @@ install_xense() {
     uv pip install -e "$SDK_DIR"
     echo "[xense] Building pyxensexu companion module..."
     bash "$XU_DIR/build_python.sh"
-    # Install xensegripper from local submodule (package name: xgripper).
+    # Install XGripper from local submodule (package name: xgripper).
     # xgripper bundles pysurvive from vendored libsurvive source, and xensesdk
     # has already been installed from the local submodule above. Avoid resolving
     # these back to PyPI wheels, which are incomplete for Python 3.12.
