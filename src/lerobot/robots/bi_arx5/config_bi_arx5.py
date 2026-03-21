@@ -94,13 +94,25 @@ class BiARX5Config(RobotConfig):
         if self.enable_tactile_sensors:
             self.cameras = {
                 "head": RealSenseCameraConfig(
-                    serial_number_or_name="230322271365", fps=60, width=640, height=480
+                    serial_number_or_name="230322271365",
+                    fps=60,
+                    width=640,
+                    height=480,
+                    warmup_s=1.0,
                 ),
                 "left_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230422271416", fps=60, width=640, height=480
+                    serial_number_or_name="230422271416",
+                    fps=60,
+                    width=640,
+                    height=480,
+                    warmup_s=1.0,
                 ),
                 "right_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230322274234", fps=60, width=640, height=480
+                    serial_number_or_name="230322274234",
+                    fps=60,
+                    width=640,
+                    height=480,
+                    warmup_s=1.0,
                 ),
                 "right_tactile_0": XenseTactileCameraConfig(
                     serial_number="OG000339",
@@ -130,13 +142,25 @@ class BiARX5Config(RobotConfig):
         else:
             self.cameras = {
                 "head": RealSenseCameraConfig(
-                    serial_number_or_name="230322271365", fps=60, width=640, height=480
+                    serial_number_or_name="230322271365",
+                    fps=60,
+                    width=640,
+                    height=480,
+                    warmup_s=0.05,
                 ),
                 "left_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230422271416", fps=60, width=640, height=480
+                    serial_number_or_name="230422271416",
+                    fps=60,
+                    width=640,
+                    height=480,
+                    warmup_s=0.05,
                 ),
                 "right_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230322274234", fps=60, width=640, height=480
+                    serial_number_or_name="230322274234",
+                    fps=60,
+                    width=640,
+                    height=480,
+                    warmup_s=0.05,
                 ),
             }
         pass

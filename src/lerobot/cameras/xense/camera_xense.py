@@ -181,7 +181,7 @@ class XenseTactileCamera(Camera):
         """Checks if the sensor is currently connected."""
         return self.sensor is not None
 
-    def connect(self, warmup: bool = True):
+    def connect(self, warmup: bool = False):
         """
         Connects to the Xense sensor specified in the configuration.
 
