@@ -7,43 +7,43 @@ for all Xense-supported robots.
 
 ## lerobot-teleoperate
 
-### Generic robots (SO-101, Koch, etc.)
-
-```bash
-lerobot-teleoperate \
-    --robot.type=so101_follower \
-    --robot.port=/dev/tty.usbmodem58760431541 \
-    --robot.cameras="{ front: {type: opencv, index_or_path: 0, width: 1920, height: 1080, fps: 30}}" \
-    --robot.id=black \
-    --teleop.type=so101_leader \
-    --teleop.port=/dev/tty.usbmodem58760431551 \
-    --teleop.id=blue \
-    --display_data=true
-```
-
-### ARX5 single-arm (teach mode)
+### ARX5 follower (teach mode)
 
 ```bash
 lerobot-teleoperate \
     --robot.type=arx5_follower \
-    --robot.arm_port=can0 \
-    --robot.id=right \
-    --teleop.type=btgamepad \
-    --teleop.id=right \
+    --robot.arm_port=can1 \
+    --robot.control_mode=joint_control \
+    --robot.id=left \
+    --teleop.type=mock_teleop \
     --fps=30 \
     --display_data=true
 ```
 
-### ARX5 single-arm + SpaceMouse
+### ARX5 follower + trlc_leader (joint master-slave teleop)
 
 ```bash
 lerobot-teleoperate \
     --robot.type=arx5_follower \
-    --robot.arm_port=can0 \
-    --robot.id=right \
+    --robot.arm_port=can1 \
+    --robot.control_mode=joint_control \
+    --robot.id=left \
+    --teleop.type=trlc_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --fps=30 \
+    --display_data=true
+```
+
+### ARX5 follower + SpaceMouse (default cartesian control_mode)
+
+```bash
+lerobot-teleoperate \
+    --robot.type=arx5_follower \
+    --robot.arm_port=can1 \
+    --robot.id=left \
     --teleop.type=spacemouse \
-    --teleop.id=right \
-    --fps=30
+    --teleop.id=left \
+    --fps=100
 ```
 
 ### ARX5 bimanual (teach mode)
@@ -194,7 +194,7 @@ lerobot-record \
     --display_data=true
 ```
 
-### ARX5 single-arm (teach mode)
+### ARX5 follower (teach mode)
 
 ```bash
 lerobot-record \
