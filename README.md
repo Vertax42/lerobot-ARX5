@@ -75,7 +75,7 @@ This step will:
 
 - update the conda environment from `conda_environment.yaml`
 - install the main package from `pyproject.toml`
-- build and install local `third_party` packages, including `pyarx`, `flexiv_rt`, `xensevr_pc_service_sdk`, `xensesdk`, `xensegripper`, and `pyxensexu`
+- build and install local `third_party` packages, including `pyarx`, `flexiv_rt`, `xensevr_pc_service_sdk`, `xensesdk`, `XGripper`, and `pyxensexu`
 
 ### 5. Verify the installation
 

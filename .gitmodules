@@ -11,8 +11,8 @@
 	path = third_party/xensesdk
 	url = git@192.168.1.61:physical-ai/xensesdk-dev.git
 	branch = main
-[submodule "third_party/xensegripper"]
-	path = third_party/xensegripper
+[submodule "third_party/XGripper"]
+	path = third_party/XGripper
 	url = https://github.com/Vertax42/XGripper.git
 [submodule "third_party/xense_franka"]
     path = third_party/xense_franka
