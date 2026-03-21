@@ -220,6 +220,41 @@ PY
     fi
 }
 
+# Apply CAP_SYS_NICE to the active conda Python so ARX5 SDK can use SCHED_FIFO on the CAN thread.
+# Must target the real interpreter (e.g. python3.12), not a python/python3 symlink — setcap rejects symlinks.
+apply_python_cap_sys_nice_for_arx5() {
+    echo ""
+    echo "[arx5] CAP_SYS_NICE on Python (optional, ARX5 CAN real-time thread)"
+    if ! command -v setcap &>/dev/null; then
+        echo "[arx5]   setcap not found — install: sudo apt install libcap2-bin"
+        return 0
+    fi
+    local PY_EXE
+    PY_EXE="$(python -c 'import sys; print(sys.executable)' 2>/dev/null)" || true
+    if [[ -z "$PY_EXE" || ! -e "$PY_EXE" ]]; then
+        echo "[arx5]   Could not resolve sys.executable. Skip."
+        return 0
+    fi
+    # setcap requires a regular file; follow symlinks to python3.x
+    while [[ -L "$PY_EXE" ]]; do
+        PY_EXE="$(readlink -f "$PY_EXE")"
+    done
+    if [[ ! -f "$PY_EXE" ]]; then
+        echo "[arx5]   Not a regular file: $PY_EXE. Skip."
+        return 0
+    fi
+    echo "[arx5]   Target: $PY_EXE"
+    if sudo setcap cap_sys_nice+ep "$PY_EXE"; then
+        if command -v getcap &>/dev/null; then
+            echo "[arx5]   $(getcap "$PY_EXE" 2>/dev/null || true)"
+        fi
+        echo "[arx5]   Done. (ARX5 CAN thread may use SCHED_FIFO; see third_party/ARX5_SDK/README.md)"
+    else
+        echo "[arx5]   setcap failed (need sudo). ARX5 still works without it."
+        echo "[arx5]   Manual: sudo setcap cap_sys_nice+ep $PY_EXE"
+    fi
+}
+
 # ── Hardware module: ARX5 ─────────────────────────────────────────────────────
 
 install_arx5() {
@@ -241,8 +276,6 @@ install_arx5() {
     bash "$SDK_DIR/build_python.sh"
 
     write_sitecustomize
-    echo "[arx5] Skipped runtime capability changes (setcap)."
-    echo "[arx5] If you need real-time scheduling privileges, configure them manually outside setup_env.sh."
     echo "[arx5] Done. Verify with: python -c 'import pyarx; print(pyarx)'"
 }
 
@@ -619,6 +652,9 @@ elif [[ "$1" == "--install" ]]; then
     install_xense     || echo "[WARN] xense installation skipped or failed (see above)"
     install_spacemouse || echo "[WARN] spacemouse installation skipped or failed (see above)"
 
+    # ARX5: allow SCHED_FIFO on CAN thread (requires sudo once per env Python binary)
+    apply_python_cap_sys_nice_for_arx5
+
     # ── Post-install verification ────────────────────────────────────────────
     echo ""
     echo "══════════════════════════════════════════"
@@ -654,5 +690,6 @@ else
     echo "  --conda [env_name]   Create a conda environment (requires Miniconda/Anaconda)"
     echo "  --mamba [env_name]   Create a mamba environment (requires Miniforge)"
     echo "  --install            Install base package + all hardware SDK bindings"
+    echo "                       (will prompt for sudo once to: setcap cap_sys_nice+ep on this env's python)"
     exit 1
 fi
