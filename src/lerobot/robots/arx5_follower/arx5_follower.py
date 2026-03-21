@@ -397,6 +397,24 @@ class ARX5Follower(Robot):
             raise ValueError("get_start_eef_pose requires CARTESIAN_CONTROL mode")
         return self._start_position_eef
 
+    def get_current_tcp_pose_euler(self) -> np.ndarray:
+        """Current TCP pose in Euler form, including gripper (same as Flexiv / SpaceMouse init).
+
+        Returns:
+            ``numpy.ndarray`` of shape ``(7,)``: ``[x, y, z, roll, pitch, yaw, gripper_pos]``.
+            Index ``6`` is the live gripper value from ``get_eef_state().gripper_pos`` (SDK readout),
+            consistent with :meth:`get_observation` / :meth:`send_action` under Cartesian mode.
+        """
+        if not self._is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+        if self.config.control_mode != ARX5ControlMode.CARTESIAN_CONTROL:
+            raise ValueError("get_current_tcp_pose_euler requires CARTESIAN_CONTROL mode")
+        eef_state = self.arm.get_eef_state()
+        pose_6d = np.asarray(eef_state.pose_6d(), dtype=np.float64).reshape(6)
+        gripper_pos = float(eef_state.gripper_pos)
+        # [x, y, z, roll, pitch, yaw, gripper_pos]
+        return np.array([*pose_6d, gripper_pos], dtype=np.float32)
+
     def get_observation(self) -> dict[str, Any]:
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
