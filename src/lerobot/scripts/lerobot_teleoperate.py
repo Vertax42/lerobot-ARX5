@@ -247,7 +247,7 @@ from lerobot.utils.robot_utils import (
     get_logger,
     precise_sleep,
     rotation_6d_to_quaternion,
-    busy_wait
+    busy_wait,
 )
 from lerobot.utils.utils import move_cursor_up
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
@@ -897,6 +897,7 @@ def arx5_trlc_leader_teleop_loop(
         if duration is not None and time.perf_counter() - start >= duration:
             return
 
+
 def spacemouse_teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
@@ -938,6 +939,7 @@ def spacemouse_teleop_loop(
 
     _prev_rt_moving = False
     _reset_display_cleared = False
+    _spacemouse_both_buttons_prev = False
 
     while True:
         loop_start = time.perf_counter()
@@ -952,8 +954,15 @@ def spacemouse_teleop_loop(
         if teleop.name == "spacemouse":
             button_left = teleop._spacemouse.is_left_button_pressed()
             button_right = teleop._spacemouse.is_right_button_pressed()
+            both_buttons = button_left and button_right
+            both_buttons_rising = both_buttons and not _spacemouse_both_buttons_prev
+            _spacemouse_both_buttons_prev = both_buttons
 
-            if button_left and button_right:
+            if both_buttons:
+                is_arx5_family = getattr(robot, "name", None) in (
+                    "arx5_follower",
+                    "bi_arx5",
+                )
                 if dryrun:
                     logger.info(
                         "[DRYRUN] Reset to initial position triggered by both buttons"
@@ -963,6 +972,25 @@ def spacemouse_teleop_loop(
                     ):
                         teleop.reset_to_pose(
                             teleop._start_pose_6d, teleop._start_gripper_pos
+                        )
+                elif (
+                    is_arx5_family
+                    and hasattr(robot, "smooth_go_start")
+                    and both_buttons_rising
+                ):
+                    try:
+                        # Match connect(go_to_start=True): interpolated move, not a teleop target jump.
+                        robot.smooth_go_start(duration=2.0)
+                        eef = robot.get_start_eef_pose()
+                        teleop.reset_to_pose(eef[:6], float(eef[6]))
+                        teleop._start_pose_6d = eef[:6].copy()
+                        teleop._start_gripper_pos = float(eef[6])
+                        logger.info(
+                            "SpaceMouse both buttons: smooth go-to-start (ARX5 / bi_arx5)"
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Smooth go-to-start failed: {e}\n{traceback.format_exc()}"
                         )
                 elif is_flexiv_rt and hasattr(robot, "reset_to_initial_position"):
                     try:
@@ -1006,7 +1034,9 @@ def spacemouse_teleop_loop(
                         logger.error(
                             f"Failed to reset robot position: {e}\n{traceback.format_exc()}"
                         )
-                else:
+                elif not (
+                    is_arx5_family and hasattr(robot, "smooth_go_start")
+                ):
                     if hasattr(teleop, "_start_pose_6d") and hasattr(
                         teleop, "_start_gripper_pos"
                     ):
@@ -2050,8 +2080,10 @@ def teleoperate(cfg: TeleoperateConfig):
             robot = make_robot_from_config(cfg.robot)
             robot.connect()
             teleop = make_teleoperator_from_config(cfg.teleop)
-            logger.info(f"Start EEF pose: {robot.get_start_eef_pose()}")
-            teleop.connect(start_eef_pose=robot.get_start_eef_pose())
+            logger.info(
+                f"Current TCP pose (euler+gripper): {robot.get_current_tcp_pose_euler()}"
+            )
+            teleop.connect(current_tcp_pose_euler=robot.get_current_tcp_pose_euler())
             (
                 teleop_action_processor,
                 robot_action_processor,
@@ -2072,7 +2104,7 @@ def teleoperate(cfg: TeleoperateConfig):
                 )
             except KeyboardInterrupt:
                 pass
-        
+
         # --- arx5_follower + trlc_leader ---
         elif cfg.robot.type == "arx5_follower" and cfg.teleop.type == "trlc_leader":
             logger.info("Detected ARX5 Follower + TRLC Leader")
@@ -2080,7 +2112,11 @@ def teleoperate(cfg: TeleoperateConfig):
             robot.connect()
             teleop = make_teleoperator_from_config(cfg.teleop)
             teleop.connect()
-            teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
+            (
+                teleop_action_processor,
+                robot_action_processor,
+                robot_observation_processor,
+            ) = make_default_processors()
             try:
                 arx5_trlc_leader_teleop_loop(
                     teleop=teleop,
@@ -2660,7 +2696,7 @@ def teleoperate(cfg: TeleoperateConfig):
                         logger.error(
                             f"Error disconnecting robot: {e}\n{traceback.format_exc()}"
                         )
-                        
+
         # ======================== Mock Robot ========================
         elif cfg.robot.type == "mock_robot":
             logger.info("Detected mock robot, using mock teleop loop")
@@ -2668,7 +2704,11 @@ def teleoperate(cfg: TeleoperateConfig):
             robot.connect()
             teleop = make_teleoperator_from_config(cfg.teleop)
             teleop.connect()
-            teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
+            (
+                teleop_action_processor,
+                robot_action_processor,
+                robot_observation_processor,
+            ) = make_default_processors()
             try:
                 mock_robot_teleop_loop(
                     teleop=teleop,
