@@ -47,8 +47,7 @@ import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
 from lerobot.robots.bi_flexiv_rizon4_rt.config_bi_flexiv_rizon4_rt import BiFlexivRizon4RTConfig
-from lerobot.robots.flexiv_rizon4.flare_gripper import FlareGripper
-from lerobot.robots.flexiv_rizon4.xense_gripper import Gripper
+from lerobot.robots.bi_flexiv_rizon4_rt.serial_gripper import SerialGripper
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import (
@@ -122,19 +121,15 @@ class BiFlexivRizon4RT(Robot):
         self._is_connected = False
 
         # Grippers
-        self._left_gripper: FlareGripper | Gripper | None = None
-        if config.left_use_gripper and config.left_gripper_type == "flare_gripper":
-            self._left_gripper = FlareGripper(config.left_gripper)
-        elif config.left_use_gripper and config.left_gripper_type == "xense_gripper":
-            self._left_gripper = Gripper(config.left_gripper)
+        self._left_gripper: SerialGripper | None = None
+        if config.left_use_gripper:
+            self._left_gripper = SerialGripper(config.left_gripper)
         else:
             self.logger.info("Left arm: no gripper configured.")
 
-        self._right_gripper: FlareGripper | Gripper | None = None
-        if config.right_use_gripper and config.right_gripper_type == "flare_gripper":
-            self._right_gripper = FlareGripper(config.right_gripper)
-        elif config.right_use_gripper and config.right_gripper_type == "xense_gripper":
-            self._right_gripper = Gripper(config.right_gripper)
+        self._right_gripper: SerialGripper | None = None
+        if config.right_use_gripper:
+            self._right_gripper = SerialGripper(config.right_gripper)
         else:
             self.logger.info("Right arm: no gripper configured.")
 
@@ -230,27 +225,8 @@ class BiFlexivRizon4RT(Robot):
 
     @property
     def _cameras_ft(self) -> dict[str, tuple]:
-        """Camera/image features from grippers and external cameras."""
+        """Camera/image features from external cameras."""
         features = {}
-
-        for side, gripper, use_gripper, gripper_type in [
-            ("left", self._left_gripper, self.config.left_use_gripper, self.config.left_gripper_type),
-            ("right", self._right_gripper, self.config.right_use_gripper, self.config.right_gripper_type),
-        ]:
-            if gripper and use_gripper:
-                if gripper_type == "flare_gripper":
-                    features[f"{side}_wrist_cam"] = (
-                        gripper._config.cam_size[1],
-                        gripper._config.cam_size[0],
-                        3,
-                    )
-                if gripper._config.enable_sensor:
-                    for sensor_key in gripper._config.sensor_keys.values():
-                        features[sensor_key] = (
-                            gripper._config.rectify_size[1],
-                            gripper._config.rectify_size[0],
-                            3,
-                        )
 
         for cam_name in self.cameras:
             features[cam_name] = (
@@ -679,7 +655,7 @@ class BiFlexivRizon4RT(Robot):
     def _move_arm_to_position(
         self,
         robot: frt.Robot,
-        gripper: FlareGripper | Gripper | None,
+        gripper: SerialGripper | None,
         side: str,
         target_position_degree: list[float],
         vel_scale: int,
@@ -793,9 +769,7 @@ class BiFlexivRizon4RT(Robot):
         self._read_gripper_state(
             gripper=self._left_gripper,
             use_gripper=self.config.left_use_gripper,
-            gripper_type=self.config.left_gripper_type,
             gripper_key=self._left_gripper_key,
-            wrist_cam_key="left_wrist_cam",
             obs_dict=obs_dict,
         )
 
@@ -803,9 +777,7 @@ class BiFlexivRizon4RT(Robot):
         self._read_gripper_state(
             gripper=self._right_gripper,
             use_gripper=self.config.right_use_gripper,
-            gripper_type=self.config.right_gripper_type,
             gripper_key=self._right_gripper_key,
-            wrist_cam_key="right_wrist_cam",
             obs_dict=obs_dict,
         )
 
@@ -853,30 +825,14 @@ class BiFlexivRizon4RT(Robot):
 
     def _read_gripper_state(
         self,
-        gripper: FlareGripper | Gripper | None,
+        gripper: SerialGripper | None,
         use_gripper: bool,
-        gripper_type: str,
         gripper_key: str,
-        wrist_cam_key: str,
         obs_dict: dict,
     ) -> None:
-        """Read gripper state (position, camera, tactile) into obs_dict."""
+        """Read gripper position into obs_dict."""
         if gripper is None or not use_gripper:
             return
-
-        if gripper._enable_sensor:
-            sensor_data = gripper.get_sensor_data()
-            for key, data in sensor_data.items():
-                obs_dict[key] = data
-
-        if gripper_type == "flare_gripper":
-            camera_frame = gripper.get_camera_frame()
-            if camera_frame is not None:
-                obs_dict[wrist_cam_key] = camera_frame
-            else:
-                h, w = gripper._config.cam_size[1], gripper._config.cam_size[0]
-                obs_dict[wrist_cam_key] = np.zeros((h, w, 3), dtype=np.uint8)
-
         obs_dict[gripper_key] = gripper.get_gripper_position()
 
     # =========================================================================
@@ -964,7 +920,7 @@ class BiFlexivRizon4RT(Robot):
     def _send_gripper_action(
         self,
         action: dict[str, Any],
-        gripper: FlareGripper | Gripper | None,
+        gripper: SerialGripper | None,
         use_gripper: bool,
         gripper_key: str,
     ) -> None:

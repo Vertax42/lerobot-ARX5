@@ -17,14 +17,14 @@
 """Configuration for BiFlexivRizon4RT dual-arm robot (real-time via flexiv_rt)."""
 
 from dataclasses import dataclass, field
-from typing import Union
 
 import flexiv_rt
 
 from lerobot.cameras.configs import CameraConfig
+from lerobot.cameras.realsense import RealSenseCameraConfig
+from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
 from lerobot.robots.config import RobotConfig
-from lerobot.robots.flexiv_rizon4.config_flare_gripper import FlareGripperConfig, SensorOutputType
-from lerobot.robots.flexiv_rizon4.config_xense_gripper import GripperConfig
+from lerobot.robots.bi_flexiv_rizon4_rt.config_serial_gripper import SerialGripperConfig
 
 
 @RobotConfig.register_subclass("bi_flexiv_rizon4_rt")
@@ -75,6 +75,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
 
     # Camera configurations (external cameras)
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
+    enable_tactile_sensors: bool = True
 
     # Cartesian impedance (shared for both arms)
     stiffness_ratio: float = 0.2
@@ -101,12 +102,12 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         default_factory=lambda: [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24]
     )
     # left_TCP : x, y ,z, r, p, y = [955, 150, -110, 70, -170, 50]
-    
+
     # Start position parameters (right arm)
     right_start_position_degree: list[float] = field(
         default_factory=lambda: [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.60]
     )
-    
+
     # right_TCP : x, y ,z, r, p, y = [955, -150, -110, -70, 170, -50]
     start_vel_scale: int = 50
 
@@ -138,17 +139,10 @@ class BiFlexivRizon4RTConfig(RobotConfig):
 
     # ========== Left gripper settings ==========
     left_use_gripper: bool = False
-    left_gripper_type: str = "flare_gripper"  # Options: "flare_gripper", "xense_gripper"
-    left_gripper_mac_addr: str = "e2b26adbb104"
-    left_gripper_cam_size: tuple[int, int] = (640, 480)
-    left_gripper_rectify_size: tuple[int, int] = (400, 700)
-    left_gripper_sensor_output_type: SensorOutputType = SensorOutputType.RECTIFY
-    left_gripper_sensor_keys: dict[str, str] = field(
-        default_factory=lambda: {
-            "OG000657": "left_right_tactile",
-            "OG000450": "left_left_tactile",
-        }
-    )
+    left_gripper_port: str = "/dev/ttyUSB0"
+    left_gripper_baudrate: int = 115200
+    left_gripper_serial_timeout: float = 1.0
+    # -- shared motion parameters --
     left_gripper_min_pos: float = 0.0
     left_gripper_max_pos: float = 85.0
     left_gripper_v_max: float = 80.0  # mm/s
@@ -157,17 +151,10 @@ class BiFlexivRizon4RTConfig(RobotConfig):
 
     # ========== Right gripper settings ==========
     right_use_gripper: bool = False
-    right_gripper_type: str = "flare_gripper"  # Options: "flare_gripper", "xense_gripper"
-    right_gripper_mac_addr: str = "bef1504b5391"
-    right_gripper_cam_size: tuple[int, int] = (640, 480)
-    right_gripper_rectify_size: tuple[int, int] = (400, 700)
-    right_gripper_sensor_output_type: SensorOutputType = SensorOutputType.RECTIFY
-    right_gripper_sensor_keys: dict[str, str] = field(
-        default_factory=lambda: {
-            "OG000658": "right_right_tactile",
-            "OG000451": "right_left_tactile",
-        }
-    )
+    right_gripper_port: str = "/dev/ttyUSB1"
+    right_gripper_baudrate: int = 115200
+    right_gripper_serial_timeout: float = 1.0
+    # -- shared motion parameters --
     right_gripper_min_pos: float = 0.0
     right_gripper_max_pos: float = 85.0
     right_gripper_v_max: float = 80.0  # mm/s
@@ -175,8 +162,8 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     right_gripper_init_open: bool = True
 
     # Auto-created in __post_init__ (do not set directly)
-    left_gripper: Union[GripperConfig, FlareGripperConfig] | None = field(default=None, init=False)
-    right_gripper: Union[GripperConfig, FlareGripperConfig] | None = field(default=None, init=False)
+    left_gripper: SerialGripperConfig | None = field(default=None, init=False)
+    right_gripper: SerialGripperConfig | None = field(default=None, init=False)
 
     def __post_init__(self):
         super().__post_init__()
@@ -226,24 +213,11 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             )
 
         # Create left gripper config
-        if self.left_use_gripper and self.left_gripper_type == "flare_gripper":
-            self.left_gripper = FlareGripperConfig(
-                mac_addr=self.left_gripper_mac_addr,
-                cam_size=self.left_gripper_cam_size,
-                rectify_size=self.left_gripper_rectify_size,
-                sensor_output_type=self.left_gripper_sensor_output_type,
-                sensor_keys=self.left_gripper_sensor_keys,
-                gripper_max_pos=self.left_gripper_max_pos,
-                gripper_v_max=self.left_gripper_v_max,
-                gripper_f_max=self.left_gripper_f_max,
-                init_open=self.left_gripper_init_open,
-            )
-        elif self.left_use_gripper and self.left_gripper_type == "xense_gripper":
-            self.left_gripper = GripperConfig(
-                mac_addr=self.left_gripper_mac_addr,
-                rectify_size=self.left_gripper_rectify_size,
-                sensor_output_type=self.left_gripper_sensor_output_type,
-                sensor_keys=self.left_gripper_sensor_keys,
+        if self.left_use_gripper:
+            self.left_gripper = SerialGripperConfig(
+                port=self.left_gripper_port,
+                baudrate=self.left_gripper_baudrate,
+                serial_timeout=self.left_gripper_serial_timeout,
                 gripper_min_pos=self.left_gripper_min_pos,
                 gripper_max_pos=self.left_gripper_max_pos,
                 gripper_v_max=self.left_gripper_v_max,
@@ -254,24 +228,11 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             self.left_gripper = None
 
         # Create right gripper config
-        if self.right_use_gripper and self.right_gripper_type == "flare_gripper":
-            self.right_gripper = FlareGripperConfig(
-                mac_addr=self.right_gripper_mac_addr,
-                cam_size=self.right_gripper_cam_size,
-                rectify_size=self.right_gripper_rectify_size,
-                sensor_output_type=self.right_gripper_sensor_output_type,
-                sensor_keys=self.right_gripper_sensor_keys,
-                gripper_max_pos=self.right_gripper_max_pos,
-                gripper_v_max=self.right_gripper_v_max,
-                gripper_f_max=self.right_gripper_f_max,
-                init_open=self.right_gripper_init_open,
-            )
-        elif self.right_use_gripper and self.right_gripper_type == "xense_gripper":
-            self.right_gripper = GripperConfig(
-                mac_addr=self.right_gripper_mac_addr,
-                rectify_size=self.right_gripper_rectify_size,
-                sensor_output_type=self.right_gripper_sensor_output_type,
-                sensor_keys=self.right_gripper_sensor_keys,
+        if self.right_use_gripper:
+            self.right_gripper = SerialGripperConfig(
+                port=self.right_gripper_port,
+                baudrate=self.right_gripper_baudrate,
+                serial_timeout=self.right_gripper_serial_timeout,
                 gripper_min_pos=self.right_gripper_min_pos,
                 gripper_max_pos=self.right_gripper_max_pos,
                 gripper_v_max=self.right_gripper_v_max,
@@ -280,3 +241,78 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             )
         else:
             self.right_gripper = None
+
+        # Camera configuration based on tactile sensors setting
+        if self.enable_tactile_sensors:
+            self.cameras = {
+                "head": RealSenseCameraConfig(
+                    serial_number_or_name="230322271365",
+                    fps=60,
+                    width=640,
+                    height=480,
+                    warmup_s=1.0,
+                ),
+                "left_wrist": RealSenseCameraConfig(
+                    serial_number_or_name="230422271416",
+                    fps=60,
+                    width=640,
+                    height=480,
+                    warmup_s=1.0,
+                ),
+                "right_wrist": RealSenseCameraConfig(
+                    serial_number_or_name="230322274234",
+                    fps=60,
+                    width=640,
+                    height=480,
+                    warmup_s=1.0,
+                ),
+                "right_tactile_0": XenseTactileCameraConfig(
+                    serial_number="OG000339",
+                    fps=30,
+                    output_types=[XenseOutputType.RECTIFY],
+                    warmup_s=1.0,
+                ),
+                "right_tactile_1": XenseTactileCameraConfig(
+                    serial_number="OG000344",
+                    fps=30,
+                    output_types=[XenseOutputType.RECTIFY],
+                    warmup_s=1.0,
+                ),
+                "left_tactile_0": XenseTactileCameraConfig(
+                    serial_number="OG000337",
+                    fps=30,
+                    output_types=[XenseOutputType.RECTIFY],
+                    warmup_s=1.0,
+                ),
+                "left_tactile_1": XenseTactileCameraConfig(
+                    serial_number="OG000352",
+                    fps=30,
+                    output_types=[XenseOutputType.RECTIFY],
+                    warmup_s=1.0,
+                ),
+            }
+        else:
+            self.cameras = {
+                "head": RealSenseCameraConfig(
+                    serial_number_or_name="230322271365",
+                    fps=60,
+                    width=640,
+                    height=480,
+                    warmup_s=0.05,
+                ),
+                "left_wrist": RealSenseCameraConfig(
+                    serial_number_or_name="230422271416",
+                    fps=60,
+                    width=640,
+                    height=480,
+                    warmup_s=0.05,
+                ),
+                "right_wrist": RealSenseCameraConfig(
+                    serial_number_or_name="230322274234",
+                    fps=60,
+                    width=640,
+                    height=480,
+                    warmup_s=0.05,
+                ),
+            }
+        pass
