@@ -516,6 +516,22 @@ install_spacemouse() {
     echo "[spacemouse] Done."
 }
 
+# ── Hardware module: Dynamixel (TRLC leader, SO arms, etc.) ─────────────────
+
+install_dynamixel() {
+    echo ""
+    echo "══════════════════════════════════════════"
+    echo " Dynamixel — dynamixel-sdk (Python)"
+    echo "══════════════════════════════════════════"
+
+    # Keep in sync with pyproject.toml: dynamixel = ["dynamixel-sdk>=3.7.31,<3.9.0"]
+    if ! uv pip install "dynamixel-sdk>=3.7.31,<3.9.0"; then
+        echo "[dynamixel] ERROR: pip install dynamixel-sdk failed"
+        return 1
+    fi
+    echo "[dynamixel] Done. Verify with: python -c 'import dynamixel_sdk; print(dynamixel_sdk.__file__)'"
+}
+
 # ── Argument parsing ──────────────────────────────────────────────────────────
 
 # Check if an environment name is provided
@@ -651,6 +667,7 @@ elif [[ "$1" == "--install" ]]; then
     ( install_pico4 ) || echo "[WARN] pico4 installation skipped or failed (see above)"
     install_xense     || echo "[WARN] xense installation skipped or failed (see above)"
     install_spacemouse || echo "[WARN] spacemouse installation skipped or failed (see above)"
+    install_dynamixel  || echo "[WARN] dynamixel-sdk installation skipped or failed (see above)"
 
     # ARX5: allow SCHED_FIFO on CAN thread (requires sudo once per env Python binary)
     apply_python_cap_sys_nice_for_arx5
@@ -673,6 +690,7 @@ xensevr_pc_service_sdk|import xensevr_pc_service_sdk; print(xensevr_pc_service_s
 xensesdk|import xensesdk; print(xensesdk.__file__)
 xensegripper|import xensegripper; print(xensegripper.__file__)
 pyxensexu (flash)|from xensesdk.utils.flashRW import xense_flash_manager; print("available" if xense_flash_manager.is_available else "NOT available")
+dynamixel_sdk|import dynamixel_sdk; print(dynamixel_sdk.__file__)
 VERIFY
 
     echo ""

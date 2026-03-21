@@ -23,7 +23,14 @@ from copy import deepcopy
 from enum import Enum
 
 from ..encoding_utils import decode_twos_complement, encode_twos_complement
-from ..motors_bus import Motor, MotorCalibration, NameOrID, SerialMotorsBus, Value, get_address
+from ..motors_bus import (
+    Motor,
+    MotorCalibration,
+    NameOrID,
+    SerialMotorsBus,
+    Value,
+    get_address,
+)
 from .tables import (
     AVAILABLE_BAUDRATES,
     MODEL_BAUDRATE_TABLE,
@@ -128,8 +135,12 @@ class DynamixelMotorsBus(SerialMotorsBus):
 
         self.port_handler = dxl.PortHandler(self.port)
         self.packet_handler = dxl.PacketHandler(PROTOCOL_VERSION)
-        self.sync_reader = dxl.GroupSyncRead(self.port_handler, self.packet_handler, 0, 0)
-        self.sync_writer = dxl.GroupSyncWrite(self.port_handler, self.packet_handler, 0, 0)
+        self.sync_reader = dxl.GroupSyncRead(
+            self.port_handler, self.packet_handler, 0, 0
+        )
+        self.sync_writer = dxl.GroupSyncWrite(
+            self.port_handler, self.packet_handler, 0, 0
+        )
         self._comm_success = dxl.COMM_SUCCESS
         self._no_error = 0x00
 
@@ -139,10 +150,14 @@ class DynamixelMotorsBus(SerialMotorsBus):
     def _handshake(self) -> None:
         self._assert_motors_exist()
 
-    def _find_single_motor(self, motor: str, initial_baudrate: int | None = None) -> tuple[int, int]:
+    def _find_single_motor(
+        self, motor: str, initial_baudrate: int | None = None
+    ) -> tuple[int, int]:
         model = self.motors[motor].model
         search_baudrates = (
-            [initial_baudrate] if initial_baudrate is not None else self.model_baudrate_table[model]
+            [initial_baudrate]
+            if initial_baudrate is not None
+            else self.model_baudrate_table[model]
         )
 
         for baudrate in search_baudrates:
@@ -159,7 +174,9 @@ class DynamixelMotorsBus(SerialMotorsBus):
                     )
                 return baudrate, found_id
 
-        raise RuntimeError(f"Motor '{motor}' (model '{model}') was not found. Make sure it is connected.")
+        raise RuntimeError(
+            f"Motor '{motor}' (model '{model}') was not found. Make sure it is connected."
+        )
 
     def configure_motors(self, return_delay_time=0) -> None:
         # By default, Dynamixel motors have a 500µs delay response time (corresponding to a value of 250 on
@@ -189,7 +206,9 @@ class DynamixelMotorsBus(SerialMotorsBus):
 
         return calibration
 
-    def write_calibration(self, calibration_dict: dict[str, MotorCalibration], cache: bool = True) -> None:
+    def write_calibration(
+        self, calibration_dict: dict[str, MotorCalibration], cache: bool = True
+    ) -> None:
         for motor, calibration in calibration_dict.items():
             self.write("Homing_Offset", motor, calibration.homing_offset)
             self.write("Min_Position_Limit", motor, calibration.range_min)
@@ -198,19 +217,29 @@ class DynamixelMotorsBus(SerialMotorsBus):
         if cache:
             self.calibration = calibration_dict
 
-    def disable_torque(self, motors: int | str | list[str] | None = None, num_retry: int = 0) -> None:
+    def disable_torque(
+        self, motors: int | str | list[str] | None = None, num_retry: int = 0
+    ) -> None:
         for motor in self._get_motors_list(motors):
-            self.write("Torque_Enable", motor, TorqueMode.DISABLED.value, num_retry=num_retry)
+            self.write(
+                "Torque_Enable", motor, TorqueMode.DISABLED.value, num_retry=num_retry
+            )
 
     def _disable_torque(self, motor: int, model: str, num_retry: int = 0) -> None:
         addr, length = get_address(self.model_ctrl_table, model, "Torque_Enable")
         self._write(addr, length, motor, TorqueMode.DISABLED.value, num_retry=num_retry)
 
-    def enable_torque(self, motors: int | str | list[str] | None = None, num_retry: int = 0) -> None:
+    def enable_torque(
+        self, motors: int | str | list[str] | None = None, num_retry: int = 0
+    ) -> None:
         for motor in self._get_motors_list(motors):
-            self.write("Torque_Enable", motor, TorqueMode.ENABLED.value, num_retry=num_retry)
+            self.write(
+                "Torque_Enable", motor, TorqueMode.ENABLED.value, num_retry=num_retry
+            )
 
-    def _encode_sign(self, data_name: str, ids_values: dict[int, int]) -> dict[int, int]:
+    def _encode_sign(
+        self, data_name: str, ids_values: dict[int, int]
+    ) -> dict[int, int]:
         for id_ in ids_values:
             model = self._id_to_model(id_)
             encoding_table = self.model_encoding_table.get(model)
@@ -220,7 +249,9 @@ class DynamixelMotorsBus(SerialMotorsBus):
 
         return ids_values
 
-    def _decode_sign(self, data_name: str, ids_values: dict[int, int]) -> dict[int, int]:
+    def _decode_sign(
+        self, data_name: str, ids_values: dict[int, int]
+    ) -> dict[int, int]:
         for id_ in ids_values:
             model = self._id_to_model(id_)
             encoding_table = self.model_encoding_table.get(model)
@@ -230,7 +261,9 @@ class DynamixelMotorsBus(SerialMotorsBus):
 
         return ids_values
 
-    def _get_half_turn_homings(self, positions: dict[NameOrID, Value]) -> dict[NameOrID, Value]:
+    def _get_half_turn_homings(
+        self, positions: dict[NameOrID, Value]
+    ) -> dict[NameOrID, Value]:
         """
         On Dynamixel Motors:
         Present_Position = Actual_Position + Homing_Offset
@@ -246,7 +279,9 @@ class DynamixelMotorsBus(SerialMotorsBus):
     def _split_into_byte_chunks(self, value: int, length: int) -> list[int]:
         return _split_into_byte_chunks(value, length)
 
-    def broadcast_ping(self, num_retry: int = 0, raise_on_error: bool = False) -> dict[int, int] | None:
+    def broadcast_ping(
+        self, num_retry: int = 0, raise_on_error: bool = False
+    ) -> dict[int, int] | None:
         for n_try in range(1 + num_retry):
             data_list, comm = self.packet_handler.broadcastPing(self.port_handler)
             if self._is_comm_success(comm):
