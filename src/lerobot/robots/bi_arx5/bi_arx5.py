@@ -461,6 +461,40 @@ class BiARX5(Robot):
         self.logger.info("Make sure your hardware matches these ID configurations")
         return
 
+    def _spacemouse_arm_side(self) -> str:
+        """Arm used by single-arm teleop helpers: ``config.id`` ``left``/``l`` or ``right``/``r`` (default right)."""
+        rid = (self.config.id or "right").strip().lower()
+        if rid in ("left", "l"):
+            return "left"
+        return "right"
+
+    def get_start_eef_pose(self) -> np.ndarray:
+        if not self._is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+        if self.config.control_mode != BiARX5ControlMode.CARTESIAN_CONTROL:
+            raise ValueError("get_start_eef_pose requires CARTESIAN_CONTROL mode")
+        return self._start_position_eef.copy()
+
+    def get_current_tcp_pose_euler(self) -> np.ndarray:
+        """Current TCP pose for the arm from :meth:`_spacemouse_arm_side`, **including gripper**.
+
+        Use ``--robot.id=left`` or ``right`` when one SpaceMouse drives a single arm (default right).
+
+        Returns:
+            ``numpy.ndarray`` of shape ``(7,)``: ``[x, y, z, roll, pitch, yaw, gripper_pos]``.
+            Index ``6`` is ``get_eef_state().gripper_pos`` for that arm (same readout as observations).
+        """
+        if not self._is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+        if self.config.control_mode != BiARX5ControlMode.CARTESIAN_CONTROL:
+            raise ValueError("get_current_tcp_pose_euler requires CARTESIAN_CONTROL mode")
+        arm = self.left_arm if self._spacemouse_arm_side() == "left" else self.right_arm
+        eef_state = arm.get_eef_state()
+        pose_6d = np.asarray(eef_state.pose_6d(), dtype=np.float64).reshape(6)
+        gripper_pos = float(eef_state.gripper_pos)
+        # [x, y, z, roll, pitch, yaw, gripper_pos]
+        return np.array([*pose_6d, gripper_pos], dtype=np.float32)
+
     def get_observation(self) -> dict[str, Any]:
         if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
