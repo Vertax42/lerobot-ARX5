@@ -20,6 +20,9 @@ Uses XenseSerialGripper (from the XGripper submodule) directly over a
 USB-serial port.  No ezros / xensesdk stack required.
 """
 
+import time
+from threading import Thread
+
 from xensegripper import XenseSerialGripper
 
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
@@ -61,6 +64,11 @@ class SerialGripper:
         self._is_connected: bool = False
         self._gripper: XenseSerialGripper | None = None
 
+        # Cached position updated by background poller — avoids blocking get_observation()
+        self._cached_position: float = 0.0
+        self._poll_thread: Thread | None = None
+        self._poll_running: bool = False
+
     # ── Connection lifecycle ───────────────────────────────────────────────────
 
     def connect(self) -> None:
@@ -98,10 +106,33 @@ class SerialGripper:
             except Exception as e:
                 self._logger.warn(f"Gripper init-open failed (non-fatal): {e}")
 
+        # Start background position poller so get_gripper_position() never blocks
+        self._poll_running = True
+        self._poll_thread = Thread(target=self._position_poll_loop, daemon=True)
+        self._poll_thread.start()
+
+    def _position_poll_loop(self) -> None:
+        """Background thread: continuously refresh _cached_position via serial query."""
+        span = self._gripper_max_pos - self._gripper_min_pos
+        while self._poll_running and self._gripper is not None:
+            try:
+                status = self._gripper.get_gripper_status(timeout=0.05)
+                if status is not None:
+                    raw_pos = float(status.get("position", 0.0))
+                    raw_pos = max(self._gripper_min_pos, min(raw_pos, self._gripper_max_pos))
+                    self._cached_position = (raw_pos - self._gripper_min_pos) / span
+            except Exception:
+                pass
+
     def disconnect(self) -> None:
         """Stop the background thread and close the serial port."""
         if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        self._poll_running = False
+        if self._poll_thread is not None:
+            self._poll_thread.join(timeout=0.5)
+            self._poll_thread = None
 
         self._logger.info("Disconnecting serial gripper...")
         if self._gripper is not None:
@@ -117,24 +148,18 @@ class SerialGripper:
     # ── Position interface ─────────────────────────────────────────────────────
 
     def get_gripper_position(self) -> float:
-        """Return normalized gripper position in [0, 1].
+        """Return normalized gripper position in [0, 1] from the background cache.
+
+        Returns immediately (non-blocking). The value is refreshed by a background
+        poller thread at ~serial-round-trip rate (~10ms), so latency is at most one
+        poll cycle behind reality — acceptable for 30 Hz teleoperation.
 
         Returns:
             0.0 = fully open, 1.0 = fully closed.
-            Returns 0.0 if not connected or status unavailable.
         """
-        if not self._is_connected or self._gripper is None:
+        if not self._is_connected:
             return 0.0
-        try:
-            status = self._gripper.get_gripper_status(timeout=0.1)
-            if status is None:
-                return 0.0
-            raw_pos = float(status.get("position", 0.0))
-            raw_pos = max(self._gripper_min_pos, min(raw_pos, self._gripper_max_pos))
-            span = self._gripper_max_pos - self._gripper_min_pos
-            return (raw_pos - self._gripper_min_pos) / span
-        except Exception:
-            return 0.0
+        return self._cached_position
 
     def set_gripper_position(self, normalized_pos: float) -> None:
         """Send a position command to the gripper.
