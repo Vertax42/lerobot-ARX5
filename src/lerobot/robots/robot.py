@@ -12,17 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import abc
 import builtins
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import draccus
 
 from lerobot.motors import MotorCalibration
-from lerobot.processor import RobotAction, RobotObservation
 from lerobot.utils.constants import HF_LEROBOT_CALIBRATION, ROBOTS
 
 from .config import RobotConfig
+
+if TYPE_CHECKING:
+    from lerobot.processor import RobotAction, RobotObservation
 
 
 # TODO(aliberts): action/obs typing such as Generic[ObsType, ActType] similar to gym.Env ?
