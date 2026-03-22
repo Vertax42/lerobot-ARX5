@@ -31,11 +31,11 @@ class SerialGripper:
     """Wrapper around XenseSerialGripper for use inside BiFlexivRizon4RT.
 
     Normalized position convention:
-        0.0  →  fully open   (SDK position = gripper_max_pos, e.g. 85 mm)
-        1.0  →  fully closed (SDK position = gripper_min_pos, e.g.  0 mm)
+        0.0  →  fully closed (SDK position = gripper_min_pos, e.g.  0 mm)
+        1.0  →  fully open   (SDK position = gripper_max_pos, e.g. 85 mm)
 
     Note: XenseSerialGripper uses 0 = closed, 85 = open internally.
-    This wrapper inverts the mapping so normalized 0.0 always means open.
+    Normalized maps directly: normalized * span → SDK position.
 
     Example::
 
@@ -132,9 +132,7 @@ class SerialGripper:
             raw_pos = float(status.get("position", 0.0))
             raw_pos = max(self._gripper_min_pos, min(raw_pos, self._gripper_max_pos))
             span = self._gripper_max_pos - self._gripper_min_pos
-            # SDK convention: position=85 means open, position=0 means closed.
-            # Normalized: 0.0 = open, 1.0 = closed → invert.
-            return 1.0 - (raw_pos - self._gripper_min_pos) / span
+            return (raw_pos - self._gripper_min_pos) / span
         except Exception:
             return 0.0
 
@@ -152,8 +150,7 @@ class SerialGripper:
                 f"normalized_pos must be in [0, 1], got {normalized_pos}."
             )
         span = self._gripper_max_pos - self._gripper_min_pos
-        # SDK convention: position=85 opens, position=0 closes → invert normalized mapping.
-        target_mm = self._gripper_max_pos - normalized_pos * span
+        target_mm = self._gripper_min_pos + normalized_pos * span
         self._gripper.set_position(
             target_mm,
             vmax=self._gripper_v_max,
@@ -180,7 +177,7 @@ class SerialGripper:
         if not 0.0 <= normalized_pos <= 1.0:
             raise ValueError(f"normalized_pos must be in [0, 1], got {normalized_pos}.")
         span = self._gripper_max_pos - self._gripper_min_pos
-        target_mm = self._gripper_max_pos - normalized_pos * span
+        target_mm = self._gripper_min_pos + normalized_pos * span
         self._gripper.set_position_sync(
             target_mm,
             vmax=vmax if vmax is not None else self._gripper_v_max,
