@@ -293,20 +293,24 @@ class BiFlexivRizon4RT(Robot):
             )
 
         try:
-            # --- 1. Create robot interfaces ---
-            self.logger.info(f"Connecting to left arm: {self.config.left_robot_sn}")
-            self._left_robot = frt.Robot(
-                self.config.left_robot_sn,
-                connect_retries=self.config.connect_retries,
-                retry_interval_sec=self.config.retry_interval_sec,
+            # --- 1. Create robot interfaces (both arms in parallel) ---
+            self.logger.info(
+                f"Connecting to both arms in parallel: "
+                f"left={self.config.left_robot_sn}, right={self.config.right_robot_sn}"
             )
 
-            self.logger.info(f"Connecting to right arm: {self.config.right_robot_sn}")
-            self._right_robot = frt.Robot(
-                self.config.right_robot_sn,
-                connect_retries=self.config.connect_retries,
-                retry_interval_sec=self.config.retry_interval_sec,
-            )
+            def _connect_arm(sn):
+                return frt.Robot(
+                    sn,
+                    connect_retries=self.config.connect_retries,
+                    retry_interval_sec=self.config.retry_interval_sec,
+                )
+
+            with ThreadPoolExecutor(max_workers=2) as ex:
+                left_fut = ex.submit(_connect_arm, self.config.left_robot_sn)
+                right_fut = ex.submit(_connect_arm, self.config.right_robot_sn)
+                self._left_robot = left_fut.result()
+                self._right_robot = right_fut.result()
 
             # --- 2. Clear faults + enable both arms ---
             for side, robot in [("left", self._left_robot), ("right", self._right_robot)]:
@@ -333,14 +337,17 @@ class BiFlexivRizon4RT(Robot):
 
             self.logger.info("Both arms are operational.")
 
-            # --- 3. Connect grippers + cameras ---
-            if self._left_gripper and self.config.left_use_gripper:
-                self.logger.info("Connecting left gripper...")
-                self._left_gripper.connect()
+            # --- 3. Connect grippers + cameras (grippers in parallel) ---
+            def _connect_gripper(gripper, use_gripper, side):
+                if gripper and use_gripper:
+                    self.logger.info(f"Connecting {side} gripper...")
+                    gripper.connect()
 
-            if self._right_gripper and self.config.right_use_gripper:
-                self.logger.info("Connecting right gripper...")
-                self._right_gripper.connect()
+            with ThreadPoolExecutor(max_workers=2) as ex:
+                lg = ex.submit(_connect_gripper, self._left_gripper, self.config.left_use_gripper, "left")
+                rg = ex.submit(_connect_gripper, self._right_gripper, self.config.right_use_gripper, "right")
+                lg.result()
+                rg.result()
 
             for cam in self.cameras.values():
                 cam.connect()
@@ -358,15 +365,21 @@ class BiFlexivRizon4RT(Robot):
                 self._left_start_tcp_pose = list(self._left_robot.states().tcp_pose)
                 self._right_start_tcp_pose = list(self._right_robot.states().tcp_pose)
 
-            # --- 5. Zero FT sensors ---
+            # --- 5. Zero FT sensors (both arms in parallel) ---
             if self.config.zero_ft_sensor_on_connect:
-                self._zero_ft_sensor_left()
-                self._zero_ft_sensor_right()
+                with ThreadPoolExecutor(max_workers=2) as ex:
+                    lf = ex.submit(self._zero_ft_sensor_left)
+                    rf = ex.submit(self._zero_ft_sensor_right)
+                    lf.result()
+                    rf.result()
 
-            # --- 6. Switch to RT mode + configure ---
-            self._switch_to_rt_mode(self._left_robot, "left")
+            # --- 6. Switch to RT mode + configure (both arms in parallel) ---
+            with ThreadPoolExecutor(max_workers=2) as ex:
+                ls = ex.submit(self._switch_to_rt_mode, self._left_robot, "left")
+                rs = ex.submit(self._switch_to_rt_mode, self._right_robot, "right")
+                ls.result()
+                rs.result()
             self._configure_arm(self._left_robot, "left")
-            self._switch_to_rt_mode(self._right_robot, "right")
             self._configure_arm(self._right_robot, "right")
 
             # --- 7. Start RT threads ---
