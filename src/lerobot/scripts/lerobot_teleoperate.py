@@ -1468,6 +1468,20 @@ def bi_pico4_teleop_loop(
             send_ms   = (t_send   - t_action)   * 1e3
             rerun_ms  = (t_rerun  - t_send)     * 1e3
             sleep_ms  = loop_s * 1e3 - dt_s * 1e3
+
+            # Per-component obs breakdown (populated by BiFlexivRizon4RT)
+            obs_detail = ""
+            if hasattr(robot, "_last_obs_timing"):
+                t = robot._last_obs_timing
+                cam_parts = "  ".join(
+                    f"{k}={v:.1f}" for k, v in t.items() if k.startswith("cam[")
+                )
+                obs_detail = (
+                    f"  [obs: l_arm={t['left_arm_ms']:.1f}  r_arm={t['right_arm_ms']:.1f}"
+                    f"  l_grip={t['left_grip_ms']:.1f}  r_grip={t['right_grip_ms']:.1f}"
+                    f"  {cam_parts}]"
+                )
+
             print(
                 f"\r\033[K"
                 f"obs={obs_ms:5.1f}ms  "
@@ -1475,7 +1489,8 @@ def bi_pico4_teleop_loop(
                 f"send={send_ms:5.1f}ms  "
                 f"rerun={rerun_ms:5.1f}ms  "
                 f"sleep={sleep_ms:5.1f}ms  "
-                f"| total={loop_s*1e3:5.1f}ms ({1/loop_s:.0f}Hz)",
+                f"| total={loop_s*1e3:5.1f}ms ({1/loop_s:.0f}Hz)"
+                f"{obs_detail}",
                 end="",
                 flush=True,
             )
