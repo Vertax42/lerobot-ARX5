@@ -98,6 +98,28 @@ Expected result:
 > [!IMPORTANT]
 > The script is designed around this repository layout and its vendored `third_party` modules. Run it from the repository root.
 
+### 6. ARX5 CAN real-time thread (manual, requires sudo)
+
+The ARX5 SDK uses `SCHED_FIFO` on its CAN thread for real-time performance. This requires `CAP_SYS_NICE` to be set on the Python interpreter **once per environment**. Run this after installation:
+
+```bash
+# Find the real interpreter path (not a symlink — setcap rejects symlinks)
+PY_EXE=$(python -c 'import sys; import os; p = sys.executable; \
+    [p := os.path.realpath(p)]; print(p)')
+echo "Target: $PY_EXE"
+
+# Grant CAP_SYS_NICE (requires sudo)
+sudo setcap cap_sys_nice+ep "$PY_EXE"
+
+# Verify
+getcap "$PY_EXE"
+```
+
+Expected output: `...python3.x = cap_sys_nice+ep`
+
+> [!NOTE]
+> This step is optional. ARX5 still works without it but may experience higher CAN thread latency. Re-run if you recreate the conda environment or upgrade Python.
+
 ## Robots & Control
 
 <div align="center">
