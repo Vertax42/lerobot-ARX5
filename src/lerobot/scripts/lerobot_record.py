@@ -144,12 +144,9 @@ from lerobot.robots import (  # noqa: F401
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
     TeleoperatorConfig,
-    bi_openarm_leader,
     bi_pico4,
     make_teleoperator_from_config,
     mock_teleop,
-    openarm_leader,
-    openarm_mini,
     pico4,
     spacemouse,
     unitree_g1,
