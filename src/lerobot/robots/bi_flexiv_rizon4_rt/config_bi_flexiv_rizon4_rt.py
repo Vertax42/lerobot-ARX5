@@ -139,7 +139,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     right_rt_cpu_affinity: int = 3
 
     # ========== Left gripper settings ==========
-    left_use_gripper: bool = False
+    left_use_gripper: bool = True
     left_gripper_port: str = "/dev/ttyUSB0"
     left_gripper_baudrate: int = 115200
     left_gripper_serial_timeout: float = 1.0
@@ -151,7 +151,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     left_gripper_init_open: bool = True
 
     # ========== Right gripper settings ==========
-    right_use_gripper: bool = False
+    right_use_gripper: bool = True
     right_gripper_port: str = "/dev/ttyUSB1"
     right_gripper_baudrate: int = 115200
     right_gripper_serial_timeout: float = 1.0
@@ -248,7 +248,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             self.cameras = {
                 "head": RealSenseCameraConfig(
                     serial_number_or_name="337322070722",
-                    fps=60,
+                    fps=30,
                     width=640,
                     height=480,
                     warmup_s=1.0,
