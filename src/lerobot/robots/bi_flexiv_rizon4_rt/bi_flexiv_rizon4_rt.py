@@ -349,8 +349,10 @@ class BiFlexivRizon4RT(Robot):
                 lg.result()
                 rg.result()
 
-            for cam in self.cameras.values():
-                cam.connect()
+            with ThreadPoolExecutor(max_workers=len(self.cameras) or 1) as ex:
+                cam_futs = [ex.submit(cam.connect) for cam in self.cameras.values()]
+                for f in cam_futs:
+                    f.result()
 
             self._is_connected = True
 
