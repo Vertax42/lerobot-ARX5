@@ -246,7 +246,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         if self.enable_tactile_sensors:
             self.cameras = {
                 "head": RealSenseCameraConfig(
-                    serial_number_or_name="230322271365",
+                    serial_number_or_name="337322070722",
                     fps=60,
                     width=640,
                     height=480,
