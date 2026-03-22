@@ -53,16 +53,12 @@ from lerobot.processor import (
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
-    bi_openarm_follower,
-    bi_so_follower,
-    earthrover_mini_plus,
-    hope_jr,
-    koch_follower,
+    bi_flexiv_rizon4_rt,
+    flexiv_rizon4,
+    flexiv_rizon4_rt,
     make_robot_from_config,
-    omx_follower,
-    openarm_follower,
-    reachy2,
-    so_follower,
+    xense_flare as xense_flare_robot,
+    xense_multisensor,
     unitree_g1,
 )
 from lerobot.utils.constants import ACTION
