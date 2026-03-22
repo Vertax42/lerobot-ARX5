@@ -548,10 +548,16 @@ class Pico4(Teleoperator):
                     f"[JUMP] Position jump #{self._jump_filter_count}: "
                     f"delta={pos_delta:.4f}m > threshold={self.config.position_jump_threshold}m, "
                     f"raw_pos={controller_pose_raw[:3]}, last_pos={self._last_raw_pose[:3]}. "
-                    f"Clamping position to last frame. Release and re-press grip to recover."
+                    f"Clamping position to last frame. Auto-recovering next frame."
                 )
                 controller_pose_raw[:3] = self._last_raw_pose[:3]
-        self._last_raw_pose = controller_pose_raw.copy()
+                # Reset baseline so next frame establishes a fresh reference instead of
+                # permanently clamping (which would lock translation indefinitely).
+                self._last_raw_pose = None
+            else:
+                self._last_raw_pose = controller_pose_raw.copy()
+        else:
+            self._last_raw_pose = controller_pose_raw.copy()
 
         # Step 2: Check enable state with hysteresis (grip as enable button)
         prev_enabled = self._enabled
