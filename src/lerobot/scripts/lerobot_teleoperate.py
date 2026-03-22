@@ -2396,11 +2396,15 @@ def teleoperate(cfg: TeleoperateConfig):
             # Pre-initialize the VR SDK in background while the robot connects
             # (robot.connect() takes ~20-40s; VR SDK init takes ~3s → free overlap)
             from concurrent.futures import ThreadPoolExecutor as _TPE
-            with _TPE(max_workers=2) as _ex:
-                _robot_fut = _ex.submit(robot.connect, go_to_start=True)
-                _teleop_fut = _ex.submit(teleop.pre_init)
-                _teleop_fut.result()   # raise immediately if VR SDK fails
-                _robot_fut.result()    # raise immediately if robot fails
+            try:
+                with _TPE(max_workers=2) as _ex:
+                    _robot_fut = _ex.submit(robot.connect, go_to_start=True)
+                    _teleop_fut = _ex.submit(teleop.pre_init)
+                    _teleop_fut.result()   # raise immediately if VR SDK fails
+                    _robot_fut.result()    # raise immediately if robot fails
+            except KeyboardInterrupt:
+                logger.info("Startup interrupted by user")
+                raise
 
             left_pose, right_pose = robot.get_current_tcp_pose_quat()
             logger.info(f"Left start pose:  {left_pose}")
