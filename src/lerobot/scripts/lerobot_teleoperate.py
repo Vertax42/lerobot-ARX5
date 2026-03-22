@@ -1413,31 +1413,27 @@ def bi_pico4_teleop_loop(
             rerun_ms  = (t_rerun  - t_send)     * 1e3
             sleep_ms  = loop_s * 1e3 - dt_s * 1e3
 
-            # Per-component obs breakdown (populated by BiFlexivRizon4RT)
-            obs_detail = ""
+            lines = [
+                f"obs={obs_ms:5.1f}ms  action={action_ms:4.1f}ms  send={send_ms:4.1f}ms  "
+                f"rerun={rerun_ms:4.1f}ms  sleep={sleep_ms:5.1f}ms  "
+                f"| total={loop_s*1e3:5.1f}ms ({1/loop_s:.0f}Hz)",
+            ]
             if hasattr(robot, "_last_obs_timing"):
                 t = robot._last_obs_timing
-                cam_parts = "  ".join(
-                    f"{k}={v:.1f}" for k, v in t.items() if k.startswith("cam[")
-                )
-                obs_detail = (
-                    f"  [obs: l_arm={t['left_arm_ms']:.1f}  r_arm={t['right_arm_ms']:.1f}"
+                lines.append(
+                    f"  l_arm={t['left_arm_ms']:.1f}  r_arm={t['right_arm_ms']:.1f}"
                     f"  l_grip={t['left_grip_ms']:.1f}  r_grip={t['right_grip_ms']:.1f}"
-                    f"  {cam_parts}]"
+                    f"  cams={t['cameras_ms']:.1f}"
                 )
+                cam_parts = "  ".join(
+                    f"{k[4:-3]}={v:.1f}" for k, v in t.items() if k.startswith("cam[")
+                )
+                if cam_parts:
+                    lines.append(f"  [{cam_parts}]")
 
-            print(
-                f"\r\033[K"
-                f"obs={obs_ms:5.1f}ms  "
-                f"action={action_ms:5.1f}ms  "
-                f"send={send_ms:5.1f}ms  "
-                f"rerun={rerun_ms:5.1f}ms  "
-                f"sleep={sleep_ms:5.1f}ms  "
-                f"| total={loop_s*1e3:5.1f}ms ({1/loop_s:.0f}Hz)"
-                f"{obs_detail}",
-                end="",
-                flush=True,
-            )
+            for line in lines:
+                print(f"\033[K{line}", flush=True)
+            move_cursor_up(len(lines))
         elif not display_data:
             left_enabled = "ON " if teleop._left_pico4._enabled else "OFF"
             right_enabled = "ON " if teleop._right_pico4._enabled else "OFF"
