@@ -14,7 +14,6 @@
 
 """
 Simple script to control a robot from teleoperation.
-
 Example (SO-101):
 
 ```shell
@@ -173,13 +172,19 @@ lerobot-teleoperate \
 
 """
 
+from __future__ import annotations
+
 import time
 import traceback
 from dataclasses import asdict, dataclass
 from pprint import pformat
+from typing import TYPE_CHECKING
 
 import numpy as np
 import rerun as rr
+
+if TYPE_CHECKING:
+    from lerobot.processor import RobotAction, RobotObservation, RobotProcessorPipeline
 
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
 from lerobot.cameras.realsense.configuration_realsense import (
@@ -187,12 +192,6 @@ from lerobot.cameras.realsense.configuration_realsense import (
 )  # noqa: F401
 from lerobot.cameras.zmq.configuration_zmq import ZMQCameraConfig  # noqa: F401
 from lerobot.configs import parser
-from lerobot.processor import (
-    RobotAction,
-    RobotObservation,
-    RobotProcessorPipeline,
-    make_default_processors,
-)
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
@@ -200,18 +199,11 @@ from lerobot.robots import (  # noqa: F401
     bi_arx5,
     bi_flexiv_rizon4_rt,
     bi_openarm_follower,
-    bi_so_follower,
-    earthrover_mini_plus,
     flexiv_rizon4,
     flexiv_rizon4_rt,
-    hope_jr,
-    koch_follower,
     make_robot_from_config,
-    omx_follower,
     openarm_follower,
     pylibfranka_research3,
-    reachy2,
-    so_follower,
     unitree_g1 as unitree_g1_robot,
     xense_flare as xense_flare_robot,
     xense_multisensor,
@@ -222,20 +214,13 @@ from lerobot.teleoperators import (  # noqa: F401
     TeleoperatorConfig,
     bi_openarm_leader,
     bi_pico4,
-    bi_so_leader,
     btgamepad,
     gamepad,
-    homunculus,
-    keyboard,
-    koch_leader,
     make_teleoperator_from_config,
     mock_teleop,
-    omx_leader,
     openarm_leader,
     openarm_mini,
     pico4,
-    reachy2_teleoperator,
-    so_leader,
     spacemouse,
     unitree_g1,
     vive_tracker,
@@ -254,6 +239,12 @@ from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
 
 logger = get_logger("Teleoperate")
+
+
+def make_default_processors(*args, **kwargs):
+    """Lazy wrapper — defers lerobot.processor (torch) import until first use."""
+    from lerobot.processor import make_default_processors as _fn
+    return _fn(*args, **kwargs)
 
 
 @dataclass
