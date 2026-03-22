@@ -20,6 +20,7 @@ import logging
 import math
 import os
 import platform
+import subprocess
 import time
 from pathlib import Path
 from threading import Event, Lock, Thread
@@ -47,6 +48,50 @@ from .configuration_opencv import ColorMode, OpenCVCameraConfig
 MAX_OPENCV_INDEX = 60
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_v4l2_devices() -> dict[str, list[str]]:
+    """Parse `v4l2-ctl --list-devices` and return a mapping of device name → list of /dev/videoX paths."""
+    try:
+        result = subprocess.run(
+            ["v4l2-ctl", "--list-devices"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return {}
+
+    devices: dict[str, list[str]] = {}
+    current_name: str | None = None
+    for line in result.stdout.splitlines():
+        if line and not line.startswith("\t"):
+            # Header line like "XC000001: XC000001 (usb-...):"; take the part before the first colon
+            current_name = line.split(":")[0].strip()
+            devices.setdefault(current_name, [])
+        elif current_name and line.startswith("\t"):
+            path = line.strip()
+            if path.startswith("/dev/video"):
+                devices[current_name].append(path)
+    return devices
+
+
+def _resolve_v4l2_device_name(name: str) -> str:
+    """Resolve a V4L2 device name (e.g. 'XC000001') to its first /dev/videoX path.
+
+    Raises:
+        ValueError: If the device name is not found or has no video paths.
+    """
+    devices = _parse_v4l2_devices()
+    if name not in devices:
+        available = list(devices.keys())
+        raise ValueError(
+            f"V4L2 device name '{name}' not found. Available devices: {available}"
+        )
+    paths = devices[name]
+    if not paths:
+        raise ValueError(f"V4L2 device '{name}' has no /dev/video* paths.")
+    return paths[0]
 
 
 class OpenCVCamera(Camera):
@@ -125,6 +170,20 @@ class OpenCVCamera(Camera):
             if self.rotation in [cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE]:
                 self.capture_width, self.capture_height = self.height, self.width
 
+    def _resolve_index_or_path(self) -> int | str:
+        """Return the actual device path/index to pass to cv2.VideoCapture.
+
+        If `index_or_path` is a plain string that does not look like a filesystem path
+        (i.e., does not start with '/' or '.'), treat it as a V4L2 device name and
+        resolve it dynamically via `v4l2-ctl --list-devices`.
+        """
+        val = self.index_or_path
+        if isinstance(val, str) and not val.startswith("/") and not val.startswith("."):
+            resolved = _resolve_v4l2_device_name(val)
+            logger.info(f"{self} resolved device name '{val}' → '{resolved}'")
+            return resolved
+        return val if isinstance(val, int) else str(val)
+
     def __str__(self) -> str:
         return f"{self.__class__.__name__}({self.index_or_path})"
 
@@ -155,7 +214,8 @@ class OpenCVCamera(Camera):
         # blocking in multi-threaded applications, especially during data collection.
         cv2.setNumThreads(1)
 
-        self.videocapture = cv2.VideoCapture(self.index_or_path, self.backend)
+        device = self._resolve_index_or_path()
+        self.videocapture = cv2.VideoCapture(device, self.backend)
 
         if not self.videocapture.isOpened():
             self.videocapture.release()
@@ -185,7 +245,8 @@ class OpenCVCamera(Camera):
 
         This method attempts to set the camera properties via OpenCV. It checks if
         the camera successfully applied the settings and raises an error if not.
-        FOURCC is set first (if specified) as it can affect the available FPS and resolution options.
+        Resolution and FPS are applied first; FOURCC is set last so the codec is
+        applied after the stream geometry is established.
 
         Args:
             fourcc: The desired FOURCC code (e.g., "MJPG", "YUYV"). If None, auto-detect.
@@ -199,9 +260,6 @@ class OpenCVCamera(Camera):
             DeviceNotConnectedError: If the camera is not connected.
         """
 
-        # Set FOURCC first (if specified) as it can affect available FPS/resolution options
-        if self.config.fourcc is not None:
-            self._validate_fourcc()
         if self.videocapture is None:
             raise DeviceNotConnectedError(f"{self} videocapture is not initialized")
 
@@ -222,6 +280,10 @@ class OpenCVCamera(Camera):
         else:
             self._validate_fps()
 
+        # Set FOURCC last so resolution/FPS are established first
+        if self.config.fourcc is not None:
+            self._validate_fourcc()
+
     def _validate_fps(self) -> None:
         """Validates and sets the camera's frames per second (FPS)."""
 
@@ -233,8 +295,9 @@ class OpenCVCamera(Camera):
 
         success = self.videocapture.set(cv2.CAP_PROP_FPS, float(self.fps))
         actual_fps = self.videocapture.get(cv2.CAP_PROP_FPS)
-        # Use math.isclose for robust float comparison
-        if not success or not math.isclose(self.fps, actual_fps, rel_tol=1e-3):
+        # Note: V4L2 backend may return False from set() even when the value is correctly applied,
+        # so we only validate the actual readback value, not the success flag.
+        if not math.isclose(self.fps, actual_fps, rel_tol=1e-3):
             raise RuntimeError(f"{self} failed to set fps={self.fps} ({actual_fps=}).")
 
     def _validate_fourcc(self) -> None:
@@ -252,7 +315,14 @@ class OpenCVCamera(Camera):
         actual_fourcc_code_int = int(actual_fourcc_code)
         actual_fourcc = "".join([chr((actual_fourcc_code_int >> 8 * i) & 0xFF) for i in range(4)])
 
-        if not success or actual_fourcc != self.config.fourcc:
+        # Some backends (e.g. CAP_ANY on Linux) return 0/spaces for FOURCC even when
+        # the format was successfully applied. Only warn when we can confirm a mismatch.
+        fourcc_unreadable = actual_fourcc_code_int == 0 or actual_fourcc.strip() == ""
+        if fourcc_unreadable:
+            logger.debug(
+                f"{self} set fourcc={self.config.fourcc} (backend cannot confirm via readback)."
+            )
+        elif actual_fourcc != self.config.fourcc:
             logger.warning(
                 f"{self} failed to set fourcc={self.config.fourcc} (actual={actual_fourcc}, success={success}). "
                 f"Continuing with default format."
@@ -271,13 +341,15 @@ class OpenCVCamera(Camera):
         height_success = self.videocapture.set(cv2.CAP_PROP_FRAME_HEIGHT, float(self.capture_height))
 
         actual_width = int(round(self.videocapture.get(cv2.CAP_PROP_FRAME_WIDTH)))
-        if not width_success or self.capture_width != actual_width:
+        # Note: V4L2 backend may return False from set() even when the value is correctly applied,
+        # so we only validate the actual readback value, not the success flag.
+        if self.capture_width != actual_width:
             raise RuntimeError(
                 f"{self} failed to set capture_width={self.capture_width} ({actual_width=}, {width_success=})."
             )
 
         actual_height = int(round(self.videocapture.get(cv2.CAP_PROP_FRAME_HEIGHT)))
-        if not height_success or self.capture_height != actual_height:
+        if self.capture_height != actual_height:
             raise RuntimeError(
                 f"{self} failed to set capture_height={self.capture_height} ({actual_height=}, {height_success=})."
             )
@@ -304,8 +376,49 @@ class OpenCVCamera(Camera):
         else:
             targets_to_scan = [int(i) for i in range(MAX_OPENCV_INDEX)]
 
+        # Build device-name → path mapping (Linux only)
+        path_to_device_name: dict[str, str] = {}
+        if platform.system() == "Linux":
+            for dev_name, paths in _parse_v4l2_devices().items():
+                for p in paths:
+                    path_to_device_name[p] = dev_name
+
+            # Override RealSense entries with their serial numbers (more stable/readable)
+            try:
+                import pyrealsense2 as rs  # type: ignore
+
+                ctx = rs.context()
+                for dev in ctx.devices:
+                    serial = dev.get_info(rs.camera_info.serial_number)
+                    port = dev.get_info(rs.camera_info.physical_port)
+                    # physical_port is like ".../video4linux/videoX" — extract the node name
+                    port_node = Path(port).name  # e.g. "video3"
+                    dev_path = f"/dev/{port_node}"
+                    # Apply serial number to all paths that share the same v4l2 device name
+                    old_name = path_to_device_name.get(dev_path)
+                    if old_name:
+                        for p, name in list(path_to_device_name.items()):
+                            if name == old_name:
+                                path_to_device_name[p] = serial
+            except Exception:
+                pass
+
         for target in targets_to_scan:
-            camera = cv2.VideoCapture(target)
+            scan_backend = cv2.CAP_V4L2 if platform.system() == "Linux" else cv2.CAP_ANY
+            # Suppress stderr during probe to avoid ioctl noise from non-camera V4L2 nodes
+            stderr_fd = os.dup(2)
+            devnull_fd = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull_fd, 2)
+            os.close(devnull_fd)
+            try:
+                camera = cv2.VideoCapture(target, scan_backend)
+                if camera.isOpened() and platform.system() == "Linux":
+                    # On Linux, probe with MJPG first — many devices (including compressed-only
+                    # firmware) require it to actually stream frames.
+                    camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+            finally:
+                os.dup2(stderr_fd, 2)
+                os.close(stderr_fd)
             if camera.isOpened():
                 default_width = int(camera.get(cv2.CAP_PROP_FRAME_WIDTH))
                 default_height = int(camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -316,9 +429,17 @@ class OpenCVCamera(Camera):
                 default_fourcc_code = camera.get(cv2.CAP_PROP_FOURCC)
                 default_fourcc_code_int = int(default_fourcc_code)
                 default_fourcc = "".join([chr((default_fourcc_code_int >> 8 * i) & 0xFF) for i in range(4)])
+                # Fallback: if readback is unreadable (CAP_ANY quirk), assume MJPG was applied
+                if default_fourcc.strip() == "" and platform.system() == "Linux":
+                    default_fourcc = "MJPG"
+
+                device_name = path_to_device_name.get(str(target))
+                display_name = f"OpenCV Camera @ {target}"
+                if device_name:
+                    display_name = f"OpenCV Camera '{device_name}' @ {target}"
 
                 camera_info = {
-                    "name": f"OpenCV Camera @ {target}",
+                    "name": display_name,
                     "type": "OpenCV",
                     "id": target,
                     "backend_api": camera.getBackendName(),
@@ -331,8 +452,27 @@ class OpenCVCamera(Camera):
                     },
                 }
 
+                if device_name:
+                    camera_info["device_name"] = device_name
+
                 found_cameras_info.append(camera_info)
                 camera.release()
+
+        # On Linux, also report V4L2 devices that couldn't be opened (e.g. busy),
+        # so users know which device names exist for configuration.
+        if platform.system() == "Linux":
+            opened_paths = {cam["id"] for cam in found_cameras_info}
+            for dev_name, paths in _parse_v4l2_devices().items():
+                primary = paths[0] if paths else None
+                if primary and primary not in opened_paths:
+                    display_name = path_to_device_name.get(primary, dev_name)
+                    found_cameras_info.append({
+                        "name": f"OpenCV Camera '{display_name}' @ {primary} (unavailable)",
+                        "type": "OpenCV",
+                        "id": primary,
+                        "device_name": display_name,
+                        "available": False,
+                    })
 
         return found_cameras_info
 
