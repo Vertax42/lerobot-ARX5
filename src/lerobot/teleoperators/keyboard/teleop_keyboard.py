@@ -32,20 +32,31 @@ from .configuration_keyboard import (
     KeyboardTeleopConfig,
 )
 
-PYNPUT_AVAILABLE = True
-try:
+keyboard = None
+PYNPUT_AVAILABLE = False
+
+
+def _ensure_pynput() -> bool:
+    """Lazily import pynput on first use; returns True if available."""
+    global keyboard, PYNPUT_AVAILABLE
+    if keyboard is not None:
+        return True
     if ("DISPLAY" not in os.environ) and ("linux" in sys.platform):
         logging.info("No DISPLAY set. Skipping pynput import.")
-        raise ImportError("pynput blocked intentionally due to no display.")
+        return False
+    try:
+        from pynput import keyboard as _kb
 
-    from pynput import keyboard
-except ImportError:
-    keyboard = None
-    PYNPUT_AVAILABLE = False
-except Exception as e:
-    keyboard = None
-    PYNPUT_AVAILABLE = False
-    logging.info(f"Could not import pynput: {e}")
+        keyboard = _kb
+        PYNPUT_AVAILABLE = True
+        return True
+    except ImportError:
+        PYNPUT_AVAILABLE = False
+        return False
+    except Exception as e:
+        PYNPUT_AVAILABLE = False
+        logging.info(f"Could not import pynput: {e}")
+        return False
 
 
 class KeyboardTeleop(Teleoperator):
@@ -88,6 +99,7 @@ class KeyboardTeleop(Teleoperator):
 
     @check_if_already_connected
     def connect(self) -> None:
+        _ensure_pynput()
         if PYNPUT_AVAILABLE:
             logging.info("pynput is available - enabling local keyboard listener.")
             self.listener = keyboard.Listener(
