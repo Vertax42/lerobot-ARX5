@@ -72,7 +72,7 @@ class SerialGripper:
         try:
             self._gripper = XenseSerialGripper(
                 port=self._config.port,
-                device_id=1,
+                device_id=self._config.device_id,
                 baudrate=self._config.baudrate,
                 timeout=self._config.serial_timeout,
             )
@@ -152,4 +152,32 @@ class SerialGripper:
             target_mm,
             vmax=self._gripper_v_max,
             fmax=self._gripper_f_max,
+        )
+
+    def set_gripper_position_sync(
+        self,
+        normalized_pos: float,
+        timeout: float = 10.0,
+        vmax: float | None = None,
+        fmax: float | None = None,
+    ) -> None:
+        """Send a position command and block until the gripper reaches the target.
+
+        Args:
+            normalized_pos: Target position in [0, 1] (0.0 = open, 1.0 = closed).
+            timeout:        Maximum wait time in seconds (default: 10.0).
+            vmax:           Override velocity limit mm/s; uses config default if None.
+            fmax:           Override force limit N; uses config default if None.
+        """
+        if not self._is_connected or self._gripper is None:
+            raise DeviceNotConnectedError("Serial gripper is not connected.")
+        if not 0.0 <= normalized_pos <= 1.0:
+            raise ValueError(f"normalized_pos must be in [0, 1], got {normalized_pos}.")
+        span = self._gripper_max_pos - self._gripper_min_pos
+        target_mm = self._gripper_min_pos + normalized_pos * span
+        self._gripper.set_position_sync(
+            target_mm,
+            vmax=vmax if vmax is not None else self._gripper_v_max,
+            fmax=fmax if fmax is not None else self._gripper_f_max,
+            timeout=timeout,
         )

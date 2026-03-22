@@ -43,6 +43,7 @@ class SerialGripperConfig:
     port: str = "/dev/ttyUSB0"
     baudrate: int = 115200
     serial_timeout: float = 1.0
+    device_id: int = 1  # XenseSerialGripper device ID on the RS-485 bus
 
     # ── Mechanical limits ──────────────────────────────────────────────────────
     gripper_min_pos: float = 0.0   # mm — fully open
