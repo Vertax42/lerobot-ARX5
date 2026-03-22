@@ -110,7 +110,6 @@ from lerobot.cameras import (  # noqa: F401
     CameraConfig,  # noqa: F401
 )
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
-from lerobot.cameras.reachy2_camera.configuration_reachy2_camera import Reachy2CameraConfig  # noqa: F401
 from lerobot.cameras.realsense.configuration_realsense import RealSenseCameraConfig  # noqa: F401
 from lerobot.cameras.zmq.configuration_zmq import ZMQCameraConfig  # noqa: F401
 from lerobot.configs import parser
@@ -135,23 +134,10 @@ from lerobot.processor.rename_processor import rename_stats
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
-    arx5_follower,
-    bi_arx5,
     bi_flexiv_rizon4_rt,
-    bi_openarm_follower,
-    bi_so_follower,
-    earthrover_mini_plus,
     flexiv_rizon4,
     flexiv_rizon4_rt,
-    hope_jr,
-    koch_follower,
     make_robot_from_config,
-    omx_follower,
-    openarm_follower,
-    pylibfranka_research3,
-    reachy2,
-    so_follower,
-    unitree_g1 as unitree_g1_robot,
     xense_flare as xense_flare_robot,
     xense_multisensor,
 )
@@ -160,25 +146,17 @@ from lerobot.teleoperators import (  # noqa: F401
     TeleoperatorConfig,
     bi_openarm_leader,
     bi_pico4,
-    bi_so_leader,
-    btgamepad,
-    homunculus,
-    koch_leader,
     make_teleoperator_from_config,
     mock_teleop,
-    omx_leader,
     openarm_leader,
     openarm_mini,
     pico4,
-    reachy2_teleoperator,
-    so_leader,
     spacemouse,
     unitree_g1,
     vive_tracker,
     xense_flare,
     trlc_leader,
 )
-from lerobot.teleoperators.keyboard.teleop_keyboard import KeyboardTeleop
 from lerobot.utils.constants import ACTION, OBS_STR
 from lerobot.utils.control_utils import (
     init_keyboard_listener,
@@ -351,31 +329,6 @@ def record_loop(
     if dataset is not None and dataset.fps != fps:
         raise ValueError(f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps}).")
 
-    teleop_arm = teleop_keyboard = None
-    if isinstance(teleop, list):
-        teleop_keyboard = next((t for t in teleop if isinstance(t, KeyboardTeleop)), None)
-        teleop_arm = next(
-            (
-                t
-                for t in teleop
-                if isinstance(
-                    t,
-                    (
-                        so_leader.SO100Leader
-                        | so_leader.SO101Leader
-                        | koch_leader.KochLeader
-                        | omx_leader.OmxLeader
-                    ),
-                )
-            ),
-            None,
-        )
-
-        if not (teleop_arm and teleop_keyboard and len(teleop) == 2 and robot.name == "lekiwi_client"):
-            raise ValueError(
-                "For multi-teleop, the list must contain exactly one KeyboardTeleop and one arm teleoperator. Currently only supported for LeKiwi robot."
-            )
-
     # Reset policy and processor if they are provided
     if policy is not None and preprocessor is not None and postprocessor is not None:
         policy.reset()
@@ -424,13 +377,6 @@ def record_loop(
             # Applies a pipeline to the raw teleop action, default is IdentityProcessor
             act_processed_teleop = teleop_action_processor((act, obs))
 
-        elif policy is None and isinstance(teleop, list):
-            arm_action = teleop_arm.get_action()
-            arm_action = {f"arm_{k}": v for k, v in arm_action.items()}
-            keyboard_action = teleop_keyboard.get_action()
-            base_action = robot._from_keyboard_to_base_action(keyboard_action)
-            act = {**arm_action, **base_action} if len(base_action) > 0 else arm_action
-            act_processed_teleop = teleop_action_processor((act, obs))
         else:
             no_action_count += 1
             if no_action_count == 1 or no_action_count % 10 == 0:
