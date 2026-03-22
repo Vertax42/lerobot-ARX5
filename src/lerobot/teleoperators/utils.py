@@ -88,18 +88,6 @@ def make_teleoperator_from_config(config: TeleoperatorConfig) -> "Teleoperator":
         from .reachy2_teleoperator import Reachy2Teleoperator
 
         return Reachy2Teleoperator(config)
-    elif config.type == "openarm_leader":
-        from .openarm_leader import OpenArmLeader
-
-        return OpenArmLeader(config)
-    elif config.type == "bi_openarm_leader":
-        from .bi_openarm_leader import BiOpenArmLeader
-
-        return BiOpenArmLeader(config)
-    elif config.type == "openarm_mini":
-        from .openarm_mini import OpenArmMini
-
-        return OpenArmMini(config)
     elif config.type == "trlc_leader":
         from .trlc_leader.trlc_leader import TRLCLeader
 

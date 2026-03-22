@@ -44,7 +44,6 @@ from lerobot.teleoperators import (  # noqa: F401
     make_teleoperator_from_config,
     mock_teleop,
     omx_leader,
-    openarm_mini,
     so_leader,
 )
 
@@ -53,7 +52,6 @@ COMPATIBLE_DEVICES = [
     "koch_leader",
     "omx_follower",
     "omx_leader",
-    "openarm_mini",
     "so100_follower",
     "so100_leader",
     "so101_follower",
