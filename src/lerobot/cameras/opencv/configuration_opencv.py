@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+import platform
 
 from ..configs import CameraConfig, ColorMode, Cv2Backends, Cv2Rotation
 
@@ -42,7 +43,9 @@ class OpenCVCameraConfig(CameraConfig):
 
     Attributes:
         index_or_path: Either an integer representing the camera device index,
-                      or a Path object pointing to a video file.
+                      a Path object pointing to a video file, a device path string
+                      (e.g. '/dev/video0'), or a V4L2 device name string (e.g. 'XC000001')
+                      on Linux. Using a device name is stable across reboots and USB re-plugs.
         fps: Requested frames per second for the color stream.
         width: Requested frame width in pixels for the color stream.
         height: Requested frame height in pixels for the color stream.
@@ -58,12 +61,12 @@ class OpenCVCameraConfig(CameraConfig):
         - Setting FOURCC can help achieve higher frame rates on some cameras.
     """
 
-    index_or_path: int | Path
+    index_or_path: int | str | Path
     color_mode: ColorMode = ColorMode.RGB
     rotation: Cv2Rotation = Cv2Rotation.NO_ROTATION
     warmup_s: int = 1
     fourcc: str | None = None
-    backend: Cv2Backends = Cv2Backends.ANY
+    backend: Cv2Backends = field(default_factory=lambda: Cv2Backends.V4L2 if platform.system() == "Linux" else Cv2Backends.ANY)
 
     def __post_init__(self) -> None:
         self.color_mode = ColorMode(self.color_mode)
