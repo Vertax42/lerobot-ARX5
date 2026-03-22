@@ -2351,11 +2351,20 @@ def teleoperate(cfg: TeleoperateConfig):
         elif cfg.robot.type == "bi_flexiv_rizon4_rt" and cfg.teleop.type == "bi_pico4":
             logger.info("Detected BiFlexivRizon4RT + BiPico4")
             robot = make_robot_from_config(cfg.robot)
-            robot.connect(go_to_start=True)
+            teleop = make_teleoperator_from_config(cfg.teleop)
+
+            # Pre-initialize the VR SDK in background while the robot connects
+            # (robot.connect() takes ~20-40s; VR SDK init takes ~3s → free overlap)
+            from concurrent.futures import ThreadPoolExecutor as _TPE
+            with _TPE(max_workers=2) as _ex:
+                _robot_fut = _ex.submit(robot.connect, go_to_start=True)
+                _teleop_fut = _ex.submit(teleop.pre_init)
+                _teleop_fut.result()   # raise immediately if VR SDK fails
+                _robot_fut.result()    # raise immediately if robot fails
+
             left_pose, right_pose = robot.get_current_tcp_pose_quat()
             logger.info(f"Left start pose:  {left_pose}")
             logger.info(f"Right start pose: {right_pose}")
-            teleop = make_teleoperator_from_config(cfg.teleop)
             teleop.connect(left_tcp_pose_quat=left_pose, right_tcp_pose_quat=right_pose)
             try:
                 bi_pico4_teleop_loop(

@@ -112,6 +112,45 @@ class BiPico4(Teleoperator):
         self._left_pico4 = Pico4(left_config)
         self._right_pico4 = Pico4(right_config)
 
+    def pre_init(self) -> None:
+        """Initialize XenseVR SDK and wait for controllers early (without TCP poses).
+
+        Call this in a background thread while the robot is connecting/moving to
+        start position, then call connect() with the TCP poses once the robot is ready.
+        The SDK init and controller validation (~3s) will overlap with robot startup.
+        """
+        if self._xrt is not None:
+            return  # Already pre-initialized
+        try:
+            import xensevr_pc_service_sdk as xrt
+        except ImportError as e:
+            raise ImportError(
+                "xensevr_pc_service_sdk is required. "
+                "Please install it according to the Pico4 SDK documentation."
+            ) from e
+
+        xrt.init()
+        self._xrt = xrt
+        self.logger.info("XenseVR SDK pre-initialized.")
+
+        time.sleep(0.5)
+        max_retries = 25
+        for attempt in range(max_retries):
+            left_pose = xrt.get_left_controller_pose()
+            right_pose = xrt.get_right_controller_pose()
+            left_ok = any(abs(v) > 1e-6 for v in left_pose)
+            right_ok = any(abs(v) > 1e-6 for v in right_pose)
+            if left_ok and right_ok:
+                self.logger.info(f"Both controllers ready after pre_init (attempt {attempt + 1})")
+                return
+            time.sleep(0.1)
+
+        self._xrt = None
+        raise DeviceNotConnectedError(
+            "Pico4 controllers not detected after waiting. "
+            "Ensure the VR client app is running and controllers are on."
+        )
+
     @property
     def is_connected(self) -> bool:
         return self._is_connected
@@ -184,28 +223,34 @@ class BiPico4(Teleoperator):
             ) from e
 
         try:
-            xrt.init()
-            self._xrt = xrt
-            self.logger.info("XenseVR SDK initialized.")
+            if self._xrt is None:
+                # Not pre-initialized — do full init now (slower path)
+                xrt.init()
+                self._xrt = xrt
+                self.logger.info("XenseVR SDK initialized.")
 
-            # Wait for both controllers to report valid pose data
-            time.sleep(0.5)
-            max_retries = 25
-            for attempt in range(max_retries):
-                left_pose = xrt.get_left_controller_pose()
-                right_pose = xrt.get_right_controller_pose()
-                left_ok = any(abs(v) > 1e-6 for v in left_pose)
-                right_ok = any(abs(v) > 1e-6 for v in right_pose)
-                if left_ok and right_ok:
-                    self.logger.info(f"Both controllers ready (attempt {attempt + 1})")
-                    break
-                time.sleep(0.1)
+                # Wait for both controllers to report valid pose data
+                time.sleep(0.5)
+                max_retries = 25
+                for attempt in range(max_retries):
+                    left_pose = xrt.get_left_controller_pose()
+                    right_pose = xrt.get_right_controller_pose()
+                    left_ok = any(abs(v) > 1e-6 for v in left_pose)
+                    right_ok = any(abs(v) > 1e-6 for v in right_pose)
+                    if left_ok and right_ok:
+                        self.logger.info(f"Both controllers ready (attempt {attempt + 1})")
+                        break
+                    time.sleep(0.1)
+                else:
+                    self._xrt = None
+                    raise DeviceNotConnectedError(
+                        "Pico4 controllers not detected after waiting. "
+                        "Ensure the VR client app is running and controllers are on."
+                    )
             else:
-                self._xrt = None
-                raise DeviceNotConnectedError(
-                    "Pico4 controllers not detected after waiting. "
-                    "Ensure the VR client app is running and controllers are on."
-                )
+                # pre_init() was already called — reuse the existing xrt handle
+                xrt = self._xrt
+                self.logger.info("XenseVR SDK already pre-initialized, skipping init.")
 
             # Inject shared xrt handle and seed initial state into both Pico4 instances,
             # bypassing their connect() to avoid calling xrt.init() a second time.
