@@ -682,7 +682,7 @@ class BiFlexivRizon4RT(Robot):
 
         # Initialize gripper during move
         if gripper is not None and use_gripper:
-            target_normalized = 1.0 if not gripper_init_open else 0.0
+            target_normalized = 1.0 if gripper_init_open else 0.0
             gripper.set_gripper_position_sync(
                 target_normalized,
                 vmax=gripper_v_max / 2,
