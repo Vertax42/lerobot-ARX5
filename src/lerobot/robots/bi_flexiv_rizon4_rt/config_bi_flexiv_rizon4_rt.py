@@ -269,25 +269,25 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                     fps=30,
                     warmup_s=0.5,
                 ),
-                "right_tactile_0": XenseTactileCameraConfig(
+                "left_tactile_0": XenseTactileCameraConfig(
                     serial_number="OG000861",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=0.05,
                 ),
-                "right_tactile_1": XenseTactileCameraConfig(
+                "left_tactile_1": XenseTactileCameraConfig(
                     serial_number="OG000862",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=0.05,
                 ),
-                "left_tactile_0": XenseTactileCameraConfig(
+                "right_tactile_0": XenseTactileCameraConfig(
                     serial_number="OG000863",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=0.05,
                 ),
-                "left_tactile_1": XenseTactileCameraConfig(
+                "right_tactile_1": XenseTactileCameraConfig(
                     serial_number="OG000864",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
