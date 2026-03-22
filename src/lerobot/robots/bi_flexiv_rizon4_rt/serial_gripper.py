@@ -31,8 +31,11 @@ class SerialGripper:
     """Wrapper around XenseSerialGripper for use inside BiFlexivRizon4RT.
 
     Normalized position convention:
-        0.0  →  fully open   (gripper_min_pos mm)
-        1.0  →  fully closed (gripper_max_pos mm)
+        0.0  →  fully open   (SDK position = gripper_max_pos, e.g. 85 mm)
+        1.0  →  fully closed (SDK position = gripper_min_pos, e.g.  0 mm)
+
+    Note: XenseSerialGripper uses 0 = closed, 85 = open internally.
+    This wrapper inverts the mapping so normalized 0.0 always means open.
 
     Example::
 
