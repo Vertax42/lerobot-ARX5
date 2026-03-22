@@ -40,7 +40,7 @@ git clone \
 cd lerobot-xense
 
 # If you already cloned the repo without submodules:
-git submodule update --init --recursive
+git submodule update --init --recursive --progress
 ```
 
 ### 2. Create the conda/mamba environment
