@@ -114,9 +114,12 @@ class SerialGripper:
     def _position_poll_loop(self) -> None:
         """Background thread: continuously refresh _cached_position via serial query."""
         span = self._gripper_max_pos - self._gripper_min_pos
-        while self._poll_running and self._gripper is not None:
+        while self._poll_running:
+            gripper = self._gripper
+            if gripper is None:
+                break
             try:
-                status = self._gripper.get_gripper_status(timeout=0.05)
+                status = gripper.get_gripper_status(timeout=0.05)
                 if status is not None:
                     raw_pos = float(status.get("position", 0.0))
                     raw_pos = max(self._gripper_min_pos, min(raw_pos, self._gripper_max_pos))
