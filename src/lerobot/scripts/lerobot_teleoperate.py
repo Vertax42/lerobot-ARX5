@@ -172,19 +172,14 @@ lerobot-teleoperate \
 
 """
 
-from __future__ import annotations
-
 import time
 import traceback
 from dataclasses import asdict, dataclass
 from pprint import pformat
-from typing import TYPE_CHECKING
+from typing import Any
 
 import numpy as np
 import rerun as rr
-
-if TYPE_CHECKING:
-    from lerobot.processor import RobotAction, RobotObservation, RobotProcessorPipeline
 
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
 from lerobot.cameras.realsense.configuration_realsense import (
@@ -325,15 +320,9 @@ def teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
     fps: int,
-    teleop_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_observation_processor: RobotProcessorPipeline[
-        RobotObservation, RobotObservation
-    ],
+    teleop_action_processor: Any,
+    robot_action_processor: Any,
+    robot_observation_processor: Any,
     display_data: bool = False,
     duration: float | None = None,
     display_compressed_images: bool = False,
@@ -434,15 +423,9 @@ def mock_robot_teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
     fps: int,
-    teleop_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_observation_processor: RobotProcessorPipeline[
-        RobotObservation, RobotObservation
-    ],
+    teleop_action_processor: Any,
+    robot_action_processor: Any,
+    robot_observation_processor: Any,
     display_data: bool = False,
     duration: float | None = None,
     dryrun: bool = False,
@@ -555,15 +538,9 @@ def mock_robot_teleop_loop(
 def arx5_teleop_loop(
     robot: Robot,
     fps: int,
-    teleop_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_observation_processor: RobotProcessorPipeline[
-        RobotObservation, RobotObservation
-    ],
+    teleop_action_processor: Any,
+    robot_action_processor: Any,
+    robot_observation_processor: Any,
     display_data: bool = False,
     duration: float | None = None,
     debug_timing: bool = False,
@@ -762,15 +739,9 @@ def arx5_trlc_leader_teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
     fps: int,
-    teleop_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_observation_processor: RobotProcessorPipeline[
-        RobotObservation, RobotObservation
-    ],
+    teleop_action_processor: Any,
+    robot_action_processor: Any,
+    robot_observation_processor: Any,
     display_data: bool = False,
     duration: float | None = None,
     dryrun: bool = False,
@@ -893,15 +864,9 @@ def spacemouse_teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
     fps: int,
-    teleop_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_observation_processor: RobotProcessorPipeline[
-        RobotObservation, RobotObservation
-    ],
+    teleop_action_processor: Any,
+    robot_action_processor: Any,
+    robot_observation_processor: Any,
     display_data: bool = False,
     duration: float | None = None,
     dryrun: bool = False,
@@ -1129,15 +1094,9 @@ def btgamepad_teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
     fps: int,
-    teleop_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_observation_processor: RobotProcessorPipeline[
-        RobotObservation, RobotObservation
-    ],
+    teleop_action_processor: Any,
+    robot_action_processor: Any,
+    robot_observation_processor: Any,
     display_data: bool = False,
     duration: float | None = None,
     dryrun: bool = False,
@@ -1222,15 +1181,9 @@ def pico4_teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
     fps: int,
-    teleop_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_observation_processor: RobotProcessorPipeline[
-        RobotObservation, RobotObservation
-    ],
+    teleop_action_processor: Any,
+    robot_action_processor: Any,
+    robot_observation_processor: Any,
     display_data: bool = False,
     duration: float | None = None,
     dryrun: bool = False,
@@ -1509,15 +1462,9 @@ def vive_tracker_teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
     fps: int,
-    teleop_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_observation_processor: RobotProcessorPipeline[
-        RobotObservation, RobotObservation
-    ],
+    teleop_action_processor: Any,
+    robot_action_processor: Any,
+    robot_observation_processor: Any,
     display_data: bool = False,
     duration: float | None = None,
     dryrun: bool = False,
@@ -1585,15 +1532,9 @@ def xense_flare_flexiv_teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
     fps: int,
-    teleop_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_action_processor: RobotProcessorPipeline[
-        tuple[RobotAction, RobotObservation], RobotAction
-    ],
-    robot_observation_processor: RobotProcessorPipeline[
-        RobotObservation, RobotObservation
-    ],
+    teleop_action_processor: Any,
+    robot_action_processor: Any,
+    robot_observation_processor: Any,
     display_data: bool = False,
     duration: float | None = None,
     dryrun: bool = False,
@@ -1675,9 +1616,7 @@ def xense_flare_flexiv_teleop_loop(
 def xense_flare_teleop_loop(
     robot: Robot,
     fps: int,
-    robot_observation_processor: RobotProcessorPipeline[
-        RobotObservation, RobotObservation
-    ],
+    robot_observation_processor: Any,
     display_data: bool = False,
     duration: float | None = None,
     debug_timing: bool = False,
@@ -1944,9 +1883,7 @@ def xense_flare_teleop_loop(
 def xense_multisensor_teleop_loop(
     robot: Robot,
     fps: int,
-    robot_observation_processor: RobotProcessorPipeline[
-        RobotObservation, RobotObservation
-    ],
+    robot_observation_processor: Any,
     display_data: bool = False,
     duration: float | None = None,
     debug_timing: bool = False,
