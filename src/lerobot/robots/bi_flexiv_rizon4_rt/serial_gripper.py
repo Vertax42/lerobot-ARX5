@@ -86,7 +86,7 @@ class SerialGripper:
             self._logger.info("Initializing gripper to fully open position...")
             try:
                 self._gripper.set_position_sync(
-                    position=self._gripper_min_pos,
+                    position=self._gripper_max_pos,
                     vmax=self._gripper_v_max / 2,
                     fmax=self._gripper_f_max / 2,
                     timeout=10.0,
@@ -129,7 +129,9 @@ class SerialGripper:
             raw_pos = float(status.get("position", 0.0))
             raw_pos = max(self._gripper_min_pos, min(raw_pos, self._gripper_max_pos))
             span = self._gripper_max_pos - self._gripper_min_pos
-            return (raw_pos - self._gripper_min_pos) / span
+            # SDK convention: position=85 means open, position=0 means closed.
+            # Normalized: 0.0 = open, 1.0 = closed → invert.
+            return 1.0 - (raw_pos - self._gripper_min_pos) / span
         except Exception:
             return 0.0
 
@@ -147,7 +149,8 @@ class SerialGripper:
                 f"normalized_pos must be in [0, 1], got {normalized_pos}."
             )
         span = self._gripper_max_pos - self._gripper_min_pos
-        target_mm = self._gripper_min_pos + normalized_pos * span
+        # SDK convention: position=85 opens, position=0 closes → invert normalized mapping.
+        target_mm = self._gripper_max_pos - normalized_pos * span
         self._gripper.set_position(
             target_mm,
             vmax=self._gripper_v_max,
@@ -174,7 +177,7 @@ class SerialGripper:
         if not 0.0 <= normalized_pos <= 1.0:
             raise ValueError(f"normalized_pos must be in [0, 1], got {normalized_pos}.")
         span = self._gripper_max_pos - self._gripper_min_pos
-        target_mm = self._gripper_min_pos + normalized_pos * span
+        target_mm = self._gripper_max_pos - normalized_pos * span
         self._gripper.set_position_sync(
             target_mm,
             vmax=vmax if vmax is not None else self._gripper_v_max,
