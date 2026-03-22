@@ -763,8 +763,10 @@ class BiFlexivRizon4RT(Robot):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         obs_dict: dict[str, Any] = {}
+        _t = time.perf_counter
 
         # --- Left arm state ---
+        t0 = _t()
         self._read_arm_state(
             cc=self._left_cc,
             robot=self._left_robot,
@@ -772,6 +774,7 @@ class BiFlexivRizon4RT(Robot):
             wrench_keys=self._left_wrench_keys if self.config.use_force else None,
             obs_dict=obs_dict,
         )
+        t1 = _t()
 
         # --- Right arm state ---
         self._read_arm_state(
@@ -781,6 +784,7 @@ class BiFlexivRizon4RT(Robot):
             wrench_keys=self._right_wrench_keys if self.config.use_force else None,
             obs_dict=obs_dict,
         )
+        t2 = _t()
 
         # --- Left gripper ---
         self._read_gripper_state(
@@ -789,6 +793,7 @@ class BiFlexivRizon4RT(Robot):
             gripper_key=self._left_gripper_key,
             obs_dict=obs_dict,
         )
+        t3 = _t()
 
         # --- Right gripper ---
         self._read_gripper_state(
@@ -797,10 +802,26 @@ class BiFlexivRizon4RT(Robot):
             gripper_key=self._right_gripper_key,
             obs_dict=obs_dict,
         )
+        t4 = _t()
 
         # --- External cameras ---
+        cam_timings: dict[str, float] = {}
         for cam_key, cam in self.cameras.items():
+            tc0 = _t()
             obs_dict[cam_key] = cam.async_read()
+            cam_timings[cam_key] = (_t() - tc0) * 1e3
+
+        t5 = _t()
+
+        self._last_obs_timing = {
+            "left_arm_ms":    (t1 - t0) * 1e3,
+            "right_arm_ms":   (t2 - t1) * 1e3,
+            "left_grip_ms":   (t3 - t2) * 1e3,
+            "right_grip_ms":  (t4 - t3) * 1e3,
+            "cameras_ms":     (t5 - t4) * 1e3,
+            "total_ms":       (t5 - t0) * 1e3,
+            **{f"cam[{k}]_ms": v for k, v in cam_timings.items()},
+        }
 
         return obs_dict
 
