@@ -1361,6 +1361,7 @@ def bi_pico4_teleop_loop(
     display_data: bool = False,
     duration: float | None = None,
     dryrun: bool = False,
+    debug_timing: bool = False,
 ):
     """
     Teleop loop for BiPico4 VR controllers with BiFlexivRizon4RT bimanual robot.
@@ -1381,7 +1382,10 @@ def bi_pico4_teleop_loop(
         loop_start = time.perf_counter()
 
         obs = robot.get_observation()
+        t_obs = time.perf_counter()
+
         raw_action = teleop.get_action()
+        t_action = time.perf_counter()
 
         reset_button = teleop.get_reset_button()
         if reset_button:
@@ -1441,20 +1445,41 @@ def bi_pico4_teleop_loop(
 
         if not dryrun:
             robot.send_action(raw_action)
+        t_send = time.perf_counter()
 
         if display_data:
             log_rerun_data(observation=obs, action=raw_action)
+            t_rerun = time.perf_counter()
             print("\n" + "-" * (display_len + 10))
             print(f"{'NAME':<{display_len}} | {'NORM':>7}")
             for motor, value in raw_action.items():
                 print(f"{motor:<{display_len}} | {value:>7.4f}")
             move_cursor_up(len(raw_action) + 5)
+        else:
+            t_rerun = t_send
 
         dt_s = time.perf_counter() - loop_start
         precise_sleep(max(1 / fps - dt_s, 0))
         loop_s = time.perf_counter() - loop_start
 
-        if not display_data:
+        if debug_timing:
+            obs_ms    = (t_obs    - loop_start) * 1e3
+            action_ms = (t_action - t_obs)      * 1e3
+            send_ms   = (t_send   - t_action)   * 1e3
+            rerun_ms  = (t_rerun  - t_send)     * 1e3
+            sleep_ms  = loop_s * 1e3 - dt_s * 1e3
+            print(
+                f"\r\033[K"
+                f"obs={obs_ms:5.1f}ms  "
+                f"action={action_ms:5.1f}ms  "
+                f"send={send_ms:5.1f}ms  "
+                f"rerun={rerun_ms:5.1f}ms  "
+                f"sleep={sleep_ms:5.1f}ms  "
+                f"| total={loop_s*1e3:5.1f}ms ({1/loop_s:.0f}Hz)",
+                end="",
+                flush=True,
+            )
+        elif not display_data:
             left_enabled = "ON " if teleop._left_pico4._enabled else "OFF"
             right_enabled = "ON " if teleop._right_pico4._enabled else "OFF"
             left_grip = f"{teleop._left_pico4._last_grip:.2f}"
@@ -2374,6 +2399,7 @@ def teleoperate(cfg: TeleoperateConfig):
                     display_data=cfg.display_data,
                     duration=cfg.teleop_time_s,
                     dryrun=cfg.dryrun,
+                    debug_timing=cfg.debug_timing,
                 )
             except KeyboardInterrupt:
                 logger.info("Teleoperation interrupted by user")
