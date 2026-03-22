@@ -94,15 +94,16 @@ class SerialGripper:
         self._logger.info(f"Serial gripper connected on {self._config.port}.")
 
         if self._init_open:
-            self._logger.info("Initializing gripper to fully open position...")
+            self._logger.info("Initializing gripper to fully open position (non-blocking)...")
             try:
-                self._gripper.set_position_sync(
-                    position=self._gripper_max_pos,
-                    vmax=self._gripper_v_max / 2,
+                # Use non-blocking set_position: MCU does not respond to status queries
+                # while idle, so set_position_sync would spin for ~4s even when already open.
+                self._gripper.set_position(
+                    self._gripper_max_pos,
+                    vmax=self._gripper_v_max,
                     fmax=self._gripper_f_max / 2,
-                    timeout=10.0,
                 )
-                self._logger.info("Gripper initialized to open position.")
+                self._logger.info("Gripper open command sent.")
             except Exception as e:
                 self._logger.warn(f"Gripper init-open failed (non-fatal): {e}")
 
