@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 import flexiv_rt
 
 from lerobot.cameras.configs import CameraConfig
+from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
 from lerobot.robots.config import RobotConfig
@@ -252,40 +253,42 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                     height=480,
                     warmup_s=1.0,
                 ),
-                "left_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230422271416",
-                    fps=60,
+                "left_wrist": OpenCVCameraConfig(
+                    index_or_path="XC000001",
+                    fourcc="MJPG",
                     width=640,
                     height=480,
-                    warmup_s=1.0,
+                    fps=30,
+                    warmup_s=1,
                 ),
-                "right_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230322274234",
-                    fps=60,
+                "right_wrist": OpenCVCameraConfig(
+                    index_or_path="XC000002",
+                    fourcc="MJPG",
                     width=640,
                     height=480,
-                    warmup_s=1.0,
+                    fps=30,
+                    warmup_s=1,
                 ),
                 "right_tactile_0": XenseTactileCameraConfig(
-                    serial_number="OG000339",
+                    serial_number="OG000861",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
                 "right_tactile_1": XenseTactileCameraConfig(
-                    serial_number="OG000344",
+                    serial_number="OG000862",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
                 "left_tactile_0": XenseTactileCameraConfig(
-                    serial_number="OG000337",
+                    serial_number="OG000863",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
                 "left_tactile_1": XenseTactileCameraConfig(
-                    serial_number="OG000352",
+                    serial_number="OG000864",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
