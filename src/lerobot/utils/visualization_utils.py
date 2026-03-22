@@ -53,7 +53,7 @@ def _is_scalar(x):
 def log_rerun_data(
     observation: RobotObservation | None = None,
     action: RobotAction | None = None,
-    compress_images: bool = False,
+    compress_images: bool = True,
 ) -> None:
     """
     Logs observation and action data to Rerun for real-time visualization.
@@ -71,7 +71,9 @@ def log_rerun_data(
     Args:
         observation: An optional dictionary containing observation data to log.
         action: An optional dictionary containing action data to log.
-        compress_images: Whether to compress images before logging to save bandwidth & memory in exchange for cpu and quality.
+        compress_images: Whether to compress images to JPEG before logging (default True).
+                         Reduces rerun memory usage and IPC bandwidth significantly.
+                         Set to False only when lossless quality is required.
     """
     if observation:
         for k, v in observation.items():
@@ -91,7 +93,7 @@ def log_rerun_data(
                         rr.log(f"{key}_{i}", rr.Scalars(float(vi)))
                 else:
                     img_entity = rr.Image(arr).compress() if compress_images else rr.Image(arr)
-                    rr.log(key, entity=img_entity, static=True)
+                    rr.log(key, entity=img_entity)
 
     if action:
         for k, v in action.items():
