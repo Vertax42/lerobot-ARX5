@@ -26,8 +26,15 @@ class SerialGripperConfig:
     This gripper communicates directly over a USB-serial port and does not
     require the ezros / xensesdk stack.
 
+    Identification (provide one):
+        sn:              Board serial number (e.g. ``"000001"``).  When set,
+                         the driver scans available serial ports at connect()
+                         time and picks the one whose READ_BOARD_SN response
+                         matches.  Takes priority over ``port``.
+        port:            Fallback explicit serial port path (e.g.
+                         ``"/dev/ttyUSB0"``).  Used when ``sn`` is None.
+
     Attributes:
-        port:            Serial port device path (e.g. ``/dev/ttyUSB0``).
         baudrate:        Serial baud rate (default: 115200).
         serial_timeout:  Read timeout in seconds for the serial port (default: 1.0).
 
@@ -39,8 +46,11 @@ class SerialGripperConfig:
         init_open:       If True, fully open the gripper on ``connect()``.
     """
 
+    # ── Identification ─────────────────────────────────────────────────────────
+    sn: str | None = None          # board SN — preferred over port
+    port: str = ""                 # fallback explicit port path
+
     # ── Serial connection ──────────────────────────────────────────────────────
-    port: str = "/dev/ttyUSB0"
     baudrate: int = 115200
     serial_timeout: float = 1.0
     device_id: int = 1  # XenseSerialGripper device ID on the RS-485 bus
@@ -57,8 +67,8 @@ class SerialGripperConfig:
     init_open: bool = True
 
     def __post_init__(self):
-        if not self.port:
-            raise ValueError("SerialGripperConfig: 'port' must not be empty.")
+        if not self.sn and not self.port:
+            raise ValueError("SerialGripperConfig: provide either 'sn' or 'port'.")
         if not 0 < self.baudrate:
             raise ValueError(f"SerialGripperConfig: baudrate must be positive, got {self.baudrate}.")
         if not 0.0 <= self.gripper_min_pos < self.gripper_max_pos:

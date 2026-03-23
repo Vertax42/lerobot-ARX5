@@ -22,12 +22,41 @@ USB-serial port.  No ezros / xensesdk stack required.
 
 import time
 from threading import Thread
+from glob import glob
 
-from xensegripper import XenseSerialGripper
+from xensegripper import XenseSerialGripper, read_board_sn
 
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.robots.bi_flexiv_rizon4_rt.config_serial_gripper import SerialGripperConfig
 from lerobot.utils.robot_utils import get_logger
+
+
+def find_port_by_sn(sn: str, baudrate: int = 115200, device_id: int = 1) -> str:
+    """Scan all ttyUSB/ttyACM ports and return the one whose board SN matches.
+
+    Args:
+        sn:        Target board serial number string (e.g. ``"000001"``).
+        baudrate:  Baud rate to use when querying each port.
+        device_id: Device ID to use when querying each port.
+
+    Returns:
+        Matched port path (e.g. ``"/dev/ttyUSB3"``).
+
+    Raises:
+        RuntimeError: If no port with the given SN is found.
+    """
+    candidates = sorted(glob("/dev/ttyUSB*") + glob("/dev/ttyACM*"))
+    for port in candidates:
+        try:
+            found = read_board_sn(port, baudrate=baudrate, device_id=device_id)
+            if found and found.strip() == sn.strip():
+                return port
+        except Exception:
+            pass
+    raise RuntimeError(
+        f"SerialGripper: could not find a port with SN={sn!r}. "
+        f"Scanned: {candidates}"
+    )
 
 
 class SerialGripper:
@@ -60,7 +89,11 @@ class SerialGripper:
         self._gripper_f_max = config.gripper_f_max
         self._init_open = config.init_open
 
-        self._logger = get_logger(f"SerialGripper-{config.port.split('/')[-1]}")
+        # Resolved at connect() time (SN lookup or explicit port)
+        self._port: str = config.port
+
+        label = config.sn or config.port.split("/")[-1]
+        self._logger = get_logger(f"SerialGripper-{label}")
         self._is_connected: bool = False
         self._gripper: XenseSerialGripper | None = None
 
@@ -76,22 +109,32 @@ class SerialGripper:
         if self._is_connected:
             raise DeviceAlreadyConnectedError(f"{self} is already connected.")
 
+        # Resolve port from SN if not explicitly set
+        if self._config.sn:
+            self._logger.info(f"Scanning serial ports for gripper SN={self._config.sn!r}...")
+            self._port = find_port_by_sn(
+                self._config.sn,
+                baudrate=self._config.baudrate,
+                device_id=self._config.device_id,
+            )
+            self._logger.info(f"Found SN={self._config.sn!r} on {self._port}.")
+
         self._logger.info(
-            f"Connecting serial gripper on {self._config.port} "
+            f"Connecting serial gripper on {self._port} "
             f"(baud={self._config.baudrate}, id={self._config.device_id})..."
         )
         try:
             self._gripper = XenseSerialGripper(
-                port=self._config.port,
+                port=self._port,
                 device_id=self._config.device_id,
                 baudrate=self._config.baudrate,
                 timeout=self._config.serial_timeout,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to open serial gripper on {self._config.port}: {e}") from e
+            raise RuntimeError(f"Failed to open serial gripper on {self._port}: {e}") from e
 
         self._is_connected = True
-        self._logger.info(f"Serial gripper connected on {self._config.port}.")
+        self._logger.info(f"Serial gripper connected on {self._port}.")
 
         if self._init_open:
             self._logger.info("Initializing gripper to fully open position (non-blocking)...")

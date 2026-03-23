@@ -140,7 +140,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
 
     # ========== Left gripper settings ==========
     left_use_gripper: bool = True
-    left_gripper_port: str = "/dev/ttyUSB3"
+    left_gripper_sn: str = "000001"
     left_gripper_baudrate: int = 115200
     left_gripper_serial_timeout: float = 1.0
     # -- shared motion parameters --
@@ -152,7 +152,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
 
     # ========== Right gripper settings ==========
     right_use_gripper: bool = True
-    right_gripper_port: str = "/dev/ttyUSB2"
+    right_gripper_sn: str = "000002"
     right_gripper_baudrate: int = 115200
     right_gripper_serial_timeout: float = 1.0
     # -- shared motion parameters --
@@ -216,7 +216,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         # Create left gripper config
         if self.left_use_gripper:
             self.left_gripper = SerialGripperConfig(
-                port=self.left_gripper_port,
+                sn=self.left_gripper_sn,
                 baudrate=self.left_gripper_baudrate,
                 serial_timeout=self.left_gripper_serial_timeout,
                 gripper_min_pos=self.left_gripper_min_pos,
@@ -231,7 +231,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         # Create right gripper config
         if self.right_use_gripper:
             self.right_gripper = SerialGripperConfig(
-                port=self.right_gripper_port,
+                sn=self.right_gripper_sn,
                 baudrate=self.right_gripper_baudrate,
                 serial_timeout=self.right_gripper_serial_timeout,
                 gripper_min_pos=self.right_gripper_min_pos,
