@@ -56,7 +56,7 @@ from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
     arx5_follower,  # noqa: F401
-    # bi_arx5,
+    bi_arx5,  # noqa: F401
     flexiv_rizon4,  # noqa: F401
     make_robot_from_config,
     xense_flare,  # noqa: F401

@@ -77,9 +77,9 @@ class BiARX5Config(RobotConfig):
     enable_tactile_sensors: bool = False
 
     # Position settings (Joint space: 6 joints + gripper)
-    home_position: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    home_position: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.8])
 
-    start_position: list[float] = field(default_factory=lambda: [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.0])
+    start_position: list[float] = field(default_factory=lambda: [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.8])
     # Camera configuration
     cameras: dict[str, CameraConfig] = field(default_factory=lambda: {})
 
@@ -88,23 +88,23 @@ class BiARX5Config(RobotConfig):
         if self.enable_tactile_sensors:
             self.cameras = {
                 "head": RealSenseCameraConfig(
-                    serial_number_or_name="230322271365", fps=60, width=640, height=480
+                    serial_number_or_name="230322271365", fps=30, width=640, height=480
                 ),
                 "left_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230422271416", fps=60, width=640, height=480
+                    serial_number_or_name="230422271416", fps=30, width=640, height=480
                 ),
                 "right_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230322274234", fps=60, width=640, height=480
+                    serial_number_or_name="230322274234", fps=30, width=640, height=480
                 ),
                 "right_tactile_0": XenseCameraConfig(
                     serial_number="OG000344",
-                    fps=60,
+                    fps=30,
                     output_types=[XenseOutputType.DIFFERENCE],
                     warmup_s=1.0,
                 ),
                 "left_tactile_0": XenseCameraConfig(
                     serial_number="OG000337",
-                    fps=60,
+                    fps=30,
                     output_types=[XenseOutputType.DIFFERENCE],
                     warmup_s=1.0,
                 ),
@@ -112,13 +112,13 @@ class BiARX5Config(RobotConfig):
         else:
             self.cameras = {
                 "head": RealSenseCameraConfig(
-                    serial_number_or_name="230322271365", fps=60, width=640, height=480
+                    serial_number_or_name="230322271365", fps=30, width=640, height=480
                 ),
                 "left_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230422271416", fps=60, width=640, height=480
+                    serial_number_or_name="230422271416", fps=30, width=640, height=480
                 ),
                 "right_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230322274234", fps=60, width=640, height=480
+                    serial_number_or_name="230322274234", fps=30, width=640, height=480
                 ),
             }
         pass
