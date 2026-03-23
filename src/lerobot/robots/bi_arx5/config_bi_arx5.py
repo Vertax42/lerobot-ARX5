@@ -117,25 +117,25 @@ class BiARX5Config(RobotConfig):
                 "right_tactile_0": XenseTactileCameraConfig(
                     serial_number="OG000339",
                     fps=30,
-                    output_types=[XenseOutputType.DIFFERENCE],
+                    output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
                 "right_tactile_1": XenseTactileCameraConfig(
                     serial_number="OG000344",
                     fps=30,
-                    output_types=[XenseOutputType.DIFFERENCE],
+                    output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
                 "left_tactile_0": XenseTactileCameraConfig(
                     serial_number="OG000337",
                     fps=30,
-                    output_types=[XenseOutputType.DIFFERENCE],
+                    output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
                 "left_tactile_1": XenseTactileCameraConfig(
                     serial_number="OG000352",
                     fps=30,
-                    output_types=[XenseOutputType.DIFFERENCE],
+                    output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
             }
