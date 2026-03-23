@@ -323,16 +323,29 @@ class BiFlexivRizon4RT(Robot):
                 self.logger.info(f"Enabling {side} arm...")
                 robot.Enable()
 
-            # Wait for both arms to become operational
+            # Wait for both arms to become operational (no logs here used to look like a hang;
+            # grippers/cameras run only after this step).
             timeout = 30
             start_time = time.time()
+            last_log = start_time
+            self.logger.info(
+                f"Waiting for both arms to report operational (timeout {timeout}s)..."
+            )
             while True:
-                if time.time() - start_time > timeout:
+                elapsed = time.time() - start_time
+                if elapsed > timeout:
                     raise RuntimeError(f"Arms did not become operational within {timeout}s")
                 left_ready = self._left_robot.operational()
                 right_ready = self._right_robot.operational()
                 if left_ready and right_ready:
                     break
+                now = time.time()
+                if now - last_log >= 2.0:
+                    self.logger.info(
+                        f"Still waiting for operational: left={left_ready}, right={right_ready} "
+                        f"({elapsed:.1f}s / {timeout}s)"
+                    )
+                    last_log = now
                 time.sleep(0.1)
 
             self.logger.info("Both arms are operational.")
@@ -349,10 +362,18 @@ class BiFlexivRizon4RT(Robot):
                 lg.result()
                 rg.result()
 
+            if not self.cameras:
+                self.logger.info("No cameras configured; skipping camera connect.")
+            else:
+                self.logger.info(
+                    f"Connecting {len(self.cameras)} camera(s): {', '.join(self.cameras.keys())}..."
+                )
             with ThreadPoolExecutor(max_workers=len(self.cameras) or 1) as ex:
                 cam_futs = [ex.submit(cam.connect) for cam in self.cameras.values()]
                 for f in cam_futs:
                     f.result()
+            if self.cameras:
+                self.logger.info("All cameras connected.")
 
             self._is_connected = True
 
