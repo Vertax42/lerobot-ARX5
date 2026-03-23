@@ -21,7 +21,7 @@ USB-serial port.  No ezros / xensesdk stack required.
 """
 
 import time
-from threading import Thread
+from threading import Thread, Lock
 from glob import glob
 
 from xensegripper import XenseSerialGripper, read_board_sn
@@ -29,6 +29,10 @@ from xensegripper import XenseSerialGripper, read_board_sn
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.robots.bi_flexiv_rizon4_rt.config_serial_gripper import SerialGripperConfig
 from lerobot.utils.robot_utils import get_logger
+
+# Serialize port scans so parallel gripper connect() calls don't
+# interfere with each other's serial read_board_sn() queries.
+_scan_lock = Lock()
 
 
 def find_port_by_sn(sn: str, baudrate: int = 115200, device_id: int = 1) -> str:
@@ -45,14 +49,15 @@ def find_port_by_sn(sn: str, baudrate: int = 115200, device_id: int = 1) -> str:
     Raises:
         RuntimeError: If no port with the given SN is found.
     """
-    candidates = sorted(glob("/dev/ttyUSB*") + glob("/dev/ttyACM*"))
-    for port in candidates:
-        try:
-            found = read_board_sn(port, baudrate=baudrate, device_id=device_id)
-            if found and found.strip() == sn.strip():
-                return port
-        except Exception:
-            pass
+    with _scan_lock:
+        candidates = sorted(glob("/dev/ttyUSB*") + glob("/dev/ttyACM*"))
+        for port in candidates:
+            try:
+                found = read_board_sn(port, baudrate=baudrate, device_id=device_id)
+                if found and found.strip() == sn.strip():
+                    return port
+            except Exception:
+                pass
     raise RuntimeError(
         f"SerialGripper: could not find a port with SN={sn!r}. "
         f"Scanned: {candidates}"
