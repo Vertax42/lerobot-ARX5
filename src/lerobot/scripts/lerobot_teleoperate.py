@@ -197,7 +197,6 @@ from lerobot.robots import (  # noqa: F401
     flexiv_rizon4_rt,
     make_robot_from_config,
     pylibfranka_research3,
-    unitree_g1 as unitree_g1_robot,
     xense_flare as xense_flare_robot,
     xense_multisensor,
     mock_robot,
@@ -212,7 +211,6 @@ from lerobot.teleoperators import (  # noqa: F401
     mock_teleop,
     pico4,
     spacemouse,
-    unitree_g1,
     vive_tracker,
     xense_flare,
     trlc_leader,
@@ -350,9 +348,6 @@ def teleop_loop(
         obs_t0 = time.perf_counter()
         obs = robot.get_observation()
         obs_time_ms = (time.perf_counter() - obs_t0) * 1e3
-
-        if robot.name == "unitree_g1":
-            teleop.send_feedback(obs)
 
         # Get teleop action
         teleop_t0 = time.perf_counter()

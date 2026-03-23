@@ -59,7 +59,6 @@ from lerobot.robots import (  # noqa: F401
     make_robot_from_config,
     xense_flare as xense_flare_robot,
     xense_multisensor,
-    unitree_g1,
 )
 from lerobot.utils.constants import ACTION
 from lerobot.utils.import_utils import register_third_party_plugins

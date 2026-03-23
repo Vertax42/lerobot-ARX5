@@ -149,7 +149,6 @@ from lerobot.teleoperators import (  # noqa: F401
     mock_teleop,
     pico4,
     spacemouse,
-    unitree_g1,
     vive_tracker,
     xense_flare,
     trlc_leader,
@@ -367,8 +366,6 @@ def record_loop(
             act_processed_policy: RobotAction = make_robot_action(action_values, dataset.features)
 
         elif policy is None and isinstance(teleop, Teleoperator):
-            if robot.name == "unitree_g1":
-                teleop.send_feedback(obs)
             act = teleop.get_action()
 
             # Applies a pipeline to the raw teleop action, default is IdentityProcessor
