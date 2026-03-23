@@ -44,6 +44,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     Attributes:
         left_robot_sn: Serial number of the left arm robot
         right_robot_sn: Serial number of the right arm robot
+        bi_mount_type: Preset layout for SNs and home/start poses ("forward" or "side")
         use_force: Enable force control axes (both arms)
         control_frequency: Python-side control loop frequency in Hz
         go_to_start: Move to start positions after connect
@@ -62,9 +63,9 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     """
 
     # Robot identification
-    left_robot_sn: str = "Rizon4-063458"
-    right_robot_sn: str = "Rizon4-063670"
-
+    left_robot_sn: str = "Rizon4s-063458"
+    right_robot_sn: str = "Rizon4s-063670"
+    bi_mount_type: str = "forward"
     # Force control
     use_force: bool = False
 
@@ -139,27 +140,27 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     right_rt_cpu_affinity: int = 3
 
     # ========== Left gripper settings ==========
-    left_use_gripper: bool = True
+    left_use_gripper: bool = False
     left_gripper_sn: str = "000001"
     left_gripper_baudrate: int = 115200
     left_gripper_serial_timeout: float = 1.0
     # -- shared motion parameters --
     left_gripper_min_pos: float = 0.0
     left_gripper_max_pos: float = 85.0
-    left_gripper_v_max: float = 160.0  # mm/s
-    left_gripper_f_max: float = 27.0  # N
+    left_gripper_v_max: float = 100.0  # mm/s
+    left_gripper_f_max: float = 10.0  # N
     left_gripper_init_open: bool = True
 
     # ========== Right gripper settings ==========
-    right_use_gripper: bool = True
+    right_use_gripper: bool = False
     right_gripper_sn: str = "000002"
     right_gripper_baudrate: int = 115200
     right_gripper_serial_timeout: float = 1.0
     # -- shared motion parameters --
     right_gripper_min_pos: float = 0.0
     right_gripper_max_pos: float = 85.0
-    right_gripper_v_max: float = 160.0  # mm/s
-    right_gripper_f_max: float = 27.0  # N
+    right_gripper_v_max: float = 100.0  # mm/s
+    right_gripper_f_max: float = 10.0  # N
     right_gripper_init_open: bool = True
 
     # Auto-created in __post_init__ (do not set directly)
@@ -168,6 +169,36 @@ class BiFlexivRizon4RTConfig(RobotConfig):
 
     def __post_init__(self):
         super().__post_init__()
+
+        # ── Apply preset positions based on mounting type ─────────────────
+        _PRESETS = {
+            "forward": {
+                "left_sn":     "Rizon4s-063458",
+                "right_sn":    "Rizon4s-063670",
+                "left_start":  [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24],
+                "right_start": [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.60],
+                "left_home":   [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24],
+                "right_home":  [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.60],
+            },
+            "side": {
+                "left_sn":     "Rizon4-063423",
+                "right_sn":    "Rizon4-062855",
+                "left_start":  [-18.95, 80.45, -80.35, -89.37, -12.83, -17.05, -9.80],
+                "right_start": [12.67, -85.31, 85.44, 102.25, 5.88, 25.36, 83.76],
+                "left_home":   [-18.95, 80.45, -80.35, -89.37, -12.83, -17.05, -9.80],
+                "right_home":  [12.67, -85.31, 85.44, 102.25, 5.88, 25.36, 83.76],
+            },
+        }
+        if self.bi_mount_type not in _PRESETS:
+            raise ValueError(f"Unknown mounting type {self.bi_mount_type!r}, expected one of {list(_PRESETS)}")
+
+        preset = _PRESETS[self.bi_mount_type]
+        self.left_robot_sn = preset["left_sn"]
+        self.right_robot_sn = preset["right_sn"]
+        self.left_start_position_degree = preset["left_start"]
+        self.right_start_position_degree = preset["right_start"]
+        self.left_home_position_degree = preset["left_home"]
+        self.right_home_position_degree = preset["right_home"]
 
         # Validate Cartesian/force parameters
         if len(self.force_control_axis) != 6:
@@ -244,78 +275,78 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             self.right_gripper = None
 
         # Camera configuration based on tactile sensors setting
-        if self.enable_tactile_sensors:
-            self.cameras = {
-                "head": RealSenseCameraConfig(
-                    serial_number_or_name="337322070722",
-                    fps=30,
-                    width=640,
-                    height=480,
-                    warmup_s=1.0,
-                ),
-                "left_wrist": OpenCVCameraConfig(
-                    index_or_path="XC000001",
-                    fourcc="MJPG",
-                    width=640,
-                    height=480,
-                    fps=30,
-                    warmup_s=0.5,
-                ),
-                "right_wrist": OpenCVCameraConfig(
-                    index_or_path="XC000002",
-                    fourcc="MJPG",
-                    width=640,
-                    height=480,
-                    fps=30,
-                    warmup_s=0.5,
-                ),
-                "left_tactile_0": XenseTactileCameraConfig(
-                    serial_number="OG000861",
-                    fps=30,
-                    output_types=[XenseOutputType.RECTIFY],
-                    warmup_s=0.05,
-                ),
-                "left_tactile_1": XenseTactileCameraConfig(
-                    serial_number="OG000862",
-                    fps=30,
-                    output_types=[XenseOutputType.RECTIFY],
-                    warmup_s=0.05,
-                ),
-                "right_tactile_0": XenseTactileCameraConfig(
-                    serial_number="OG000863",
-                    fps=30,
-                    output_types=[XenseOutputType.RECTIFY],
-                    warmup_s=0.05,
-                ),
-                "right_tactile_1": XenseTactileCameraConfig(
-                    serial_number="OG000864",
-                    fps=30,
-                    output_types=[XenseOutputType.RECTIFY],
-                    warmup_s=0.05,
-                ),
-            }
-        else:
-            self.cameras = {
-                "head": RealSenseCameraConfig(
-                    serial_number_or_name="230322271365",
-                    fps=60,
-                    width=640,
-                    height=480,
-                    warmup_s=0.05,
-                ),
-                "left_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230422271416",
-                    fps=60,
-                    width=640,
-                    height=480,
-                    warmup_s=0.05,
-                ),
-                "right_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230322274234",
-                    fps=60,
-                    width=640,
-                    height=480,
-                    warmup_s=0.05,
-                ),
-            }
+        # if self.enable_tactile_sensors:
+        #     self.cameras = {
+        #         "head": RealSenseCameraConfig(
+        #             serial_number_or_name="337322070722",
+        #             fps=30,
+        #             width=640,
+        #             height=480,
+        #             warmup_s=1.0,
+        #         ),
+        #         "left_wrist": OpenCVCameraConfig(
+        #             index_or_path="XC000001",
+        #             fourcc="MJPG",
+        #             width=640,
+        #             height=480,
+        #             fps=30,
+        #             warmup_s=1.0,
+        #         ),
+        #         "right_wrist": OpenCVCameraConfig(
+        #             index_or_path="XC000002",
+        #             fourcc="MJPG",
+        #             width=640,
+        #             height=480,
+        #             fps=30,
+        #             warmup_s=1.0,
+        #         ),
+        #         "left_tactile_0": XenseTactileCameraConfig(
+        #             serial_number="OG000863",
+        #             fps=30,
+        #             output_types=[XenseOutputType.RECTIFY],
+        #             warmup_s=0.05,
+        #         ),
+        #         "left_tactile_1": XenseTactileCameraConfig(
+        #             serial_number="OG000864",
+        #             fps=30,
+        #             output_types=[XenseOutputType.RECTIFY],
+        #             warmup_s=0.05,
+        #         ),
+        #         # "right_tactile_0": XenseTactileCameraConfig(
+        #         #     serial_number="OG000861",
+        #         #     fps=30,
+        #         #     output_types=[XenseOutputType.RECTIFY],
+        #         #     warmup_s=0.05,
+        #         # ),
+        #         "right_tactile_1": XenseTactileCameraConfig(
+        #             serial_number="OG000862",
+        #             fps=30,
+        #             output_types=[XenseOutputType.RECTIFY],
+        #             warmup_s=0.05,
+        #         ),
+        #     }
+        # else:
+        #     self.cameras = {
+        #         "head": RealSenseCameraConfig(
+        #             serial_number_or_name="230322271365",
+        #             fps=60,
+        #             width=640,
+        #             height=480,
+        #             warmup_s=0.05,
+        #         ),
+        #         "left_wrist": RealSenseCameraConfig(
+        #             serial_number_or_name="230422271416",
+        #             fps=60,
+        #             width=640,
+        #             height=480,
+        #             warmup_s=0.05,
+        #         ),
+        #         "right_wrist": RealSenseCameraConfig(
+        #             serial_number_or_name="230322274234",
+        #             fps=60,
+        #             width=640,
+        #             height=480,
+        #             warmup_s=0.05,
+        #         ),
+        #     }
         pass
