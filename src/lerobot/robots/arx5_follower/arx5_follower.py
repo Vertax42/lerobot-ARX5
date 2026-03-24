@@ -28,27 +28,16 @@ from lerobot.utils.robot_utils import get_logger
 from ..robot import Robot
 from .config_arx5_follower import ARX5FollowerConfig, ARX5ControlMode
 
-# Import ARX5 interface
 import os
-import sys
-
-# Add ARX5 SDK path to Python path (reuse from bi_arx5)
-current_dir = os.path.dirname(os.path.abspath(__file__))
-arx5_sdk_path = os.path.join(current_dir, "..", "bi_arx5", "ARX5_SDK", "python")
-if arx5_sdk_path not in sys.path:
-    sys.path.insert(0, arx5_sdk_path)
 
 try:
-    import arx5_interface as arx5
+    import pyarx as arx5
 except ImportError as e:
-    if "LogLevel" in str(e) and "already registered" in str(e):
-        # LogLevel already registered, try to get the existing module
-        if "arx5_interface" in sys.modules:
-            arx5 = sys.modules["arx5_interface"]
-        else:
-            raise e
-    else:
-        raise e
+    raise ImportError(
+        "pyarx not found. Build and install it first:\n"
+        "  cd third_party/ARX5_SDK\n"
+        "  bash build_python.sh"
+    ) from e
 
 
 class ARX5Follower(Robot):
@@ -119,10 +108,14 @@ class ARX5Follower(Robot):
         )
 
         # Create solver for FK/IK calculations
+        current_dir = os.path.dirname(__file__)
         urdf_path = os.path.join(
             current_dir,
             "..",
-            "bi_arx5",
+            "..",
+            "..",
+            "..",
+            "third_party",
             "ARX5_SDK",
             "models",
             f"{config.arm_model}.urdf",

@@ -16,7 +16,6 @@
 
 import math
 import os
-import sys
 import time
 from collections.abc import Sequence
 from functools import cached_property
@@ -30,23 +29,14 @@ from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import get_logger
 
-# Add ARX5 SDK path to Python path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-arx5_sdk_path = os.path.join(current_dir, "ARX5_SDK", "python")
-if arx5_sdk_path not in sys.path:
-    sys.path.insert(0, arx5_sdk_path)
-
 try:
-    import arx5_interface as arx5
+    import pyarx as arx5
 except ImportError as e:
-    if "LogLevel" in str(e) and "already registered" in str(e):
-        # LogLevel already registered, try to get the existing module
-        if "arx5_interface" in sys.modules:
-            arx5 = sys.modules["arx5_interface"]
-        else:
-            raise e
-    else:
-        raise e
+    raise ImportError(
+        "pyarx not found. Build and install it first:\n"
+        "  cd third_party/ARX5_SDK\n"
+        "  bash build_python.sh"
+    ) from e
 
 
 class BiARX5(Robot):
@@ -139,7 +129,8 @@ class BiARX5(Robot):
         }
 
         # Create solver for FK/IK calculations (both arms use same model)
-        urdf_path = os.path.join(current_dir, "ARX5_SDK", "models", f"{config.left_arm_model}.urdf")
+        current_dir = os.path.dirname(__file__)
+        urdf_path = os.path.join(current_dir, "..", "..", "..", "..", "third_party", "ARX5_SDK", "models", f"{config.left_arm_model}.urdf")
         self._solver = arx5.Arx5Solver(
             urdf_path,
             self.robot_configs["left_config"].joint_dof,

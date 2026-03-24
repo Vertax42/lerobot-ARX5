@@ -1,0 +1,19 @@
+[submodule "third_party/ARX5_SDK"]
+	path = third_party/ARX5_SDK
+	url = https://github.com/Vertax42/ARX5_SDK.git
+[submodule "third_party/libpyflexiv"]
+	path = third_party/libpyflexiv
+	url = https://github.com/Vertax42/libpyflexiv.git
+[submodule "third_party/XenseVR-PC-Service"]
+	path = third_party/XenseVR-PC-Service
+	url = https://github.com/Vertax42/XenseVR-PC-Service.git
+[submodule "third_party/xensesdk"]
+	path = third_party/xensesdk
+	url = https://github.com/Vertax42/xensesdk.git
+	branch = main
+[submodule "third_party/XGripper"]
+	path = third_party/XGripper
+	url = https://github.com/Vertax42/XGripper.git
+[submodule "third_party/xense_franka"]
+    path = third_party/xense_franka
+    url = https://github.com/Vertax42/xense_franka.git
