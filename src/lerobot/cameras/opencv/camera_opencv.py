@@ -186,6 +186,20 @@ class OpenCVCamera(Camera):
     def __str__(self) -> str:
         return f"{self.__class__.__name__}({self.index_or_path})"
 
+    def _resolve_index_or_path(self) -> int | str:
+        """Return the actual device path/index to pass to cv2.VideoCapture.
+
+        If `index_or_path` is a plain string that does not look like a filesystem path
+        (i.e., does not start with '/' or '.'), treat it as a V4L2 device name and
+        resolve it dynamically via `v4l2-ctl --list-devices`.
+        """
+        val = self.index_or_path
+        if isinstance(val, str) and not val.startswith("/") and not val.startswith("."):
+            resolved = _resolve_v4l2_device_name(val)
+            logger.info(f"{self} resolved device name '{val}' → '{resolved}'")
+            return resolved
+        return val if isinstance(val, int) else str(val)
+
     @property
     def is_connected(self) -> bool:
         """Checks if the camera is currently connected and opened."""
@@ -213,7 +227,7 @@ class OpenCVCamera(Camera):
         # blocking in multi-threaded applications, especially during data collection.
         cv2.setNumThreads(1)
 
-        self.videocapture = cv2.VideoCapture(self.index_or_path, self.backend)
+        self.videocapture = cv2.VideoCapture(self._resolve_index_or_path(), self.backend)
 
         if not self.videocapture.isOpened():
             self.videocapture.release()
