@@ -98,7 +98,7 @@ class XenseCameraConfig(CameraConfig):
     warmup_s: float = 0.5
     rectify_size: tuple[int, int] | None = None  # (width, height) for rectified images
     raw_size: tuple[int, int] | None = None  # (width, height) for raw sensor data
-    use_gpu: bool = False
+    use_gpu: bool = True
 
     def __post_init__(self):
         # Set default output types if not provided
