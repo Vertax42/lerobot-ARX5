@@ -19,7 +19,7 @@ from enum import Enum
 
 from lerobot.cameras import CameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
-from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
+from lerobot.cameras.xense import XenseOutputType, XenseCameraConfig
 from lerobot.robots.config import RobotConfig
 
 
@@ -114,25 +114,25 @@ class BiARX5Config(RobotConfig):
                     height=480,
                     warmup_s=1.0,
                 ),
-                "right_tactile_0": XenseTactileCameraConfig(
+                "right_tactile_0": XenseCameraConfig(
                     serial_number="OG000339",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
-                "right_tactile_1": XenseTactileCameraConfig(
+                "right_tactile_1": XenseCameraConfig(
                     serial_number="OG000344",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
-                "left_tactile_0": XenseTactileCameraConfig(
+                "left_tactile_0": XenseCameraConfig(
                     serial_number="OG000337",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
-                "left_tactile_1": XenseTactileCameraConfig(
+                "left_tactile_1": XenseCameraConfig(
                     serial_number="OG000352",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
