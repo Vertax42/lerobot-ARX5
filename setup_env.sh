@@ -294,8 +294,11 @@ install_xense() {
     uv pip install -e "$SDK_DIR"
     echo "[xense] Building pyxensexu companion module..."
     bash "$XU_DIR/build_python.sh"
-    # Install XGripper from local submodule (package name: xgripper)
-    uv pip install -e "$GRIPPER_DIR" --no-deps
+    # Install XGripper from local submodule (package name: xgripper).
+    # The conda cross-compiler sysroot does not search /usr/lib/x86_64-linux-gnu/,
+    # so we expose it via LIBRARY_PATH so the linker finds libhidapi-libusb.
+    LIBRARY_PATH="/usr/lib/x86_64-linux-gnu:${LIBRARY_PATH:-}" \
+        uv pip install -e "$GRIPPER_DIR" --no-deps
     # xensesdk requires a specific av version
     uv pip install av==15.1.0
 
