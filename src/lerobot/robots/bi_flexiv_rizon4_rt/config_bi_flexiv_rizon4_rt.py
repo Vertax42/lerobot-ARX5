@@ -140,7 +140,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     right_rt_cpu_affinity: int = 3
 
     # ========== Left gripper settings ==========
-    left_use_gripper: bool = False
+    left_use_gripper: bool = True
     left_gripper_sn: str = "000001"
     left_gripper_baudrate: int = 115200
     left_gripper_serial_timeout: float = 1.0
@@ -152,7 +152,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     left_gripper_init_open: bool = True
 
     # ========== Right gripper settings ==========
-    right_use_gripper: bool = False
+    right_use_gripper: bool = True
     right_gripper_sn: str = "000002"
     right_gripper_baudrate: int = 115200
     right_gripper_serial_timeout: float = 1.0
