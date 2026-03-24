@@ -63,6 +63,36 @@ def busy_wait(seconds):
             time.sleep(seconds)
 
 
+def precise_sleep(seconds: float, spin_threshold: float = 0.010, sleep_margin: float = 0.005):
+    """
+    Wait for `seconds` with better precision than time.sleep alone at the expense of more CPU usage.
+
+    Parameters:
+      - seconds: duration to wait
+      - spin_threshold: if remaining <= spin_threshold -> spin; otherwise sleep (seconds). Default 10ms
+      - sleep_margin: when sleeping leave this much time before deadline to avoid oversleep. Default 5ms
+
+    Note:
+        The default parameters are chosen to prioritize timing accuracy over CPU usage for the common 30 FPS use case.
+    """
+    if seconds <= 0:
+        return
+
+    system = platform.system()
+    if system in ("Darwin", "Windows"):
+        end_time = time.perf_counter() + seconds
+        while True:
+            remaining = end_time - time.perf_counter()
+            if remaining <= 0:
+                break
+            if remaining > spin_threshold:
+                time.sleep(max(remaining - sleep_margin, 0))
+            else:
+                pass
+    else:
+        time.sleep(seconds)
+
+
 def xyz_rpy_to_matrix(pose: np.ndarray) -> np.ndarray:
     """
     Convert position and RPY angles to 4x4 transformation matrix.
