@@ -13,76 +13,60 @@ bash Miniforge3-$(uname)-$(uname -m).sh
 
 ### 📦 Environment Setup
 
-**Step 1:** 📥 Download and install the XenseVR PC Service `.deb` package from [XenseVR-PC-Service v0.1.0 Release](https://github.com/Vertax42/XenseVR-PC-Service/releases/tag/v0.1.0).
-
-> ⚠️ **Note:** This package has only been tested on **x86_64 Ubuntu 22.04**. Other architectures or distributions may not work right now.
+**Step 1:** 📂 Clone the repository with all submodules:
 
 ```bash
-# After downloading the .deb file, install it with:
-sudo dpkg -i xensevr-pc-service_*.deb
-# or simply run:
-sudo apt-get install ./xensevr-pc-service_*.deb
-```
-
-**Step 2:** 🐭 Install HID API and configure permissions for 3D SpaceMouse support:
-
-```bash
-# Install system HID libraries for SpaceMouse devices
-sudo apt-get update
-sudo apt-get install -y libhidapi-dev libhidapi-hidraw0 libhidapi-libusb0
-
-# Install Python HID packages (will be installed by setup_env.sh, but can be installed manually)
-# pip install hidapi pyspacemouse
-
-# Configure udev rules to allow non-root access to SpaceMouse devices
-sudo tee /etc/udev/rules.d/99-hidraw-permissions.rules << 'EOF'
-KERNEL=="hidraw*", SUBSYSTEM=="hidraw", MODE="0664", GROUP="plugdev"
-EOF
-
-# Reload udev rules
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-
-# Add current user to plugdev group (if not already added)
-sudo usermod -aG plugdev $USER
-
-# Apply group changes to current session
-newgrp plugdev
-```
-
-> ⚠️ **Important:** After setting up udev rules, you may need to:
-> - Re-plug your SpaceMouse USB receiver, or
-> - Log out and log back in, or
-> - Reboot your system
->
-> to ensure the permissions take effect.
-
-**Verify SpaceMouse Setup:**
-
-```bash
-# Check if SpaceMouse is detected
-lsusb | grep -i "3Dconnexion\|space"
-
-# Check hidraw device permissions (should show MODE 0664 and GROUP plugdev)
-ls -l /dev/hidraw*
-
-# Test SpaceMouse connection
-python test_pyspacemouse_basic.py
-```
-
-**Step 3:** 📂 Clone the repository and navigate into the directory:
-
-```bash
-git clone https://github.com/Vertax42/lerobot-xense.git
+git clone \
+  --recurse-submodules \
+  https://github.com/Vertax42/lerobot-xense.git
 cd lerobot-xense
 ```
 
-**Step 4:** 🐍 Create and activate the conda/mamba environment, then install dependencies:
+> If you already cloned without submodules, initialize them manually:
+> ```bash
+> git submodule update --init --recursive --progress
+> ```
+
+This repository uses `third_party/` git submodules to manage hardware SDK dependencies:
+
+| Submodule | Installed package |
+|-----------|-------------------|
+| `third_party/ARX5_SDK` | `pyarx` |
+| `third_party/libpyflexiv` | `flexiv_rt` |
+| `third_party/XenseVR-PC-Service` | `xensevr_pc_service_sdk` |
+| `third_party/xensesdk` | `xensesdk` |
+| `third_party/XGripper` | `xensegripper` |
+| `third_party/xense_franka` | `xense_franka` |
+
+**Step 2:** 🐍 Create and activate the conda/mamba environment:
 
 ```bash
 bash ./setup_env.sh --mamba <optional_env_name>
 mamba activate <optional_env_name> # or conda activate <optional_env_name>
-bash ./setup_env.sh --install # you need to enter password for sudo access to install the dependencies
+```
+
+**Step 3:** 📦 Install LeRobot-Xense and all hardware SDK bindings:
+
+```bash
+bash ./setup_env.sh --install
+```
+
+This step will:
+- Update the conda environment from `conda_environment.yaml`
+- Install the main package from `pyproject.toml`
+- Build and install all `third_party` SDK packages: `pyarx`, `flexiv_rt`, `xensevr_pc_service_sdk`, `xensesdk`, `xensegripper`, `xense_franka`
+- Configure SpaceMouse udev rules and HID permissions automatically
+
+> You will be prompted for `sudo` password during installation (for ARX5 real-time capability and udev rules).
+
+**Step 4:** ✅ Verify the installation:
+
+```bash
+python -c 'import pyarx; print("pyarx OK ->", pyarx.__file__)'
+python -c 'import flexiv_rt; print("flexiv_rt OK ->", flexiv_rt.__file__)'
+python -c 'import xensevr_pc_service_sdk; print("xensevr_pc_service_sdk OK ->", xensevr_pc_service_sdk.__file__)'
+python -c 'import xensesdk; print("xensesdk OK ->", xensesdk.__file__)'
+python -c 'import xensegripper; print("xensegripper OK ->", xensegripper.__file__)'
 ```
 
 **Step 5:** 📌 Check if FFmpeg 7.X is installed in your environment and `libsvtav1` encoder is supported:
@@ -90,6 +74,16 @@ bash ./setup_env.sh --install # you need to enter password for sudo access to in
 ```bash
 mamba list | grep ffmpeg
 ffmpeg -encoders | grep libsvtav1
+```
+
+### ARX5 Real-time Thread Permissions
+
+The ARX5 SDK requires `CAP_SYS_NICE` on the Python interpreter for real-time CAN thread scheduling. This is handled by `setup_env.sh --install`, but can be set manually:
+
+```bash
+PY_EXE=$(python -c 'import sys, os; p = sys.executable; print(os.path.realpath(p))')
+sudo setcap cap_sys_nice+ep "$PY_EXE"
+getcap "$PY_EXE"  # should show: cap_sys_nice+ep
 ```
 ## 🐭 SpaceMouse Teleoperation System
 
