@@ -85,6 +85,19 @@ lerobot-teleoperate \
     --dryrun=true
 ```
 
+## Bimanual Flexiv Rizon4 RT + Bi-Pico4 teleoperate command
+
+```bash
+lerobot-teleoperate \
+    --robot.type=bi_flexiv_rizon4_rt \
+    --robot.bi_mount_type=forward \
+    --robot.left_robot_sn=Rizon4s-063458 \
+    --robot.right_robot_sn=Rizon4s-063670 \
+    --teleop.type=bi_pico4 \
+    --fps=60 \
+    --display_data=true
+```
+
 ## Flexiv Rizon4 Robot with Xense Flare teleoperate by Xense Flare command
 
 ```bash
@@ -516,6 +529,26 @@ lerobot-record \
     --resume=false \
     --dataset.push_to_hub=false \
     --display_data=true
+```
+
+## Bimanual Flexiv Rizon4 RT + Bi-Pico4 lerobot-record command
+
+```bash
+lerobot-record \
+    --robot.type=bi_flexiv_rizon4_rt \
+    --robot.left_robot_sn=Rizon4-063423 \
+    --robot.right_robot_sn=Rizon4-063424 \
+    --robot.id=bimanual \
+    --teleop.type=bi_pico4 \
+    --teleop.id=bimanual \
+    --dataset.repo_id=<my_username>/<my_dataset_name> \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="Pick up the cube" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=60 \
+    --dataset.reset_time_s=30 \
+    --dataset.streaming_encoding=true \
+    --dataset.encoder_threads=2
 ```
 
 ## ARX5 Robot lerobot-record command (use trlc_leader teleop)
