@@ -148,7 +148,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     left_gripper_min_pos: float = 0.0
     left_gripper_max_pos: float = 85.0
     left_gripper_v_max: float = 100.0  # mm/s
-    left_gripper_f_max: float = 10.0  # N
+    left_gripper_f_max: float = 26.0  # N
     left_gripper_init_open: bool = True
 
     # ========== Right gripper settings ==========
@@ -160,7 +160,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     right_gripper_min_pos: float = 0.0
     right_gripper_max_pos: float = 85.0
     right_gripper_v_max: float = 100.0  # mm/s
-    right_gripper_f_max: float = 10.0  # N
+    right_gripper_f_max: float = 26.0  # N
     right_gripper_init_open: bool = True
 
     # Auto-created in __post_init__ (do not set directly)
@@ -275,78 +275,78 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             self.right_gripper = None
 
         # Camera configuration based on tactile sensors setting
-        # if self.enable_tactile_sensors:
-        #     self.cameras = {
-        #         "head": RealSenseCameraConfig(
-        #             serial_number_or_name="337322070722",
-        #             fps=30,
-        #             width=640,
-        #             height=480,
-        #             warmup_s=1.0,
-        #         ),
-        #         "left_wrist": OpenCVCameraConfig(
-        #             index_or_path="XC000001",
-        #             fourcc="MJPG",
-        #             width=640,
-        #             height=480,
-        #             fps=30,
-        #             warmup_s=1.0,
-        #         ),
-        #         "right_wrist": OpenCVCameraConfig(
-        #             index_or_path="XC000002",
-        #             fourcc="MJPG",
-        #             width=640,
-        #             height=480,
-        #             fps=30,
-        #             warmup_s=1.0,
-        #         ),
-        #         "left_tactile_0": XenseTactileCameraConfig(
-        #             serial_number="OG000863",
-        #             fps=30,
-        #             output_types=[XenseOutputType.RECTIFY],
-        #             warmup_s=0.05,
-        #         ),
-        #         "left_tactile_1": XenseTactileCameraConfig(
-        #             serial_number="OG000864",
-        #             fps=30,
-        #             output_types=[XenseOutputType.RECTIFY],
-        #             warmup_s=0.05,
-        #         ),
-        #         # "right_tactile_0": XenseTactileCameraConfig(
-        #         #     serial_number="OG000861",
-        #         #     fps=30,
-        #         #     output_types=[XenseOutputType.RECTIFY],
-        #         #     warmup_s=0.05,
-        #         # ),
-        #         "right_tactile_1": XenseTactileCameraConfig(
-        #             serial_number="OG000862",
-        #             fps=30,
-        #             output_types=[XenseOutputType.RECTIFY],
-        #             warmup_s=0.05,
-        #         ),
-        #     }
-        # else:
-        #     self.cameras = {
-        #         "head": RealSenseCameraConfig(
-        #             serial_number_or_name="230322271365",
-        #             fps=60,
-        #             width=640,
-        #             height=480,
-        #             warmup_s=0.05,
-        #         ),
-        #         "left_wrist": RealSenseCameraConfig(
-        #             serial_number_or_name="230422271416",
-        #             fps=60,
-        #             width=640,
-        #             height=480,
-        #             warmup_s=0.05,
-        #         ),
-        #         "right_wrist": RealSenseCameraConfig(
-        #             serial_number_or_name="230322274234",
-        #             fps=60,
-        #             width=640,
-        #             height=480,
-        #             warmup_s=0.05,
-        #         ),
-        #     }
+        if self.enable_tactile_sensors:
+            self.cameras = {
+                "head": RealSenseCameraConfig(
+                    serial_number_or_name="337322070722",
+                    fps=30,
+                    width=640,
+                    height=480,
+                    warmup_s=1.0,
+                ),
+                "left_wrist": OpenCVCameraConfig(
+                    index_or_path="XC000001",
+                    fourcc="MJPG",
+                    width=640,
+                    height=480,
+                    fps=30,
+                    warmup_s=1.0,
+                ),
+                "right_wrist": OpenCVCameraConfig(
+                    index_or_path="XC000002",
+                    fourcc="MJPG",
+                    width=640,
+                    height=480,
+                    fps=30,
+                    warmup_s=1.0,
+                ),
+                "left_tactile_0": XenseTactileCameraConfig(
+                    serial_number="OG000863",
+                    fps=30,
+                    output_types=[XenseOutputType.RECTIFY],
+                    warmup_s=0.05,
+                ),
+                "left_tactile_1": XenseTactileCameraConfig(
+                    serial_number="OG000864",
+                    fps=30,
+                    output_types=[XenseOutputType.RECTIFY],
+                    warmup_s=0.05,
+                ),
+                "right_tactile_0": XenseTactileCameraConfig(
+                    serial_number="OG000861",
+                    fps=30,
+                    output_types=[XenseOutputType.RECTIFY],
+                    warmup_s=0.05,
+                ),
+                "right_tactile_1": XenseTactileCameraConfig(
+                    serial_number="OG000862",
+                    fps=30,
+                    output_types=[XenseOutputType.RECTIFY],
+                    warmup_s=0.05,
+                ),
+            }
+        else:
+            self.cameras = {
+                "head": RealSenseCameraConfig(
+                    serial_number_or_name="230322271365",
+                    fps=60,
+                    width=640,
+                    height=480,
+                    warmup_s=0.05,
+                ),
+                "left_wrist": RealSenseCameraConfig(
+                    serial_number_or_name="230422271416",
+                    fps=60,
+                    width=640,
+                    height=480,
+                    warmup_s=0.05,
+                ),
+                "right_wrist": RealSenseCameraConfig(
+                    serial_number_or_name="230322274234",
+                    fps=60,
+                    width=640,
+                    height=480,
+                    warmup_s=0.05,
+                ),
+            }
         pass
