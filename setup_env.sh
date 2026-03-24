@@ -271,11 +271,10 @@ install_xense() {
     fix_udev_discovery
 
     # XGripper bundles libsurvive which links against libhidapi-libusb.
-    # The conda cross-compiler uses its own sysroot and cannot find system hidapi,
-    # so hidapi must be present in the conda environment before building.
-    if ! compgen -G "${CONDA_PREFIX}/lib/libhidapi*.so*" > /dev/null 2>&1; then
-        echo "[xense] hidapi not found in conda env — installing via conda-forge..."
-        ${CONDA_CMD:-mamba} install -c conda-forge hidapi -y
+    # Install at system level so the conda cross-compiler linker can find it.
+    if ! dpkg -l | grep -q libhidapi-dev; then
+        echo "[xense] libhidapi-dev not found — installing via apt..."
+        sudo apt-get install -y libhidapi-dev
     fi
 
     # Install xensesdk dependencies explicitly
