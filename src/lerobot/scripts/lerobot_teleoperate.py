@@ -210,7 +210,6 @@ from lerobot.teleoperators import (  # noqa: F401
     xense_flare,
     trlc_leader,
 )
-from lerobot.utils.import_utils import register_third_party_plugins
 from lerobot.utils.robot_utils import (
     get_logger,
     precise_sleep,
@@ -2722,7 +2721,6 @@ def teleoperate(cfg: TeleoperateConfig):
 
 
 def main():
-    register_third_party_plugins()
     teleoperate()
 
 
