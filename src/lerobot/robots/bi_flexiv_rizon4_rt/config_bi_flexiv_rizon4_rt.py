@@ -23,7 +23,7 @@ import flexiv_rt
 from lerobot.cameras.configs import CameraConfig
 from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
-from lerobot.cameras.xense import XenseOutputType, XenseCameraConfig
+from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
 from lerobot.robots.config import RobotConfig
 from lerobot.robots.bi_flexiv_rizon4_rt.config_serial_gripper import SerialGripperConfig
 
@@ -300,25 +300,25 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         #             fps=30,
         #             warmup_s=1.0,
         #         ),
-        #         "left_tactile_0": XenseCameraConfig(
+        #         "left_tactile_0": XenseTactileCameraConfig(
         #             serial_number="OG000863",
         #             fps=30,
         #             output_types=[XenseOutputType.RECTIFY],
         #             warmup_s=0.05,
         #         ),
-        #         "left_tactile_1": XenseCameraConfig(
+        #         "left_tactile_1": XenseTactileCameraConfig(
         #             serial_number="OG000864",
         #             fps=30,
         #             output_types=[XenseOutputType.RECTIFY],
         #             warmup_s=0.05,
         #         ),
-        #         # "right_tactile_0": XenseCameraConfig(
+        #         # "right_tactile_0": XenseTactileCameraConfig(
         #         #     serial_number="OG000861",
         #         #     fps=30,
         #         #     output_types=[XenseOutputType.RECTIFY],
         #         #     warmup_s=0.05,
         #         # ),
-        #         "right_tactile_1": XenseCameraConfig(
+        #         "right_tactile_1": XenseTactileCameraConfig(
         #             serial_number="OG000862",
         #             fps=30,
         #             output_types=[XenseOutputType.RECTIFY],

@@ -27,7 +27,7 @@ from lerobot.utils.robot_utils import get_logger
 from xensesdk import CameraSource
 
 from ..camera import Camera
-from .configuration_xense import XenseCameraConfig, XenseOutputType
+from .configuration_xense import XenseTactileCameraConfig, XenseOutputType
 
 logger = get_logger("XenseCam")
 
@@ -107,10 +107,10 @@ class XenseTactileCamera(Camera):
 
     Example:
         ```python
-        from lerobot.cameras.xense import XenseTactileCamera, XenseCameraConfig, XenseOutputType
+        from lerobot.cameras.xense import XenseTactileCamera, XenseTactileCameraConfig, XenseOutputType
 
         # Basic usage with force sensing
-        config = XenseCameraConfig(
+        config = XenseTactileCameraConfig(
             serial_number="OG000344",
             fps=60,
             output_types=[XenseOutputType.FORCE, XenseOutputType.FORCE_RESULTANT]
@@ -131,7 +131,7 @@ class XenseTactileCamera(Camera):
         ```
     """
 
-    def __init__(self, config: XenseCameraConfig):
+    def __init__(self, config: XenseTactileCameraConfig):
         """
         Initializes the XenseTactileCamera instance.
 

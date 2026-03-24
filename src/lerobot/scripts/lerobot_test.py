@@ -502,9 +502,9 @@ def _build_sample_configs() -> dict[str, Any]:
         samples["realsense_camera_cfg_error"] = f"{type(e).__name__}: {e}"
 
     try:
-        from lerobot.cameras.xense.configuration_xense import XenseCameraConfig, XenseOutputType
+        from lerobot.cameras.xense.configuration_xense import XenseTactileCameraConfig, XenseOutputType
 
-        samples["xense_camera_cfg"] = XenseCameraConfig(
+        samples["xense_camera_cfg"] = XenseTactileCameraConfig(
             serial_number="OG000456",
             fps=30,
             output_types=[XenseOutputType.DIFFERENCE],

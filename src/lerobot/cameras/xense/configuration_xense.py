@@ -40,7 +40,7 @@ class XenseOutputType(Enum):
 
 @CameraConfig.register_subclass("xense")
 @dataclass
-class XenseCameraConfig(CameraConfig):
+class XenseTactileCameraConfig(CameraConfig):
     """Configuration class for Xense tactile sensor devices.
 
     This class provides configuration options for Xense tactile sensors,
@@ -50,21 +50,21 @@ class XenseCameraConfig(CameraConfig):
     Example configurations:
     ```python
     # Basic force sensing configuration
-    XenseCameraConfig(
+    XenseTactileCameraConfig(
         serial_number="OG000344",
         fps=60,
         output_types=[XenseOutputType.FORCE, XenseOutputType.FORCE_RESULTANT]
     )
 
     # Multi-modal configuration with depth
-    XenseCameraConfig(
+    XenseTactileCameraConfig(
         serial_number="OG000352",
         fps=30,
         output_types=[XenseOutputType.FORCE, XenseOutputType.DEPTH]
     )
 
     # High-performance configuration with reduced resolution
-    XenseCameraConfig(
+    XenseTactileCameraConfig(
         serial_number="OG000344",
         fps=30,
         output_types=[XenseOutputType.DIFFERENCE],

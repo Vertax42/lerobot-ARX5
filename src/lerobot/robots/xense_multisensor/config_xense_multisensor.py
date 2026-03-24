@@ -19,7 +19,7 @@ from enum import Enum
 
 from lerobot.cameras import CameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
-from lerobot.cameras.xense import XenseCameraConfig, XenseOutputType
+from lerobot.cameras.xense import XenseTactileCameraConfig, XenseOutputType
 from lerobot.robots.config import RobotConfig
 
 
@@ -34,20 +34,20 @@ class XenseMultisensorConfig(RobotConfig):
     def __post_init__(self):
         # Camera configuration based on tactile sensors setting
          self.cameras = {
-                "OS000097": XenseCameraConfig(
+                "OS000097": XenseTactileCameraConfig(
                     serial_number="OS000097",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
-                "OS000115": XenseCameraConfig(
+                "OS000115": XenseTactileCameraConfig(
                     serial_number="OS000115",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                     use_gpu=False,
                 ),
-                # "OG000456": XenseCameraConfig(
+                # "OG000456": XenseTactileCameraConfig(
                 #     serial_number="OG000456",
                 #     fps=30,
                 #     output_types=[XenseOutputType.RECTIFY],
