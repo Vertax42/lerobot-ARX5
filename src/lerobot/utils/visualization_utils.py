@@ -29,7 +29,7 @@ def init_rerun(
     batch_size = os.getenv("RERUN_FLUSH_NUM_BYTES", "8000")
     os.environ["RERUN_FLUSH_NUM_BYTES"] = batch_size
     rr.init(session_name)
-    memory_limit = os.getenv("LEROBOT_RERUN_MEMORY_LIMIT", "20%")
+    memory_limit = os.getenv("LEROBOT_RERUN_MEMORY_LIMIT", "10%")
     if ip and port:
         rr.connect_grpc(url=f"rerun+http://{ip}:{port}/proxy")
     else:
@@ -48,6 +48,7 @@ def _is_scalar(x):
 def log_rerun_data(
     observation: dict[str, Any] | None = None,
     action: dict[str, Any] | None = None,
+    compress_images: bool = True,
 ) -> None:
     """
     Logs observation and action data to Rerun for real-time visualization.
@@ -137,7 +138,8 @@ def log_rerun_data(
                     depth = arr[..., 0] if (arr.ndim == 3 and arr.shape[-1] == 1) else arr
                     rr.log(key, rr.DepthImage(depth, meter=0.001, depth_range=(0.0, 0.1), colormap="turbo"))
                 else:
-                    rr.log(key, rr.Image(arr))
+                    img_entity = rr.Image(arr).compress() if compress_images else rr.Image(arr)
+                    rr.log(key, entity=img_entity)
 
     if action:
         for k, v in action.items():
