@@ -17,6 +17,7 @@ dependencies:
   - spdlog=1.14.1
   - pybind11
   - numpy=1.26.4
+  - matplotlib
   - wheel
   - click
   - pyzmq
