@@ -136,6 +136,11 @@ class Pico4(Teleoperator):
         self._last_raw_pose: np.ndarray | None = None  # Last raw pose for jump detection
         self._jump_filter_count: int = 0  # Count of filtered jumps for debugging
 
+        # Output rate limiter state
+        self._last_action_time: float | None = None  # Timestamp of last get_action call
+        self._prev_target_pos: np.ndarray | None = None  # Previous frame target position
+        self._prev_target_quat: np.ndarray | None = None  # Previous frame target quaternion
+
     @property
     def is_connected(self) -> bool:
         """Check if the Pico4 VR headset is connected."""
@@ -313,6 +318,11 @@ class Pico4(Teleoperator):
 
         # Reset jump filter state
         self._last_raw_pose = None
+
+        # Reset rate limiter state so the new pose is accepted without clamping
+        self._prev_target_pos = self._target_pos.copy()
+        self._prev_target_quat = self._target_quat.copy()
+        self._last_action_time = None
 
         self.logger.info(
             f"Reset target pose to: pos={pose_7d[:3]}, quat={pose_7d[3:7]}, gripper={gripper_pos}"
@@ -694,6 +704,44 @@ class Pico4(Teleoperator):
                     self._target_quat = full_target_quat
             # If orientation control is disabled, target_quat stays at the value when grip was pressed
         # When not enabled, target pose stays at last position (no update)
+
+        # Step 5.5: Output rate limiter — clamp _target_pos / _target_quat
+        # velocity to physically plausible human hand speed.
+        now = time.time()
+        if self._prev_target_pos is not None and self._last_action_time is not None:
+            dt = now - self._last_action_time
+            if dt > 0:
+                # --- position rate limit ---
+                if self.config.max_pos_velocity > 0:
+                    max_delta = self.config.max_pos_velocity * dt
+                    delta_pos = self._target_pos - self._prev_target_pos
+                    delta_norm = np.linalg.norm(delta_pos)
+                    if delta_norm > max_delta:
+                        self.logger.warn(
+                            f"[RATE_LIMIT] Position velocity {delta_norm/dt:.2f} m/s "
+                            f"exceeds limit {self.config.max_pos_velocity} m/s, clamping."
+                        )
+                        self._target_pos = self._prev_target_pos + delta_pos * (max_delta / delta_norm)
+
+                # --- orientation rate limit ---
+                if self.config.max_rot_velocity > 0:
+                    max_angle = self.config.max_rot_velocity * dt
+                    # Angle between two quaternions: θ = 2 * arccos(|q1 · q2|)
+                    dot = np.clip(abs(np.dot(self._target_quat, self._prev_target_quat)), 0.0, 1.0)
+                    angle = 2.0 * np.arccos(dot)
+                    if angle > max_angle:
+                        self.logger.warn(
+                            f"[RATE_LIMIT] Rotation velocity {np.degrees(angle/dt):.1f} deg/s "
+                            f"exceeds limit {np.degrees(self.config.max_rot_velocity):.1f} deg/s, clamping."
+                        )
+                        t = max_angle / angle
+                        self._target_quat = self._slerp_quaternion(
+                            self._prev_target_quat, self._target_quat, t
+                        )
+
+        self._prev_target_pos = self._target_pos.copy()
+        self._prev_target_quat = self._target_quat.copy()
+        self._last_action_time = now
 
         # Step 6: Update gripper position from trigger value
         # Trigger value [0, 1] maps directly to gripper position [0, gripper_width]
