@@ -23,6 +23,7 @@ cd lerobot-xense
 ```
 
 > If you already cloned without submodules, initialize them manually:
+
 > ```bash
 > git submodule update --init --recursive --progress
 > ```
@@ -52,6 +53,7 @@ bash ./setup_env.sh --install
 ```
 
 This step will:
+
 - Update the conda environment from `conda_environment.yaml`
 - Install the main package from `pyproject.toml`
 - Build and install all `third_party` SDK packages: `pyarx`, `flexiv_rt`, `xensevr_pc_service_sdk`, `xensesdk`, `xensegripper`, `xense_franka`
@@ -85,6 +87,7 @@ PY_EXE=$(python -c 'import sys, os; p = sys.executable; print(os.path.realpath(p
 sudo setcap cap_sys_nice+ep "$PY_EXE"
 getcap "$PY_EXE"  # should show: cap_sys_nice+ep
 ```
+
 ## 🐭 SpaceMouse Teleoperation System
 
 This project includes advanced SpaceMouse support with both single and dual-device modes for precise robotic control.
@@ -92,11 +95,13 @@ This project includes advanced SpaceMouse support with both single and dual-devi
 ### Dependencies
 
 **System Requirements:**
+
 - Ubuntu 22.04 (tested) or other Linux distributions
 - Python 3.10+
 - libhidapi (installed via apt)
 
 **Python Packages:**
+
 - `pyspacemouse` - Modern cross-platform SpaceMouse library
 - `hidapi` - Python wrapper for HID API
 - `easyhid` - Easy-to-use HID library (dependency of pyspacemouse)
