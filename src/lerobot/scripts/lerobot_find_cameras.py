@@ -159,13 +159,19 @@ def create_camera_instance(cam_meta: dict[str, Any]) -> dict[str, Any] | None:
     cam_id = cam_meta.get("id")
     instance = None
 
+    if not cam_meta.get("available", True):
+        logger.info(f"Skipping unavailable device {cam_meta.get('device_name', cam_id)}")
+        return None
+
     logger.info(f"Preparing {cam_type} ID {cam_id} with default profile")
 
     try:
         if cam_type == "OpenCV":
+            profile = cam_meta.get("default_stream_profile", {})
             cv_config = OpenCVCameraConfig(
                 index_or_path=cam_id,
                 color_mode=ColorMode.RGB,
+                fourcc=profile.get("fourcc") or None,
             )
             instance = OpenCVCamera(cv_config)
         elif cam_type == "RealSense":
@@ -196,7 +202,7 @@ def process_camera_image(
     cam = cam_dict["instance"]
     meta = cam_dict["meta"]
     cam_type_str = str(meta.get("type", "unknown"))
-    cam_id_str = str(meta.get("id", "unknown"))
+    cam_id_str = str(meta.get("device_name") or meta.get("id", "unknown"))
 
     try:
         image_data = cam.read()

@@ -18,6 +18,7 @@ Provides the OpenCVCamera class for capturing frames from cameras using OpenCV.
 
 import os
 import platform
+import subprocess
 import time
 from pathlib import Path
 from threading import Event, Lock, Thread
@@ -48,6 +49,50 @@ from .configuration_opencv import ColorMode, OpenCVCameraConfig
 MAX_OPENCV_INDEX = 60
 
 logger = get_logger("CVCam")
+
+
+def _parse_v4l2_devices() -> dict[str, list[str]]:
+    """Parse `v4l2-ctl --list-devices` and return a mapping of device name → list of /dev/videoX paths."""
+    try:
+        result = subprocess.run(
+            ["v4l2-ctl", "--list-devices"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return {}
+
+    devices: dict[str, list[str]] = {}
+    current_name: str | None = None
+    for line in result.stdout.splitlines():
+        if line and not line.startswith("\t"):
+            # Header line like "XC000001: XC000001 (usb-...):"; take the part before the first colon
+            current_name = line.split(":")[0].strip()
+            devices.setdefault(current_name, [])
+        elif current_name and line.startswith("\t"):
+            path = line.strip()
+            if path.startswith("/dev/video"):
+                devices[current_name].append(path)
+    return devices
+
+
+def _resolve_v4l2_device_name(name: str) -> str:
+    """Resolve a V4L2 device name (e.g. 'XC000001') to its first /dev/videoX path.
+
+    Raises:
+        ValueError: If the device name is not found or has no video paths.
+    """
+    devices = _parse_v4l2_devices()
+    if name not in devices:
+        available = list(devices.keys())
+        raise ValueError(
+            f"V4L2 device name '{name}' not found. Available devices: {available}"
+        )
+    paths = devices[name]
+    if not paths:
+        raise ValueError(f"V4L2 device '{name}' has no /dev/video* paths.")
+    return paths[0]
 
 
 class OpenCVCamera(Camera):
@@ -332,8 +377,49 @@ class OpenCVCamera(Camera):
         else:
             targets_to_scan = [int(i) for i in range(MAX_OPENCV_INDEX)]
 
+        # Build device-name → path mapping (Linux only)
+        path_to_device_name: dict[str, str] = {}
+        if platform.system() == "Linux":
+            for dev_name, paths in _parse_v4l2_devices().items():
+                for p in paths:
+                    path_to_device_name[p] = dev_name
+
+            # Override RealSense entries with their serial numbers (more stable/readable)
+            try:
+                import pyrealsense2 as rs  # type: ignore
+
+                ctx = rs.context()
+                for dev in ctx.devices:
+                    serial = dev.get_info(rs.camera_info.serial_number)
+                    port = dev.get_info(rs.camera_info.physical_port)
+                    # physical_port is like ".../video4linux/videoX" — extract the node name
+                    port_node = Path(port).name  # e.g. "video3"
+                    dev_path = f"/dev/{port_node}"
+                    # Apply serial number to all paths that share the same v4l2 device name
+                    old_name = path_to_device_name.get(dev_path)
+                    if old_name:
+                        for p, name in list(path_to_device_name.items()):
+                            if name == old_name:
+                                path_to_device_name[p] = serial
+            except Exception:
+                pass
+
         for target in targets_to_scan:
-            camera = cv2.VideoCapture(target)
+            scan_backend = cv2.CAP_V4L2 if platform.system() == "Linux" else cv2.CAP_ANY
+            # Suppress stderr during probe to avoid ioctl noise from non-camera V4L2 nodes
+            stderr_fd = os.dup(2)
+            devnull_fd = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull_fd, 2)
+            os.close(devnull_fd)
+            try:
+                camera = cv2.VideoCapture(target, scan_backend)
+                if camera.isOpened() and platform.system() == "Linux":
+                    # On Linux, probe with MJPG first — many devices (including compressed-only
+                    # firmware) require it to actually stream frames.
+                    camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+            finally:
+                os.dup2(stderr_fd, 2)
+                os.close(stderr_fd)
             if camera.isOpened():
                 default_width = int(camera.get(cv2.CAP_PROP_FRAME_WIDTH))
                 default_height = int(camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -346,9 +432,17 @@ class OpenCVCamera(Camera):
                 default_fourcc = "".join(
                     [chr((default_fourcc_code_int >> 8 * i) & 0xFF) for i in range(4)]
                 )
+                # Fallback: if readback is unreadable (CAP_ANY quirk), assume MJPG was applied
+                if default_fourcc.strip() == "" and platform.system() == "Linux":
+                    default_fourcc = "MJPG"
+
+                device_name = path_to_device_name.get(str(target))
+                display_name = f"OpenCV Camera @ {target}"
+                if device_name:
+                    display_name = f"OpenCV Camera '{device_name}' @ {target}"
 
                 camera_info = {
-                    "name": f"OpenCV Camera @ {target}",
+                    "name": display_name,
                     "type": "OpenCV",
                     "id": target,
                     "backend_api": camera.getBackendName(),
@@ -361,8 +455,27 @@ class OpenCVCamera(Camera):
                     },
                 }
 
+                if device_name:
+                    camera_info["device_name"] = device_name
+
                 found_cameras_info.append(camera_info)
                 camera.release()
+
+        # On Linux, also report V4L2 devices that couldn't be opened (e.g. busy),
+        # so users know which device names exist for configuration.
+        if platform.system() == "Linux":
+            opened_paths = {cam["id"] for cam in found_cameras_info}
+            for dev_name, paths in _parse_v4l2_devices().items():
+                primary = paths[0] if paths else None
+                if primary and primary not in opened_paths:
+                    display_name = path_to_device_name.get(primary, dev_name)
+                    found_cameras_info.append({
+                        "name": f"OpenCV Camera '{display_name}' @ {primary} (unavailable)",
+                        "type": "OpenCV",
+                        "id": primary,
+                        "device_name": display_name,
+                        "available": False,
+                    })
 
         return found_cameras_info
 
