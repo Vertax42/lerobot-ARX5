@@ -16,8 +16,10 @@
 
 import math
 import os
+import sys
 import time
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import cached_property
 from typing import Any
 
@@ -273,6 +275,38 @@ class BiARX5(Robot):
             raise DeviceNotConnectedError(f"{self} is not connected.")
         return self._is_cartesian_control_mode
 
+    def _connect_cameras_parallel(self) -> None:
+        """Open all cameras concurrently (RealSense + Xense tactile warmup overlaps in time)."""
+        if not self.cameras:
+            return
+        n = len(self.cameras)
+        max_workers = min(n, 8)
+        self.logger.info(f"Connecting {n} camera(s) in parallel (max_workers={max_workers})...")
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(cam.connect): name for name, cam in self.cameras.items()}
+            for fut in as_completed(futures):
+                name = futures[fut]
+                try:
+                    fut.result()
+                except Exception as e:
+                    self.logger.error(f"Camera '{name}' connect failed: {e}")
+                    raise
+
+    def _disconnect_cameras_parallel(self) -> None:
+        if not self.cameras:
+            return
+        n = len(self.cameras)
+        max_workers = min(n, 8)
+        self.logger.info(f"Disconnecting {n} camera(s) in parallel...")
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(cam.disconnect): name for name, cam in self.cameras.items()}
+            for fut in as_completed(futures):
+                name = futures[fut]
+                try:
+                    fut.result()
+                except Exception as e:
+                    self.logger.warning(f"Camera '{name}' disconnect failed: {e}")
+
     def connect(self, calibrate: bool = False, go_to_start: bool = True) -> None:
         if self._is_connected:
             raise DeviceAlreadyConnectedError(
@@ -341,9 +375,7 @@ class BiARX5(Robot):
         # Set gravity compensation gain
         self.set_to_gravity_compensation_mode()
 
-        # Connect cameras
-        for cam in self.cameras.values():
-            cam.connect()
+        self._connect_cameras_parallel()
 
         # Initialize command buffers for optimized send_action
         if self.config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL:
@@ -428,6 +460,40 @@ class BiARX5(Robot):
         self.logger.info("  - Gripper motor: 8")
         self.logger.info("Make sure your hardware matches these ID configurations")
         return
+
+    def _spacemouse_arm_side(self) -> str:
+        """Arm used by single-arm teleop helpers: ``config.id`` ``left``/``l`` or ``right``/``r`` (default right)."""
+        rid = (self.config.id or "right").strip().lower()
+        if rid in ("left", "l"):
+            return "left"
+        return "right"
+
+    def get_start_eef_pose(self) -> np.ndarray:
+        if not self._is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+        if self.config.control_mode != BiARX5ControlMode.CARTESIAN_CONTROL:
+            raise ValueError("get_start_eef_pose requires CARTESIAN_CONTROL mode")
+        return self._start_position_eef.copy()
+
+    def get_current_tcp_pose_euler(self) -> np.ndarray:
+        """Current TCP pose for the arm from :meth:`_spacemouse_arm_side`, **including gripper**.
+
+        Use ``--robot.id=left`` or ``right`` when one SpaceMouse drives a single arm (default right).
+
+        Returns:
+            ``numpy.ndarray`` of shape ``(7,)``: ``[x, y, z, roll, pitch, yaw, gripper_pos]``.
+            Index ``6`` is ``get_eef_state().gripper_pos`` for that arm (same readout as observations).
+        """
+        if not self._is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+        if self.config.control_mode != BiARX5ControlMode.CARTESIAN_CONTROL:
+            raise ValueError("get_current_tcp_pose_euler requires CARTESIAN_CONTROL mode")
+        arm = self.left_arm if self._spacemouse_arm_side() == "left" else self.right_arm
+        eef_state = arm.get_eef_state()
+        pose_6d = np.asarray(eef_state.pose_6d(), dtype=np.float64).reshape(6)
+        gripper_pos = float(eef_state.gripper_pos)
+        # [x, y, z, roll, pitch, yaw, gripper_pos]
+        return np.array([*pose_6d, gripper_pos], dtype=np.float32)
 
     def get_observation(self) -> dict[str, Any]:
         if not self._is_connected:
@@ -805,9 +871,7 @@ class BiARX5(Robot):
         except Exception as e:
             self.logger.warn(f"Failed to disconnect arms: {e}")
 
-        # Disconnect cameras
-        for cam in self.cameras.values():
-            cam.disconnect()
+        self._disconnect_cameras_parallel()
 
         # Destroy arm objects
         self.left_arm = None

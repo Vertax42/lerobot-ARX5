@@ -19,7 +19,7 @@ from enum import Enum
 
 from lerobot.cameras import CameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
-from lerobot.cameras.xense import XenseCameraConfig, XenseOutputType
+from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
 from lerobot.robots.config import RobotConfig
 
 
@@ -58,7 +58,9 @@ class BiARX5Config(RobotConfig):
 
     # Control parameters
     controller_dt: float = 0.005  # 200Hz low-level control frequency
-    interpolation_controller_dt: float = 0.02  # 50Hz high-level interpolation control frequency
+    interpolation_controller_dt: float = (
+        0.02  # 50Hz high-level interpolation control frequency
+    )
 
     # Control mode (default: joint control for teleoperation)
     control_mode: BiARX5ControlMode = BiARX5ControlMode.TEACH_MODE
@@ -77,9 +79,13 @@ class BiARX5Config(RobotConfig):
     enable_tactile_sensors: bool = True
 
     # Position settings (Joint space: 6 joints + gripper)
-    home_position: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    home_position: list[float] = field(
+        default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    )
 
-    start_position: list[float] = field(default_factory=lambda: [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.0])
+    start_position: list[float] = field(
+        default_factory=lambda: [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.0]
+    )
     # Camera configuration
     cameras: dict[str, CameraConfig] = field(default_factory=lambda: {})
 
@@ -88,37 +94,73 @@ class BiARX5Config(RobotConfig):
         if self.enable_tactile_sensors:
             self.cameras = {
                 "head": RealSenseCameraConfig(
-                    serial_number_or_name="230322271365", fps=30, width=640, height=480
-                ),
-                "left_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230422271416", fps=30, width=640, height=480
-                ),
-                "right_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230322274234", fps=30, width=640, height=480
-                ),
-                "right_tactile_0": XenseCameraConfig(
-                    serial_number="OG000344",
+                    serial_number_or_name="230322271365",
                     fps=30,
-                    output_types=[XenseOutputType.DIFFERENCE],
+                    width=640,
+                    height=480,
                     warmup_s=1.0,
                 ),
-                "left_tactile_0": XenseCameraConfig(
+                "left_wrist": RealSenseCameraConfig(
+                    serial_number_or_name="230422271416",
+                    fps=30,
+                    width=640,
+                    height=480,
+                    warmup_s=1.0,
+                ),
+                "right_wrist": RealSenseCameraConfig(
+                    serial_number_or_name="230322274234",
+                    fps=30,
+                    width=640,
+                    height=480,
+                    warmup_s=1.0,
+                ),
+                "right_tactile_0": XenseTactileCameraConfig(
+                    serial_number="OG000339",
+                    fps=30,
+                    output_types=[XenseOutputType.RECTIFY],
+                    warmup_s=1.0,
+                ),
+                "right_tactile_1": XenseTactileCameraConfig(
+                    serial_number="OG000344",
+                    fps=30,
+                    output_types=[XenseOutputType.RECTIFY],
+                    warmup_s=1.0,
+                ),
+                "left_tactile_0": XenseTactileCameraConfig(
                     serial_number="OG000337",
                     fps=30,
-                    output_types=[XenseOutputType.DIFFERENCE],
+                    output_types=[XenseOutputType.RECTIFY],
+                    warmup_s=1.0,
+                ),
+                "left_tactile_1": XenseTactileCameraConfig(
+                    serial_number="OG000352",
+                    fps=30,
+                    output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
             }
         else:
             self.cameras = {
                 "head": RealSenseCameraConfig(
-                    serial_number_or_name="230322271365", fps=30, width=640, height=480
+                    serial_number_or_name="230322271365",
+                    fps=30,
+                    width=640,
+                    height=480,
+                    warmup_s=0.05,
                 ),
                 "left_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230422271416", fps=30, width=640, height=480
+                    serial_number_or_name="230422271416",
+                    fps=30,
+                    width=640,
+                    height=480,
+                    warmup_s=0.05,
                 ),
                 "right_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230322274234", fps=30, width=640, height=480
+                    serial_number_or_name="230322274234",
+                    fps=30,
+                    width=640,
+                    height=480,
+                    warmup_s=0.05,
                 ),
             }
         pass
