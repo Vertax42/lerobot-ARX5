@@ -355,29 +355,16 @@ install_spacemouse() {
     echo " SpaceMouse — pyspacemouse"
     echo "══════════════════════════════════════════"
 
-    # Install hidapi system library for pyspacemouse
-    if ! dpkg -l | grep -q libhidapi-dev; then
-        echo "[spacemouse] Installing libhidapi-dev..."
-        sudo apt-get update && sudo apt-get install -y libhidapi-dev
-    fi
-
-    # Setup udev rules for SpaceMouse HID access (allows non-root users)
-    local UDEV_RULE_FILE="/etc/udev/rules.d/99-hidraw-permissions.rules"
-    if [[ ! -f "$UDEV_RULE_FILE" ]]; then
-        echo "[spacemouse] Setting up udev rules for HID access..."
-        echo 'KERNEL=="hidraw*", SUBSYSTEM=="hidraw", MODE="0664", GROUP="plugdev"' | sudo tee "$UDEV_RULE_FILE" > /dev/null
-        sudo udevadm control --reload-rules
-        sudo udevadm trigger
-    fi
-
-    # Add user to plugdev group if not already a member
-    if ! groups "$USER" | grep -q plugdev; then
-        echo "[spacemouse] Adding user '$USER' to plugdev group..."
-        sudo usermod -aG plugdev "$USER"
-        echo "[spacemouse] WARN: You may need to log out and log back in for group changes to take effect."
+    if ! compgen -G "${CONDA_PREFIX}/lib/libhidapi*.so*" > /dev/null; then
+        echo "[spacemouse] WARN: hidapi shared library not found under ${CONDA_PREFIX}/lib"
+        echo "[spacemouse] Re-run the conda environment update to install the conda-forge hidapi package."
+        return 1
     fi
 
     uv pip install pyspacemouse
+    echo "[spacemouse] No system-level udev or group changes were applied."
+    echo "[spacemouse] If hidraw permissions are restricted on the host OS, configure them manually outside setup_env.sh."
+
     echo "[spacemouse] Done."
 }
 
