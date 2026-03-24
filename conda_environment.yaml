@@ -14,7 +14,7 @@ dependencies:
   - orocos-kdl
   - eigen=3.4.0
   - boost
-  - spdlog
+  - spdlog=1.14.1
   - pybind11
   - numpy=1.26.4
   - wheel
