@@ -93,7 +93,7 @@ class Pico4(Teleoperator):
         self.config = config
         self._is_connected = False
         self._xrt = None
-        self.logger = get_logger("Pico4Teleop")
+        self.logger = get_logger(f"Pico4Teleop/{config.id}")
 
         # Target pose tracking (in Flexiv coordinate system)
         self._target_pos: np.ndarray = np.zeros(3, dtype=np.float32)  # [x, y, z]
@@ -548,10 +548,16 @@ class Pico4(Teleoperator):
                     f"[JUMP] Position jump #{self._jump_filter_count}: "
                     f"delta={pos_delta:.4f}m > threshold={self.config.position_jump_threshold}m, "
                     f"raw_pos={controller_pose_raw[:3]}, last_pos={self._last_raw_pose[:3]}. "
-                    f"Clamping position to last frame."
+                    f"Clamping position to last frame. Auto-recovering next frame."
                 )
                 controller_pose_raw[:3] = self._last_raw_pose[:3]
-        self._last_raw_pose = controller_pose_raw.copy()
+                # Reset baseline so next frame establishes a fresh reference instead of
+                # permanently clamping (which would lock translation indefinitely).
+                self._last_raw_pose = None
+            else:
+                self._last_raw_pose = controller_pose_raw.copy()
+        else:
+            self._last_raw_pose = controller_pose_raw.copy()
 
         # Step 2: Check enable state with hysteresis (grip as enable button)
         prev_enabled = self._enabled
@@ -585,6 +591,11 @@ class Pico4(Teleoperator):
         # Step 5: Handle enable state transitions and pose updates
         # Detect rising edge: grip just pressed (transition from not enabled to enabled)
         just_enabled = self._enabled and not self._was_enabled
+
+        if just_enabled:
+            # Reset jump filter baseline so the new grip press starts fresh.
+            # Without this, a prior jump clamp would lock position permanently.
+            self._last_raw_pose = None
 
         if just_enabled or self._ref_pos is None:
             self.logger.info(
@@ -780,3 +791,7 @@ class Pico4(Teleoperator):
                 self.disconnect()
             except Exception:
                 pass
+            finally:
+                self._is_connected = False
+                self._xrt = None
+                self.logger.info(f"{self} disconnected.")
