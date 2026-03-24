@@ -12,7 +12,7 @@ dependencies:
   - cmake
   - ninja
   - orocos-kdl
-  - eigen
+  - eigen=3.4.0
   - boost
   - spdlog
   - pybind11
