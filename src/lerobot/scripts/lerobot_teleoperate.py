@@ -992,7 +992,7 @@ def spacemouse_teleop_loop(
                     if not _reset_display_cleared:
                         print("\033[2J\033[H", end="", flush=True)
                         _reset_display_cleared = True
-                    _print_obs_state(obs, display_len, "RESETTING")
+                    # _print_obs_state(obs, display_len, "RESETTING")
                 continue
 
         if is_flexiv_rt and hasattr(robot, "rt_moving") and robot.rt_moving:
@@ -1002,7 +1002,7 @@ def spacemouse_teleop_loop(
                 if not _reset_display_cleared:
                     print("\033[2J\033[H", end="", flush=True)
                     _reset_display_cleared = True
-                _print_obs_state(obs, display_len, "MOVING")
+                # _print_obs_state(obs, display_len, "MOVING")
             _prev_rt_moving = True
             continue
 
@@ -1125,7 +1125,7 @@ def btgamepad_teleop_loop(
                 )
             if display_data:
                 log_rerun_data(observation=obs)
-            _print_obs_state(obs, display_len, "RESETTING")
+            #_print_obs_state(obs, display_len, "RESETTING")
             continue
 
         teleop_action = teleop_action_processor((raw_action, obs))
@@ -1222,7 +1222,7 @@ def pico4_teleop_loop(
             if not _reset_display_cleared:
                 print("\033[2J\033[H", end="", flush=True)
                 _reset_display_cleared = True
-            _print_obs_state(obs, display_len, "RESETTING")
+            # _print_obs_state(obs, display_len, "RESETTING")
             continue
 
         if is_flexiv_rt and hasattr(robot, "rt_moving") and robot.rt_moving:
@@ -1231,7 +1231,7 @@ def pico4_teleop_loop(
             if not _reset_display_cleared:
                 print("\033[2J\033[H", end="", flush=True)
                 _reset_display_cleared = True
-            _print_obs_state(obs, display_len, "MOVING")
+            # _print_obs_state(obs, display_len, "MOVING")
             _prev_rt_moving = True
             continue
 
@@ -1341,7 +1341,7 @@ def bi_pico4_teleop_loop(
             if not _reset_display_cleared:
                 print("\033[2J\033[H", end="", flush=True)
                 _reset_display_cleared = True
-            _print_obs_state(obs, display_len, "RESETTING")
+            # _print_obs_state(obs, display_len, "RESETTING")
             dt_s = time.perf_counter() - loop_start
             precise_sleep(max(1 / fps - dt_s, 0))
             continue
@@ -1352,7 +1352,7 @@ def bi_pico4_teleop_loop(
             if not _reset_display_cleared:
                 print("\033[2J\033[H", end="", flush=True)
                 _reset_display_cleared = True
-            _print_obs_state(obs, display_len, "MOVING")
+            # _print_obs_state(obs, display_len, "MOVING")
             _prev_rt_moving = True
             dt_s = time.perf_counter() - loop_start
             precise_sleep(max(1 / fps - dt_s, 0))
