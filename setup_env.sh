@@ -198,8 +198,8 @@ install_flexiv() {
 
     # Install Flexiv NRT Python SDK from PyPI
     echo ""
-    echo "[flexiv] Installing NRT SDK (flexivrdk)..."
-    uv pip install "flexivrdk"
+    echo "[flexiv] Installing NRT SDK (flexivrdkv1.8.0)..."
+    uv pip install "flexivrdk==1.8.0"
     echo "[flexiv] NRT SDK done. Verify with: python -c 'import flexivrdk; print(flexivrdk)'"
 }
 
