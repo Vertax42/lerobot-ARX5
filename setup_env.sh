@@ -426,6 +426,28 @@ elif [[ "$1" == "--install" ]]; then
         CONDA_CMD="conda"
     fi
 
+    # brltty grabs USB serial devices (cp210x, ch341, ftdi) and prevents
+    # user-space programs from opening /dev/ttyUSB*. Remove it if present.
+    if dpkg -l brltty &>/dev/null 2>&1; then
+        echo "[INFO] Removing brltty (interferes with USB serial port detection)..."
+        sudo apt-get remove -y brltty brltty-flite
+        sudo udevadm control --reload-rules && sudo udevadm trigger
+        echo "[INFO] brltty removed."
+    else
+        echo "[INFO] brltty not installed — skipping."
+    fi
+
+    # Ensure the current user can access serial ports (/dev/ttyUSB*, /dev/ttyACM*)
+    if id -nG "$USER" | grep -qw dialout; then
+        echo "[INFO] User '$USER' is already in the dialout group."
+    else
+        echo "[INFO] Adding user '$USER' to dialout group..."
+        sudo usermod -aG dialout "$USER"
+        echo "[WARN] User added to dialout group. A reboot is required for this to take effect."
+        echo "[WARN] Please reboot and then rerun: bash setup_env.sh --install"
+        exit 0
+    fi
+
     echo "[INFO] Updating conda environment '$ENV_NAME' from: $CONDA_ENV_FILE"
     if ! $CONDA_CMD env update -f "$CONDA_ENV_FILE" -n "$ENV_NAME"; then
         echo "[ERROR] Failed to update conda environment '$ENV_NAME' from: $CONDA_ENV_FILE"
