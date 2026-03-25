@@ -802,30 +802,38 @@ def flexiv_rizon4_rt_record_loop(
 
     while timestamp < control_time_s:
         start_loop_t = time.perf_counter()
-        reset_triggered = False  # set True the frame reset is triggered; skips send_action + dataset write
-        teleop_has_reset_button = isinstance(teleop, Teleoperator) and hasattr(
-            teleop, "get_reset_button"
-        )
+        reset_triggered = False
 
-        if events["exit_early"]:
+        # Refresh button states before event checks (lightweight, no pose computation).
+        if isinstance(teleop, Teleoperator) and hasattr(teleop, "poll_buttons"):
+            teleop.poll_buttons()
+
+        # Unified top-of-loop event checks: keyboard events OR controller buttons.
+        if events["stop_recording"] or (
+            hasattr(teleop, "get_stop_recording_button") and teleop.get_stop_recording_button()
+        ):
+            events["stop_recording"] = True
+            break
+
+        if events["rerecord_episode"] or (
+            hasattr(teleop, "get_rerecord_button") and teleop.get_rerecord_button()
+        ):
+            events["rerecord_episode"] = True
+            break
+
+        if events["exit_early"] or (
+            hasattr(teleop, "get_finish_episode_button") and teleop.get_finish_episode_button()
+        ):
             events["exit_early"] = False
             break
 
-        if events["rerecord_episode"]:
-            logger.info("Re-record episode requested, exiting record loop early")
-            break
-
-        if events["go_start"]:
+        if events["go_start"] or (
+            hasattr(teleop, "get_reset_button") and teleop.get_reset_button()
+        ):
             events["go_start"] = False
-            if teleop_has_reset_button:
-                logger.debug(
-                    "Ignoring keyboard go_start because teleop reset button controls reset."
-                )
-            elif hasattr(robot, "reset_to_initial_position"):
+            if hasattr(robot, "reset_to_initial_position"):
                 try:
-                    logger.info(
-                        "Starting reset_to_initial_position while recording continues..."
-                    )
+                    logger.info("Reset to initial position (keyboard or A button)")
                     robot.reset_to_initial_position()
                     reset_triggered = True
                 except Exception as e:
@@ -855,46 +863,9 @@ def flexiv_rizon4_rt_record_loop(
         if isinstance(teleop, Teleoperator):
             teleop_action = teleop.get_action()
 
-            if teleop.name == "bi_pico4":
-                if hasattr(teleop, "get_stop_recording_button") and teleop.get_stop_recording_button():
-                    logger.info("Stop recording requested from BiPico4 B button")
-                    events["stop_recording"] = True
-                    events["exit_early"] = True
-                    break
-
-                if hasattr(teleop, "get_rerecord_button") and teleop.get_rerecord_button():
-                    logger.info("Re-record episode requested from BiPico4 X button")
-                    events["rerecord_episode"] = True
-                    events["exit_early"] = True
-                    break
-
-                if (
-                    hasattr(teleop, "get_finish_episode_button")
-                    and teleop.get_finish_episode_button()
-                ):
-                    logger.info("Finish episode requested from BiPico4 Y button")
-                    events["exit_early"] = True
-                    break
-
-            if teleop_has_reset_button and hasattr(
-                robot, "reset_to_initial_position"
-            ):
-                reset_button = teleop.get_reset_button()
-                if reset_button:
-                    try:
-                        robot.reset_to_initial_position()
-                        reset_triggered = True
-                        logger.info("Reset to initial position requested from teleop")
-                    except Exception as e:
-                        logger.error(f"Error during teleop-triggered reset: {e}")
-
             if reset_triggered:
-                # Reset was just triggered this frame: C++ RT thread will take over.
-                # Skip send_action and dataset write; save obs[T] as prev so the first
-                # shifted frame next iteration pairs (obs[T], obs[T+1]_as_action).
                 sent_action = teleop_action  # not sent, used only for display
             elif robot_is_moving:
-                # C++ RT thread controls the arm — Python skips send_action.
                 sent_action = teleop_action  # not sent, used only for display
             else:
                 sent_action = robot.send_action(teleop_action)
@@ -903,8 +874,9 @@ def flexiv_rizon4_rt_record_loop(
                 if robot_is_moving and prev_observation_frame is not None:
                     # Shifted-frame logic during RT reset: C++ background thread controls
                     # the arm autonomously — Python does not send arm commands.
-                    # Record (obs[t-1], obs[t] as action) so action[t-1] reflects
-                    # where the robot actually moved to, matching bi_arx5 convention.
+                    # Action = proprioception state from current obs (same keys as action_features:
+                    # left/right TCP pose 9D + gripper 1D = 20D). Images and other obs keys are
+                    # excluded because we iterate over robot.action_features, not current_observation.
                     current_as_action = {
                         k: current_observation[k]
                         for k in robot.action_features
@@ -1703,6 +1675,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
                 dataset.save_episode()
                 recorded_episodes += 1
+                events["exit_early"] = False  # clear so the reset loop runs normally
 
         log_say("Stop recording", cfg.play_sounds, blocking=True)
     except KeyboardInterrupt:
