@@ -216,10 +216,14 @@ Lerobot record XenseFlare dataset can be directly used for FlexivRizon4 policy t
 
 For `lerobot-record` with `--robot.type=bi_flexiv_rizon4_rt --teleop.type=bi_pico4`, the controller buttons are mapped as follows:
 
-- Right controller `A`: reset both arms to the start pose using the non-blocking RT reset path
-- Left controller `X`: re-record the current episode
-- Left controller `Y`: finish the current episode early and continue to the next step
-- Right controller `B`: stop the recording session
+| Controller button | Keyboard equivalent | Action |
+|---|---|---|
+| Right `A` | `go_start` | Reset both arms to start pose (RT non-blocking, recording continues) |
+| Left `X` | `rerecord_episode` | Discard current episode and re-record |
+| Left `Y` | `exit_early` | Finish current episode early |
+| Right `B` | `stop_recording` | Stop the recording session |
+
+Button state is refreshed via `BiPico4.poll_buttons()` at the top of each loop iteration, before event checks. Keyboard events and controller buttons are unified into the same `events[]` checks — both are equal-priority input sources.
 
 During RT reset, the record loop keeps running: observations are still sampled, teleop actions are still read, and the teleop pose is re-synced to the robot once the reset trajectory finishes.
 
@@ -227,13 +231,31 @@ During RT reset, the record loop keeps running: observations are still sampled, 
 
 This section documents the dataset construction logic in `flexiv_rizon4_rt_record_loop`, which handles both normal teleoperation recording and the RT reset trajectory recording for `bi_flexiv_rizon4_rt + bi_pico4`.
 
+### Loop Structure
+
+```
+while timestamp < control_time_s:
+    poll_buttons()              # lightweight button refresh (no pose computation)
+
+    # Unified event checks — keyboard OR controller button, symmetric
+    stop_recording  / B  →  break
+    rerecord        / X  →  break
+    exit_early      / Y  →  break
+    go_start        / A  →  reset_to_initial_position(), recording continues
+
+    get_observation()
+    check robot_is_moving + sync teleop if reset just finished
+    get_action()
+    send_action / dataset write
+```
+
 ### State Variables
 
 | Variable | Role |
 |---|---|
-| `reset_triggered` | Per-frame flag. Set `True` the frame reset is triggered. Skips `send_action` and dataset write for that frame only. Automatically `False` at the start of every iteration. |
-| `prev_rt_moving` | Edge-detection flag. Set `True` while `robot.rt_moving` is `True`. Cleared to `False` when movement stops, at which point `_sync_rt_teleop_to_robot_pose()` is called once. |
-| `prev_observation_frame` | Holds the previous frame's observation dict. Used by the shifted-frame logic to pair `obs[t-1]` with the robot's actual position at `obs[t]` as the action. |
+| `reset_triggered` | Per-frame flag. Set `True` the frame reset is triggered. Skips `send_action` and dataset write for that frame only. Resets to `False` at the start of every iteration. |
+| `prev_rt_moving` | Edge-detection flag. Set `True` while `robot.rt_moving` is `True`. Cleared to `False` when movement stops, triggering one call to `_sync_rt_teleop_to_robot_pose()`. |
+| `prev_observation_frame` | Holds the previous frame's observation. Used by shifted-frame logic to pair `obs[t-1]` with the robot's actual position at `obs[t]` as the action. |
 
 ### Three Frame Modes
 
@@ -245,8 +267,6 @@ dataset: { obs[t],  action = sent_action[t] }   # direct frame
 prev_observation_frame = obs[t]
 ```
 
-Action is what was actually commanded to and accepted by the robot this frame.
-
 #### 2. Reset trigger frame (`reset_triggered=True`)
 
 ```
@@ -256,20 +276,20 @@ dataset      → skipped
 prev_observation_frame = obs[T]     # saved as anchor for next iteration
 ```
 
-`obs[T]` is intentionally not written to the dataset here. It will be used as `prev_observation_frame` for the first shifted frame in the next iteration, so it appears exactly once in the dataset (as `obs[t-1]` of a shifted pair). Without this skip, `obs[T]` would appear twice — once as a direct frame with `teleop_action[T]`, and again as the prev of the first shifted frame.
+`obs[T]` is intentionally not written to the dataset. It is used as `prev_observation_frame` for the first shifted frame on the next iteration, so it appears exactly once — without this skip it would appear twice (once as a direct frame, once as the prev of the first shifted frame).
 
 #### 3. RT reset in progress (`robot_is_moving=True`)
 
 ```
-send_action  → skipped (C++ RT thread drives the arm)
+send_action  → skipped (C++ RT thread drives the arm autonomously)
 current_as_action = { key: obs[t][key] for key in robot.action_features }
-# robot.action_features = left/right TCP pose (9D each) + gripper (1D each) = 20D
+# robot.action_features = left/right TCP pose (9D each) + gripper (1D each) = 20D total
 # Iterates action_features keys only — image keys in obs[t] are excluded automatically.
 dataset: { obs[t-1],  action = current_as_action }   # shifted frame
 prev_observation_frame = obs[t]
 ```
 
-The action is extracted directly from the current observation using the same keys as `robot.action_features` (TCP pose + gripper). This records where the robot actually moved to, not what the teleop commanded. This is the same shifted-frame convention used by `bi_arx5_record_loop` for gravity-compensation demonstrations.
+The action is extracted from the current observation using the same keys as `robot.action_features`. This records where the robot actually moved to, not what the teleop commanded — the same shifted-frame convention used by `bi_arx5_record_loop`.
 
 ### Complete Frame Sequence Around a Reset
 
@@ -287,7 +307,7 @@ frame N+1  reset done     →  _sync_rt_teleop_to_robot_pose()
 
 ### Post-Reset Teleop Sync
 
-When `prev_rt_moving` transitions from `True` to `False` (frame N+1), `_sync_rt_teleop_to_robot_pose()` is called. This reads the robot's current TCP pose (now at start position) and calls `teleop.reset_to_pose()`, updating the Pico4's internal `_start_pos` reference. Without this sync, the teleop would compute position deltas from the pre-reset pose, causing the arm to jump on the first grip after reset.
+When `prev_rt_moving` transitions `True → False` (frame N+1), `_sync_rt_teleop_to_robot_pose()` is called once. This reads the robot's current TCP pose (now at start position) and calls `teleop.reset_to_pose()`, updating the Pico4's internal `_start_pos` reference. Without this sync the teleop would compute position deltas from the pre-reset pose, causing the arm to jump on the first grip after reset.
 
 ## 🔑 The `LeRobotDataset` format
 
