@@ -130,7 +130,13 @@ class Pico4(Teleoperator):
         )
         self._was_reset_button_pressed: bool = False  # Track previous reset button state for edge detection
         self._last_grip: float = 0.0  # Last grip value for debugging
-        self._last_a_button: bool = False  # Last A button state (cached from get_action)
+        # Physical button states cached each get_action() call.
+        # Right controller populates _last_a_button / _last_b_button.
+        # Left  controller populates _last_x_button / _last_y_button.
+        self._last_a_button: bool = False
+        self._last_b_button: bool = False
+        self._last_x_button: bool = False
+        self._last_y_button: bool = False
 
         # Position jump filtering
         self._last_raw_pose: np.ndarray | None = None  # Last raw pose for jump detection
@@ -537,17 +543,18 @@ class Pico4(Teleoperator):
             pose = self._xrt.get_right_controller_pose()
             controller_grip = float(self._xrt.get_right_grip())
             controller_trigger = float(self._xrt.get_right_trigger())
-            a_button = bool(self._xrt.get_A_button())
+            self._last_a_button = bool(self._xrt.get_A_button())
+            self._last_b_button = bool(self._xrt.get_B_button())
         elif self.config.use_left_controller:
             pose = self._xrt.get_left_controller_pose()
             controller_grip = float(self._xrt.get_left_grip())
             controller_trigger = float(self._xrt.get_left_trigger())
-            a_button = bool(self._xrt.get_X_button())
+            self._last_x_button = bool(self._xrt.get_X_button())
+            self._last_y_button = bool(self._xrt.get_Y_button())
         else:
             raise RuntimeError("No controller configured")
         controller_pose_raw = np.array(pose, dtype=np.float32)  # [x, y, z, qx, qy, qz, qw] in Pico4 frame
-        self._last_grip = controller_grip  # Save for debugging
-        self._last_a_button = a_button  # Cache A button state for get_reset_button()
+        self._last_grip = controller_grip
 
         # Step 1.5: Filter out position jumps (VR tracking glitches)
         if self._last_raw_pose is not None and self.config.position_jump_threshold > 0:
