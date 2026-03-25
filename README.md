@@ -212,6 +212,81 @@ All 3Dconnexion devices supported by PySpaceMouse:
 
 Lerobot record XenseFlare dataset can be directly used for FlexivRizon4 policy training.  🎉
 
+### Bimanual Flexiv Rizon4 RT + BiPico4 Record Controls
+
+For `lerobot-record` with `--robot.type=bi_flexiv_rizon4_rt --teleop.type=bi_pico4`, the controller buttons are mapped as follows:
+
+- Right controller `A`: reset both arms to the start pose using the non-blocking RT reset path
+- Left controller `X`: re-record the current episode
+- Left controller `Y`: finish the current episode early and continue to the next step
+- Right controller `B`: stop the recording session
+
+During RT reset, the record loop keeps running: observations are still sampled, teleop actions are still read, and the teleop pose is re-synced to the robot once the reset trajectory finishes.
+
+## Record Loop Implementation (`flexiv_rizon4_rt_record_loop`)
+
+This section documents the dataset construction logic in `flexiv_rizon4_rt_record_loop`, which handles both normal teleoperation recording and the RT reset trajectory recording for `bi_flexiv_rizon4_rt + bi_pico4`.
+
+### State Variables
+
+| Variable | Role |
+|---|---|
+| `reset_triggered` | Per-frame flag. Set `True` the frame reset is triggered. Skips `send_action` and dataset write for that frame only. Automatically `False` at the start of every iteration. |
+| `prev_rt_moving` | Edge-detection flag. Set `True` while `robot.rt_moving` is `True`. Cleared to `False` when movement stops, at which point `_sync_rt_teleop_to_robot_pose()` is called once. |
+| `prev_observation_frame` | Holds the previous frame's observation dict. Used by the shifted-frame logic to pair `obs[t-1]` with the robot's actual position at `obs[t]` as the action. |
+
+### Three Frame Modes
+
+#### 1. Normal teleoperation (`robot_is_moving=False`, `reset_triggered=False`)
+
+```
+robot.send_action(teleop_action) → sent_action
+dataset: { obs[t],  action = sent_action[t] }   # direct frame
+prev_observation_frame = obs[t]
+```
+
+Action is what was actually commanded to and accepted by the robot this frame.
+
+#### 2. Reset trigger frame (`reset_triggered=True`)
+
+```
+robot.reset_to_initial_position()   # C++ RT thread takes over arm control
+send_action  → skipped
+dataset      → skipped
+prev_observation_frame = obs[T]     # saved as anchor for next iteration
+```
+
+`obs[T]` is intentionally not written to the dataset here. It will be used as `prev_observation_frame` for the first shifted frame in the next iteration, so it appears exactly once in the dataset (as `obs[t-1]` of a shifted pair). Without this skip, `obs[T]` would appear twice — once as a direct frame with `teleop_action[T]`, and again as the prev of the first shifted frame.
+
+#### 3. RT reset in progress (`robot_is_moving=True`)
+
+```
+send_action  → skipped (C++ RT thread drives the arm)
+current_as_action = { key: obs[t][key] for key in robot.action_features }
+dataset: { obs[t-1],  action = current_as_action }   # shifted frame
+prev_observation_frame = obs[t]
+```
+
+The action is extracted directly from the current observation using the same keys as `robot.action_features` (TCP pose + gripper). This records where the robot actually moved to, not what the teleop commanded. This is the same shifted-frame convention used by `bi_arx5_record_loop` for gravity-compensation demonstrations.
+
+### Complete Frame Sequence Around a Reset
+
+```
+frame T-2  normal teleop  →  dataset: { obs[T-2], action[T-2] }
+frame T-1  normal teleop  →  dataset: { obs[T-1], action[T-1] },  prev=obs[T-1]
+frame T    reset trigger  →  dataset: skipped,                     prev=obs[T]
+frame T+1  rt_moving      →  dataset: { obs[T],   obs[T+1]_pos },  prev=obs[T+1]
+frame T+2  rt_moving      →  dataset: { obs[T+1], obs[T+2]_pos },  prev=obs[T+2]
+  ...
+frame N    rt_moving      →  dataset: { obs[N-1], obs[N]_pos },    prev=obs[N]
+frame N+1  reset done     →  _sync_rt_teleop_to_robot_pose()
+           normal teleop  →  dataset: { obs[N+1], action[N+1] }
+```
+
+### Post-Reset Teleop Sync
+
+When `prev_rt_moving` transitions from `True` to `False` (frame N+1), `_sync_rt_teleop_to_robot_pose()` is called. This reads the robot's current TCP pose (now at start position) and calls `teleop.reset_to_pose()`, updating the Pico4's internal `_start_pos` reference. Without this sync, the teleop would compute position deltas from the pre-reset pose, causing the arm to jump on the first grip after reset.
+
 ## 🔑 The `LeRobotDataset` format
 
 A dataset in `LeRobotDataset` format is very simple to use. It can be loaded from a repository on the Hugging Face hub or a local folder simply with e.g. `dataset = LeRobotDataset("lerobot/aloha_static_coffee")` and can be indexed into like any Hugging Face and PyTorch dataset. For instance `dataset[0]` will retrieve a single temporal frame from the dataset containing observation(s) and an action as PyTorch tensors ready to be fed to a model.
