@@ -52,24 +52,7 @@ lerobot-teleoperate \
     --fps=30 \
     --debug_timing=false \
     --display_data=true
-```
-
-## Flexiv Rizon4 Robot with Flare Gripper teleoperate by Spacemouse command
-
-```bash
-lerobot-teleoperate \
-    --robot.type=flexiv_rizon4 \
-    --robot.gripper_mac_addr="e2b26adbb104" \
-    --robot.gripper_type="flare_gripper" \
-    --robot.control_mode=cartesian_motion_force_control \
-    --teleop.type=spacemouse \
-    --fps=30 \
-    --display_data=true \
-    --debug_timing=true
-
-sudo -E env "PATH=$PATH" $(which python) src/lerobot/scripts/lerobot_teleoperate.py     --robot.type=flexiv_rizon4_rt     --robot.use_gripper=false     --teleop.type=spacemouse     --fps=200     --display_data=true     --debug_timing=false
-
-```
+``````
 
 ## Flexiv Rizon4 Robot with Flare Gripper teleoperate by Pico4 command
 
@@ -441,40 +424,6 @@ lerobot-annotate-reward \
     --push-to-hub
 ```
 
-## BiARX5 Robot lerobot-train command act
-
-```python
-lerobot-train \
-  --dataset.repo_id=Vertax/bi_arx5_pick_and_place_cube \
-  --policy.type=act \
-  --output_dir=outputs/train/act_bi_arx5_pick_and_place_cube \
-  --job_name=act_bi_arx5_pick_and_place_cube \
-  --policy.device=cuda \
-  --wandb.enable=true \
-  --policy.repo_id=Vertax/act_bi_arx5_pick_and_place_cube \
-  --batch_size=32 \
-  --steps=200000 \
-  --policy.push_to_hub=true \
-  --wandb.disable_artifact=true
-```
-
-## BiARX5 Robot lerobot-train command diffusion
-
-```python
-lerobot-train \
-  --dataset.repo_id=Vertax/bi_arx5_pick_and_place_cube \
-  --policy.type=diffusion \
-  --output_dir=outputs/train/diffusion_bi_arx5_pick_and_place_cube \
-  --job_name=diffusion_bi_arx5_pick_and_place_cube \
-  --policy.device=cuda \
-  --wandb.enable=true \
-  --policy.repo_id=Vertax/diffusion_bi_arx5_pick_and_place_cube \
-  --batch_size=16 \
-  --steps=100000 \
-  --policy.push_to_hub=true \
-  --wandb.disable_artifact=true
-```
-
 **Note on preview_time:**
 
 Adjust `--robot.preview_time` to reduce jittering:
@@ -482,24 +431,6 @@ Adjust `--robot.preview_time` to reduce jittering:
 - 0.03-0.05s: Smoother motion, more delay (recommended for stable movements)
 - 0.01-0.02s: More responsive, but may cause jittering
 - 0.0: No preview (only for teleoperation/recording)
-
-## BiARX5 diffusion policy lerobot-eval command
-
-```python
-lerobot-record  \
-  --robot.type=bi_arx5 \
-  --robot.inference_mode=true \
-  --robot.preview_time=0.0 \
-  --robot.id=bi_arx5 \
-  --dataset.fps=30 \
-  --dataset.episode_time_s=600 \
-  --dataset.streaming_encoding=true \
-  --dataset.vcodec=auto \
-  --display_data=false \
-  --dataset.repo_id=Vertax/eval_diffusion_bi_arx5_pick_and_place_cube \
-  --dataset.single_task="pick and place cube" \
-  --policy.path=outputs/train/diffusion_bi_arx5_pick_and_place_cube/checkpoints/last/pretrained_model
-```
 
 ## Franka robot lerobot-record command
 
@@ -533,23 +464,6 @@ lerobot-record \
 
 ## Bimanual Flexiv Rizon4 RT + Bi-Pico4 lerobot-record command
 
-```bash
-lerobot-record \
-    --robot.type=bi_flexiv_rizon4_rt \
-    --robot.left_robot_sn=Rizon4-063423 \
-    --robot.right_robot_sn=Rizon4-063424 \
-    --robot.id=bimanual \
-    --teleop.type=bi_pico4 \
-    --teleop.id=bimanual \
-    --dataset.repo_id=<my_username>/<my_dataset_name> \
-    --dataset.num_episodes=50 \
-    --dataset.single_task="Pick up the cube" \
-    --dataset.fps=30 \
-    --dataset.episode_time_s=60 \
-    --dataset.reset_time_s=30 \
-    --dataset.streaming_encoding=true \
-    --dataset.encoder_threads=2
-```
 
 ## ARX5 Robot lerobot-record command (use trlc_leader teleop)
 

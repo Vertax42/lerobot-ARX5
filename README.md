@@ -263,6 +263,8 @@ prev_observation_frame = obs[T]     # saved as anchor for next iteration
 ```
 send_action  → skipped (C++ RT thread drives the arm)
 current_as_action = { key: obs[t][key] for key in robot.action_features }
+# robot.action_features = left/right TCP pose (9D each) + gripper (1D each) = 20D
+# Iterates action_features keys only — image keys in obs[t] are excluded automatically.
 dataset: { obs[t-1],  action = current_as_action }   # shifted frame
 prev_observation_frame = obs[t]
 ```
@@ -275,10 +277,10 @@ The action is extracted directly from the current observation using the same key
 frame T-2  normal teleop  →  dataset: { obs[T-2], action[T-2] }
 frame T-1  normal teleop  →  dataset: { obs[T-1], action[T-1] },  prev=obs[T-1]
 frame T    reset trigger  →  dataset: skipped,                     prev=obs[T]
-frame T+1  rt_moving      →  dataset: { obs[T],   obs[T+1]_pos },  prev=obs[T+1]
-frame T+2  rt_moving      →  dataset: { obs[T+1], obs[T+2]_pos },  prev=obs[T+2]
+frame T+1  rt_moving      →  dataset: { obs[T],   state_20d[T+1] },  prev=obs[T+1]
+frame T+2  rt_moving      →  dataset: { obs[T+1], state_20d[T+2] },  prev=obs[T+2]
   ...
-frame N    rt_moving      →  dataset: { obs[N-1], obs[N]_pos },    prev=obs[N]
+frame N    rt_moving      →  dataset: { obs[N-1], state_20d[N] },    prev=obs[N]
 frame N+1  reset done     →  _sync_rt_teleop_to_robot_pose()
            normal teleop  →  dataset: { obs[N+1], action[N+1] }
 ```
