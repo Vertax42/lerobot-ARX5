@@ -38,8 +38,8 @@ class SerialGripperConfig:
         baudrate:        Serial baud rate (default: 115200).
         serial_timeout:  Read timeout in seconds for the serial port (default: 1.0).
 
-        gripper_min_pos: Minimum gripper position in mm (0 = fully open).
-        gripper_max_pos: Maximum gripper position in mm (85 = fully closed).
+        gripper_min_pos: Minimum gripper position in mm (0 = fully closed).
+        gripper_max_pos: Maximum gripper position in mm (85 = fully open).
         gripper_v_max:   Maximum jaw velocity in mm/s [0, 350].
         gripper_f_max:   Maximum jaw force in N [0, 60].
 
@@ -56,8 +56,8 @@ class SerialGripperConfig:
     device_id: int = 1  # XenseSerialGripper device ID on the RS-485 bus
 
     # ── Mechanical limits ──────────────────────────────────────────────────────
-    gripper_min_pos: float = 0.0   # mm — fully open
-    gripper_max_pos: float = 85.0  # mm — fully closed
+    gripper_min_pos: float = 0.0   # mm — fully closed
+    gripper_max_pos: float = 85.0  # mm — fully open
 
     # ── Motion parameters ──────────────────────────────────────────────────────
     gripper_v_max: float = 80.0  # mm/s  (range: 0–350)

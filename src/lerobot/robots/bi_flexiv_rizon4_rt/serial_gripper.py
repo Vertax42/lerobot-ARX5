@@ -71,8 +71,8 @@ class SerialGripper:
         0.0  →  fully closed (SDK position = gripper_min_pos, e.g.  0 mm)
         1.0  →  fully open   (SDK position = gripper_max_pos, e.g. 85 mm)
 
-    Note: XenseSerialGripper uses 0 = closed, 85 = open internally.
-    Normalized maps directly: normalized * span → SDK position.
+    Note: XenseSerialGripper uses 0 mm = fully closed, 85 mm = fully open internally.
+    Normalized maps directly: normalized * span + min_pos → SDK position.
 
     Example::
 
