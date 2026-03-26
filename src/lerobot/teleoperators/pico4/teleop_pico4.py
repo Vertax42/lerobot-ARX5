@@ -583,7 +583,7 @@ class Pico4(Teleoperator):
         else:
             self._enabled = controller_grip > self.config.grip_enable_threshold
         if self._enabled != prev_enabled:
-            self.logger.info(
+            self.logger.debug(
                 f"[ENABLE] State changed: {prev_enabled} -> {self._enabled}, "
                 f"grip={controller_grip:.3f} "
                 f"(enable_thresh={self.config.grip_enable_threshold}, "
@@ -615,7 +615,7 @@ class Pico4(Teleoperator):
             self._last_raw_pose = None
 
         if just_enabled or self._ref_pos is None:
-            self.logger.info(
+            self.logger.debug(
                 f"[REF_RESET] {'just_enabled' if just_enabled else 'ref_pos is None'}: "
                 f"ref_pos={filtered_pos_flexiv}, start_pos={self._target_pos}, "
                 f"filtered_quat={filtered_quat_flexiv}"
