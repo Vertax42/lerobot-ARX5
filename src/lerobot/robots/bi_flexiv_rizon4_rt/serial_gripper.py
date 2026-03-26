@@ -102,8 +102,11 @@ class SerialGripper:
         self._is_connected: bool = False
         self._gripper: XenseSerialGripper | None = None
 
-        # Cached position updated by background poller — avoids blocking get_observation()
-        self._cached_position: float = 0.0
+        # Cached position updated by background poller — avoids blocking get_observation().
+        # Pre-seeded from init_open so get_gripper_position() returns a sensible value
+        # before the poller thread gets its first valid MCU response (MCU does not
+        # respond to status queries while idle, so the first update may be delayed).
+        self._cached_position: float = 1.0 if config.init_open else 0.0
         self._poll_thread: Thread | None = None
         self._poll_running: bool = False
 
