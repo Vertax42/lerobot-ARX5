@@ -263,11 +263,17 @@ class BiPico4(Teleoperator):
             self._init_pico4_instance(self._left_pico4, xrt, left_tcp_pose_quat)
             self._init_pico4_instance(self._right_pico4, xrt, right_tcp_pose_quat)
 
-            self._was_reset_button_pressed = False
-            self._was_rerecord_button_pressed = False
-            self._was_finish_episode_button_pressed = False
-            self._was_stop_recording_button_pressed = False
             self._is_connected = True
+
+            # Seed edge-detection state from the actual current button state so that
+            # held buttons at connect time do not fire as false "just pressed" events
+            # on the first poll_buttons() call in the control loop.
+            self.poll_buttons()
+            self._was_reset_button_pressed         = self._right_pico4._last_a_button
+            self._was_rerecord_button_pressed      = self._left_pico4._last_x_button
+            self._was_finish_episode_button_pressed = self._left_pico4._last_y_button
+            self._was_stop_recording_button_pressed = self._right_pico4._last_b_button
+
             self.logger.info("BiPico4 connected (left + right controllers).")
 
         except DeviceNotConnectedError:
