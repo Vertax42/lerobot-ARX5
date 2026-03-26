@@ -1,5 +1,18 @@
 # Lerobot-integration with BiARX5
 
+## Prerequisites
+
+### Hugging Face CLI login
+
+Required before running any command with `--dataset.push_to_hub=true`:
+
+```bash
+huggingface-cli login
+```
+
+Paste your HuggingFace access token (with write permission) when prompted.
+The token is stored at `~/.cache/huggingface/token` and persists across sessions.
+
 ## BiARX5 Robot lerobot-teleoperate command
 
 ```bash
