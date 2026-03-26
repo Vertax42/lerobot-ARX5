@@ -291,6 +291,19 @@ prev_observation_frame = obs[t]
 
 The action is extracted from the current observation using the same keys as `robot.action_features`. This records where the robot actually moved to, not what the teleop commanded — the same shifted-frame convention used by `bi_arx5_record_loop`.
 
+### Per-Frame Decision Table
+
+| Frame | `reset_triggered` | `robot_is_moving` | `send_action` | Dataset write | `prev_obs` updated to |
+|---|---|---|---|---|---|
+| T-1 (normal teleop) | False | False | ✓ | `{obs[T-1], action[T-1]}` direct | obs[T-1] |
+| **T (reset triggered)** | **True** | **False** | **skipped** | **skipped** | **obs[T]** |
+| T+1 (RT moving) | False | True | skipped | `{obs[T], state_20d[T+1]}` shifted | obs[T+1] |
+| T+2 (RT moving) | False | True | skipped | `{obs[T+1], state_20d[T+2]}` shifted | obs[T+2] |
+| … | False | True | skipped | shifted | … |
+| N+1 (reset done, teleop synced) | False | False | ✓ | `{obs[N+1], action[N+1]}` direct | obs[N+1] |
+
+`state_20d[t]` = `{k: obs[t][k] for k in robot.action_features}` — left/right TCP pose (9D each) + gripper (1D each), image keys excluded.
+
 ### Complete Frame Sequence Around a Reset
 
 ```
