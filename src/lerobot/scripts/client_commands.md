@@ -464,6 +464,58 @@ lerobot-record \
 
 ## Bimanual Flexiv Rizon4 RT + Bi-Pico4 lerobot-record command
 
+### forward mount (side-by-side)
+
+```bash
+lerobot-record \
+    --robot.type=bi_flexiv_rizon4_rt \
+    --robot.bi_mount_type=forward \
+    --robot.left_robot_sn=Rizon4s-063458 \
+    --robot.right_robot_sn=Rizon4s-063670 \
+    --teleop.type=bi_pico4 \
+    --dataset.repo_id=Vertax/bi_flexiv_rt_test_demo_20260326 \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="test demo" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=60 \
+    --dataset.reset_time_s=20 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
+    --resume=false \
+    --dataset.push_to_hub=true \
+    --display_data=false
+```
+
+### side mount (facing each other)
+
+```bash
+lerobot-record \
+    --robot.type=bi_flexiv_rizon4_rt \
+    --robot.bi_mount_type=side \
+    --robot.left_robot_sn=Rizon4-063423 \
+    --robot.right_robot_sn=Rizon4-062855 \
+    --teleop.type=bi_pico4 \
+    --dataset.repo_id=Vertax/bi_flexiv_rt_pick_and_place \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="pick up the cube and place it in the box" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=60 \
+    --dataset.reset_time_s=20 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
+    --resume=false \
+    --dataset.push_to_hub=false \
+    --display_data=false
+```
+
+**Controller button mapping during recording:**
+
+| Button | Action |
+|---|---|
+| Right `A` | Reset both arms to start pose (recording continues) |
+| Left `X` | Discard current episode and re-record |
+| Left `Y` | Finish current episode early |
+| Right `B` | Stop the recording session |
 
 ## ARX5 Robot lerobot-record command (use trlc_leader teleop)
 
