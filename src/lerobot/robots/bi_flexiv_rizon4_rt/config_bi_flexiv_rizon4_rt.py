@@ -44,7 +44,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     Attributes:
         left_robot_sn: Serial number of the left arm robot
         right_robot_sn: Serial number of the right arm robot
-        bi_mount_type: Preset layout for SNs and home/start poses ("forward" or "side")
+        bi_mount_type: Preset layout for robot/gripper/camera SNs and home/start poses ("forward" or "side")
         use_force: Enable force control axes (both arms)
         control_frequency: Python-side control loop frequency in Hz
         go_to_start: Move to start positions after connect
@@ -170,23 +170,41 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     def __post_init__(self):
         super().__post_init__()
 
-        # ── Apply preset positions based on mounting type ─────────────────
+        # ── Apply preset positions and device identifiers based on mounting type ──
         _PRESETS = {
             "forward": {
-                "left_sn":     "Rizon4s-063458",
-                "right_sn":    "Rizon4s-063670",
-                "left_start":  [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24],
+                "left_sn": "Rizon4s-063458",
+                "right_sn": "Rizon4s-063670",
+                "left_gripper_sn": "000001",
+                "right_gripper_sn": "000002",
+                "left_start": [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24],
                 "right_start": [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.60],
-                "left_home":   [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24],
-                "right_home":  [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.60],
+                "left_home": [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24],
+                "right_home": [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.60],
+                "head_camera_sn": "337322070722",
+                "left_wrist_camera_sn": "XC000001",
+                "right_wrist_camera_sn": "XC000002",
+                "left_tactile_camera_sn_0": "OG000863",
+                "left_tactile_camera_sn_1": "OG000864",
+                "right_tactile_camera_sn_0": "OG000861",
+                "right_tactile_camera_sn_1": "OG000862",
             },
             "side": {
-                "left_sn":     "Rizon4-063423",
-                "right_sn":    "Rizon4-062855",
-                "left_start":  [-18.95, 80.45, -80.35, -89.37, -12.83, -17.05, -9.80],
+                "left_sn": "Rizon4-063423",
+                "right_sn": "Rizon4-062855",
+                "left_gripper_sn": "000003",
+                "right_gripper_sn": "000004",
+                "left_start": [-18.95, 80.45, -80.35, -89.37, -12.83, -17.05, -9.80],
                 "right_start": [12.67, -85.31, 85.44, 102.25, 5.88, 25.36, 0.0],
-                "left_home":   [-18.95, 80.45, -80.35, -89.37, -12.83, -17.05, -9.80],
-                "right_home":  [12.67, -85.31, 85.44, 102.25, 5.88, 25.36, 0.0],
+                "left_home": [-18.95, 80.45, -80.35, -89.37, -12.83, -17.05, -9.80],
+                "right_home": [12.67, -85.31, 85.44, 102.25, 5.88, 25.36, 0.0],
+                "head_camera_sn": "135522074323",
+                "left_wrist_camera_sn": "XC000003",
+                "right_wrist_camera_sn": "XC000004",
+                "left_tactile_camera_sn_0": "OG000867",
+                "left_tactile_camera_sn_1": "OG000865",
+                "right_tactile_camera_sn_0": "OG000142",
+                "right_tactile_camera_sn_1": "OG000866",
             },
         }
         if self.bi_mount_type not in _PRESETS:
@@ -195,6 +213,8 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         preset = _PRESETS[self.bi_mount_type]
         self.left_robot_sn = preset["left_sn"]
         self.right_robot_sn = preset["right_sn"]
+        self.left_gripper_sn = preset["left_gripper_sn"]
+        self.right_gripper_sn = preset["right_gripper_sn"]
         self.left_start_position_degree = preset["left_start"]
         self.right_start_position_degree = preset["right_start"]
         self.left_home_position_degree = preset["left_home"]
@@ -275,78 +295,56 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             self.right_gripper = None
 
         # Camera configuration based on tactile sensors setting
+        self.cameras = {
+            "head": RealSenseCameraConfig(
+                serial_number_or_name=preset["head_camera_sn"],
+                fps=30 if self.enable_tactile_sensors else 60,
+                width=640,
+                height=480,
+                warmup_s=1.0 if self.enable_tactile_sensors else 0.05,
+            ),
+            "left_wrist": OpenCVCameraConfig(
+                index_or_path=preset["left_wrist_camera_sn"],
+                fourcc="MJPG",
+                width=640,
+                height=480,
+                fps=30,
+                warmup_s=1.0,
+            ),
+            "right_wrist": OpenCVCameraConfig(
+                index_or_path=preset["right_wrist_camera_sn"],
+                fourcc="MJPG",
+                width=640,
+                height=480,
+                fps=30,
+                warmup_s=1.0,
+            ),
+        }
         if self.enable_tactile_sensors:
-            self.cameras = {
-                "head": RealSenseCameraConfig(
-                    serial_number_or_name="337322070722",
-                    fps=30,
-                    width=640,
-                    height=480,
-                    warmup_s=1.0,
-                ),
-                "left_wrist": OpenCVCameraConfig(
-                    index_or_path="XC000001",
-                    fourcc="MJPG",
-                    width=640,
-                    height=480,
-                    fps=30,
-                    warmup_s=1.0,
-                ),
-                "right_wrist": OpenCVCameraConfig(
-                    index_or_path="XC000002",
-                    fourcc="MJPG",
-                    width=640,
-                    height=480,
-                    fps=30,
-                    warmup_s=1.0,
-                ),
+            self.cameras.update({
                 "left_tactile_0": XenseTactileCameraConfig(
-                    serial_number="OG000863",
+                    serial_number=preset["left_tactile_camera_sn_0"],
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=0.05,
                 ),
                 "left_tactile_1": XenseTactileCameraConfig(
-                    serial_number="OG000864",
+                    serial_number=preset["left_tactile_camera_sn_1"],
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=0.05,
                 ),
                 "right_tactile_0": XenseTactileCameraConfig(
-                    serial_number="OG000861",
+                    serial_number=preset["right_tactile_camera_sn_0"],
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=0.05,
                 ),
                 "right_tactile_1": XenseTactileCameraConfig(
-                    serial_number="OG000862",
+                    serial_number=preset["right_tactile_camera_sn_1"],
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=0.05,
                 ),
-            }
-        else:
-            self.cameras = {
-                "head": RealSenseCameraConfig(
-                    serial_number_or_name="230322271365",
-                    fps=60,
-                    width=640,
-                    height=480,
-                    warmup_s=0.05,
-                ),
-                "left_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230422271416",
-                    fps=60,
-                    width=640,
-                    height=480,
-                    warmup_s=0.05,
-                ),
-                "right_wrist": RealSenseCameraConfig(
-                    serial_number_or_name="230322274234",
-                    fps=60,
-                    width=640,
-                    height=480,
-                    warmup_s=0.05,
-                ),
-            }
+            })
         pass
