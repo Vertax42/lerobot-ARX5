@@ -121,13 +121,17 @@ def predict_action(
     return action
 
 
-def init_keyboard_listener():
+def init_keyboard_listener(teleop: Any | None = None):
     """
     Initializes a non-blocking keyboard listener for real-time user interaction.
 
     This function sets up a listener for specific keys (right arrow, left arrow, escape) to control
     the program flow during execution, such as stopping recording or exiting loops. It gracefully
     handles headless environments where keyboard listening is not possible.
+
+    Args:
+        teleop: Optional teleoperator whose button events should be mapped into the
+            same `events` dictionary as keyboard shortcuts.
 
     Returns:
         A tuple containing:
@@ -142,6 +146,36 @@ def init_keyboard_listener():
     events["rerecord_episode"] = False
     events["stop_recording"] = False
     events["go_start"] = False
+
+    def refresh_events_from_teleop() -> None:
+        if teleop is None:
+            return
+
+        try:
+            if hasattr(teleop, "poll_buttons"):
+                teleop.poll_buttons()
+
+            if hasattr(teleop, "get_stop_recording_button") and teleop.get_stop_recording_button():
+                print("Teleop stop-recording button pressed. Stopping data recording...")
+                events["stop_recording"] = True
+                events["exit_early"] = True
+
+            if hasattr(teleop, "get_rerecord_button") and teleop.get_rerecord_button():
+                print("Teleop rerecord button pressed. Exiting loop and rerecord the last episode...")
+                events["rerecord_episode"] = True
+                events["exit_early"] = True
+
+            if hasattr(teleop, "get_finish_episode_button") and teleop.get_finish_episode_button():
+                print("Teleop finish-episode button pressed. Exiting loop...")
+                events["exit_early"] = True
+
+            if hasattr(teleop, "get_reset_button") and teleop.get_reset_button():
+                print("Teleop reset button pressed. Robot will go start while recording continues...")
+                events["go_start"] = True
+        except Exception as e:
+            logging.debug(f"Error refreshing teleop control events: {e}")
+
+    events["_refresh_events"] = refresh_events_from_teleop
 
     if is_headless():
         logging.warning(
@@ -180,6 +214,13 @@ def init_keyboard_listener():
     listener.start()
 
     return listener, events
+
+
+def refresh_listener_events(events: dict[str, Any]) -> None:
+    """Refresh controller-derived control events attached by init_keyboard_listener()."""
+    refresh_events = events.get("_refresh_events")
+    if callable(refresh_events):
+        refresh_events()
 
 
 def sanity_check_dataset_name(repo_id, policy_cfg):

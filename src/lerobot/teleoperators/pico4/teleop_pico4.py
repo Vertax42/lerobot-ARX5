@@ -803,19 +803,31 @@ class Pico4(Teleoperator):
         """Pico4 doesn't support feedback."""
         raise NotImplementedError("Feedback is not implemented for Pico4 teleoperator.")
 
+    def poll_buttons(self) -> None:
+        """Refresh cached physical button states without computing a full action."""
+        if not self._is_connected or self._xrt is None:
+            return
+
+        if self.config.use_right_controller:
+            self._last_a_button = bool(self._xrt.get_A_button())
+            self._last_b_button = bool(self._xrt.get_B_button())
+        if self.config.use_left_controller:
+            self._last_x_button = bool(self._xrt.get_X_button())
+            self._last_y_button = bool(self._xrt.get_Y_button())
+
     def get_reset_button(self) -> bool:
         """Get the state of the reset button with edge detection.
 
         Only returns True on the rising edge (button just pressed), not while held.
         This prevents multiple resets when the button is held down.
 
-        Note: This uses the cached A button state from the last get_action() call
-        to avoid additional SDK calls. Make sure get_action() is called before this.
+        Note: This uses the cached A button state from the last get_action()
+        or poll_buttons() call to avoid additional SDK calls.
 
         Returns:
             True if reset button was just pressed (rising edge), False otherwise.
         """
-        # Use cached button state from get_action() to avoid extra SDK calls
+        # Use cached button state from get_action() / poll_buttons() to avoid extra SDK calls
         current_pressed = self._last_a_button
 
         # Edge detection: only trigger on rising edge (was not pressed, now pressed)

@@ -92,6 +92,7 @@ from lerobot.utils.control_utils import (
     init_keyboard_listener,
     is_headless,
     predict_action,
+    refresh_listener_events,
     sanity_check_dataset_name,
     sanity_check_dataset_robot_compatibility,
 )
@@ -371,6 +372,54 @@ def _sync_rt_teleop_to_robot_pose(robot: Robot, teleop: Teleoperator | None) -> 
         teleop.reset_to_pose(pose[:7], pose[7])
 
 
+def _get_bi_pico4_listener_snapshot(
+    teleop: Teleoperator | None, events: dict[str, Any]
+) -> dict[str, bool] | None:
+    if teleop is None or getattr(teleop, "name", None) != "bi_pico4":
+        return None
+
+    left_pico4 = getattr(teleop, "_left_pico4", None)
+    right_pico4 = getattr(teleop, "_right_pico4", None)
+    return {
+        "right_a": bool(getattr(right_pico4, "_last_a_button", False)),
+        "right_b": bool(getattr(right_pico4, "_last_b_button", False)),
+        "left_x": bool(getattr(left_pico4, "_last_x_button", False)),
+        "left_y": bool(getattr(left_pico4, "_last_y_button", False)),
+        "go_start": bool(events.get("go_start", False)),
+        "rerecord_episode": bool(events.get("rerecord_episode", False)),
+        "exit_early": bool(events.get("exit_early", False)),
+        "stop_recording": bool(events.get("stop_recording", False)),
+    }
+
+
+def _log_bi_pico4_listener_transition(
+    previous_snapshot: dict[str, bool] | None,
+    current_snapshot: dict[str, bool] | None,
+) -> dict[str, bool] | None:
+    if current_snapshot is None:
+        return previous_snapshot
+
+    if previous_snapshot is None:
+        logger.info(
+            "[bi_pico4 shared-listener] initial state: "
+            + ", ".join(f"{key}={int(value)}" for key, value in current_snapshot.items())
+        )
+        return dict(current_snapshot)
+
+    changes = [
+        f"{key}:{int(previous_snapshot[key])}->{int(value)}"
+        for key, value in current_snapshot.items()
+        if previous_snapshot.get(key) != value
+    ]
+    if changes:
+        logger.info(
+            "[bi_pico4 shared-listener] state change after refresh_listener_events: "
+            + ", ".join(changes)
+        )
+
+    return dict(current_snapshot)
+
+
 def _use_raw_passthrough_record(robot_type: str, teleop_type: str | None) -> bool:
     return (robot_type, teleop_type) in RAW_PASSTHROUGH_RECORD_PAIRS
 
@@ -452,6 +501,7 @@ def bi_arx5_record_loop(
 
     while timestamp < control_time_s:
         start_loop_t = time.perf_counter()
+        refresh_listener_events(events)
 
         if events["exit_early"]:
             events["exit_early"] = False
@@ -598,6 +648,7 @@ def xense_flare_record_loop(
 
     while timestamp < control_time_s:
         start_loop_t = time.perf_counter()
+        refresh_listener_events(events)
 
         if events["exit_early"]:
             events["exit_early"] = False
@@ -679,6 +730,7 @@ def flexiv_rizon4_record_loop(
 
     while timestamp < control_time_s:
         start_loop_t = time.perf_counter()
+        refresh_listener_events(events)
 
         if events["exit_early"]:
             events["exit_early"] = False
@@ -703,11 +755,10 @@ def flexiv_rizon4_record_loop(
         if isinstance(teleop, Teleoperator):
             robot_action_to_send = teleop.get_action()
 
-            if teleop.name == "pico4" and robot.name == "flexiv_rizon4":
-                reset_button = teleop.get_reset_button()
+            if events["go_start"]:
+                events["go_start"] = False
                 if (
-                    reset_button
-                    and hasattr(robot, "reset_to_initial_position")
+                    hasattr(robot, "reset_to_initial_position")
                     and not resetting_this_frame
                 ):
                     is_resetting = True
@@ -799,41 +850,48 @@ def flexiv_rizon4_rt_record_loop(
     start_episode_t = time.perf_counter()
     prev_rt_moving = False
     prev_observation_frame = None  # for shifted-frame logic during RT reset
+    bi_pico4_listener_snapshot = _get_bi_pico4_listener_snapshot(teleop, events)
 
     while timestamp < control_time_s:
         start_loop_t = time.perf_counter()
         reset_triggered = False
+        refresh_listener_events(events)
+        bi_pico4_listener_snapshot = _log_bi_pico4_listener_transition(
+            bi_pico4_listener_snapshot,
+            _get_bi_pico4_listener_snapshot(teleop, events),
+        )
 
-        # Refresh button states before event checks (lightweight, no pose computation).
-        if isinstance(teleop, Teleoperator) and hasattr(teleop, "poll_buttons"):
-            teleop.poll_buttons()
-
-        # Unified top-of-loop event checks: keyboard events OR controller buttons.
-        if events["stop_recording"] or (
-            hasattr(teleop, "get_stop_recording_button") and teleop.get_stop_recording_button()
-        ):
-            events["stop_recording"] = True
+        if events["stop_recording"]:
+            if getattr(teleop, "name", None) == "bi_pico4":
+                logger.info(
+                    "[bi_pico4 shared-listener] consuming stop_recording=1 -> break record loop (right B)"
+                )
             break
 
-        if events["rerecord_episode"] or (
-            hasattr(teleop, "get_rerecord_button") and teleop.get_rerecord_button()
-        ):
-            events["rerecord_episode"] = True
+        if events["rerecord_episode"]:
+            if getattr(teleop, "name", None) == "bi_pico4":
+                logger.info(
+                    "[bi_pico4 shared-listener] consuming rerecord_episode=1 -> break record loop (left X)"
+                )
             break
 
-        if events["exit_early"] or (
-            hasattr(teleop, "get_finish_episode_button") and teleop.get_finish_episode_button()
-        ):
+        if events["exit_early"]:
+            if getattr(teleop, "name", None) == "bi_pico4":
+                logger.info(
+                    "[bi_pico4 shared-listener] consuming exit_early=1 -> finish current episode (left Y)"
+                )
             events["exit_early"] = False
             break
 
-        if events["go_start"] or (
-            hasattr(teleop, "get_reset_button") and teleop.get_reset_button()
-        ):
+        if events["go_start"]:
+            if getattr(teleop, "name", None) == "bi_pico4":
+                logger.info(
+                    "[bi_pico4 shared-listener] consuming go_start=1 -> reset_to_initial_position (right A)"
+                )
             events["go_start"] = False
             if hasattr(robot, "reset_to_initial_position"):
                 try:
-                    logger.info("Reset to initial position (keyboard or A button)")
+                    logger.info("Reset to initial position (keyboard or controller button)")
                     robot.reset_to_initial_position()
                     reset_triggered = True
                 except Exception as e:
@@ -946,6 +1004,7 @@ def pylibfranka_research3_record_loop(
 
     while timestamp < control_time_s:
         start_loop_t = time.perf_counter()
+        refresh_listener_events(events)
 
         if events["exit_early"]:
             events["exit_early"] = False
@@ -972,35 +1031,16 @@ def pylibfranka_research3_record_loop(
 
         robot_action_to_send = act
 
-        if teleop.name == "pico4" and robot.name == "pylibfranka_research3":
-            # Check for reset button (uses cached A button state from get_action)
-            reset_button = teleop.get_reset_button()
-            if reset_button:
-                # Reset robot to initial position
-                if hasattr(robot, "reset_to_initial_position"):
-                    robot.reset_to_initial_position()
-                logger.info("Reset to initial position (A button pressed)")
+        if events["go_start"]:
+            events["go_start"] = False
+            if hasattr(robot, "reset_to_initial_position"):
+                robot.reset_to_initial_position()
+            logger.info("Reset to initial position (keyboard or controller button)")
 
-                # Always reset teleop state (both dryrun and normal mode)
+            if hasattr(teleop, "reset_to_pose"):
                 current_pose_quat = robot.get_current_tcp_pose_quat()
                 teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
-                # Skip this loop iteration (don't send action after reset)
-                continue
-
-        if teleop.name == "btgamepad" and robot.name == "pylibfranka_research3":
-            # Check for reset button (uses cached A button state from get_action)
-            reset_button = teleop.get_reset_button()
-            if reset_button:
-                # Reset robot to initial position
-                if hasattr(robot, "reset_to_initial_position"):
-                    robot.reset_to_initial_position()
-                logger.info("Reset to initial position (A button pressed)")
-
-                # Always reset teleop state (both dryrun and normal mode)
-                current_pose_quat = robot.get_current_tcp_pose_quat()
-                teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
-                # Skip this loop iteration (don't send action after reset)
-                continue
+            continue
 
         # Send action to robot
         sent_action = robot.send_action(robot_action_to_send)
@@ -1066,6 +1106,7 @@ def record_loop(
     is_resetting = False
     while timestamp < control_time_s:
         start_loop_t = time.perf_counter()
+        refresh_listener_events(events)
 
         if events["exit_early"]:
             events["exit_early"] = False
@@ -1131,9 +1172,14 @@ def record_loop(
             action_values = act_processed_teleop
             robot_action_to_send = robot_action_processor((act_processed_teleop, obs))
 
-        if teleop.name == "pico4" and robot.name == "flexiv_rizon4":
-            reset_button = teleop.get_reset_button()
-            if reset_button and hasattr(robot, "reset_to_initial_position"):
+        if (
+            events["go_start"]
+            and isinstance(teleop, Teleoperator)
+            and teleop.name == "pico4"
+            and robot.name == "flexiv_rizon4"
+        ):
+            events["go_start"] = False
+            if hasattr(robot, "reset_to_initial_position"):
                 is_resetting = True
 
                 def _clear_reset():
@@ -1221,6 +1267,7 @@ def arx5_trlc_record_loop(
 
     while timestamp < control_time_s:
         loop_start = time.perf_counter()
+        refresh_listener_events(events)
 
         if events["exit_early"]:
             events["exit_early"] = False
@@ -1461,6 +1508,14 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             left_pose, right_pose = robot.get_current_tcp_pose_quat()
             teleop.connect(left_tcp_pose_quat=left_pose, right_tcp_pose_quat=right_pose)
             logger.info("BiPico4 initialized with both robot EEF poses.")
+            logger.info(
+                "[bi_pico4 shared-listener] mapping enabled for bi_flexiv_rizon4_rt: "
+                "right A -> go_start/reset, left X -> rerecord episode, "
+                "left Y -> finish episode, right B -> stop recording"
+            )
+            logger.info(
+                "[bi_pico4 shared-listener] detailed button/event transition logs will be emitted inside flexiv_rizon4_rt_record_loop"
+            )
         elif teleop_type == "pico4" and cfg.robot.type == "pylibfranka_research3":
             teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
             logger.info("Teleop initialized with robot EEF pose.")
@@ -1473,7 +1528,15 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         else:
             teleop.connect()
 
-    listener, events = init_keyboard_listener()
+    listener, events = init_keyboard_listener(teleop=teleop)
+    if teleop_type == "bi_pico4" and cfg.robot.type == "bi_flexiv_rizon4_rt":
+        logger.info(
+            "[bi_pico4 shared-listener] initialized events: "
+            + ", ".join(
+                f"{key}={int(bool(events[key]))}"
+                for key in ("go_start", "rerecord_episode", "exit_early", "stop_recording")
+            )
+        )
 
     try:
         with VideoEncodingManager(dataset):
