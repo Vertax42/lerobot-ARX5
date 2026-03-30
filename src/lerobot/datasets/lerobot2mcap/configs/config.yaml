@@ -1,34 +1,54 @@
 writer_format: ros2
 tabular_mappings:
-  - file_pattern: robot/actions.parquet
-    converter_functions:
-      - function_name: row_to_message_with_timestamp
-        topic_suffix: data
-        exclude_columns:
-          - timestamp
-  - file_pattern: robot/states.parquet
-    converter_functions:
-      - function_name: row_to_message_with_timestamp
-        topic_suffix: data
-        exclude_columns:
-          - timestamp
+- file_pattern: robot/actions.parquet
+  converter_functions:
+  - function_name: row_to_message_with_timestamp
+    topic_suffix: data
+    exclude_columns:
+    - timestamp
+- file_pattern: robot/states.parquet
+  converter_functions:
+  - function_name: row_to_message_with_timestamp
+    topic_suffix: data
+    exclude_columns:
+    - timestamp
 other_mappings:
-  - file_pattern: observation/images/wrist_cam.mp4
-    type: compressed_video
-    topic_suffix: video
-    frame_id: wrist_cam_camera
-    format: h264
-  - file_pattern: observation/images/right_tactile.mp4
-    type: compressed_video
-    topic_suffix: video
-    frame_id: right_tactile_camera
-    format: h264
-  - file_pattern: observation/images/left_tactile.mp4
-    type: compressed_video
-    topic_suffix: video
-    frame_id: left_tactile_camera
-    format: h264
+- file_pattern: observation/images/head.mp4
+  type: compressed_video
+  topic_suffix: video
+  frame_id: head_camera
+  format: h264
+- file_pattern: observation/images/left_wrist.mp4
+  type: compressed_video
+  topic_suffix: video
+  frame_id: left_wrist_camera
+  format: h264
+- file_pattern: observation/images/right_wrist.mp4
+  type: compressed_video
+  topic_suffix: video
+  frame_id: right_wrist_camera
+  format: h264
+- file_pattern: observation/images/left_tactile_0.mp4
+  type: compressed_video
+  topic_suffix: video
+  frame_id: left_tactile_0_camera
+  format: h264
+- file_pattern: observation/images/left_tactile_1.mp4
+  type: compressed_video
+  topic_suffix: video
+  frame_id: left_tactile_1_camera
+  format: h264
+- file_pattern: observation/images/right_tactile_0.mp4
+  type: compressed_video
+  topic_suffix: video
+  frame_id: right_tactile_0_camera
+  format: h264
+- file_pattern: observation/images/right_tactile_1.mp4
+  type: compressed_video
+  topic_suffix: video
+  frame_id: right_tactile_1_camera
+  format: h264
 attachments:
-  - file_pattern: "**/*.log"
-    mime_type: text/plain
+- file_pattern: '**/*.log'
+  mime_type: text/plain
 metadata: []
