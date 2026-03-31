@@ -296,13 +296,13 @@ class BiFlexivRizon4RTConfig(RobotConfig):
 
         # Camera configuration based on tactile sensors setting
         self.cameras = {
-            # "head": RealSenseCameraConfig(
-            #     serial_number_or_name=preset["head_camera_sn"],
-            #     fps=30 if self.enable_tactile_sensors else 60,
-            #     width=640,
-            #     height=480,
-            #     warmup_s=1.0 if self.enable_tactile_sensors else 0.05,
-            # ),
+            "head": RealSenseCameraConfig(
+                serial_number_or_name=preset["head_camera_sn"],
+                fps=30 if self.enable_tactile_sensors else 60,
+                width=640,
+                height=480,
+                warmup_s=1.0 if self.enable_tactile_sensors else 0.05,
+            ),
             "left_wrist": OpenCVCameraConfig(
                 index_or_path=preset["left_wrist_camera_sn"],
                 fourcc="MJPG",
