@@ -486,15 +486,15 @@ lerobot-record \
     --robot.left_robot_sn=Rizon4s-063458 \
     --robot.right_robot_sn=Rizon4s-063670 \
     --teleop.type=bi_pico4 \
-    --dataset.repo_id=Vertax/bi_flexiv_rt_test_demo_20260326 \
-    --dataset.num_episodes=50 \
-    --dataset.single_task="test demo" \
+    --dataset.repo_id=Xense/assemble_box_with_phone_stand \
+    --dataset.num_episodes=10 \
+    --dataset.single_task="Assemble the packaging by folding the flat box into shape, placing the metal phone stand inside, and closing the box properly" \
     --dataset.fps=30 \
-    --dataset.episode_time_s=60 \
-    --dataset.reset_time_s=20 \
+    --dataset.episode_time_s=600 \
+    --dataset.reset_time_s=120 \
     --dataset.streaming_encoding=true \
     --dataset.vcodec=auto \
-    --resume=false \
+    --resume=true \
     --dataset.push_to_hub=true \
     --display_data=false
 ```

@@ -24,9 +24,9 @@ Usage Examples:
 
 Delete episodes 0, 2, and 5 from a dataset:
     python -m lerobot.scripts.lerobot_edit_dataset \
-        --repo_id lerobot/pusht \
+        --repo_id Xense/assemble_box_with_phone_stand \
         --operation.type delete_episodes \
-        --operation.episode_indices "[0, 2, 5]"
+        --operation.episode_indices "[12]"
 
 Delete episodes and save to a new dataset:
     python -m lerobot.scripts.lerobot_edit_dataset \
