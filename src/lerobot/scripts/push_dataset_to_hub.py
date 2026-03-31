@@ -15,8 +15,8 @@ Usage:
 
     # Use upload_large_folder for large datasets (recommended)
     python -m lerobot.scripts.push_dataset_to_hub \\
-        --repo-id Vertax/xense_flare_pick_and_place \\
-        --dataset-path ~/.cache/huggingface/lerobot/Vertax/xense_flare_pick_and_place \\
+        --repo-id Xense/assemble_box_with_phone_stand \\
+        --dataset-path ~/.cache/huggingface/lerobot/Xense/assemble_box_with_phone_stand \\
         --upload-large-folder
 
     # Push as private dataset
