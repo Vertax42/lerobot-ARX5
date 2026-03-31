@@ -809,20 +809,23 @@ def flexiv_rizon4_rt_record_loop(
         refresh_listener_events(events)
 
         if events["stop_recording"]:
+            logger.info("Stop recording requested, exiting record loop early")
             break
 
         if events["rerecord_episode"]:
+            logger.info("Re-record episode requested, exiting record loop early")
             break
 
         if events["exit_early"]:
             events["exit_early"] = False
+            logger.info("Exit early requested, exiting record loop early")
             break
 
         if events["go_start"]:
             events["go_start"] = False
             if hasattr(robot, "reset_to_initial_position"):
                 try:
-                    logger.info("Reset to initial position (keyboard)")
+                    logger.info("Reset to initial position (keyboard or controller button)")
                     robot.reset_to_initial_position()
                     reset_triggered = True
                 except Exception as e:
@@ -1451,7 +1454,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         else:
             teleop.connect()
 
-    listener, events = init_keyboard_listener(teleop=None)
+    listener, events = init_keyboard_listener(teleop=teleop)
 
     try:
         with VideoEncodingManager(dataset):
