@@ -862,7 +862,9 @@ def flexiv_rizon4_rt_record_loop(
             else:
                 sent_action = robot.send_action(teleop_action)
 
-            if dataset is not None and not reset_triggered:
+            teleop_is_active = not hasattr(teleop, "is_active") or teleop.is_active()
+
+            if dataset is not None and not reset_triggered and teleop_is_active:
                 if robot_is_moving and prev_observation_frame is not None:
                     # Shifted-frame logic during RT reset: C++ background thread controls
                     # the arm autonomously — Python does not send arm commands.
@@ -891,7 +893,13 @@ def flexiv_rizon4_rt_record_loop(
                     }
                     dataset.add_frame(frame)
 
-            prev_observation_frame = current_observation_frame
+            # Only advance prev_observation_frame when actively recording.
+            # When grip is released, reset it to None so the next enabled frame
+            # starts a fresh trajectory segment without a stale prev anchor.
+            if teleop_is_active:
+                prev_observation_frame = current_observation_frame
+            else:
+                prev_observation_frame = None
             display_action = sent_action
         else:
             logger.info(

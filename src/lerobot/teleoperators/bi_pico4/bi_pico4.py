@@ -407,6 +407,10 @@ class BiPico4(Teleoperator):
     def send_feedback(self, feedback: dict[str, Any]) -> None:
         raise NotImplementedError("Feedback is not supported by BiPico4.")
 
+    def is_active(self) -> bool:
+        """Return True when at least one controller's grip is held."""
+        return self._left_pico4._enabled or self._right_pico4._enabled
+
     def disconnect(self) -> None:
         if not self._is_connected or self._xrt is None:
             raise DeviceNotConnectedError(f"{self} is not connected.")

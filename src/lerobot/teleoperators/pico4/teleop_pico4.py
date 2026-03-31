@@ -799,6 +799,10 @@ class Pico4(Teleoperator):
         )
         return tcp_pose, self._target_gripper_pos
 
+    def is_active(self) -> bool:
+        """Return True when the grip is held and the controller is actively controlling the robot."""
+        return self._enabled
+
     def send_feedback(self, feedback: dict[str, Any]) -> None:
         """Pico4 doesn't support feedback."""
         raise NotImplementedError("Feedback is not implemented for Pico4 teleoperator.")
