@@ -148,7 +148,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     left_gripper_min_pos: float = 0.0  # mm — fully closed
     left_gripper_max_pos: float = 85.0  # mm — fully open
     left_gripper_v_max: float = 100.0  # mm/s
-    left_gripper_f_max: float = 26.0  # N
+    left_gripper_f_max: float = 40.0  # N
     left_gripper_init_open: bool = True
 
     # ========== Right gripper settings ==========
@@ -160,7 +160,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     right_gripper_min_pos: float = 0.0  # mm — fully closed
     right_gripper_max_pos: float = 85.0  # mm — fully open
     right_gripper_v_max: float = 100.0  # mm/s
-    right_gripper_f_max: float = 26.0  # N
+    right_gripper_f_max: float = 40.0  # N
     right_gripper_init_open: bool = True
 
     # Auto-created in __post_init__ (do not set directly)
