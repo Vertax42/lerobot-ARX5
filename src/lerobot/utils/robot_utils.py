@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 import spdlog
 
-SPDLOG_PATTERN = "[%D %T] [%n] [%^%l%$] %v"
+SPDLOG_PATTERN = "[%D %T.%e] [%n] [%^%l%$] %v"
 FILE_LOG_PATTERN = "[%Y-%m-%d %H:%M:%S.%e] [%n] [%l] %v"
 
 # Global log directory — set via XENSE_LOG_DIR env var, defaults to ~/xenselogs
