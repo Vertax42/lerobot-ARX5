@@ -12,13 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import platform
 import time
+from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import spdlog
 
 SPDLOG_PATTERN = "[%D %T] [%n] [%^%l%$] %v"
+FILE_LOG_PATTERN = "[%Y-%m-%d %H:%M:%S.%e] [%n] [%l] %v"
+
+# Global log directory — set via XENSE_LOG_DIR env var, defaults to ~/xenselogs
+_LOG_DIR = Path(os.environ.get("XENSE_LOG_DIR", Path.home() / "xenselogs"))
+_LOG_SESSION = datetime.now().strftime("%Y%m%d_%H%M%S")
+_MAX_LOG_FILES = 15
 
 _SPDLOG_LEVEL_MAP = {
     "TRACE": spdlog.LogLevel.TRACE,
@@ -32,21 +41,62 @@ _SPDLOG_LEVEL_MAP = {
     "OFF": spdlog.LogLevel.OFF,
 }
 
+# Shared file sink (one log file per session, all loggers write to it)
+_file_sink: spdlog.Sink | None = None
 
-def get_logger(name: str, loglevel: str = "INFO") -> spdlog.ConsoleLogger:
-    """Create a spdlog ConsoleLogger with unified format and colors.
+
+def _get_file_sink() -> spdlog.Sink | None:
+    """Lazily create a shared file sink for the current session."""
+    global _file_sink
+    if _file_sink is not None:
+        return _file_sink
+    try:
+        _LOG_DIR.mkdir(parents=True, exist_ok=True)
+        # Clean up old logs (keep newest _MAX_LOG_FILES - 1)
+        log_files = sorted(_LOG_DIR.glob("*.log"), key=lambda f: f.stat().st_mtime)
+        while len(log_files) >= _MAX_LOG_FILES:
+            log_files.pop(0).unlink(missing_ok=True)
+        log_path = _LOG_DIR / f"session_{_LOG_SESSION}.log"
+        _file_sink = spdlog.basic_file_sink_mt(str(log_path))
+        _file_sink.set_level(spdlog.LogLevel.DEBUG)
+        return _file_sink
+    except Exception:
+        return None
+
+
+def get_logger(name: str, loglevel: str = "INFO") -> spdlog.Logger:
+    """Create a spdlog logger with console + file output.
+
+    Console shows INFO+ with colors.  File captures DEBUG+ to
+    ~/xenselogs/session_<timestamp>.log (override via XENSE_LOG_DIR).
+    Old log files are rotated (max 15 kept).
 
     Args:
         name: Logger name
         loglevel: Log level string, one of TRACE/DEBUG/INFO/WARN/ERR/CRITICAL/OFF
 
     Returns:
-        Configured spdlog.ConsoleLogger instance with colored output
+        Configured spdlog logger (SinkLogger with console + file sinks)
     """
-    logger = spdlog.ConsoleLogger(name, colored=True, multithreaded=True)
+    console_level = _SPDLOG_LEVEL_MAP.get(loglevel.upper(), spdlog.LogLevel.INFO)
+
+    # Console sink — respects the requested log level, with colors
+    console_sink = spdlog.stdout_color_sink_mt()
+    console_sink.set_level(console_level)
+
+    sinks = [console_sink]
+
+    # File sink — shared across all loggers, captures DEBUG+
+    file_sink = _get_file_sink()
+    if file_sink is not None:
+        sinks.append(file_sink)
+
+    logger = spdlog.SinkLogger(name, sinks)
     logger.set_pattern(SPDLOG_PATTERN)
-    level = _SPDLOG_LEVEL_MAP.get(loglevel.upper(), spdlog.LogLevel.INFO)
-    logger.set_level(level)
+    # Logger level = DEBUG so the file sink gets everything;
+    # console sink filters to its own level.
+    logger.set_level(spdlog.LogLevel.DEBUG)
+
     return logger
 
 
