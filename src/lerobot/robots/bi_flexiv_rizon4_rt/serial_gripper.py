@@ -180,9 +180,21 @@ class SerialGripper:
                 pass
 
     def disconnect(self) -> None:
-        """Stop the background thread and close the serial port."""
+        """Open gripper fully, stop the background thread, and close the serial port."""
         if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        # Open gripper before disconnecting so it doesn't stay closed
+        if self._gripper is not None:
+            try:
+                self._logger.info("Opening gripper before disconnect...")
+                self._gripper.set_position(
+                    self._gripper_max_pos,
+                    vmax=self._gripper_v_max,
+                    fmax=self._gripper_f_max / 2,
+                )
+            except Exception as e:
+                self._logger.warn(f"Gripper open before disconnect failed (non-fatal): {e}")
 
         self._poll_running = False
         if self._poll_thread is not None:
