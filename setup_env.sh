@@ -158,20 +158,45 @@ install_flexiv() {
     fi
 
     # Stage 1: build ~/rdk_install (only if not already present)
+    # IMPORTANT: must run OUTSIDE conda env — conda's newer CMake (3.31+) rejects
+    # the old cmake_minimum_required(<3.5) used by flexiv_rdk's third-party deps.
+    # We temporarily strip CONDA_PREFIX from PATH so the system CMake is used.
     if [[ ! -f "$RDK_INSTALL/include/flexiv/rdk/robot.hpp" ]]; then
-        echo ""
-        echo "[flexiv] ~/rdk_install not found or incomplete. Build it first:"
-        echo ""
-        echo "  cd third_party/libpyflexiv"
-        echo "  git submodule update --init flexiv_rdk"
-        echo "  cd flexiv_rdk/thirdparty"
-        echo "  bash build_and_install_dependencies.sh ~/rdk_install \$(nproc)"
-        echo "  cd ../.. && mkdir -p build && cd build"
-        echo "  cmake .. -DCMAKE_INSTALL_PREFIX=~/rdk_install -DCMAKE_PREFIX_PATH=~/rdk_install"
-        echo "  cmake --build . --target install --config Release -j\$(nproc)"
-        echo ""
-        echo "Then rerun: bash setup_env.sh --install"
-        return 1
+        echo "[flexiv] ~/rdk_install not found or incomplete — building automatically..."
+        echo "[flexiv] Using system CMake (bypassing conda) to avoid version conflicts..."
+
+        # Init flexiv_rdk submodule
+        git -C "$LIB_DIR" submodule update --init flexiv_rdk
+
+        # Build Stage 1 with conda paths stripped from PATH/CMAKE_PREFIX_PATH
+        # so the system CMake and compilers are used instead of conda's.
+        (
+            export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "$CONDA_PREFIX" | paste -sd ':')
+            unset CMAKE_PREFIX_PATH
+
+            # Build and install third-party dependencies
+            bash "$LIB_DIR/flexiv_rdk/thirdparty/build_and_install_dependencies.sh" \
+                "$RDK_INSTALL" "$(nproc)"
+
+            # Build and install flexiv_rdk itself
+            RDK_BUILD_DIR="$LIB_DIR/flexiv_rdk/build"
+            mkdir -p "$RDK_BUILD_DIR"
+
+            cmake \
+                -S "$LIB_DIR/flexiv_rdk" \
+                -B "$RDK_BUILD_DIR" \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_INSTALL_PREFIX="$RDK_INSTALL" \
+                -DCMAKE_PREFIX_PATH="$RDK_INSTALL"
+
+            cmake --build "$RDK_BUILD_DIR" --target install --config Release -j"$(nproc)"
+        )
+
+        if [[ ! -f "$RDK_INSTALL/include/flexiv/rdk/robot.hpp" ]]; then
+            echo "ERROR: flexiv_rdk build succeeded but robot.hpp not found in $RDK_INSTALL"
+            return 1
+        fi
+        echo "[flexiv] ~/rdk_install built successfully."
     fi
 
     # Stage 2: build Python bindings (inside conda env)
