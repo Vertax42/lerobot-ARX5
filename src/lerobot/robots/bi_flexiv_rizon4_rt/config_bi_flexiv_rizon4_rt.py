@@ -145,7 +145,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     left_gripper_baudrate: int = 115200
     left_gripper_serial_timeout: float = 1.0
     # -- shared motion parameters --
-    left_gripper_min_pos: float = 0.0   # mm — fully closed
+    left_gripper_min_pos: float = 0.0  # mm — fully closed
     left_gripper_max_pos: float = 85.0  # mm — fully open
     left_gripper_v_max: float = 100.0  # mm/s
     left_gripper_f_max: float = 26.0  # N
@@ -157,7 +157,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     right_gripper_baudrate: int = 115200
     right_gripper_serial_timeout: float = 1.0
     # -- shared motion parameters --
-    right_gripper_min_pos: float = 0.0   # mm — fully closed
+    right_gripper_min_pos: float = 0.0  # mm — fully closed
     right_gripper_max_pos: float = 85.0  # mm — fully open
     right_gripper_v_max: float = 100.0  # mm/s
     right_gripper_f_max: float = 26.0  # N
@@ -208,7 +208,9 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             },
         }
         if self.bi_mount_type not in _PRESETS:
-            raise ValueError(f"Unknown mounting type {self.bi_mount_type!r}, expected one of {list(_PRESETS)}")
+            raise ValueError(
+                f"Unknown mounting type {self.bi_mount_type!r}, expected one of {list(_PRESETS)}"
+            )
 
         preset = _PRESETS[self.bi_mount_type]
         self.left_robot_sn = preset["left_sn"]
@@ -298,7 +300,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         self.cameras = {
             "head": RealSenseCameraConfig(
                 serial_number_or_name=preset["head_camera_sn"],
-                fps=30 if self.enable_tactile_sensors else 60,
+                fps=30,
                 width=640,
                 height=480,
                 warmup_s=1.0 if self.enable_tactile_sensors else 0.05,
@@ -321,30 +323,32 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             ),
         }
         if self.enable_tactile_sensors:
-            self.cameras.update({
-                "left_tactile_0": XenseTactileCameraConfig(
-                    serial_number=preset["left_tactile_camera_sn_0"],
-                    fps=30,
-                    output_types=[XenseOutputType.RECTIFY],
-                    warmup_s=0.05,
-                ),
-                "left_tactile_1": XenseTactileCameraConfig(
-                    serial_number=preset["left_tactile_camera_sn_1"],
-                    fps=30,
-                    output_types=[XenseOutputType.RECTIFY],
-                    warmup_s=0.05,
-                ),
-                "right_tactile_0": XenseTactileCameraConfig(
-                    serial_number=preset["right_tactile_camera_sn_0"],
-                    fps=30,
-                    output_types=[XenseOutputType.RECTIFY],
-                    warmup_s=0.05,
-                ),
-                "right_tactile_1": XenseTactileCameraConfig(
-                    serial_number=preset["right_tactile_camera_sn_1"],
-                    fps=30,
-                    output_types=[XenseOutputType.RECTIFY],
-                    warmup_s=0.05,
-                ),
-            })
+            self.cameras.update(
+                {
+                    "left_tactile_0": XenseTactileCameraConfig(
+                        serial_number=preset["left_tactile_camera_sn_0"],
+                        fps=30,
+                        output_types=[XenseOutputType.RECTIFY],
+                        warmup_s=0.05,
+                    ),
+                    "left_tactile_1": XenseTactileCameraConfig(
+                        serial_number=preset["left_tactile_camera_sn_1"],
+                        fps=30,
+                        output_types=[XenseOutputType.RECTIFY],
+                        warmup_s=0.05,
+                    ),
+                    "right_tactile_0": XenseTactileCameraConfig(
+                        serial_number=preset["right_tactile_camera_sn_0"],
+                        fps=30,
+                        output_types=[XenseOutputType.RECTIFY],
+                        warmup_s=0.05,
+                    ),
+                    "right_tactile_1": XenseTactileCameraConfig(
+                        serial_number=preset["right_tactile_camera_sn_1"],
+                        fps=30,
+                        output_types=[XenseOutputType.RECTIFY],
+                        warmup_s=0.05,
+                    ),
+                }
+            )
         pass
