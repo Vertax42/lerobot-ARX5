@@ -433,9 +433,10 @@ class BiFlexivRizon4RT(Robot):
 
         Steps:
         1. Stop RT threads
-        2. Move both arms to home position
-        3. Stop robots
-        4. Disconnect grippers and cameras
+        2. Send gripper open command (non-blocking, runs in parallel with arm home)
+        3. Move both arms to home position (blocking)
+        4. Stop robots
+        5. Disconnect grippers and cameras
         """
         if not self._is_connected:
             self.logger.warn(f"{self} is not connected, skipping disconnect.")
@@ -465,7 +466,20 @@ class BiFlexivRizon4RT(Robot):
             self._left_cc = None
             self._right_cc = None
 
-            # 2. Move both arms to home in parallel
+            # 2. Trigger gripper open *before* the blocking arm home movement so
+            #    the gripper opens in parallel while the arms are returning home.
+            for side, gripper, use_gripper in [
+                ("left", self._left_gripper, self.config.left_use_gripper),
+                ("right", self._right_gripper, self.config.right_use_gripper),
+            ]:
+                if gripper and use_gripper:
+                    try:
+                        gripper.set_gripper_position(1.0)
+                        self.logger.info(f"{side} gripper: open command sent.")
+                    except Exception as e:
+                        self.logger.warn(f"{side} gripper open command failed (non-fatal): {e}")
+
+            # 3. Move both arms to home in parallel
             with ThreadPoolExecutor(max_workers=2) as executor:
                 home_futures = {
                     "left": executor.submit(self._go_to_home_arm, self._left_robot, "left"),
@@ -477,7 +491,7 @@ class BiFlexivRizon4RT(Robot):
                     except Exception as e:
                         self.logger.warn(f"Failed to move {side} arm to home: {e}")
 
-            # 3. Stop robots
+            # 4. Stop robots
             for side, robot in [("left", self._left_robot), ("right", self._right_robot)]:
                 if robot is not None:
                     try:
@@ -485,7 +499,7 @@ class BiFlexivRizon4RT(Robot):
                     except Exception as e:
                         self.logger.warn(f"{side} arm: error calling Stop(): {e}")
 
-            # 4. Disconnect grippers + cameras
+            # 5. Disconnect grippers + cameras
             for side, gripper, use_gripper in [
                 ("left", self._left_gripper, self.config.left_use_gripper),
                 ("right", self._right_gripper, self.config.right_use_gripper),
