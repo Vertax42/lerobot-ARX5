@@ -1582,6 +1582,9 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             ):
                 log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
 
+                if dataset is not None:
+                    dataset.prepare_episode_recording()
+
                 # Use specialized record loop for XenseFlare (data collection gripper)
                 if cfg.robot.type == "xense_flare":
                     xense_flare_record_loop(

@@ -1078,6 +1078,17 @@ class LeRobotDataset(torch.utils.data.Dataset):
             ep_buffer[key] = current_ep_idx if key == "episode_index" else []
         return ep_buffer
 
+    def prepare_episode_recording(self) -> None:
+        """Prepare the in-memory episode buffer and streaming encoders before recording starts."""
+        if self.episode_buffer is None:
+            self.episode_buffer = self.create_episode_buffer()
+
+        if self._streaming_encoder is not None and not self._streaming_encoder._episode_active:
+            self._streaming_encoder.start_episode(
+                video_keys=list(self.meta.video_keys),
+                temp_dir=self.root,
+            )
+
     def _get_image_file_path(self, episode_index: int, image_key: str, frame_index: int) -> Path:
         fpath = DEFAULT_IMAGE_PATH.format(
             image_key=image_key, episode_index=episode_index, frame_index=frame_index
@@ -1118,8 +1129,12 @@ class LeRobotDataset(torch.utils.data.Dataset):
         self.episode_buffer["timestamp"].append(timestamp)
         self.episode_buffer["task"].append(frame.pop("task"))  # Remove task from frame after processing
 
-        # Start streaming encoder on the first frame of the episode
-        if frame_index == 0 and self._streaming_encoder is not None:
+        # Defensive fallback if the caller didn't pre-start the streaming encoder.
+        if (
+            frame_index == 0
+            and self._streaming_encoder is not None
+            and not self._streaming_encoder._episode_active
+        ):
             self._streaming_encoder.start_episode(
                 video_keys=list(self.meta.video_keys),
                 temp_dir=self.root,
