@@ -164,7 +164,7 @@ def _record_loop_sleep(
         if robot is not None
         else "record"
     )
-    logger.warning(
+    logger.warn(
         f"[slow_frame] robot={robot_name} t={episode_t_s:.3f}s "
         f"loop={dt_s * 1e3:.1f}ms budget={budget_s * 1e3:.1f}ms "
         f"overrun={(-remaining_s) * 1e3:.1f}ms"
@@ -1366,7 +1366,7 @@ def arx5_trlc_record_loop(
 
             robot_action_to_send = robot_action_processor((filtered_action, obs))
         else:
-            logger.warning("No policy or teleop provided, skipping action.")
+            logger.warn("No policy or teleop provided, skipping action.")
             _record_loop_sleep(
                 start_loop_t=loop_start,
                 fps=fps,
@@ -1791,7 +1791,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         except Exception as e:
             logger.error(f"Error during robot disconnect: {e}")
             if emergency_stop_flexiv_rt_robot(robot, logger):
-                logger.warning("Emergency stop fallback completed for Flexiv RT robot.")
+                logger.warn("Emergency stop fallback completed for Flexiv RT robot.")
 
         try:
             if (
