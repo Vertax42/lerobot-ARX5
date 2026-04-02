@@ -46,7 +46,8 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         right_robot_sn: Serial number of the right arm robot
         bi_mount_type: Preset layout for robot/gripper/camera SNs and home/start poses ("forward" or "side")
         use_force: Enable force control axes (both arms)
-        control_frequency: Python-side control loop frequency in Hz
+        inner_control_hz: How often each 1 kHz RT thread consumes a new Python command (1-1000 Hz)
+        interpolate_cmds: Enable linear interpolation between consumed commands
         go_to_start: Move to start positions after connect
         left_start_position_degree: Left arm joint positions in degrees for start pose
         right_start_position_degree: Right arm joint positions in degrees for start pose
@@ -69,8 +70,9 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     # Force control
     use_force: bool = False
 
-    # Python-side frequency (RT thread is always 1 kHz internally)
-    control_frequency: float = 100.0  # Hz
+    # RT command consumption parameters (match flexiv_rt defaults)
+    inner_control_hz: int = 1000
+    interpolate_cmds: bool = True
 
     # Connection behavior
     go_to_start: bool = True
@@ -169,6 +171,17 @@ class BiFlexivRizon4RTConfig(RobotConfig):
 
     def __post_init__(self):
         super().__post_init__()
+
+        if isinstance(self.inner_control_hz, bool) or not isinstance(self.inner_control_hz, int):
+            raise TypeError(
+                "inner_control_hz must be an integer in [1, 1000], "
+                f"got {self.inner_control_hz!r}"
+            )
+
+        if not 1 <= self.inner_control_hz <= 1000:
+            raise ValueError(
+                f"inner_control_hz must be between 1 and 1000, got {self.inner_control_hz}"
+            )
 
         # ── Apply preset positions and device identifiers based on mounting type ──
         _PRESETS = {

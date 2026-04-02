@@ -406,15 +406,13 @@ class BiFlexivRizon4RT(Robot):
             self._configure_arm(self._right_robot, "right")
 
             # --- 7. Start RT threads ---
-            self._left_cc = self._left_robot.start_cartesian_control(task_name="CartesianRT_L")
-            self.logger.info("Left arm: C++ RT thread started (1 kHz)")
+            self._left_cc = self._start_cartesian_control(self._left_robot, "CartesianRT_L", "left")
 
             # Seed the RT thread with current TCP pose to avoid jump
             left_init_pose = list(self._left_robot.states().tcp_pose)
             self._left_cc.set_target_pose(left_init_pose)
 
-            self._right_cc = self._right_robot.start_cartesian_control(task_name="CartesianRT_R")
-            self.logger.info("Right arm: C++ RT thread started (1 kHz)")
+            self._right_cc = self._start_cartesian_control(self._right_robot, "CartesianRT_R", "right")
 
             right_init_pose = list(self._right_robot.states().tcp_pose)
             self._right_cc.set_target_pose(right_init_pose)
@@ -1067,6 +1065,25 @@ class BiFlexivRizon4RT(Robot):
     # Utility methods
     # =========================================================================
 
+    def _start_cartesian_control(
+        self,
+        robot: frt.Robot,
+        task_name: str,
+        side: str,
+    ) -> frt.CartesianMotionForceControl:
+        """Start one arm's flexiv_rt Cartesian RT thread using configured SHM consumption params."""
+        ctrl = robot.start_cartesian_control(
+            task_name=task_name,
+            inner_control_hz=self.config.inner_control_hz,
+            interpolate_cmds=self.config.interpolate_cmds,
+        )
+        self.logger.info(
+            f"{side} arm: C++ RT thread started "
+            f"(inner_control_hz={self.config.inner_control_hz}, "
+            f"interpolate_cmds={self.config.interpolate_cmds})"
+        )
+        return ctrl
+
     def reset_to_initial_position(self) -> None:
         """Reset both arms to their initial start positions via RT trajectory.
 
@@ -1129,7 +1146,11 @@ class BiFlexivRizon4RT(Robot):
 
                 self._switch_to_rt_mode(robot, side)
                 self._configure_arm(robot, side)
-                new_cc = robot.start_cartesian_control(task_name=f"CartesianRT_{side[0].upper()}")
+                new_cc = self._start_cartesian_control(
+                    robot,
+                    task_name=f"CartesianRT_{side[0].upper()}",
+                    side=side,
+                )
                 init_pose = list(robot.states().tcp_pose)
                 new_cc.set_target_pose(init_pose)
                 time.sleep(0.1)
