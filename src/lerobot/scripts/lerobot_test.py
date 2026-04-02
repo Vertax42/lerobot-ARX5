@@ -53,7 +53,7 @@ from lerobot.cameras.configs import CameraConfig
 from lerobot.configs import parser
 from lerobot.robots.config import RobotConfig
 from lerobot.teleoperators.config import TeleoperatorConfig
-from lerobot.utils.robot_utils import quaternion_to_rotation_6d
+from lerobot.utils.robot_utils import emergency_stop_flexiv_rt_robot, quaternion_to_rotation_6d
 from lerobot.utils.utils import init_logging
 # Delay import of rerun and visualization utils - only needed for camera tests
 # import rerun as rr
@@ -186,13 +186,8 @@ def _test_robot(
                     logger.info("✅ Robot safely disconnected.")
             except Exception as e:
                 logger.error(f"Error during robot disconnect: {e}")
-                # Force cleanup for Flexiv robots
-                try:
-                    if hasattr(robot, '_robot') and robot._robot is not None:
-                        logger.warning("Attempting emergency stop...")
-                        robot._robot.Stop()
-                except Exception as stop_error:
-                    logger.error(f"Error during emergency stop: {stop_error}")
+                if emergency_stop_flexiv_rt_robot(robot, logger):
+                    logger.warning("Emergency stop fallback completed for Flexiv RT robot.")
 
 
 def _test_camera(

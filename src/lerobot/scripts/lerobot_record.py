@@ -79,6 +79,7 @@ from lerobot.teleoperators import (  # noqa: F401
     pico4,
     trlc_leader,
 )
+from lerobot.utils.robot_utils import emergency_stop_flexiv_rt_robot
 from lerobot.teleoperators.keyboard.teleop_keyboard import KeyboardTeleop
 
 # Import mock_teleop to register its config with draccus ChoiceRegistry
@@ -1673,6 +1674,8 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 logger.info("✅ Robot disconnected safely")
         except Exception as e:
             logger.error(f"Error during robot disconnect: {e}")
+            if emergency_stop_flexiv_rt_robot(robot, logger):
+                logger.warning("Emergency stop fallback completed for Flexiv RT robot.")
 
         try:
             if (
