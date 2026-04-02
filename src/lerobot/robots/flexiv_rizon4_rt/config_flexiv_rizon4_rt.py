@@ -46,7 +46,8 @@ class FlexivRizon4RTConfig(RobotConfig):
         robot_sn: Serial number of the robot (e.g., "Rizon4-063423")
         use_force: Enable force control axes (when True, action includes target wrench)
         use_joint_observation: Include joint states in observation (even in Cartesian mode)
-        control_frequency: Python-side control loop frequency in Hz (RT thread always 1 kHz)
+        inner_control_hz: How often the 1 kHz RT thread consumes a new Python command (1-1000 Hz)
+        interpolate_cmds: Enable linear interpolation between consumed commands
 
         force_control_frame: Reference frame for force control (CoordType.WORLD or TCP)
         force_control_axis: Which axes to enable force control [x, y, z, rx, ry, rz]
@@ -75,8 +76,9 @@ class FlexivRizon4RTConfig(RobotConfig):
     use_force: bool = False
     use_joint_observation: bool = False
 
-    # Python-side frequency (RT thread is always 1 kHz internally)
-    control_frequency: float = 100.0  # Hz
+    # RT command consumption parameters (match flexiv_rt defaults)
+    inner_control_hz: int = 1000
+    interpolate_cmds: bool = True
 
     # Connection behavior
     go_to_start: bool = True
@@ -145,6 +147,17 @@ class FlexivRizon4RTConfig(RobotConfig):
 
     def __post_init__(self):
         super().__post_init__()
+
+        if isinstance(self.inner_control_hz, bool) or not isinstance(self.inner_control_hz, int):
+            raise TypeError(
+                "inner_control_hz must be an integer in [1, 1000], "
+                f"got {self.inner_control_hz!r}"
+            )
+
+        if not 1 <= self.inner_control_hz <= 1000:
+            raise ValueError(
+                f"inner_control_hz must be between 1 and 1000, got {self.inner_control_hz}"
+            )
 
         # Validate Cartesian/force parameters
         if len(self.force_control_axis) != 6:

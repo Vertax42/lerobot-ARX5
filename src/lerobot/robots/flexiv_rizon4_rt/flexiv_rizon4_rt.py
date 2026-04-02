@@ -395,8 +395,7 @@ class FlexivRizon4RT(Robot):
             # The Flexiv Scheduler's mlockall() is intercepted at link time
             # by __wrap_mlockall (no-op), so no OOM risk regardless of
             # Python process size.  See CMakeLists.txt --wrap=mlockall.
-            self._cc = self._robot.start_cartesian_control()
-            self.logger.info("C++ RT thread started (1 kHz CartesianMotionForceControl)")
+            self._cc = self._start_cartesian_control()
 
             # Seed the RT thread with the current TCP pose so it doesn't jump
             init_pose = list(self._robot.states().tcp_pose)
@@ -958,6 +957,22 @@ class FlexivRizon4RT(Robot):
     # Utility methods
     # =========================================================================
 
+    def _start_cartesian_control(self) -> frt.CartesianMotionForceControl:
+        """Start the flexiv_rt Cartesian RT thread using configured SHM consumption params."""
+        if self._robot is None:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        ctrl = self._robot.start_cartesian_control(
+            inner_control_hz=self.config.inner_control_hz,
+            interpolate_cmds=self.config.interpolate_cmds,
+        )
+        self.logger.info(
+            "C++ RT thread started "
+            f"(inner_control_hz={self.config.inner_control_hz}, "
+            f"interpolate_cmds={self.config.interpolate_cmds})"
+        )
+        return ctrl
+
     def zero_ft_sensor(self) -> None:
         """Zero force-torque sensor (public API).
 
@@ -974,7 +989,7 @@ class FlexivRizon4RT(Robot):
 
         if was_running and self._robot is not None:
             self._switch_to_rt_mode()
-            self._cc = self._robot.start_cartesian_control()
+            self._cc = self._start_cartesian_control()
             init_pose = list(self._robot.states().tcp_pose)
             self._cc.set_target_pose(init_pose)
             time.sleep(0.1)
@@ -1052,7 +1067,7 @@ class FlexivRizon4RT(Robot):
         # Restart RT mode
         self._switch_to_rt_mode()
         self.configure()
-        self._cc = self._robot.start_cartesian_control()
+        self._cc = self._start_cartesian_control()
         init_pose = list(self._robot.states().tcp_pose)
         self._cc.set_target_pose(init_pose)
         time.sleep(0.1)
