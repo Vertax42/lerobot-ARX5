@@ -71,7 +71,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     use_force: bool = False
 
     # RT command consumption parameters (match flexiv_rt defaults)
-    inner_control_hz: int = 200
+    inner_control_hz: int = 1000
     interpolate_cmds: bool = True
 
     # Connection behavior
