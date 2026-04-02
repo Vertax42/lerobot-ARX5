@@ -288,6 +288,46 @@ class TestCameraEncoderThread:
         finally:
             path.unlink(missing_ok=True)
 
+    def test_can_open_codec_context_before_first_frame(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            video_path = tmp / "out.mp4"
+            frame_q: queue.Queue = queue.Queue(maxsize=5)
+            result_q: queue.Queue = queue.Queue()
+            stop = threading.Event()
+            ready_event = threading.Event()
+
+            thread = _CameraEncoderThread(
+                video_path=video_path,
+                fps=FPS,
+                vcodec="h264",
+                pix_fmt="yuv420p",
+                g=2,
+                crf=30,
+                preset=None,
+                frame_queue=frame_q,
+                result_queue=result_q,
+                stop_event=stop,
+                encoder_threads=None,
+                frame_shape=(HEIGHT, WIDTH, CHANNELS),
+                ready_event=ready_event,
+            )
+            thread.start()
+
+            assert ready_event.wait(timeout=10)
+            assert thread.init_error is None
+
+            frame_q.put(make_frame(0))
+            frame_q.put(None)
+            thread.join(timeout=30)
+            assert not thread.is_alive()
+
+            status, data = result_q.get_nowait()
+            assert status == "ok"
+            path, _ = data
+            assert path.exists()
+            assert _video_frame_count(path) == 1
+
 
 # ---------------------------------------------------------------------------
 # 4. StreamingVideoEncoder
@@ -533,6 +573,26 @@ class TestStreamingVideoEncoder:
             assert path.exists()
             enc.close()
 
+    def test_start_episode_waits_until_ready_with_frame_shapes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            enc = self._make_encoder(vcodec="h264")
+            enc.start_episode(
+                ["cam"],
+                tmp,
+                frame_shapes={"cam": (HEIGHT, WIDTH, CHANNELS)},
+                wait_until_ready=True,
+            )
+
+            assert enc._threads["cam"].ready_event.is_set()
+            assert enc._threads["cam"].init_error is None
+
+            feed_n_frames(enc, ["cam"], 5)
+            results = enc.finish_episode()
+            path, _ = results["cam"]
+            assert _video_frame_count(path) == 5
+            enc.close()
+
 
 # ---------------------------------------------------------------------------
 # 5. Integration with LeRobotDataset
@@ -616,6 +676,35 @@ class TestStreamingEncoderIntegration:
         # Video file should exist
         video_path = ds.root / ds.meta.get_video_file_path(0, "observation.images.cam")
         assert video_path.exists(), f"Video not found: {video_path}"
+
+    def test_prepare_episode_recording_warms_encoder_without_extra_frames(self, tmp_path):
+        from lerobot.datasets.lerobot_dataset import LeRobotDataset
+
+        ds = LeRobotDataset.create(
+            repo_id="test/prepare_warmup",
+            fps=FPS,
+            features=self.FEATURES,
+            root=tmp_path / "ds",
+            streaming_encoding=True,
+            vcodec="h264",
+        )
+
+        ds.prepare_episode_recording()
+        assert ds.episode_buffer["size"] == 0
+        assert ds._streaming_encoder is not None
+        assert ds._streaming_encoder._episode_active
+        assert ds._streaming_encoder._threads["observation.images.cam"].ready_event.is_set()
+
+        n_frames = 7
+        for i in range(n_frames):
+            ds.add_frame(self._make_frame_dict(i))
+
+        ds.save_episode()
+        ds.finalize()
+
+        video_path = ds.root / ds.meta.get_video_file_path(0, "observation.images.cam")
+        assert video_path.exists()
+        assert _video_frame_count(video_path) == n_frames
 
     def test_multi_episode_sequential(self, tmp_path):
         from lerobot.datasets.lerobot_dataset import LeRobotDataset

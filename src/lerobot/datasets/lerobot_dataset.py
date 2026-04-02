@@ -1078,8 +1078,14 @@ class LeRobotDataset(torch.utils.data.Dataset):
             ep_buffer[key] = current_ep_idx if key == "episode_index" else []
         return ep_buffer
 
+    def _get_video_frame_shapes(self) -> dict[str, tuple[int, int, int]]:
+        return {
+            video_key: tuple(self.features[video_key]["shape"])
+            for video_key in self.meta.video_keys
+        }
+
     def prepare_episode_recording(self) -> None:
-        """Prepare the in-memory episode buffer and streaming encoders before recording starts."""
+        """Prepare the in-memory episode buffer and warm up streaming encoders before recording starts."""
         if self.episode_buffer is None:
             self.episode_buffer = self.create_episode_buffer()
 
@@ -1087,6 +1093,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
             self._streaming_encoder.start_episode(
                 video_keys=list(self.meta.video_keys),
                 temp_dir=self.root,
+                frame_shapes=self._get_video_frame_shapes(),
+                wait_until_ready=True,
             )
 
     def _get_image_file_path(self, episode_index: int, image_key: str, frame_index: int) -> Path:
@@ -1138,6 +1146,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
             self._streaming_encoder.start_episode(
                 video_keys=list(self.meta.video_keys),
                 temp_dir=self.root,
+                frame_shapes=self._get_video_frame_shapes(),
             )
 
         # Add frame features to episode_buffer
