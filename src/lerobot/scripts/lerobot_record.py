@@ -108,6 +108,70 @@ from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 logger = get_logger("lerobot_record")
 
 
+def _format_slow_frame_obs_suffix(robot: Robot | None) -> str:
+    if robot is None:
+        return ""
+
+    timing = getattr(robot, "_last_obs_timing", None)
+    if not isinstance(timing, dict):
+        return ""
+
+    parts: list[str] = []
+    total_ms = timing.get("total_ms")
+    if isinstance(total_ms, (int, float)):
+        parts.append(f"obs={float(total_ms):.1f}ms")
+
+    cameras_ms = timing.get("cameras_ms")
+    if isinstance(cameras_ms, (int, float)):
+        parts.append(f"cams={float(cameras_ms):.1f}ms")
+
+    cam_items = [
+        (key[4:-4], float(value))
+        for key, value in timing.items()
+        if (
+            key.startswith("cam[")
+            and key.endswith("]_ms")
+            and isinstance(value, (int, float))
+        )
+    ]
+    cam_items.sort(key=lambda item: item[1], reverse=True)
+    if cam_items:
+        top_cams = ", ".join(f"{name}={value:.1f}ms" for name, value in cam_items[:2])
+        parts.append(f"top_cams={top_cams}")
+
+    return f" | {' '.join(parts)}" if parts else ""
+
+
+def _record_loop_sleep(
+    start_loop_t: float,
+    fps: int,
+    start_episode_t: float,
+    robot: Robot | None = None,
+) -> None:
+    if fps <= 0:
+        return
+
+    budget_s = 1.0 / fps
+    dt_s = time.perf_counter() - start_loop_t
+    remaining_s = budget_s - dt_s
+    if remaining_s > 0:
+        busy_wait(remaining_s)
+        return
+
+    episode_t_s = time.perf_counter() - start_episode_t
+    robot_name = (
+        getattr(robot, "name", None) or getattr(type(robot), "__name__", "record")
+        if robot is not None
+        else "record"
+    )
+    logger.warning(
+        f"[slow_frame] robot={robot_name} t={episode_t_s:.3f}s "
+        f"loop={dt_s * 1e3:.1f}ms budget={budget_s * 1e3:.1f}ms "
+        f"overrun={(-remaining_s) * 1e3:.1f}ms"
+        f"{_format_slow_frame_obs_suffix(robot)}"
+    )
+
+
 RAW_PASSTHROUGH_RECORD_PAIRS = frozenset(
     {
         ("flexiv_rizon4", "pico4"),
@@ -562,8 +626,12 @@ def bi_arx5_record_loop(
         prev_observation = current_observation
         prev_observation_frame = current_observation_frame
 
-        dt_s = time.perf_counter() - start_loop_t
-        busy_wait(1 / fps - dt_s)
+        _record_loop_sleep(
+            start_loop_t=start_loop_t,
+            fps=fps,
+            start_episode_t=start_episode_t,
+            robot=robot,
+        )
 
         timestamp = time.perf_counter() - start_episode_t
 
@@ -643,8 +711,12 @@ def xense_flare_record_loop(
         prev_observation = current_observation
         prev_observation_frame = current_observation_frame
 
-        dt_s = time.perf_counter() - start_loop_t
-        busy_wait(1 / fps - dt_s)
+        _record_loop_sleep(
+            start_loop_t=start_loop_t,
+            fps=fps,
+            start_episode_t=start_episode_t,
+            robot=robot,
+        )
 
         timestamp = time.perf_counter() - start_episode_t
 
@@ -725,8 +797,12 @@ def flexiv_rizon4_record_loop(
                     if display_data:
                         log_rerun_data(observation=current_observation)
 
-                    dt_s = time.perf_counter() - start_loop_t
-                    busy_wait(1 / fps - dt_s)
+                    _record_loop_sleep(
+                        start_loop_t=start_loop_t,
+                        fps=fps,
+                        start_episode_t=start_episode_t,
+                        robot=robot,
+                    )
                     timestamp = time.perf_counter() - start_episode_t
                     continue
         else:
@@ -735,8 +811,12 @@ def flexiv_rizon4_record_loop(
                 "This is likely to happen when resetting the environment without a teleop device."
                 "The robot won't be at its rest position at the start of the next episode."
             )
-            dt_s = time.perf_counter() - start_loop_t
-            busy_wait(1 / fps - dt_s)
+            _record_loop_sleep(
+                start_loop_t=start_loop_t,
+                fps=fps,
+                start_episode_t=start_episode_t,
+                robot=robot,
+            )
             timestamp = time.perf_counter() - start_episode_t
             continue
 
@@ -744,8 +824,12 @@ def flexiv_rizon4_record_loop(
             if display_data:
                 log_rerun_data(observation=current_observation)
 
-            dt_s = time.perf_counter() - start_loop_t
-            busy_wait(1 / fps - dt_s)
+            _record_loop_sleep(
+                start_loop_t=start_loop_t,
+                fps=fps,
+                start_episode_t=start_episode_t,
+                robot=robot,
+            )
             timestamp = time.perf_counter() - start_episode_t
             continue
 
@@ -765,8 +849,12 @@ def flexiv_rizon4_record_loop(
         if display_data:
             log_rerun_data(observation=current_observation, action=sent_action)
 
-        dt_s = time.perf_counter() - start_loop_t
-        busy_wait(1 / fps - dt_s)
+        _record_loop_sleep(
+            start_loop_t=start_loop_t,
+            fps=fps,
+            start_episode_t=start_episode_t,
+            robot=robot,
+        )
 
         timestamp = time.perf_counter() - start_episode_t
 
@@ -901,16 +989,24 @@ def flexiv_rizon4_rt_record_loop(
                 "The robot won't be at its rest position at the start of the next episode."
             )
 
-            dt_s = time.perf_counter() - start_loop_t
-            busy_wait(1 / fps - dt_s)
+            _record_loop_sleep(
+                start_loop_t=start_loop_t,
+                fps=fps,
+                start_episode_t=start_episode_t,
+                robot=robot,
+            )
             timestamp = time.perf_counter() - start_episode_t
             continue
 
         if display_data:
             log_rerun_data(observation=current_observation, action=display_action)
 
-        dt_s = time.perf_counter() - start_loop_t
-        busy_wait(1 / fps - dt_s)
+        _record_loop_sleep(
+            start_loop_t=start_loop_t,
+            fps=fps,
+            start_episode_t=start_episode_t,
+            robot=robot,
+        )
 
         timestamp = time.perf_counter() - start_episode_t
 
@@ -994,8 +1090,12 @@ def pylibfranka_research3_record_loop(
         if display_data:
             log_rerun_data(observation=current_observation, action=sent_action)
 
-        dt_s = time.perf_counter() - start_loop_t
-        busy_wait(1 / fps - dt_s)
+        _record_loop_sleep(
+            start_loop_t=start_loop_t,
+            fps=fps,
+            start_episode_t=start_episode_t,
+            robot=robot,
+        )
 
         timestamp = time.perf_counter() - start_episode_t
 
@@ -1048,8 +1148,12 @@ def record_loop(
             break
 
         if is_resetting:
-            dt_s = time.perf_counter() - start_loop_t
-            busy_wait(1 / fps - dt_s)
+            _record_loop_sleep(
+                start_loop_t=start_loop_t,
+                fps=fps,
+                start_episode_t=start_episode_t,
+                robot=robot,
+            )
             timestamp = time.perf_counter() - start_episode_t
             continue
 
@@ -1143,8 +1247,12 @@ def record_loop(
         if display_data:
             log_rerun_data(observation=obs_processed, action=action_values)
 
-        dt_s = time.perf_counter() - start_loop_t
-        busy_wait(1 / fps - dt_s)
+        _record_loop_sleep(
+            start_loop_t=start_loop_t,
+            fps=fps,
+            start_episode_t=start_episode_t,
+            robot=robot,
+        )
 
         timestamp = time.perf_counter() - start_episode_t
 
@@ -1259,8 +1367,12 @@ def arx5_trlc_record_loop(
             robot_action_to_send = robot_action_processor((filtered_action, obs))
         else:
             logger.warning("No policy or teleop provided, skipping action.")
-            dt_s = time.perf_counter() - loop_start
-            busy_wait(1 / fps - dt_s)
+            _record_loop_sleep(
+                start_loop_t=loop_start,
+                fps=fps,
+                start_episode_t=start_episode_t,
+                robot=robot,
+            )
             timestamp = time.perf_counter() - start_episode_t
             continue
 
@@ -1276,8 +1388,12 @@ def arx5_trlc_record_loop(
         if display_data:
             log_rerun_data(observation=obs_processed, action=robot_action_to_send)
 
-        dt_s = time.perf_counter() - loop_start
-        busy_wait(1 / fps - dt_s)
+        _record_loop_sleep(
+            start_loop_t=loop_start,
+            fps=fps,
+            start_episode_t=start_episode_t,
+            robot=robot,
+        )
 
         timestamp = time.perf_counter() - start_episode_t
 
