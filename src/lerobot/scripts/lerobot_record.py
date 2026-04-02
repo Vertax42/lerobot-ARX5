@@ -222,7 +222,7 @@ class DatasetRecordConfig:
     video_encoding_batch_size: int = 1
     # Video codec to use for encoding. Options: 'h264', 'hevc', 'libsvtav1', 'auto', or HW encoder name.
     # 'auto' probes the system and picks the best available hardware encoder, falling back to libsvtav1.
-    vcodec: str = "libsvtav1"
+    vcodec: str = "auto"
     # Encode frames in real-time while recording (streaming encoding).
     # Dramatically reduces save_episode() latency. Recommended when hardware encoding is available.
     streaming_encoding: bool = False

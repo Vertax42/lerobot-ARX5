@@ -568,7 +568,7 @@ def _keep_episodes_from_video_with_av(
     output_path: Path,
     episodes_to_keep: list[tuple[float, float]],
     fps: float,
-    vcodec: str = "libsvtav1",
+    vcodec: str = "auto",
     pix_fmt: str = "yuv420p",
 ) -> None:
     """Keep only specified episodes from a video file using PyAV.
@@ -674,7 +674,7 @@ def _copy_and_reindex_videos(
     src_dataset: LeRobotDataset,
     dst_meta: LeRobotDatasetMetadata,
     episode_mapping: dict[int, int],
-    vcodec: str = "libsvtav1",
+    vcodec: str = "auto",
     pix_fmt: str = "yuv420p",
 ) -> dict[int, dict]:
     """Copy and filter video files, only re-encoding files with deleted episodes.
