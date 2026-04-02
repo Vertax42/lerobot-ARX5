@@ -521,14 +521,20 @@ lerobot-record \
     --display_data=false
 ```
 
-**Controller button mapping during recording:**
+**Current controller mapping during recording:**
 
 | Button | Action |
 |---|---|
 | Right `A` | Reset both arms to start pose (recording continues) |
-| Left `X` | Discard current episode and re-record |
-| Left `Y` | Finish current episode early |
-| Right `B` | Stop the recording session |
+
+Other record-control shortcuts are currently keyboard-driven:
+
+| Input | Action |
+|---|---|
+| `Left Arrow` | Discard current episode and re-record |
+| `Right Arrow` | Finish current episode early |
+| `Esc` | Stop the recording session |
+| `Space` | Reset both arms to start pose (recording continues) |
 
 ## ARX5 Robot lerobot-record command (use trlc_leader teleop)
 

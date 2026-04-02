@@ -29,9 +29,6 @@ Control scheme (same for each controller):
     Grip release -> freeze arm at current target
     Trigger    -> gripper position (0 = open, 1 = closed mapped to gripper_width)
     A button (right controller) -> reset both arms to initial pose (rising edge)
-    X button (left controller) -> re-record current episode (record mode)
-    Y button (left controller) -> finish current episode (record mode)
-    B button (right controller) -> stop recording session (record mode)
 """
 
 import time
@@ -82,11 +79,8 @@ class BiPico4(Teleoperator):
         self._xrt = None
         self.logger = get_logger("BiPico4")
 
-        # Edge detection for controller buttons used by teleop / record flows
+        # Edge detection for the controller button currently used by teleop / record flows
         self._was_reset_button_pressed: bool = False
-        self._was_rerecord_button_pressed: bool = False
-        self._was_finish_episode_button_pressed: bool = False
-        self._was_stop_recording_button_pressed: bool = False
 
         # Build per-arm Pico4 configs from shared BiPico4Config fields
         left_config = Pico4Config(
@@ -265,14 +259,11 @@ class BiPico4(Teleoperator):
 
             self._is_connected = True
 
-            # Seed edge-detection state from the actual current button state so that
-            # held buttons at connect time do not fire as false "just pressed" events
-            # on the first poll_buttons() call in the control loop.
+            # Seed edge-detection state from the actual current A-button state so
+            # that a held button at connect time does not fire as a false
+            # "just pressed" event on the first poll_buttons() call.
             self.poll_buttons()
-            self._was_reset_button_pressed         = self._right_pico4._last_a_button
-            self._was_rerecord_button_pressed      = self._left_pico4._last_x_button
-            self._was_finish_episode_button_pressed = self._left_pico4._last_y_button
-            self._was_stop_recording_button_pressed = self._right_pico4._last_b_button
+            self._was_reset_button_pressed = self._right_pico4._last_a_button
 
             self.logger.info("BiPico4 connected (left + right controllers).")
 
@@ -357,17 +348,15 @@ class BiPico4(Teleoperator):
         self._right_pico4.reset_to_pose(right_pose_7d, right_gripper_pos)
 
     def poll_buttons(self) -> None:
-        """Refresh all controller button states from the SDK without full pose/action computation.
+        """Refresh cached controller button states without a full pose/action computation.
 
         Call this at the top of a control loop when button state is needed before get_action().
         get_action() will re-read the same buttons, which is safe (idempotent reads).
+        Only the right-controller A button is currently consumed by teleop / record flows.
         """
         if not self._is_connected or self._xrt is None:
             return
         self._right_pico4._last_a_button = bool(self._xrt.get_A_button())
-        self._right_pico4._last_b_button = bool(self._xrt.get_B_button())
-        self._left_pico4._last_x_button  = bool(self._xrt.get_X_button())
-        self._left_pico4._last_y_button  = bool(self._xrt.get_Y_button())
 
     def get_reset_button(self) -> bool:
         """Get rising-edge state of the A button (right controller).
@@ -381,27 +370,6 @@ class BiPico4(Teleoperator):
         current = self._right_pico4._last_a_button
         just_pressed = current and not self._was_reset_button_pressed
         self._was_reset_button_pressed = current
-        return just_pressed
-
-    def get_rerecord_button(self) -> bool:
-        """Get rising-edge state of the X button (left controller)."""
-        current = self._left_pico4._last_x_button
-        just_pressed = current and not self._was_rerecord_button_pressed
-        self._was_rerecord_button_pressed = current
-        return just_pressed
-
-    def get_finish_episode_button(self) -> bool:
-        """Get rising-edge state of the Y button (left controller)."""
-        current = self._left_pico4._last_y_button
-        just_pressed = current and not self._was_finish_episode_button_pressed
-        self._was_finish_episode_button_pressed = current
-        return just_pressed
-
-    def get_stop_recording_button(self) -> bool:
-        """Get rising-edge state of the B button (right controller)."""
-        current = self._right_pico4._last_b_button
-        just_pressed = current and not self._was_stop_recording_button_pressed
-        self._was_stop_recording_button_pressed = current
         return just_pressed
 
     def send_feedback(self, feedback: dict[str, Any]) -> None:
