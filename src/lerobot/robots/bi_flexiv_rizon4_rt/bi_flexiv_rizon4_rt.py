@@ -903,7 +903,12 @@ class BiFlexivRizon4RT(Robot):
         """Read gripper position into obs_dict."""
         if gripper is None or not use_gripper:
             return
-        obs_dict[gripper_key] = gripper.get_gripper_position()
+        try:
+            obs_dict[gripper_key] = gripper.get_gripper_position()
+        except Exception as e:
+            raise RuntimeError(
+                f"{gripper_key} observation unavailable: gripper status link is not responding. {e}"
+            ) from e
 
     # =========================================================================
     # Action
@@ -1048,7 +1053,13 @@ class BiFlexivRizon4RT(Robot):
                 tcp_pose = robot.states().tcp_pose
             gripper_pos = 0.0
             if gripper is not None and use_gripper:
-                gripper_pos = gripper.get_gripper_position()
+                try:
+                    gripper_pos = gripper.get_gripper_position()
+                except Exception as e:
+                    raise RuntimeError(
+                        "Current TCP pose unavailable because gripper status link is not responding. "
+                        f"{e}"
+                    ) from e
             return np.array([*tcp_pose, gripper_pos], dtype=np.float32)
 
         left_pose = _read_arm_pose(
