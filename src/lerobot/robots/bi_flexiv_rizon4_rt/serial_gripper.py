@@ -20,6 +20,7 @@ Uses XenseSerialGripper (from the XGripper submodule) directly over a
 USB-serial port.  No ezros / xensesdk stack required.
 """
 
+import time
 from threading import Thread, Lock
 from glob import glob
 
@@ -34,7 +35,10 @@ from lerobot.utils.robot_utils import get_logger
 _scan_lock = Lock()
 
 # Log an error after this many consecutive status-poll failures.
-_POLL_FAIL_LOG_THRESHOLD = 10
+# Each failure sleeps _POLL_FAIL_SLEEP_S, so threshold × sleep ≈ elapsed time before alert.
+_POLL_FAIL_LOG_THRESHOLD = 20        # ~1 s at 50 ms/failure before first error
+_POLL_FAIL_REPEAT_INTERVAL = 100     # re-log error every N additional failures (~5 s)
+_POLL_FAIL_SLEEP_S = 0.05            # back-off sleep on each failure
 
 
 def find_port_by_sn(sn: str, baudrate: int = 115200, device_id: int = 1) -> str:
@@ -121,7 +125,9 @@ class SerialGripper:
 
         # Resolve port from SN if not explicitly set
         if self._config.sn:
-            self._logger.info(f"Scanning serial ports for gripper SN={self._config.sn!r}...")
+            self._logger.info(
+                f"Scanning serial ports for gripper SN={self._config.sn!r}..."
+            )
             self._port = find_port_by_sn(
                 self._config.sn,
                 baudrate=self._config.baudrate,
@@ -141,14 +147,18 @@ class SerialGripper:
                 timeout=self._config.serial_timeout,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to open serial gripper on {self._port}: {e}") from e
+            raise RuntimeError(
+                f"Failed to open serial gripper on {self._port}: {e}"
+            ) from e
 
         self._is_connected = True
         self._cached_position = 1.0 if self._init_open else 0.0
         self._logger.info(f"Serial gripper connected on {self._port}.")
 
         if self._init_open:
-            self._logger.info("Initializing gripper to fully open position (non-blocking)...")
+            self._logger.info(
+                "Initializing gripper to fully open position (non-blocking)..."
+            )
             try:
                 # Use non-blocking set_position: MCU does not respond to status queries
                 # while idle, so set_position_sync would spin for ~4s even when already open.
@@ -184,9 +194,20 @@ class SerialGripper:
                             f"Gripper status unavailable on {self._port}: "
                             f"{consecutive_failures} consecutive poll failures — position cache is stale."
                         )
+                    elif (
+                        consecutive_failures > _POLL_FAIL_LOG_THRESHOLD
+                        and (consecutive_failures - _POLL_FAIL_LOG_THRESHOLD) % _POLL_FAIL_REPEAT_INTERVAL == 0
+                    ):
+                        self._logger.error(
+                            f"Gripper status still unavailable on {self._port}: "
+                            f"{consecutive_failures} consecutive poll failures."
+                        )
+                    time.sleep(_POLL_FAIL_SLEEP_S)
                     continue
 
-                raw_pos = max(self._gripper_min_pos, min(float(raw_pos), self._gripper_max_pos))
+                raw_pos = max(
+                    self._gripper_min_pos, min(float(raw_pos), self._gripper_max_pos)
+                )
                 self._cached_position = (raw_pos - self._gripper_min_pos) / span
                 if consecutive_failures >= _POLL_FAIL_LOG_THRESHOLD:
                     self._logger.info(
@@ -200,6 +221,15 @@ class SerialGripper:
                         f"Gripper poll error on {self._port} ({type(e).__name__}: {e}) — "
                         f"position cache is stale after {consecutive_failures} consecutive failures."
                     )
+                elif (
+                    consecutive_failures > _POLL_FAIL_LOG_THRESHOLD
+                    and (consecutive_failures - _POLL_FAIL_LOG_THRESHOLD) % _POLL_FAIL_REPEAT_INTERVAL == 0
+                ):
+                    self._logger.error(
+                        f"Gripper poll error on {self._port} ({type(e).__name__}: {e}) — "
+                        f"{consecutive_failures} consecutive failures."
+                    )
+                time.sleep(_POLL_FAIL_SLEEP_S)
 
     def disconnect(self) -> None:
         """Open gripper fully, stop the background thread, and close the serial port."""
@@ -216,7 +246,9 @@ class SerialGripper:
                     fmax=self._gripper_f_max / 2,
                 )
             except Exception as e:
-                self._logger.warn(f"Gripper open before disconnect failed (non-fatal): {e}")
+                self._logger.warn(
+                    f"Gripper open before disconnect failed (non-fatal): {e}"
+                )
 
         self._poll_running = False
         if self._poll_thread is not None:
@@ -260,9 +292,7 @@ class SerialGripper:
         if not self._is_connected or self._gripper is None:
             raise DeviceNotConnectedError("Serial gripper is not connected.")
         if not 0.0 <= normalized_pos <= 1.0:
-            raise ValueError(
-                f"normalized_pos must be in [0, 1], got {normalized_pos}."
-            )
+            raise ValueError(f"normalized_pos must be in [0, 1], got {normalized_pos}.")
         span = self._gripper_max_pos - self._gripper_min_pos
         target_mm = self._gripper_min_pos + normalized_pos * span
         self._gripper.set_position(
