@@ -20,7 +20,6 @@ Uses XenseSerialGripper (from the XGripper submodule) directly over a
 USB-serial port.  No ezros / xensesdk stack required.
 """
 
-import time
 from threading import Thread, Lock
 from glob import glob
 
@@ -33,6 +32,9 @@ from lerobot.utils.robot_utils import get_logger
 # Serialize port scans so parallel gripper connect() calls don't
 # interfere with each other's serial read_board_sn() queries.
 _scan_lock = Lock()
+
+# Log an error after this many consecutive status-poll failures.
+_POLL_FAIL_LOG_THRESHOLD = 10
 
 
 def find_port_by_sn(sn: str, baudrate: int = 115200, device_id: int = 1) -> str:
@@ -142,6 +144,7 @@ class SerialGripper:
             raise RuntimeError(f"Failed to open serial gripper on {self._port}: {e}") from e
 
         self._is_connected = True
+        self._cached_position = 1.0 if self._init_open else 0.0
         self._logger.info(f"Serial gripper connected on {self._port}.")
 
         if self._init_open:
@@ -166,18 +169,37 @@ class SerialGripper:
     def _position_poll_loop(self) -> None:
         """Background thread: continuously refresh _cached_position via serial query."""
         span = self._gripper_max_pos - self._gripper_min_pos
+        consecutive_failures = 0
         while self._poll_running:
             gripper = self._gripper
             if gripper is None:
                 break
             try:
                 status = gripper.get_gripper_status(timeout=0.05)
-                if status is not None:
-                    raw_pos = float(status.get("position", 0.0))
-                    raw_pos = max(self._gripper_min_pos, min(raw_pos, self._gripper_max_pos))
-                    self._cached_position = (raw_pos - self._gripper_min_pos) / span
-            except Exception:
-                pass
+                raw_pos = None if status is None else status.get("position")
+                if raw_pos is None:
+                    consecutive_failures += 1
+                    if consecutive_failures == _POLL_FAIL_LOG_THRESHOLD:
+                        self._logger.error(
+                            f"Gripper status unavailable on {self._port}: "
+                            f"{consecutive_failures} consecutive poll failures — position cache is stale."
+                        )
+                    continue
+
+                raw_pos = max(self._gripper_min_pos, min(float(raw_pos), self._gripper_max_pos))
+                self._cached_position = (raw_pos - self._gripper_min_pos) / span
+                if consecutive_failures >= _POLL_FAIL_LOG_THRESHOLD:
+                    self._logger.info(
+                        f"Gripper status recovered on {self._port} after {consecutive_failures} failures."
+                    )
+                consecutive_failures = 0
+            except Exception as e:
+                consecutive_failures += 1
+                if consecutive_failures == _POLL_FAIL_LOG_THRESHOLD:
+                    self._logger.error(
+                        f"Gripper poll error on {self._port} ({type(e).__name__}: {e}) — "
+                        f"position cache is stale after {consecutive_failures} consecutive failures."
+                    )
 
     def disconnect(self) -> None:
         """Open gripper fully, stop the background thread, and close the serial port."""
@@ -222,7 +244,7 @@ class SerialGripper:
         poll cycle behind reality — acceptable for 30 Hz teleoperation.
 
         Returns:
-            0.0 = fully open, 1.0 = fully closed.
+            0.0 = fully closed, 1.0 = fully open.
         """
         if not self._is_connected:
             return 0.0
@@ -233,7 +255,7 @@ class SerialGripper:
 
         Args:
             normalized_pos: Target position in [0, 1].
-                            0.0 = fully open, 1.0 = fully closed.
+                            0.0 = fully closed, 1.0 = fully open.
         """
         if not self._is_connected or self._gripper is None:
             raise DeviceNotConnectedError("Serial gripper is not connected.")
@@ -259,7 +281,7 @@ class SerialGripper:
         """Send a position command and block until the gripper reaches the target.
 
         Args:
-            normalized_pos: Target position in [0, 1] (0.0 = open, 1.0 = closed).
+            normalized_pos: Target position in [0, 1] (0.0 = closed, 1.0 = open).
             timeout:        Maximum wait time in seconds (default: 10.0).
             vmax:           Override velocity limit mm/s; uses config default if None.
             fmax:           Override force limit N; uses config default if None.
