@@ -728,11 +728,12 @@ class BiFlexivRizon4RT(Robot):
         )
         self.logger.info(f"{side} arm: MoveJ sent, waiting for completion...")
 
-        # Initialize gripper during move (non-blocking — MCU does not
-        # respond to status queries while idle, so sync would timeout).
+        # Initialize gripper during arm motion with hybrid logic:
+        # skip if already near target, otherwise fall back to a non-blocking
+        # command when the background gripper poller is already running.
         if gripper is not None and use_gripper:
             target_normalized = 1.0 if gripper_init_open else 0.0
-            gripper.set_gripper_position(target_normalized)
+            gripper.initialize_gripper_position(target_normalized)
 
         timeout = 30.0
         start_time = time.time()
