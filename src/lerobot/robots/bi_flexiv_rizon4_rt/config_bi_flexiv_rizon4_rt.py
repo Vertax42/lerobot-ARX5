@@ -172,7 +172,9 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     def __post_init__(self):
         super().__post_init__()
 
-        if isinstance(self.inner_control_hz, bool) or not isinstance(self.inner_control_hz, int):
+        if isinstance(self.inner_control_hz, bool) or not isinstance(
+            self.inner_control_hz, int
+        ):
             raise TypeError(
                 "inner_control_hz must be an integer in [1, 1000], "
                 f"got {self.inner_control_hz!r}"
