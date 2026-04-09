@@ -121,6 +121,22 @@ def _format_slow_frame_obs_suffix(robot: Robot | None) -> str:
     if isinstance(total_ms, (int, float)):
         parts.append(f"obs={float(total_ms):.1f}ms")
 
+    arm_items = [
+        (key[:-3], float(value))
+        for key, value in timing.items()
+        if key.endswith("_arm_ms") and isinstance(value, (int, float))
+    ]
+    if arm_items:
+        parts.append(f"arms={sum(value for _, value in arm_items):.1f}ms")
+
+    grip_items = [
+        (key[:-3], float(value))
+        for key, value in timing.items()
+        if key.endswith("_grip_ms") and isinstance(value, (int, float))
+    ]
+    if grip_items:
+        parts.append(f"grips={sum(value for _, value in grip_items):.1f}ms")
+
     cameras_ms = timing.get("cameras_ms")
     if isinstance(cameras_ms, (int, float)):
         parts.append(f"cams={float(cameras_ms):.1f}ms")
@@ -135,9 +151,17 @@ def _format_slow_frame_obs_suffix(robot: Robot | None) -> str:
         )
     ]
     cam_items.sort(key=lambda item: item[1], reverse=True)
-    if cam_items:
-        top_cams = ", ".join(f"{name}={value:.1f}ms" for name, value in cam_items[:2])
-        parts.append(f"top_cams={top_cams}")
+
+    obs_part_items = arm_items + grip_items + cam_items
+    obs_part_items.sort(key=lambda item: item[1], reverse=True)
+    if obs_part_items:
+        visible_obs_items = [item for item in obs_part_items if item[1] >= 0.1]
+        if not visible_obs_items:
+            visible_obs_items = obs_part_items
+        top_parts = ", ".join(
+            f"{name}={value:.1f}ms" for name, value in visible_obs_items[:4]
+        )
+        parts.append(f"top_obs={top_parts}")
 
     return f" | {' '.join(parts)}" if parts else ""
 
