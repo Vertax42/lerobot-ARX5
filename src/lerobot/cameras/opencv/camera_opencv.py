@@ -313,7 +313,7 @@ class OpenCVCamera(Camera):
         if not success or actual_fps < self.fps * 0.95:  # Allow 5% tolerance below
             raise RuntimeError(f"{self} failed to set fps={self.fps} ({actual_fps=}).")
         if actual_fps > self.fps * 1.05:  # Warn if camera runs significantly faster
-            self.logger.warn(
+            logger.warn(
                 f"Camera running at {actual_fps} FPS (requested {self.fps} FPS). "
                 "Software will read at requested rate."
             )
