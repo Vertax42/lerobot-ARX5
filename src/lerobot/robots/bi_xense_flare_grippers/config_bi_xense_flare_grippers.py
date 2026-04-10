@@ -30,7 +30,7 @@ class BiXenseFlareGrippersConfig(RobotConfig):
     """Config for a dual Xense flare-gripper rig without robot arms."""
 
     left_use_gripper: bool = True
-    left_gripper_sn: str = "000003"
+    left_gripper_sn: str = "000009"
     left_gripper_baudrate: int = 115200
     left_gripper_serial_timeout: float = 1.0
     left_gripper_min_pos: float = 0.0
@@ -40,7 +40,7 @@ class BiXenseFlareGrippersConfig(RobotConfig):
     left_gripper_init_open: bool = True
 
     right_use_gripper: bool = True
-    right_gripper_sn: str = "000004"
+    right_gripper_sn: str = "000010"
     right_gripper_baudrate: int = 115200
     right_gripper_serial_timeout: float = 1.0
     right_gripper_min_pos: float = 0.0
@@ -62,7 +62,7 @@ class BiXenseFlareGrippersConfig(RobotConfig):
                 warmup_s=1.0,
             ),
             "left_wrist": OpenCVCameraConfig(
-                index_or_path="XC000003",
+                index_or_path="XC000009",
                 fourcc="MJPG",
                 width=640,
                 height=480,
@@ -70,7 +70,7 @@ class BiXenseFlareGrippersConfig(RobotConfig):
                 warmup_s=1.0,
             ),
             "right_wrist": OpenCVCameraConfig(
-                index_or_path="XC000004",
+                index_or_path="XC000010",
                 fourcc="MJPG",
                 width=640,
                 height=480,
@@ -78,25 +78,25 @@ class BiXenseFlareGrippersConfig(RobotConfig):
                 warmup_s=1.0,
             ),
             "left_tactile_0": XenseTactileCameraConfig(
-                serial_number="OG000867",
+                serial_number="OG000925",
                 fps=30,
                 output_types=[XenseOutputType.RECTIFY],
                 warmup_s=0.05,
             ),
             "left_tactile_1": XenseTactileCameraConfig(
-                serial_number="OG000865",
+                serial_number="OG000926",
                 fps=30,
                 output_types=[XenseOutputType.RECTIFY],
                 warmup_s=0.05,
             ),
             "right_tactile_0": XenseTactileCameraConfig(
-                serial_number="OG000142",
+                serial_number="OG000927",
                 fps=30,
                 output_types=[XenseOutputType.RECTIFY],
                 warmup_s=0.05,
             ),
             "right_tactile_1": XenseTactileCameraConfig(
-                serial_number="OG000866",
+                serial_number="OG000928",
                 fps=30,
                 output_types=[XenseOutputType.RECTIFY],
                 warmup_s=0.05,

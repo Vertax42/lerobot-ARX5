@@ -34,7 +34,7 @@ class XenseMultisensorConfig(RobotConfig):
     """
 
     left_use_gripper: bool = True
-    left_gripper_sn: str = "000003"
+    left_gripper_sn: str = "000009"
     left_gripper_baudrate: int = 115200
     left_gripper_serial_timeout: float = 1.0
     left_gripper_min_pos: float = 0.0
