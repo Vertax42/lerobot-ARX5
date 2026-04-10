@@ -463,7 +463,7 @@ lerobot-record \
     --robot.left_robot_sn=Rizon4s-063458 \
     --robot.right_robot_sn=Rizon4s-063670 \
     --teleop.type=bi_pico4 \
-    --dataset.repo_id=Xense/test0409 \
+    --dataset.repo_id=Xense/assemble_box_with_phone_stand0410 \
     --dataset.num_episodes=5 \
     --dataset.single_task="Assemble the packaging by folding the flat box into shape, placing the metal phone stand inside, and closing the box properly" \
     --dataset.fps=30 \
