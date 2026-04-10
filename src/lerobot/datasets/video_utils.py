@@ -38,6 +38,10 @@ import torchvision
 from datasets.features.features import register_feature
 from PIL import Image
 
+from lerobot.utils.robot_utils import get_logger
+
+logger = get_logger("video_utils")
+
 HW_ENCODERS = [
     "h264_videotoolbox",  # macOS
     "hevc_videotoolbox",  # macOS
@@ -348,6 +352,7 @@ class StreamingVideoEncoder:
                 else None,
                 ready_event=ready_event,
             )
+            thread._start_t = time.monotonic()
             thread.start()
             self._threads[video_key] = thread
             self._queues[video_key] = q
@@ -356,7 +361,8 @@ class StreamingVideoEncoder:
         self._episode_active = True
 
         if wait_until_ready:
-            deadline = time.monotonic() + ready_timeout_s
+            t_wait_start = time.monotonic()
+            deadline = t_wait_start + ready_timeout_s
             for video_key, thread in self._threads.items():
                 remaining = deadline - time.monotonic()
                 if remaining <= 0 or not thread.ready_event.wait(timeout=remaining):
@@ -369,6 +375,8 @@ class StreamingVideoEncoder:
                     raise RuntimeError(
                         f"StreamingVideoEncoder: failed to warm up '{video_key}': {thread.init_error}"
                     ) from thread.init_error
+                key_ms = (time.monotonic() - getattr(thread, "_start_t", t_wait_start)) * 1e3
+                logger.info(f"[streaming_encoder] encoder ready: {video_key} ({key_ms:.1f}ms)")
 
     def feed_frame(self, video_key: str, image: np.ndarray) -> None:
         """Feed one frame to the encoder thread for ``video_key``."""

@@ -17,6 +17,7 @@ import contextlib
 import logging
 import shutil
 import tempfile
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -77,6 +78,9 @@ from lerobot.datasets.video_utils import (
     resolve_vcodec,
 )
 from lerobot.utils.constants import HF_LEROBOT_HOME
+from lerobot.utils.robot_utils import get_logger
+
+logger = get_logger("lerobot_dataset")
 
 CODEBASE_VERSION = "v3.0"
 
@@ -1091,12 +1095,19 @@ class LeRobotDataset(torch.utils.data.Dataset):
             self.episode_buffer = self.create_episode_buffer()
 
         if self._streaming_encoder is not None and not self._streaming_encoder._episode_active:
+            video_keys = list(self.meta.video_keys)
+            logger.info(
+                f"[streaming_encoder] warming up {len(video_keys)} encoder(s): {video_keys}"
+            )
+            t0 = time.perf_counter()
             self._streaming_encoder.start_episode(
-                video_keys=list(self.meta.video_keys),
+                video_keys=video_keys,
                 temp_dir=self.root,
                 frame_shapes=self._get_video_frame_shapes(),
                 wait_until_ready=True,
             )
+            elapsed_ms = (time.perf_counter() - t0) * 1e3
+            logger.info(f"[streaming_encoder] all encoders ready in {elapsed_ms:.1f}ms")
 
     def _get_image_file_path(self, episode_index: int, image_key: str, frame_index: int) -> Path:
         fpath = DEFAULT_IMAGE_PATH.format(
