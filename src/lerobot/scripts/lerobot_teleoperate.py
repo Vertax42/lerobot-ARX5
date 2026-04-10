@@ -132,11 +132,11 @@ lerobot-teleoperate \
     --display_data=true
 ```
 
-Example (Xense Multisensor, data collection — no teleoperator needed):
+Example (Bi Xense Flare Grippers, data collection — no teleoperator needed):
 
 ```shell
 lerobot-teleoperate \
-    --robot.type=xense_multisensor \
+    --robot.type=bi_xense_flare_grippers \
     --teleop.type=btgamepad \
     --fps=30 \
     --display_data=true
@@ -188,12 +188,12 @@ from lerobot.robots import (  # noqa: F401
     arx5_follower,
     bi_arx5,
     bi_flexiv_rizon4_rt,
+    bi_xense_flare_grippers,
     flexiv_rizon4,
     flexiv_rizon4_rt,
     make_robot_from_config,
     pylibfranka_research3,
     xense_flare as xense_flare_robot,
-    xense_multisensor,
     mock_robot,
 )
 from lerobot.teleoperators import (  # noqa: F401
@@ -226,6 +226,7 @@ logger = get_logger("Teleoperate")
 def make_default_processors(*args, **kwargs):
     """Lazy wrapper — defers lerobot.processor (torch) import until first use."""
     from lerobot.processor import make_default_processors as _fn
+
     return _fn(*args, **kwargs)
 
 
@@ -974,9 +975,7 @@ def spacemouse_teleop_loop(
                         logger.error(
                             f"Failed to reset robot position: {e}\n{traceback.format_exc()}"
                         )
-                elif not (
-                    is_arx5_family and hasattr(robot, "smooth_go_start")
-                ):
+                elif not (is_arx5_family and hasattr(robot, "smooth_go_start")):
                     if hasattr(teleop, "_start_pose_6d") and hasattr(
                         teleop, "_start_gripper_pos"
                     ):
@@ -1125,7 +1124,7 @@ def btgamepad_teleop_loop(
                 )
             if display_data:
                 log_rerun_data(observation=obs)
-            #_print_obs_state(obs, display_len, "RESETTING")
+            # _print_obs_state(obs, display_len, "RESETTING")
             continue
 
         teleop_action = teleop_action_processor((raw_action, obs))
@@ -1391,11 +1390,11 @@ def bi_pico4_teleop_loop(
         loop_s = time.perf_counter() - loop_start
 
         if debug_timing:
-            obs_ms    = (t_obs    - loop_start) * 1e3
-            action_ms = (t_action - t_obs)      * 1e3
-            send_ms   = (t_send   - t_action)   * 1e3
-            rerun_ms  = (t_rerun  - t_send)     * 1e3
-            sleep_ms  = loop_s * 1e3 - dt_s * 1e3
+            obs_ms = (t_obs - loop_start) * 1e3
+            action_ms = (t_action - t_obs) * 1e3
+            send_ms = (t_send - t_action) * 1e3
+            rerun_ms = (t_rerun - t_send) * 1e3
+            sleep_ms = loop_s * 1e3 - dt_s * 1e3
 
             lines = [
                 f"obs={obs_ms:5.1f}ms  action={action_ms:4.1f}ms  send={send_ms:4.1f}ms  "
@@ -1860,7 +1859,7 @@ def xense_flare_teleop_loop(
             return
 
 
-def xense_multisensor_teleop_loop(
+def bi_xense_flare_grippers_teleop_loop(
     robot: Robot,
     fps: int,
     robot_observation_processor: Any,
@@ -1869,10 +1868,9 @@ def xense_multisensor_teleop_loop(
     debug_timing: bool = False,
 ):
     """
-    Data collection loop for Xense Multisensor robot.
+    Data collection loop for the dual-gripper camera rig.
 
-    Xense Multisensor is a pure observation device (similar to teach mode).
-    No actions are sent to the robot - it is a data collection device.
+    This robot provides camera observations and gripper state, but no arm motion.
     """
     start = time.perf_counter()
     timing_stats = {
@@ -1944,11 +1942,6 @@ def xense_multisensor_teleop_loop(
 # ---------------------------------------------------------------------------
 
 
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
-
-
 @parser.wrap()
 def teleoperate(cfg: TeleoperateConfig):
     logger.info(pformat(asdict(cfg)))
@@ -1996,18 +1989,18 @@ def teleoperate(cfg: TeleoperateConfig):
             except KeyboardInterrupt:
                 logger.info("Data collection interrupted by user")
 
-        # --- xense_multisensor (robot-only, data collection) ---
-        elif cfg.robot.type == "xense_multisensor":
-            logger.info("Detected Xense Multisensor data collection device")
+        # --- bi_xense_flare_grippers (robot-only, data collection) ---
+        elif cfg.robot.type == "bi_xense_flare_grippers":
+            logger.info("Detected Bi Xense Flare Grippers data collection device")
             robot = make_robot_from_config(cfg.robot)
             robot.connect()
             logger.info(
-                f"Xense Multisensor connected — cameras: {list(robot.cameras.keys())}"
+                f"Bi Xense Flare Grippers connected — cameras: {list(robot.cameras.keys())}"
             )
 
             _, _, robot_observation_processor = make_default_processors()
             try:
-                xense_multisensor_teleop_loop(
+                bi_xense_flare_grippers_teleop_loop(
                     robot=robot,
                     fps=cfg.fps,
                     display_data=cfg.display_data,
@@ -2304,12 +2297,13 @@ def teleoperate(cfg: TeleoperateConfig):
             # Pre-initialize the VR SDK in background while the robot connects
             # (robot.connect() takes ~20-40s; VR SDK init takes ~3s → free overlap)
             from concurrent.futures import ThreadPoolExecutor as _TPE
+
             try:
                 with _TPE(max_workers=2) as _ex:
                     _robot_fut = _ex.submit(robot.connect, go_to_start=True)
                     _teleop_fut = _ex.submit(teleop.pre_init)
-                    _teleop_fut.result()   # raise immediately if VR SDK fails
-                    _robot_fut.result()    # raise immediately if robot fails
+                    _teleop_fut.result()  # raise immediately if VR SDK fails
+                    _robot_fut.result()  # raise immediately if robot fails
             except KeyboardInterrupt:
                 logger.info("Startup interrupted by user")
                 raise

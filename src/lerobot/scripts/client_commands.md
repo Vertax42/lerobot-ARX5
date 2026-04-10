@@ -81,6 +81,16 @@ lerobot-teleoperate \
     --dryrun=true
 ```
 
+## Bi Xense Flare Grippers Robot teleoperate by Mock Teleop command
+
+```bash
+lerobot-teleoperate \
+    --robot.type=bi_xense_flare_grippers \
+    --teleop.type=mock_teleop \
+    --fps=30 \
+    --display_data=true
+```
+
 ## Bimanual Flexiv Rizon4 RT + Bi-Pico4 teleoperate command
 
 ```bash
@@ -91,39 +101,6 @@ lerobot-teleoperate \
     --robot.right_robot_sn=Rizon4s-063670 \
     --teleop.type=bi_pico4 \
     --fps=60 \
-    --display_data=true
-```
-
-## Flexiv Rizon4 Robot with Xense Flare teleoperate by Xense Flare command
-
-```bash
-lerobot-teleoperate \
-    --robot.type=flexiv_rizon4 \
-    --robot.gripper_mac_addr="e2b26adbb104" \
-    --robot.gripper_type="flare_gripper" \
-    --robot.control_mode=cartesian_motion_force_control \
-    --teleop.type=xense_flare \
-    --teleop.mac_addr="6ebbc5f53240" \
-    --fps=10 \
-    --display_data=true \
-    --dryrun=true
-```
-
-## Flexiv Rizon4 Robot with Flare Gripper lerobot-record by Pico4 command
-
-```python
-lerobot-record \
-    --robot.type=flexiv_rizon4 \
-    --robot.gripper_mac_addr="e2b26adbb104" \
-    --robot.gripper_type="flare_gripper" \
-    --robot.control_mode=cartesian_motion_force_control \
-    --teleop.type=pico4 \
-    --dataset.repo_id=flexiv_pico4/ceshi20260202 \
-    --dataset.num_episodes=2 \
-    --dataset.single_task="pick up cubes in rgb order from the table and place them in the blue box" \
-    --dataset.fps=10 \
-    --resume=false \
-    --dataset.push_to_hub=false \
     --display_data=true
 ```
 
