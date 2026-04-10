@@ -63,6 +63,7 @@ from lerobot.robots import (  # noqa: F401
     arx5_follower,  # noqa: F401
     # bi_arx5,
     bi_flexiv_rizon4_rt,  # noqa: F401
+    bi_xense_flare_grippers,  # noqa: F401
     flexiv_rizon4,  # noqa: F401
     flexiv_rizon4_rt,  # noqa: F401
     make_robot_from_config,
@@ -287,10 +288,10 @@ class RecordConfig:
             )
             self.policy.pretrained_path = policy_path
 
-        # XenseFlare acts as both robot and teleoperator (provides actions via get_action())
-        # so it doesn't need a separate teleoperator or policy
+        # XenseFlare and BiXenseFlareGrippers act as robot-only data collection devices,
+        # so they don't need a separate teleoperator or policy.
         if self.teleop is None and self.policy is None:
-            if self.robot.type != "xense_flare":
+            if self.robot.type not in {"xense_flare", "bi_xense_flare_grippers"}:
                 raise ValueError(
                     "Choose a policy, a teleoperator or both to control the robot"
                 )
@@ -732,6 +733,81 @@ def xense_flare_record_loop(
             log_rerun_data(observation=current_observation, action=current_action)
 
         # Update for next iteration
+        prev_observation = current_observation
+        prev_observation_frame = current_observation_frame
+
+        _record_loop_sleep(
+            start_loop_t=start_loop_t,
+            fps=fps,
+            start_episode_t=start_episode_t,
+            robot=robot,
+        )
+
+        timestamp = time.perf_counter() - start_episode_t
+
+
+@safe_stop_image_writer
+def bi_xense_flare_grippers_record_loop(
+    robot: Robot,
+    events: dict,
+    fps: int,
+    dataset: LeRobotDataset | None = None,
+    control_time_s: int | None = None,
+    single_task: str | None = None,
+    display_data: bool = False,
+):
+    """Record loop for the bi_xense_flare_grippers robot-only data collector."""
+    if dataset is not None and dataset.fps != fps:
+        raise ValueError(
+            f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
+        )
+
+    timestamp = 0
+    start_episode_t = time.perf_counter()
+    prev_observation = None
+    prev_observation_frame = None
+    gripper_keys = ("left_gripper.pos", "right_gripper.pos")
+
+    while timestamp < control_time_s:
+        start_loop_t = time.perf_counter()
+        refresh_listener_events(events)
+
+        if events["exit_early"]:
+            events["exit_early"] = False
+            break
+
+        if events["rerecord_episode"]:
+            logger.info("Re-record episode requested, exiting record loop early")
+            break
+
+        current_observation = robot.get_observation()
+        current_observation_frame = None
+
+        if dataset is not None:
+            current_observation_frame = build_dataset_frame(
+                dataset.features, current_observation, prefix=OBS_STR
+            )
+
+        current_action = {
+            key: current_observation[key]
+            for key in gripper_keys
+            if key in current_observation
+        }
+
+        if prev_observation is not None and dataset is not None:
+            current_action_frame = build_dataset_frame(
+                dataset.features, current_action, prefix=ACTION
+            )
+            frame = {
+                **prev_observation_frame,
+                **current_action_frame,
+                "task": single_task,
+            }
+            dataset.add_frame(frame)
+
+        if display_data:
+            log_rerun_data(observation=current_observation, action=current_action)
+
         prev_observation = current_observation
         prev_observation_frame = current_observation_frame
 
@@ -1609,9 +1685,19 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
                 log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
 
-                # Use specialized record loop for XenseFlare (data collection gripper)
+                # Use specialized record loop for XenseFlare-style robot-only data collection devices.
                 if cfg.robot.type == "xense_flare":
                     xense_flare_record_loop(
+                        robot=robot,
+                        events=events,
+                        fps=cfg.dataset.fps,
+                        dataset=dataset,
+                        control_time_s=cfg.dataset.episode_time_s,
+                        single_task=cfg.dataset.single_task,
+                        display_data=cfg.display_data,
+                    )
+                elif cfg.robot.type == "bi_xense_flare_grippers":
+                    bi_xense_flare_grippers_record_loop(
                         robot=robot,
                         events=events,
                         fps=cfg.dataset.fps,
@@ -1714,6 +1800,15 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                     log_say("Reset the environment", cfg.play_sounds)
                     if cfg.robot.type == "xense_flare":
                         xense_flare_record_loop(
+                            robot=robot,
+                            events=events,
+                            fps=cfg.dataset.fps,
+                            control_time_s=cfg.dataset.reset_time_s,
+                            single_task=cfg.dataset.single_task,
+                            display_data=cfg.display_data,
+                        )
+                    elif cfg.robot.type == "bi_xense_flare_grippers":
+                        bi_xense_flare_grippers_record_loop(
                             robot=robot,
                             events=events,
                             fps=cfg.dataset.fps,
