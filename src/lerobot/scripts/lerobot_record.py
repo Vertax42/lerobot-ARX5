@@ -61,7 +61,7 @@ from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
     arx5_follower,  # noqa: F401
-    # bi_arx5,
+    bi_arx5,
     bi_flexiv_rizon4_rt,  # noqa: F401
     bi_xense_flare_grippers,  # noqa: F401
     flexiv_rizon4,  # noqa: F401
@@ -79,6 +79,7 @@ from lerobot.teleoperators import (  # noqa: F401
     make_teleoperator_from_config,
     pico4,
     trlc_leader,
+    bi_trlc,
 )
 from lerobot.utils.robot_utils import emergency_stop_flexiv_rt_robot
 from lerobot.teleoperators.keyboard.teleop_keyboard import KeyboardTeleop
@@ -432,7 +433,9 @@ def _start_reset_in_background(robot, teleop, set_done):
     Calls set_done() in the finally block so the caller can clear any
     resetting flag regardless of success or failure.
     """
-    logger.info("Starting reset_to_initial_position in background (A button pressed)...")
+    logger.info(
+        "Starting reset_to_initial_position in background (A button pressed)..."
+    )
 
     def _thread():
         try:
@@ -454,9 +457,7 @@ def _sync_rt_teleop_to_robot_pose(robot: Robot, teleop: Teleoperator | None) -> 
 
     if teleop.name == "bi_pico4":
         left_pose, right_pose = robot.get_current_tcp_pose_quat()
-        teleop.reset_to_pose(
-            left_pose[:7], right_pose[:7], left_pose[7], right_pose[7]
-        )
+        teleop.reset_to_pose(left_pose[:7], right_pose[:7], left_pose[7], right_pose[7])
     elif teleop.name in {"pico4", "btgamepad"}:
         pose = robot.get_current_tcp_pose_quat()
         teleop.reset_to_pose(pose[:7], pose[7])
@@ -1014,7 +1015,9 @@ def flexiv_rizon4_rt_record_loop(
             events["go_start"] = False
             if hasattr(robot, "reset_to_initial_position"):
                 try:
-                    logger.info("Reset to initial position (keyboard or controller button)")
+                    logger.info(
+                        "Reset to initial position (keyboard or controller button)"
+                    )
                     robot.reset_to_initial_position()
                     reset_triggered = True
                 except Exception as e:
@@ -1066,7 +1069,11 @@ def flexiv_rizon4_rt_record_loop(
                     action_frame = build_dataset_frame(
                         dataset.features, current_as_action, prefix=ACTION
                     )
-                    frame = {**prev_observation_frame, **action_frame, "task": single_task}
+                    frame = {
+                        **prev_observation_frame,
+                        **action_frame,
+                        "task": single_task,
+                    }
                     dataset.add_frame(frame)
                 elif not robot_is_moving:
                     # Normal teleop: direct frame (obs[t], sent_action[t]).
@@ -1198,6 +1205,7 @@ def pylibfranka_research3_record_loop(
         )
 
         timestamp = time.perf_counter() - start_episode_t
+
 
 @safe_stop_image_writer
 def record_loop(
@@ -1428,7 +1436,11 @@ def arx5_trlc_record_loop(
                 dataset.features, obs_processed, prefix=OBS_STR
             )
 
-        if policy is not None and preprocessor is not None and postprocessor is not None:
+        if (
+            policy is not None
+            and preprocessor is not None
+            and postprocessor is not None
+        ):
             action_values = predict_action(
                 observation=observation_frame,
                 policy=policy,
@@ -1449,7 +1461,9 @@ def arx5_trlc_record_loop(
                     raw_action[k] = (1 - raw_action[k]) * 1.57
 
             teleop_action = teleop_action_processor((raw_action, obs))
-            filtered_action = {k: v for k, v in teleop_action.items() if k in robot_action_keys}
+            filtered_action = {
+                k: v for k, v in teleop_action.items() if k in robot_action_keys
+            }
 
             if len(filtered_action) != len(teleop_action) and not warned_unmapped_keys:
                 dropped = sorted(set(teleop_action) - robot_action_keys)
@@ -1652,20 +1666,14 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         elif teleop_type == "pico4" and cfg.robot.type == "flexiv_rizon4_rt":
             teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
             logger.info("Teleop initialized with robot EEF pose.")
-        elif (
-            teleop_type == "bi_pico4"
-            and cfg.robot.type == "bi_flexiv_rizon4_rt"
-        ):
+        elif teleop_type == "bi_pico4" and cfg.robot.type == "bi_flexiv_rizon4_rt":
             left_pose, right_pose = robot.get_current_tcp_pose_quat()
             teleop.connect(left_tcp_pose_quat=left_pose, right_tcp_pose_quat=right_pose)
             logger.info("BiPico4 initialized with both robot EEF poses.")
         elif teleop_type == "pico4" and cfg.robot.type == "pylibfranka_research3":
             teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
             logger.info("Teleop initialized with robot EEF pose.")
-        elif (
-            teleop_type == "btgamepad"
-            and cfg.robot.type == "pylibfranka_research3"
-        ):
+        elif teleop_type == "btgamepad" and cfg.robot.type == "pylibfranka_research3":
             teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
             logger.info("Teleop initialized with robot EEF pose.")
         else:
@@ -1707,7 +1715,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         display_data=cfg.display_data,
                     )
                 # Use specialized record loop for BiARX5 robot
-                elif cfg.robot.type == "bi_arx5":
+                elif cfg.robot.type == "bi_arx5" and cfg.teleop.type == "mock_teleop":
                     bi_arx5_record_loop(
                         robot=robot,
                         events=events,
@@ -1757,7 +1765,10 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         single_task=cfg.dataset.single_task,
                         display_data=cfg.display_data,
                     )
-                elif cfg.robot.type == "arx5_follower":
+                elif (
+                    cfg.robot.type == "arx5_follower"
+                    and cfg.teleop.type == "trlc_leader"
+                ) or (cfg.robot.type == "bi_arx5" and cfg.teleop.type == "bi_trlc"):
                     arx5_trlc_record_loop(
                         robot=robot,
                         teleop=teleop,
@@ -1902,6 +1913,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         logger.info("\nKeyboardInterrupt received. Stopping recording...")
     except Exception as e:
         import traceback
+
         logger.error(f"Error during recording: {e}\n{traceback.format_exc()}")
     finally:
         # Always disconnect robot and teleop safely

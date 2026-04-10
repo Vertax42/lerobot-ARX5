@@ -209,6 +209,7 @@ from lerobot.teleoperators import (  # noqa: F401
     vive_tracker,
     xense_flare,
     trlc_leader,
+    bi_trlc,
 )
 from lerobot.utils.robot_utils import (
     get_logger,
@@ -827,6 +828,144 @@ def arx5_trlc_leader_teleop_loop(
             dryrun_tag = " | DRYRUN" if dryrun else ""
             print(
                 f"\r\033[KARX5+TRLC obs: {obs_dt_ms:5.1f}ms | loop: {loop_s * 1e3:5.1f}ms ({1 / loop_s:4.0f}Hz){dryrun_tag}",
+                end="",
+                flush=True,
+            )
+        else:
+            action_summary = " ".join(
+                f"{k}={float(v):+.3f}" for k, v in robot_action_to_send.items()
+            )
+            dryrun_tag = "[DRYRUN] " if dryrun else ""
+            print(
+                f"\r\033[K{dryrun_tag}{loop_s * 1e3:5.1f}ms ({1 / loop_s:4.0f}Hz) | {action_summary}",
+                end="",
+                flush=True,
+            )
+
+        if duration is not None and time.perf_counter() - start >= duration:
+            return
+
+
+def bi_arx5_bi_trlc_teleop_loop(
+    teleop: Teleoperator,
+    robot: Robot,
+    fps: int,
+    teleop_action_processor: Any,
+    robot_action_processor: Any,
+    robot_observation_processor: Any,
+    display_data: bool = False,
+    duration: float | None = None,
+    dryrun: bool = False,
+    debug_timing: bool = False,
+):
+    """
+    Dedicated teleoperation loop for BiARX5 + BiTRLC leader.
+
+    BiTRLC outputs joint-space actions (left/right joint_i.pos + gripper.pos,
+    normalized gripper [0=open, 1=closed]), so this loop:
+      1. Validates key compatibility with bi_arx5's action schema.
+      2. Converts each gripper value from normalized [0, 1] to radians
+         via: gripper_rad = (1 - v) * 1.57
+      3. Sends the converted action to the robot.
+
+    Requires robot.control_mode == JOINT_CONTROL (set via
+    --robot.control_mode=joint_control).  An error is raised at startup
+    if no action keys overlap (which happens when the robot is in
+    CARTESIAN_CONTROL or TEACH_MODE).
+    """
+    from lerobot.robots.bi_arx5.config_bi_arx5 import BiARX5ControlMode
+
+    if robot.config.control_mode != BiARX5ControlMode.JOINT_CONTROL:
+        raise ValueError(
+            f"BiTRLC teleoperation requires JOINT_CONTROL mode, "
+            f"but robot is in '{robot.config.control_mode.value}'. "
+            f"Add --robot.control_mode=joint_control to your command."
+        )
+
+    display_len = max(len(key) for key in robot.action_features)
+    start = time.perf_counter()
+    robot_action_keys = set(robot.action_features.keys())
+    warned_unmapped_keys = False
+
+    while True:
+        loop_start = time.perf_counter()
+
+        obs_start = time.perf_counter()
+        obs = robot.get_observation()
+        obs_dt_ms = (time.perf_counter() - obs_start) * 1e3
+
+        raw_action = teleop.get_action()
+
+        # Convert normalized gripper [0=open, 1=closed] → radians [0, 1.57]
+        for k in list(raw_action.keys()):
+            if "gripper" in k:
+                raw_action[k] = (1.0 - raw_action[k]) * 1.57
+
+        teleop_action = teleop_action_processor((raw_action, obs))
+
+        filtered_action = {
+            k: v for k, v in teleop_action.items() if k in robot_action_keys
+        }
+        if len(filtered_action) != len(teleop_action) and not warned_unmapped_keys:
+            dropped = sorted(set(teleop_action) - robot_action_keys)
+            logger.warning(
+                f"BiTRLC action keys not present in BiARX5 action schema, dropping: {dropped}"
+            )
+            warned_unmapped_keys = True
+
+        if not filtered_action:
+            raise ValueError(
+                "No overlapping action keys between BiTRLC output and BiARX5 action schema. "
+                "Ensure robot.control_mode=joint_control (keys: left/right_joint_i.pos, left/right_gripper.pos)."
+            )
+
+        robot_action_to_send = robot_action_processor((filtered_action, obs))
+
+        if not dryrun:
+            _ = robot.send_action(robot_action_to_send)
+
+        dt_s = time.perf_counter() - loop_start
+        busy_wait(1 / fps - dt_s)
+        loop_s = time.perf_counter() - loop_start
+
+        if display_data:
+            obs_transition = robot_observation_processor(obs)
+            log_rerun_data(observation=obs_transition, action=teleop_action)
+
+            ordered_keys = [
+                k for k in robot.action_features if k in robot_action_to_send
+            ]
+            ordered_keys.extend(
+                k for k in robot_action_to_send if k not in ordered_keys
+            )
+
+            panel_lines = []
+            panel_lines.append("-" * (display_len + 38))
+            panel_lines.append(
+                f"{'NAME':<{display_len}} | {'CMD':>8} | {'OBS':>8} | {'ERR':>8}"
+            )
+            for motor in ordered_keys:
+                cmd = float(robot_action_to_send[motor])
+                obs_val = obs.get(motor, None)
+                if obs_val is None or isinstance(obs_val, np.ndarray):
+                    panel_lines.append(
+                        f"{motor:<{display_len}} | {cmd:>8.4f} | {'-':>8} | {'-':>8}"
+                    )
+                    continue
+                obs_num = float(obs_val)
+                err = cmd - obs_num
+                panel_lines.append(
+                    f"{motor:<{display_len}} | {cmd:>8.4f} | {obs_num:>8.4f} | {err:>+8.4f}"
+                )
+            panel_lines.append(
+                f"{'timing':<{display_len}} | {'loop':>8} | {loop_s * 1e3:>6.2f}ms | {obs_dt_ms:>6.2f}ms"
+            )
+            print("\n".join(panel_lines), flush=True)
+            move_cursor_up(len(panel_lines))
+        elif debug_timing:
+            dryrun_tag = " | DRYRUN" if dryrun else ""
+            print(
+                f"\r\033[KBiARX5+BiTRLC obs: {obs_dt_ms:5.1f}ms | loop: {loop_s * 1e3:5.1f}ms ({1 / loop_s:4.0f}Hz){dryrun_tag}",
                 end="",
                 flush=True,
             )
@@ -2060,6 +2199,34 @@ def teleoperate(cfg: TeleoperateConfig):
             ) = make_default_processors()
             try:
                 arx5_trlc_leader_teleop_loop(
+                    teleop=teleop,
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    teleop_action_processor=teleop_action_processor,
+                    robot_action_processor=robot_action_processor,
+                    robot_observation_processor=robot_observation_processor,
+                    debug_timing=cfg.debug_timing,
+                    dryrun=cfg.dryrun,
+                )
+            except KeyboardInterrupt:
+                pass
+
+        # --- bi_arx5 + bi_trlc ---
+        elif cfg.robot.type == "bi_arx5" and cfg.teleop.type == "bi_trlc":
+            logger.info("Detected BiARX5 + BiTRLC Leader")
+            robot = make_robot_from_config(cfg.robot)
+            robot.connect()
+            teleop = make_teleoperator_from_config(cfg.teleop)
+            teleop.connect()
+            (
+                teleop_action_processor,
+                robot_action_processor,
+                robot_observation_processor,
+            ) = make_default_processors()
+            try:
+                bi_arx5_bi_trlc_teleop_loop(
                     teleop=teleop,
                     robot=robot,
                     fps=cfg.fps,
