@@ -15,8 +15,8 @@ Usage:
 
     # Use upload_large_folder for large datasets (recommended)
     python -m lerobot.scripts.push_dataset_to_hub \
-        --repo-id Xense/assemble_box_with_phone_stand \
-        --dataset-path ~/.cache/huggingface/lerobot/Xense/assemble_box_with_phone_stand \
+        --repo-id Xense/assemble_box_with_phone_stand0410 \
+        --dataset-path ~/.cache/huggingface/lerobot/Xense/assemble_box_with_phone_stand0410 \
         --upload-large-folder
 
     # Push as private dataset
@@ -43,17 +43,11 @@ Examples:
 """
 
 import argparse
-import contextlib
-import json
 import logging
 import sys
 from pathlib import Path
 
-from huggingface_hub import HfApi
-from huggingface_hub.errors import RevisionNotFoundError
-
-from lerobot.datasets.lerobot_dataset import CODEBASE_VERSION
-from lerobot.datasets.utils import create_lerobot_dataset_card
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
 
 def setup_logging():
@@ -63,17 +57,6 @@ def setup_logging():
         format="%(levelname)s %(asctime)s %(filename)s:%(lineno)d %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-
-
-def load_dataset_info(dataset_path: Path) -> dict:
-    """Load dataset metadata from meta/info.json."""
-    info_path = dataset_path / "meta" / "info.json"
-    if not info_path.exists():
-        raise FileNotFoundError(f"Dataset info not found at {info_path}")
-    
-    with open(info_path) as f:
-        return json.load(f)
-
 
 def push_dataset_to_hub(
     dataset_path: Path,
@@ -90,7 +73,7 @@ def push_dataset_to_hub(
 ) -> None:
     """
     Push a local dataset to the Hugging Face Hub.
-    
+
     Args:
         dataset_path: Path to the local dataset directory
         repo_id: Hub repository ID (e.g., "Vertax/xense_flare_pick_and_place")
@@ -105,96 +88,46 @@ def push_dataset_to_hub(
         **card_kwargs: Additional arguments for the dataset card
     """
     dataset_path = Path(dataset_path).expanduser().resolve()
-    
+
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset path does not exist: {dataset_path}")
-    
-    # Load dataset info
-    logging.info(f"Loading dataset info from {dataset_path}")
-    dataset_info = load_dataset_info(dataset_path)
-    
+
     logging.info(f"Pushing dataset to: {repo_id}")
     logging.info(f"Dataset path: {dataset_path}")
     logging.info(f"Private: {private}")
     logging.info(f"Push videos: {push_videos}")
     logging.info(f"Upload large folder: {upload_large_folder}")
-    
-    # Setup ignore patterns
-    ignore_patterns = ["images/"]
     if not push_videos:
-        ignore_patterns.append("videos/")
         logging.info("Skipping video files")
-    
-    hub_api = HfApi()
-    
-    # Create repo if it doesn't exist
-    logging.info(f"Creating/checking repository: {repo_id}")
-    try:
-        hub_api.create_repo(
-            repo_id=repo_id,
-            private=private,
-            repo_type="dataset",
-            exist_ok=True,
-        )
-    except Exception as e:
-        logging.error(f"Failed to create repository: {e}")
-        logging.info("Make sure you are logged in with: huggingface-cli login")
-        raise
-    
-    # Create branch if specified
-    if branch:
-        logging.info(f"Creating branch: {branch}")
-        hub_api.create_branch(
-            repo_id=repo_id,
-            branch=branch,
-            repo_type="dataset",
-            exist_ok=True,
-        )
-    
-    # Upload files
-    upload_kwargs = {
-        "repo_id": repo_id,
-        "folder_path": str(dataset_path),
-        "repo_type": "dataset",
-        "revision": branch,
-        "allow_patterns": allow_patterns,
-        "ignore_patterns": ignore_patterns,
-    }
-    
+
+    logging.info("Loading local LeRobot dataset...")
+    dataset = LeRobotDataset(repo_id=repo_id, root=dataset_path)
+
     logging.info("Starting upload...")
     try:
-        if upload_large_folder:
-            logging.info("Using upload_large_folder API (recommended for large datasets)")
-            hub_api.upload_large_folder(**upload_kwargs)
-        else:
-            hub_api.upload_folder(**upload_kwargs)
+        dataset.push_to_hub(
+            branch=branch,
+            tags=tags,
+            license=license,
+            tag_version=tag_version,
+            push_videos=push_videos,
+            private=private,
+            allow_patterns=allow_patterns,
+            upload_large_folder=upload_large_folder,
+            **card_kwargs,
+        )
     except Exception as e:
         logging.error(f"Upload failed: {e}")
         logging.info("Tips:")
         logging.info("  - Try using --upload-large-folder for large datasets")
         logging.info("  - Check your network connection")
         logging.info("  - Make sure you have write access to the repository")
+        logging.info("  - Make sure you are logged in with: huggingface-cli login")
         raise
-    
-    logging.info("Upload complete, creating dataset card...")
-    
-    # Create and push dataset card
-    card = create_lerobot_dataset_card(
-        tags=tags, 
-        dataset_info=dataset_info, 
-        license=license, 
-        **card_kwargs
+
+    logging.info(
+        f"✅ Dataset successfully pushed to: https://huggingface.co/datasets/{repo_id}"
     )
-    card.push_to_hub(repo_id=repo_id, repo_type="dataset", revision=branch)
-    
-    # Tag version
-    if tag_version:
-        logging.info(f"Tagging with version: {CODEBASE_VERSION}")
-        with contextlib.suppress(RevisionNotFoundError):
-            hub_api.delete_tag(repo_id, tag=CODEBASE_VERSION, repo_type="dataset")
-        hub_api.create_tag(repo_id, tag=CODEBASE_VERSION, revision=branch, repo_type="dataset")
-    
-    logging.info(f"✅ Dataset successfully pushed to: https://huggingface.co/datasets/{repo_id}")
 
 
 def main():
@@ -203,7 +136,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    
+
     parser.add_argument(
         "--dataset-path",
         type=str,
@@ -255,11 +188,11 @@ def main():
         action="store_true",
         help="Do not tag with codebase version",
     )
-    
+
     args = parser.parse_args()
-    
+
     setup_logging()
-    
+
     try:
         push_dataset_to_hub(
             dataset_path=args.dataset_path,
@@ -282,4 +215,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
