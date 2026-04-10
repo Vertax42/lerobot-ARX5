@@ -84,7 +84,7 @@ class BiARX5Config(RobotConfig):
     )
 
     start_position: list[float] = field(
-        default_factory=lambda: [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.0]
+        default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     )
     # Camera configuration
     cameras: dict[str, CameraConfig] = field(default_factory=lambda: {})
