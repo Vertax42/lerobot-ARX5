@@ -95,6 +95,8 @@ class ARX5FollowerConfig(RobotConfig):
         # modified cartesian start position is [0.0, 0.967, 1.290, -0.970, 0.0, 0.0, 0.0]
         if self.control_mode == ARX5ControlMode.CARTESIAN_CONTROL:
             self.start_position = [0.0, 0.967, 1.290, -0.970, 0.0, 0.0, 0.0]
+        elif self.control_mode == ARX5ControlMode.TEACH_MODE:
+            self.start_position = [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.0]
         else:
             self.start_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.57]
         # Default camera configuration if not provided
