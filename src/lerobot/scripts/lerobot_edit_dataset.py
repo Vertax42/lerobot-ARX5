@@ -55,9 +55,9 @@ Split into more than two splits:
 
 Merge multiple datasets:
     python -m lerobot.scripts.lerobot_edit_dataset \
-        --repo_id lerobot/pusht_merged \
+        --repo_id Xense/assemble_box_with_phone_stand0410_merged \
         --operation.type merge \
-        --operation.repo_ids "['lerobot/pusht_train', 'lerobot/pusht_val']"
+        --operation.repo_ids "['Xense/assemble_box_with_phone_stand', 'Xense/assemble_box_with_phone_stand0408', 'Xense/assemble_box_with_phone_stand0409', 'Xense/assemble_box_with_phone_stand0410']"
 
 Remove camera feature:
     python -m lerobot.scripts.lerobot_edit_dataset \
@@ -120,7 +120,9 @@ class EditDatasetConfig:
     push_to_hub: bool = False
 
 
-def get_output_path(repo_id: str, new_repo_id: str | None, root: Path | None) -> tuple[str, Path]:
+def get_output_path(
+    repo_id: str, new_repo_id: str | None, root: Path | None
+) -> tuple[str, Path]:
     if new_repo_id:
         output_repo_id = new_repo_id
         output_dir = root / new_repo_id if root else HF_LEROBOT_HOME / new_repo_id
@@ -144,7 +146,9 @@ def handle_delete_episodes(cfg: EditDatasetConfig) -> None:
         raise ValueError("Operation config must be DeleteEpisodesConfig")
 
     if not cfg.operation.episode_indices:
-        raise ValueError("episode_indices must be specified for delete_episodes operation")
+        raise ValueError(
+            "episode_indices must be specified for delete_episodes operation"
+        )
 
     dataset = LeRobotDataset(cfg.repo_id, root=cfg.root)
     output_repo_id, output_dir = get_output_path(
@@ -154,7 +158,9 @@ def handle_delete_episodes(cfg: EditDatasetConfig) -> None:
     if cfg.new_repo_id is None:
         dataset.root = Path(str(dataset.root) + "_old")
 
-    logging.info(f"Deleting episodes {cfg.operation.episode_indices} from {cfg.repo_id}")
+    logging.info(
+        f"Deleting episodes {cfg.operation.episode_indices} from {cfg.repo_id}"
+    )
     new_dataset = delete_episodes(
         dataset,
         episode_indices=cfg.operation.episode_indices,
@@ -163,7 +169,9 @@ def handle_delete_episodes(cfg: EditDatasetConfig) -> None:
     )
 
     logging.info(f"Dataset saved to {output_dir}")
-    logging.info(f"Episodes: {new_dataset.meta.total_episodes}, Frames: {new_dataset.meta.total_frames}")
+    logging.info(
+        f"Episodes: {new_dataset.meta.total_episodes}, Frames: {new_dataset.meta.total_frames}"
+    )
 
     if cfg.push_to_hub:
         logging.info(f"Pushing to hub as {output_repo_id}")
@@ -203,12 +211,18 @@ def handle_merge(cfg: EditDatasetConfig) -> None:
         raise ValueError("repo_ids must be specified for merge operation")
 
     if not cfg.repo_id:
-        raise ValueError("repo_id must be specified as the output repository for merged dataset")
+        raise ValueError(
+            "repo_id must be specified as the output repository for merged dataset"
+        )
 
     logging.info(f"Loading {len(cfg.operation.repo_ids)} datasets to merge")
-    datasets = [LeRobotDataset(repo_id, root=cfg.root) for repo_id in cfg.operation.repo_ids]
+    datasets = [
+        LeRobotDataset(repo_id, root=cfg.root) for repo_id in cfg.operation.repo_ids
+    ]
 
-    output_dir = Path(cfg.root) / cfg.repo_id if cfg.root else HF_LEROBOT_HOME / cfg.repo_id
+    output_dir = (
+        Path(cfg.root) / cfg.repo_id if cfg.root else HF_LEROBOT_HOME / cfg.repo_id
+    )
 
     logging.info(f"Merging datasets into {cfg.repo_id}")
     merged_dataset = merge_datasets(
