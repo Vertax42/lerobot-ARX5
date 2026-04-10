@@ -795,15 +795,16 @@ class LeRobotDataset(torch.utils.data.Dataset):
             "allow_patterns": allow_patterns,
             "ignore_patterns": ignore_patterns,
         }
-        if upload_large_folder:
-            hub_api.upload_large_folder(**upload_kwargs)
-        else:
-            hub_api.upload_folder(**upload_kwargs)
 
         card = create_lerobot_dataset_card(
             tags=tags, dataset_info=self.meta.info, license=license, **card_kwargs
         )
         card.push_to_hub(repo_id=self.repo_id, repo_type="dataset", revision=branch)
+
+        if upload_large_folder:
+            hub_api.upload_large_folder(**upload_kwargs)
+        else:
+            hub_api.upload_folder(**upload_kwargs)
 
         if tag_version:
             with contextlib.suppress(RevisionNotFoundError):
