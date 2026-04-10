@@ -91,6 +91,24 @@ lerobot-teleoperate \
     --display_data=true
 ```
 
+## Bi Xense Flare Grippers Robot lerobot-record command
+
+```bash
+lerobot-record \
+    --robot.type=bi_xense_flare_grippers \
+    --dataset.repo_id=Vertax/bi_xense_flare_grippers_test \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="bi_xense_flare_grippers_test_data" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=120 \
+    --dataset.reset_time_s=20 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
+    --resume=false \
+    --dataset.push_to_hub=false \
+    --display_data=true
+```
+
 ## Bimanual Flexiv Rizon4 RT + Bi-Pico4 teleoperate command
 
 ```bash
@@ -135,98 +153,6 @@ lerobot-teleoperate \
     --display_data=true \
     --debug_timing=true \
     --dryrun=false
-```
-
-## Xense-Flare Robot lerobot-record command
-
-```python
-lerobot-record \
-    --robot.type=xense_flare \
-    --robot.mac_addr=6ebbc5f53240 \
-    --dataset.repo_id=Vertax/xense_flare_pick_and_place_cube_20260113 \
-    --dataset.num_episodes=50 \
-    --dataset.single_task="pick up cubes in rgb order from the table and place them in the blue box" \
-    --dataset.fps=20 \
-    --dataset.streaming_encoding=true \
-    --dataset.vcodec=auto \
-    --display_data=false \
-    --resume=false \
-    --dataset.push_to_hub=true
-```
-
-```python
-lerobot-record \
-    --robot.type=xense_flare \
-    --robot.mac_addr=6ebbc5f53240 \
-    --dataset.repo_id=Vertax/xense_flare_open_lock_20260108 \
-    --dataset.num_episodes=20 \
-    --dataset.single_task="open the lock with the key" \
-    --dataset.fps=20 \
-    --dataset.streaming_encoding=true \
-    --dataset.vcodec=auto \
-    --display_data=false \
-    --resume=false \
-    --dataset.push_to_hub=true
-```
-
-```python
-lerobot-record \
-    --robot.type=xense_flare \
-    --robot.mac_addr=6ebbc5f53240 \
-    --dataset.repo_id=Vertax/xense_flare_wipe_vase_20260113 \
-    --dataset.num_episodes=20 \
-    --dataset.single_task="wipe the vase" \
-    --dataset.fps=20 \
-    --dataset.streaming_encoding=true \
-    --dataset.vcodec=auto \
-    --display_data=false \
-    --resume=false \
-    --dataset.push_to_hub=true
-```
-
-```python
-lerobot-record \
-    --robot.type=xense_flare \
-    --robot.mac_addr=6ebbc5f53240 \
-    --dataset.repo_id=Vertax/xense_flare_pick_and_place_cubes_20260104 \
-    --dataset.num_episodes=50 \
-    --dataset.single_task="pick up cubes in rgb order from the table and place them in the blue box" \
-    --dataset.fps=20 \
-    --dataset.streaming_encoding=true \
-    --dataset.vcodec=auto \
-    --display_data=false \
-    --resume=false \
-    --dataset.push_to_hub=true
-```
-
-```python
-lerobot-record \
-    --robot.type=xense_flare \
-    --robot.mac_addr=6ebbc5f53240 \
-    --dataset.repo_id=Vertax/xense_flare_cucumber_peeling \
-    --dataset.num_episodes=3 \
-    --dataset.single_task="peel a cucumber with a vegetable peeler" \
-    --dataset.fps=20 \
-    --dataset.streaming_encoding=true \
-    --dataset.vcodec=auto \
-    --display_data=false \
-    --resume=false \
-    --dataset.push_to_hub=true
-```
-
-```python
-lerobot-record \
-    --robot.type=xense_flare \
-    --robot.mac_addr=6ebbc5f53240 \
-    --dataset.repo_id=Vertax/xense_flare_replay_test \
-    --dataset.num_episodes=2 \
-    --dataset.single_task="xense flare traj replay test" \
-    --dataset.fps=20 \
-    --dataset.streaming_encoding=true \
-    --dataset.vcodec=auto \
-    --display_data=false \
-    --resume=false \
-    --dataset.push_to_hub=true
 ```
 
 ## BiARX5 Robot lerobot-record command
@@ -394,15 +320,6 @@ lerobot-record \
     --dataset.num_episodes=5 \
     --dataset.streaming_encoding=true \
     --dataset.vcodec=auto
-```
-
-## BiARX5 Robot lerobot-replay command
-
-```python
-lerobot-replay \
-    --robot.type=bi_arx5 \
-    --dataset.repo_id=Vertax/lerobot040_test_bi_arx5 \
-    --dataset.episode=0
 ```
 
 ## BiARX5 Robot lerobot-annotate-reward command
