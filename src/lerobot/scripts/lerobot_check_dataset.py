@@ -27,7 +27,7 @@ Verifies:
 Examples:
 
 ```shell
-python lerobot_check_dataset.py --repo-id Xense/assemble_box_with_phone_stand  --root ~/.cache/huggingface/lerobot
+python src/lerobot/scripts/lerobot_check_dataset.py --repo-id Xense/assemble_box_with_phone_stand  --root ~/.cache/huggingface/lerobot
 python lerobot-check-dataset.py --repo-id Xense/assemble_box_with_phone_stand
 lerobot-check-dataset --repo-id Xense/assemble_box_with_phone_stand --root ~/.cache/huggingface/lerobot
 lerobot-check-dataset --repo-id Xense/assemble_box_with_phone_stand --episode-index 0 2 4
@@ -42,6 +42,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import pyarrow as pa
 import pyarrow.parquet as pq
 
 from lerobot.utils.constants import HF_LEROBOT_HOME
@@ -59,7 +60,14 @@ WARN = "[WARN]"
 # ---------------------------------------------------------------------------
 
 
-def _check(cond: bool, msg_ok: str, msg_fail: str, errors: list, warnings: list, warn: bool = False) -> bool:
+def _check(
+    cond: bool,
+    msg_ok: str,
+    msg_fail: str,
+    errors: list,
+    warnings: list,
+    warn: bool = False,
+) -> bool:
     if cond:
         logger.info("  %s %s", PASS, msg_ok)
         return True
@@ -102,7 +110,9 @@ def check_meta(dataset_root: Path, errors: list, warnings: list) -> dict:
 
     info = {}
     info_path = meta_dir / "info.json"
-    if not _check(info_path.exists(), "info.json found", "info.json missing", errors, warnings):
+    if not _check(
+        info_path.exists(), "info.json found", "info.json missing", errors, warnings
+    ):
         return info
     try:
         info = json.loads(info_path.read_text())
@@ -124,13 +134,21 @@ def check_meta(dataset_root: Path, errors: list, warnings: list) -> dict:
     return info
 
 
-def check_episodes_meta(dataset_root: Path, info: dict, errors: list, warnings: list) -> pd.DataFrame:
+def check_episodes_meta(
+    dataset_root: Path, info: dict, errors: list, warnings: list
+) -> pd.DataFrame:
     """Check episodes parquet files under meta/episodes/ and return merged DataFrame."""
     logger.info("\n[meta/episodes]")
     ep_dir = dataset_root / "meta" / "episodes"
 
     ep_files = sorted(ep_dir.rglob("*.parquet")) if ep_dir.exists() else []
-    _check(len(ep_files) > 0, f"{len(ep_files)} episode parquet file(s) found", "no episode parquet files found", errors, warnings)
+    _check(
+        len(ep_files) > 0,
+        f"{len(ep_files)} episode parquet file(s) found",
+        "no episode parquet files found",
+        errors,
+        warnings,
+    )
 
     frames: list[pd.DataFrame] = []
     for f in ep_files:
@@ -155,21 +173,78 @@ def check_episodes_meta(dataset_root: Path, info: dict, errors: list, warnings: 
     return eps
 
 
-def check_data(dataset_root: Path, info: dict, episode_indices: list[int] | None, errors: list, warnings: list) -> pd.DataFrame:
+def check_data(
+    dataset_root: Path,
+    info: dict,
+    episode_indices: list[int] | None,
+    errors: list,
+    warnings: list,
+) -> pd.DataFrame:
     """Check data parquet files and return merged DataFrame."""
     logger.info("\n[data]")
     data_dir = dataset_root / "data"
 
     data_files = sorted(data_dir.rglob("*.parquet")) if data_dir.exists() else []
-    _check(len(data_files) > 0, f"{len(data_files)} data parquet file(s) found", "no data parquet files found", errors, warnings)
+    _check(
+        len(data_files) > 0,
+        f"{len(data_files)} data parquet file(s) found",
+        "no data parquet files found",
+        errors,
+        warnings,
+    )
 
+    # Identify array features that must be stored as fixed_size_list in parquet.
+    # Any feature with dtype=float32/float64 and a 1-D shape of length > 1 falls into this category.
+    array_feature_cols = {
+        k
+        for k, v in info.get("features", {}).items()
+        if v.get("dtype") in ("float32", "float64")
+        and isinstance(v.get("shape"), list)
+        and len(v["shape"]) == 1
+        and v["shape"][0] > 1
+    }
+
+    schema_checked = (
+        False  # report once for the first file; subsequent files would be identical
+    )
     frames: list[pd.DataFrame] = []
     for f in data_files:
         try:
-            frames.append(pq.read_table(f).to_pandas())
+            table = pq.read_table(f)
+            frames.append(table.to_pandas())
         except Exception as e:
             errors.append(f"Cannot read {f}: {e}")
             logger.warning("  %s Cannot read %s: %s", FAIL, f, e)
+            continue
+
+        if not schema_checked:
+            schema_checked = True
+            file_schema = table.schema
+            meta = file_schema.metadata or {}
+            has_pandas_meta = b"pandas" in meta
+            _check(
+                not has_pandas_meta,
+                "parquet schema has no pandas metadata (HF viewer compatible)",
+                "parquet schema contains pandas metadata — action/observation.state will appear "
+                "as 'object' type in the HF viewer and line charts will not render "
+                "(fix: re-merge with the current aggregate.py)",
+                errors,
+                warnings,
+            )
+            for col in sorted(array_feature_cols):
+                if col not in file_schema.names:
+                    continue
+                col_type = file_schema.field(col).type
+                is_fixed = pa.types.is_fixed_size_list(col_type)
+                _check(
+                    is_fixed,
+                    f"{col}: parquet type is fixed_size_list (HF viewer compatible)",
+                    f"{col}: parquet type is '{col_type}' instead of fixed_size_list — "
+                    f"HF viewer and training will not display this column correctly "
+                    f"(merge was done with an older aggregate.py)",
+                    errors,
+                    warnings,
+                )
 
     if not frames:
         return pd.DataFrame()
@@ -188,7 +263,13 @@ def check_data(dataset_root: Path, info: dict, episode_indices: list[int] | None
 
     # Global index continuity
     idx_gaps = (data["index"].diff().dropna() != 1).sum()
-    _check(idx_gaps == 0, "global index is continuous", f"global index has {idx_gaps} gap(s)", errors, warnings)
+    _check(
+        idx_gaps == 0,
+        "global index is continuous",
+        f"global index has {idx_gaps} gap(s)",
+        errors,
+        warnings,
+    )
 
     # Per-episode checks
     filter_eps = set(episode_indices) if episode_indices is not None else None
@@ -210,29 +291,99 @@ def check_data(dataset_root: Path, info: dict, episode_indices: list[int] | None
     for col in ("action", "observation.state"):
         if col not in data.columns:
             continue
-        nan_count = data[col].apply(
-            lambda x: any(v != v for v in x) if hasattr(x, "__iter__") else (x != x)
-        ).sum()
-        _check(nan_count == 0, f"{col}: no NaN values", f"{col}: {nan_count} row(s) with NaN", errors, warnings)
+        nan_count = (
+            data[col]
+            .apply(
+                lambda x: any(v != v for v in x) if hasattr(x, "__iter__") else (x != x)
+            )
+            .sum()
+        )
+        _check(
+            nan_count == 0,
+            f"{col}: no NaN values",
+            f"{col}: {nan_count} row(s) with NaN",
+            errors,
+            warnings,
+        )
 
     return data
 
 
-def check_videos(dataset_root: Path, info: dict, data: pd.DataFrame, episode_indices: list[int] | None, errors: list, warnings: list) -> None:
+def check_data_file_refs(
+    dataset_root: Path,
+    eps_df: pd.DataFrame,
+    errors: list,
+    warnings: list,
+) -> None:
+    """Check that every data (chunk, file) referenced in episodes parquet exists on disk.
+
+    This catches the merge bug where source datasets with many small data files are
+    consolidated into fewer files but the episodes parquet still points to the old
+    source file indices (e.g. file-003 through file-007 that no longer exist).
+    """
+    logger.info("\n[data file references]")
+
+    if eps_df.empty:
+        logger.info("  %s Skipping — no episodes metadata", WARN)
+        return
+
+    chunk_col = "data/chunk_index"
+    file_col = "data/file_index"
+
+    if chunk_col not in eps_df.columns or file_col not in eps_df.columns:
+        logger.info(
+            "  %s %s / %s columns missing from episodes parquet — skipping",
+            WARN, chunk_col, file_col,
+        )
+        return
+
+    unique_pairs = sorted({
+        (int(c), int(f))
+        for c, f in zip(eps_df[chunk_col], eps_df[file_col])
+    })
+
+    for chunk_idx, file_idx in unique_pairs:
+        rel_path = f"data/chunk-{chunk_idx:03d}/file-{file_idx:03d}.parquet"
+        _check(
+            (dataset_root / rel_path).exists(),
+            f"{rel_path} exists",
+            f"{rel_path} referenced in episodes parquet but MISSING on disk "
+            f"(merge may have remapped data files without updating episodes — "
+            f"re-merge with the current aggregate.py)",
+            errors,
+            warnings,
+        )
+
+
+def check_videos(
+    dataset_root: Path,
+    info: dict,
+    data: pd.DataFrame,
+    episode_indices: list[int] | None,
+    errors: list,
+    warnings: list,
+) -> None:
     """Check video files: existence, frame count, fps, resolution."""
     logger.info("\n[videos]")
-    video_features = {k: v for k, v in info.get("features", {}).items() if v.get("dtype") == "video"}
+    video_features = {
+        k: v for k, v in info.get("features", {}).items() if v.get("dtype") == "video"
+    }
     if not video_features:
         logger.info("  %s No video features defined in info.json", WARN)
         return
 
-    video_path_template = info.get("video_path", "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4")
+    video_path_template = info.get(
+        "video_path",
+        "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4",
+    )
 
     # Collect expected (video_key, chunk_index, file_index) from episodes metadata
     # We derive from the data parquet directly to stay self-contained
     # Group data by (chunk, file) per video key using episodes meta if available
     ep_meta_dir = dataset_root / "meta" / "episodes"
-    ep_meta_files = sorted(ep_meta_dir.rglob("*.parquet")) if ep_meta_dir.exists() else []
+    ep_meta_files = (
+        sorted(ep_meta_dir.rglob("*.parquet")) if ep_meta_dir.exists() else []
+    )
 
     if ep_meta_files:
         ep_frames: list[pd.DataFrame] = []
@@ -257,7 +408,12 @@ def check_videos(dataset_root: Path, info: dict, data: pd.DataFrame, episode_ind
                 logger.warning("  %s Video directory missing: %s", FAIL, video_dir)
                 continue
             mp4_files = sorted(video_dir.rglob("*.mp4"))
-            logger.info("  %s %s: %d video file(s) found (frame count not verified — no episode metadata)", PASS if mp4_files else FAIL, video_key, len(mp4_files))
+            logger.info(
+                "  %s %s: %d video file(s) found (frame count not verified — no episode metadata)",
+                PASS if mp4_files else FAIL,
+                video_key,
+                len(mp4_files),
+            )
             continue
 
         # Determine which video files to check (based on filtered episodes)
@@ -375,7 +531,8 @@ def main() -> None:
         help="Episode indices to check (positional, e.g. 0 1 2). Checks all if not specified.",
     )
     parser.add_argument(
-        "--episode-index", "-e",
+        "--episode-index",
+        "-e",
         type=int,
         nargs="+",
         default=None,
@@ -406,6 +563,7 @@ def main() -> None:
 
     info = check_meta(dataset_root, errors, warnings)
     eps_df = check_episodes_meta(dataset_root, info, errors, warnings)
+    check_data_file_refs(dataset_root, eps_df, errors, warnings)
     data_df = check_data(dataset_root, info, episode_indices, errors, warnings)
     if not data_df.empty:
         check_videos(dataset_root, info, data_df, episode_indices, errors, warnings)
