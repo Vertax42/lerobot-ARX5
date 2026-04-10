@@ -44,7 +44,8 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     Attributes:
         left_robot_sn: Serial number of the left arm robot
         right_robot_sn: Serial number of the right arm robot
-        bi_mount_type: Preset layout for robot/gripper/camera SNs and home/start poses ("forward" or "side")
+        bi_mount_type: Preset layout for robot/gripper/camera SNs and home/start poses
+            ("forward", "side", or "diagonal")
         use_force: Enable force control axes (both arms)
         inner_control_hz: How often each 1 kHz RT thread consumes a new Python command (1-1000 Hz)
         interpolate_cmds: Enable linear interpolation between consumed commands
@@ -213,6 +214,23 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 "right_start": [12.67, -85.31, 85.44, 102.25, 5.88, 25.36, 0.0],
                 "left_home": [-18.95, 80.45, -80.35, -89.37, -12.83, -17.05, -9.80],
                 "right_home": [12.67, -85.31, 85.44, 102.25, 5.88, 25.36, 0.0],
+                "head_camera_sn": "135522074323",
+                "left_wrist_camera_sn": "XC000003",
+                "right_wrist_camera_sn": "XC000004",
+                "left_tactile_camera_sn_0": "OG000867",
+                "left_tactile_camera_sn_1": "OG000865",
+                "right_tactile_camera_sn_0": "OG000142",
+                "right_tactile_camera_sn_1": "OG000866",
+            },
+            "diagonal": {
+                "left_sn": "Rizon4-063423",
+                "right_sn": "Rizon4-062855",
+                "left_gripper_sn": "000003",
+                "right_gripper_sn": "000004",
+                "left_start": [16.18, -26.29, -3.84, 114.00, 10.66, 84.24, 27.56],
+                "right_start": [31.91, -26.72, -27.42, 122.58, -13.93, 89.42, -1.31],
+                "left_home": [16.18, -26.29, -3.84, 114.00, 10.66, 84.24, 27.56],
+                "right_home": [31.91, -26.72, -27.42, 122.58, -13.93, 89.42, -1.31],
                 "head_camera_sn": "135522074323",
                 "left_wrist_camera_sn": "XC000003",
                 "right_wrist_camera_sn": "XC000004",
