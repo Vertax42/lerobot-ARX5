@@ -354,8 +354,8 @@ def aggregate_videos(src_meta, dst_meta, videos_idx, video_files_size_in_mb, chu
                 videos_idx[key]["src_to_dst"][(src_chunk_idx, src_file_idx)] = dst_key
                 dst_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy(str(src_path), str(dst_path))
-                # Track duration of this destination file
-                dst_file_durations[dst_key] = src_duration
+                # Read actual duration from the copied file (avoids relying on src metadata).
+                dst_file_durations[dst_key] = get_video_duration_in_s(dst_path)
                 videos_idx[key]["episode_duration"] += src_duration
                 continue
 
@@ -376,20 +376,25 @@ def aggregate_videos(src_meta, dst_meta, videos_idx, video_files_size_in_mb, chu
                 )
                 dst_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy(str(src_path), str(dst_path))
-                # Track duration of this new destination file
-                dst_file_durations[dst_key] = src_duration
+                # Read actual duration from the copied file.
+                dst_file_durations[dst_key] = get_video_duration_in_s(dst_path)
             else:
-                # Append to existing destination file
-                # Offset is the current duration of this destination file
-                current_dst_duration = dst_file_durations.get(dst_key, 0)
+                # Append to existing destination file.
+                # Read the actual stream duration from the MP4 rather than using a running
+                # sum: ffmpeg's concat demuxer uses the stream.duration stored in the file
+                # as the PTS offset for the appended segment.  Summing get_video_duration_in_s()
+                # results accumulates floating-point rounding errors that can grow to >0.0002 s
+                # over many episodes, causing the training-time timestamp tolerance check to fail.
+                current_dst_duration = get_video_duration_in_s(dst_path)
                 videos_idx[key]["src_to_offset"][(src_chunk_idx, src_file_idx)] = current_dst_duration
                 videos_idx[key]["src_to_dst"][(src_chunk_idx, src_file_idx)] = dst_key
                 concatenate_video_files(
                     [dst_path, src_path],
                     dst_path,
                 )
-                # Update duration of this destination file
-                dst_file_durations[dst_key] = current_dst_duration + src_duration
+                # Refresh from the actual merged file so the next iteration uses the
+                # value that ffmpeg stored, not a floating-point sum.
+                dst_file_durations[dst_key] = get_video_duration_in_s(dst_path)
 
             videos_idx[key]["episode_duration"] += src_duration
 
