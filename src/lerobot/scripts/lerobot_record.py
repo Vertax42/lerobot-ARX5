@@ -570,6 +570,10 @@ def bi_arx5_record_loop(
                     logger.info(
                         "✅ smooth_go_start completed successfully in 2 seconds"
                     )
+                    robot.set_to_gravity_compensation_mode()
+                    logger.info(
+                        "Now in gravity compensation mode !"
+                    )
                 except Exception as e:
                     logger.error(f"Error during smooth_go_start: {e}")
 
