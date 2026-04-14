@@ -621,7 +621,6 @@ def arx5_teleop_loop(
     robot_observation_processor: Any,
     display_data: bool = False,
     duration: float | None = None,
-    debug_timing: bool = False,
 ):
     """
     Teleop loop for ARX5 robots (both single-arm and bimanual).
@@ -631,12 +630,6 @@ def arx5_teleop_loop(
     - Bimanual mode (bi_arx5): robot.left_arm, robot.right_arm
     """
     start = time.perf_counter()
-    timing_stats = {
-        "robot_obs_times": [],
-        "camera_obs_times": {},
-        "total_obs_times": [],
-        "loop_times": [],
-    }
 
     is_bimanual = hasattr(robot, "left_arm") and hasattr(robot, "right_arm")
     is_single_arm = hasattr(robot, "arm") and not is_bimanual
@@ -646,17 +639,8 @@ def arx5_teleop_loop(
             "Robot must have either 'arm' (single) or 'left_arm'/'right_arm' (bimanual)"
         )
 
-    camera_keys = [
-        key for key in robot.observation_features.keys() if not key.endswith(".pos")
-    ]
-    for cam_key in camera_keys:
-        timing_stats["camera_obs_times"][cam_key] = []
-
     while True:
         loop_start = time.perf_counter()
-
-        obs_start = time.perf_counter()
-        robot_state_start = time.perf_counter()
 
         if is_bimanual:
             left_joint_state = robot.left_arm.get_joint_state()
@@ -664,20 +648,9 @@ def arx5_teleop_loop(
         else:
             joint_state = robot.arm.get_joint_state()
 
-        robot_obs_time = time.perf_counter() - robot_state_start
-        timing_stats["robot_obs_times"].append(robot_obs_time * 1000)
-
-        camera_obs_start = time.perf_counter()
         camera_observations = {}
-        camera_times = {}
         for cam_key, cam in robot.cameras.items():
-            cam_start = time.perf_counter()
             camera_observations[cam_key] = cam.async_read()
-            cam_time_ms = (time.perf_counter() - cam_start) * 1000
-            camera_times[cam_key] = cam_time_ms
-            timing_stats["camera_obs_times"][cam_key].append(cam_time_ms)
-
-        total_camera_time_ms = (time.perf_counter() - camera_obs_start) * 1000
 
         raw_observation = {}
 
@@ -699,9 +672,6 @@ def arx5_teleop_loop(
 
         raw_observation.update(camera_observations)
 
-        total_obs_time = time.perf_counter() - obs_start
-        timing_stats["total_obs_times"].append(total_obs_time * 1000)
-
         raw_action = {
             key: value
             for key, value in raw_observation.items()
@@ -717,98 +687,9 @@ def arx5_teleop_loop(
             obs_transition = robot_observation_processor(raw_observation)
             log_rerun_data(observation=obs_transition, action=raw_action)
 
-            # if not debug_timing:
-            #     if is_bimanual:
-            #         left_motors = {
-            #             k: v for k, v in raw_action.items() if k.startswith("left_")
-            #         }
-            #         right_motors = {
-            #             k: v for k, v in raw_action.items() if k.startswith("right_")
-            #         }
-            #         col_width = 25
-            #         print("\n" + "-" * (col_width * 2 + 3))
-            #         print(f"{'LEFT ARM':<{col_width}} | {'RIGHT ARM':<{col_width}}")
-            #         print("-" * (col_width * 2 + 3))
-            #         max_motors = max(len(left_motors), len(right_motors))
-            #         left_items = list(left_motors.items())
-            #         right_items = list(right_motors.items())
-            #         for i in range(max_motors):
-            #             left_str = ""
-            #             right_str = ""
-            #             if i < len(left_items):
-            #                 motor_name = left_items[i][0].replace("left_", "")
-            #                 left_str = f"{motor_name}: {left_items[i][1]:>7.3f}"
-            #             if i < len(right_items):
-            #                 motor_name = right_items[i][0].replace("right_", "")
-            #                 right_str = f"{motor_name}: {right_items[i][1]:>7.3f}"
-            #             print(f"{left_str:<{col_width}} | {right_str:<{col_width}}")
-            #         move_cursor_up(max_motors + 4)
-            #     else:
-            # col_width = 20
-            # print("\n" + "-" * (col_width + 12))
-            # print(f"{'JOINT':<{col_width}} | {'VALUE':>7}")
-            # print("-" * (col_width + 12))
-            # motor_items = list(raw_action.items())
-            # for motor, value in motor_items:
-            #     print(f"{motor:<{col_width}} | {value:>7.3f}")
-            # move_cursor_up(len(motor_items) + 4)
-
         _teleop_loop_sleep(loop_start, fps, start, robot)
-        loop_s = time.perf_counter() - loop_start
-        timing_stats["loop_times"].append(loop_s * 1000)
-
-        if debug_timing:
-            print()
-            print("TELEOP TIMING DEBUG")
-            print("=" * 50)
-            print(f"Robot state:     {robot_obs_time * 1000:.1f}ms")
-            print(f"Total cameras:   {total_camera_time_ms:.1f}ms")
-            print()
-            num_cameras = len(camera_times)
-            for cam_key, cam_time_ms in camera_times.items():
-                speed = (
-                    "SLOW"
-                    if cam_time_ms > 10
-                    else ("MED " if cam_time_ms > 5 else "FAST")
-                )
-                print(f"  {speed} {cam_key:12}: {cam_time_ms:5.1f}ms")
-            print()
-            print(f"Total observation: {total_obs_time * 1000:.1f}ms")
-            print(f"Loop time:        {loop_s * 1000:.1f}ms")
-            print(f"Target period:    {1000 / fps:.1f}ms")
-            print(f"Loop efficiency:  {(1000 / fps) / (loop_s * 1000) * 100:.1f}%")
-            extra_warning_lines = 0
-            if total_camera_time_ms > 20:
-                print()
-                print(f"SLOW CAMERAS DETECTED! Total: {total_camera_time_ms:.1f}ms")
-                extra_warning_lines = 2
-            print("=" * 50)
-            total_lines = (
-                1 + 1 + 1 + 2 + 1 + num_cameras + 1 + 4 + extra_warning_lines + 1
-            )
-            move_cursor_up(total_lines)
-        else:
-            if total_camera_time_ms > 20:
-                print(f"SLOW CAMERAS: {total_camera_time_ms:.1f}ms")
-                for cam_key, cam_time_ms in camera_times.items():
-                    if cam_time_ms > 10:
-                        print(f"  SLOW {cam_key}: {cam_time_ms:.1f}ms")
 
         if duration is not None and time.perf_counter() - start >= duration:
-            if len(timing_stats["robot_obs_times"]) > 10:
-                print("\n=== FINAL TIMING REPORT ===")
-                all_robot = timing_stats["robot_obs_times"]
-                all_total = timing_stats["total_obs_times"]
-                all_loops = timing_stats["loop_times"]
-                print(f"Total samples: {len(all_robot)}")
-                print(f"Robot obs - avg: {sum(all_robot) / len(all_robot):.2f}ms")
-                print(f"Total obs - avg: {sum(all_total) / len(all_total):.2f}ms")
-                print(f"Loop time - avg: {sum(all_loops) / len(all_loops):.2f}ms")
-                for cam_key, cam_times in timing_stats["camera_obs_times"].items():
-                    if cam_times:
-                        print(
-                            f"{cam_key} - avg: {sum(cam_times) / len(cam_times):.2f}ms"
-                        )
             return
 
 
