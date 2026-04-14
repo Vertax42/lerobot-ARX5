@@ -73,7 +73,9 @@ class BiARX5(Robot):
         if self.config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL:
             # Let SDK use its default preview_time (0.1s for cartesian_controller)
             self.default_preview_time = None
-            self.logger.info("Cartesian control mode: using SDK default preview_time (0.1s)")
+            self.logger.info(
+                "Cartesian control mode: using SDK default preview_time (0.1s)"
+            )
         elif self.config.inference_mode:
             self.default_preview_time = self.config.preview_time
             self.logger.info(
@@ -81,7 +83,9 @@ class BiARX5(Robot):
             )
         else:
             self.default_preview_time = 0.0
-            self.logger.info(f"Joint control mode (teleop): using preview_time {self.default_preview_time}s")
+            self.logger.info(
+                f"Joint control mode (teleop): using preview_time {self.default_preview_time}s"
+            )
 
         # Pre-compute action keys for faster lookup (performance optimization)
         if config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL:
@@ -118,7 +122,7 @@ class BiARX5(Robot):
         if config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL:
             self.config.start_position = [0.0, 0.967, 1.290, -0.970, 0.0, 0.0, 0.0]
         else:
-            self.config.start_position = [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.0]
+            self.config.start_position = [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 1.57]
 
         # Define home position (all joints at 0, gripper closed)
         self._home_position = self.config.home_position
@@ -126,13 +130,27 @@ class BiARX5(Robot):
 
         # Robot configs
         self.robot_configs = {
-            "left_config": arx5.RobotConfigFactory.get_instance().get_config(config.left_arm_model),
-            "right_config": arx5.RobotConfigFactory.get_instance().get_config(config.right_arm_model),
+            "left_config": arx5.RobotConfigFactory.get_instance().get_config(
+                config.left_arm_model
+            ),
+            "right_config": arx5.RobotConfigFactory.get_instance().get_config(
+                config.right_arm_model
+            ),
         }
 
         # Create solver for FK/IK calculations (both arms use same model)
         current_dir = os.path.dirname(__file__)
-        urdf_path = os.path.join(current_dir, "..", "..", "..", "..", "third_party", "ARX5_SDK", "models", f"{config.left_arm_model}.urdf")
+        urdf_path = os.path.join(
+            current_dir,
+            "..",
+            "..",
+            "..",
+            "..",
+            "third_party",
+            "ARX5_SDK",
+            "models",
+            f"{config.left_arm_model}.urdf",
+        )
         self._solver = arx5.Arx5Solver(
             urdf_path,
             self.robot_configs["left_config"].joint_dof,
@@ -162,8 +180,12 @@ class BiARX5(Robot):
             self.logger.info(f"EEF start position (FK): {self._start_position_eef}")
 
         # Set gripper_open_readout for left and right arm
-        self.robot_configs["left_config"].gripper_open_readout = config.gripper_open_readout[0]
-        self.robot_configs["right_config"].gripper_open_readout = config.gripper_open_readout[1]
+        self.robot_configs["left_config"].gripper_open_readout = (
+            config.gripper_open_readout[0]
+        )
+        self.robot_configs["right_config"].gripper_open_readout = (
+            config.gripper_open_readout[1]
+        )
         self.logger.info(
             f"Set left gripper_open_readout to: {self.robot_configs['left_config'].gripper_open_readout}"
         )
@@ -188,15 +210,21 @@ class BiARX5(Robot):
                 controller_type, self.robot_configs["right_config"].joint_dof
             ),
         }
-        self.logger.info(f"Using {controller_type} for control mode: {config.control_mode.value}")
+        self.logger.info(
+            f"Using {controller_type} for control mode: {config.control_mode.value}"
+        )
 
         # Set controller_dt and default_preview_time
         self.controller_configs["left_config"].controller_dt = config.controller_dt
         self.controller_configs["right_config"].controller_dt = config.controller_dt
         # Only override default_preview_time if not CARTESIAN_CONTROL (preserve SDK default 0.1s)
         if self.default_preview_time is not None:
-            self.controller_configs["left_config"].default_preview_time = self.default_preview_time
-            self.controller_configs["right_config"].default_preview_time = self.default_preview_time
+            self.controller_configs["left_config"].default_preview_time = (
+                self.default_preview_time
+            )
+            self.controller_configs["right_config"].default_preview_time = (
+                self.default_preview_time
+            )
 
         # Background send/recv setting
         self.controller_configs["left_config"].background_send_recv = use_background
@@ -236,7 +264,8 @@ class BiARX5(Robot):
     @property
     def _cameras_ft(self) -> dict[str, tuple]:
         return {
-            cam: (self.config.cameras[cam].height, self.config.cameras[cam].width, 3) for cam in self.cameras
+            cam: (self.config.cameras[cam].height, self.config.cameras[cam].width, 3)
+            for cam in self.cameras
         }
 
     @cached_property
@@ -281,9 +310,13 @@ class BiARX5(Robot):
             return
         n = len(self.cameras)
         max_workers = min(n, 8)
-        self.logger.info(f"Connecting {n} camera(s) in parallel (max_workers={max_workers})...")
+        self.logger.info(
+            f"Connecting {n} camera(s) in parallel (max_workers={max_workers})..."
+        )
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(cam.connect): name for name, cam in self.cameras.items()}
+            futures = {
+                executor.submit(cam.connect): name for name, cam in self.cameras.items()
+            }
             for fut in as_completed(futures):
                 name = futures[fut]
                 try:
@@ -299,7 +332,10 @@ class BiARX5(Robot):
         max_workers = min(n, 8)
         self.logger.info(f"Disconnecting {n} camera(s) in parallel...")
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(cam.disconnect): name for name, cam in self.cameras.items()}
+            futures = {
+                executor.submit(cam.disconnect): name
+                for name, cam in self.cameras.items()
+            }
             for fut in as_completed(futures):
                 name = futures[fut]
                 try:
@@ -314,7 +350,9 @@ class BiARX5(Robot):
             )
 
         try:
-            self.logger.info(f"Creating left arm controller (mode: {self.config.control_mode.value})...")
+            self.logger.info(
+                f"Creating left arm controller (mode: {self.config.control_mode.value})..."
+            )
             if self.config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL:
                 self.left_arm = arx5.Arx5CartesianController(
                     self.robot_configs["left_config"],
@@ -328,12 +366,16 @@ class BiARX5(Robot):
                     self.config.left_arm_port,
                 )
             time.sleep(0.5)
-            self.logger.info(f"✅ Left arm controller created successfully ({type(self.left_arm).__name__})")
+            self.logger.info(
+                f"✅ Left arm controller created successfully ({type(self.left_arm).__name__})"
+            )
             self.logger.info(
                 f"Left arm preview_time: {self.controller_configs['left_config'].default_preview_time}"
             )
 
-            self.logger.info(f"Creating right arm controller (mode: {self.config.control_mode.value})...")
+            self.logger.info(
+                f"Creating right arm controller (mode: {self.config.control_mode.value})..."
+            )
             if self.config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL:
                 self.right_arm = arx5.Arx5CartesianController(
                     self.robot_configs["right_config"],
@@ -357,8 +399,12 @@ class BiARX5(Robot):
             # Verify SDK is using the correct gripper_open_readout
             left_robot_config = self.left_arm.get_robot_config()
             right_robot_config = self.right_arm.get_robot_config()
-            self.logger.info(f"SDK left gripper_open_readout: {left_robot_config.gripper_open_readout}")
-            self.logger.info(f"SDK right gripper_open_readout: {right_robot_config.gripper_open_readout}")
+            self.logger.info(
+                f"SDK left gripper_open_readout: {left_robot_config.gripper_open_readout}"
+            )
+            self.logger.info(
+                f"SDK right gripper_open_readout: {right_robot_config.gripper_open_readout}"
+            )
         except Exception as e:
             self.logger.error(f"Failed to create robot controller: {e}")
             self.left_arm = None
@@ -384,17 +430,25 @@ class BiARX5(Robot):
             self._left_cmd_buffer = None
             self._right_cmd_buffer = None
         else:
-            self._left_cmd_buffer = arx5.JointState(self.robot_configs["left_config"].joint_dof)
-            self._right_cmd_buffer = arx5.JointState(self.robot_configs["right_config"].joint_dof)
+            self._left_cmd_buffer = arx5.JointState(
+                self.robot_configs["left_config"].joint_dof
+            )
+            self._right_cmd_buffer = arx5.JointState(
+                self.robot_configs["right_config"].joint_dof
+            )
             self._left_eef_cmd_buffer = None
             self._right_eef_cmd_buffer = None
 
         self.logger.info("Dual-ARX5 Robot connected.")
         if go_to_start:
             self.smooth_go_start(duration=2.0)
-            self.logger.info("✅ Robot go to start position, both arms are now in gravity compensation mode")
+            self.logger.info(
+                "✅ Robot go to start position, both arms are now in gravity compensation mode"
+            )
         else:
-            self.logger.info("Robot go to home position, both arms are now in gravity compensation mode")
+            self.logger.info(
+                "Robot go to home position, both arms are now in gravity compensation mode"
+            )
 
         # Log current gain
         gain = self.left_arm.get_gain()
@@ -409,29 +463,47 @@ class BiARX5(Robot):
         if self.config.inference_mode:
             if self.config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL:
                 self.set_to_normal_cartesian_control()
-                self.logger.info("✅ Robot is now in cartesian control mode for inference")
+                self.logger.info(
+                    "✅ Robot is now in cartesian control mode for inference"
+                )
             elif self.config.control_mode == BiARX5ControlMode.JOINT_CONTROL:
                 self.set_to_normal_position_control()
-                self.logger.info("✅ Robot is now in joint position control mode for inference")
+                self.logger.info(
+                    "✅ Robot is now in joint position control mode for inference"
+                )
             else:
-                self.logger.error(f"Invalid inference time control mode: {self.config.control_mode.value}")
-                raise ValueError(f"Invalid inference time control mode: {self.config.control_mode.value}")
+                self.logger.error(
+                    f"Invalid inference time control mode: {self.config.control_mode.value}"
+                )
+                raise ValueError(
+                    f"Invalid inference time control mode: {self.config.control_mode.value}"
+                )
             self.logger.info(
                 f"✅ Robot is now connected and ready for inference in {self.config.control_mode.value} mode."
             )
         else:  # Teleoperation mode
             if self.config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL:
                 self.set_to_normal_cartesian_control()
-                self.logger.info("✅ Robot is now in cartesian control mode for teleoperation")
+                self.logger.info(
+                    "✅ Robot is now in cartesian control mode for teleoperation"
+                )
             elif self.config.control_mode == BiARX5ControlMode.JOINT_CONTROL:
                 self.set_to_normal_position_control()
-                self.logger.info("✅ Robot is now in position control mode for teleoperation")
+                self.logger.info(
+                    "✅ Robot is now in position control mode for teleoperation"
+                )
             elif self.config.control_mode == BiARX5ControlMode.TEACH_MODE:
                 self.set_to_gravity_compensation_mode()
-                self.logger.info("✅ Robot is now in gravity compensation mode for teleoperation")
+                self.logger.info(
+                    "✅ Robot is now in gravity compensation mode for teleoperation"
+                )
             else:
-                self.logger.error(f"Invalid teleoperation control mode: {self.config.control_mode.value}")
-                raise ValueError(f"Invalid teleoperation control mode: {self.config.control_mode.value}")
+                self.logger.error(
+                    f"Invalid teleoperation control mode: {self.config.control_mode.value}"
+                )
+                raise ValueError(
+                    f"Invalid teleoperation control mode: {self.config.control_mode.value}"
+                )
             self.logger.info(
                 f"✅ Robot is now connected and ready for teleoperation in {self.config.control_mode.value} mode."
             )
@@ -454,7 +526,9 @@ class BiARX5(Robot):
 
     def setup_motors(self) -> None:
         """ARX5 motors are pre-configured, no runtime setup needed"""
-        self.logger.info(f"{self} ARX5 motors are pre-configured, no runtime setup needed")
+        self.logger.info(
+            f"{self} ARX5 motors are pre-configured, no runtime setup needed"
+        )
         self.logger.info("Motor IDs are defined in the robot configuration:")
         self.logger.info("  - Joint motors: [1, 2, 4, 5, 6, 7]")
         self.logger.info("  - Gripper motor: 8")
@@ -487,7 +561,9 @@ class BiARX5(Robot):
         if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
         if self.config.control_mode != BiARX5ControlMode.CARTESIAN_CONTROL:
-            raise ValueError("get_current_tcp_pose_euler requires CARTESIAN_CONTROL mode")
+            raise ValueError(
+                "get_current_tcp_pose_euler requires CARTESIAN_CONTROL mode"
+            )
         arm = self.left_arm if self._spacemouse_arm_side() == "left" else self.right_arm
         eef_state = arm.get_eef_state()
         pose_6d = np.asarray(eef_state.pose_6d(), dtype=np.float64).reshape(6)
@@ -505,7 +581,9 @@ class BiARX5(Robot):
             # Cartesian mode: get EEF states
             left_eef_state = self.left_arm.get_eef_state()
             left_pose_6d = left_eef_state.pose_6d().copy()
-            for i, key in enumerate(["left_x", "left_y", "left_z", "left_roll", "left_pitch", "left_yaw"]):
+            for i, key in enumerate(
+                ["left_x", "left_y", "left_z", "left_roll", "left_pitch", "left_yaw"]
+            ):
                 obs_dict[key] = float(left_pose_6d[i])
             obs_dict["left_gripper_pos"] = float(left_eef_state.gripper_pos)
 
@@ -562,7 +640,9 @@ class BiARX5(Robot):
             left_pose_6d = left_cmd.pose_6d()
             for i, key in enumerate(self._left_action_keys):
                 left_pose_6d[i] = action.get(key, left_pose_6d[i])
-            left_cmd.gripper_pos = action.get(self._left_gripper_key, left_cmd.gripper_pos)
+            left_cmd.gripper_pos = action.get(
+                self._left_gripper_key, left_cmd.gripper_pos
+            )
             # Debug: Print commands before sending
             # print(
             #     f"Left arm command - pose_6d: {left_cmd.pose_6d()}, gripper: {left_cmd.gripper_pos}"
@@ -573,7 +653,9 @@ class BiARX5(Robot):
             right_pose_6d = right_cmd.pose_6d()
             for i, key in enumerate(self._right_action_keys):
                 right_pose_6d[i] = action.get(key, right_pose_6d[i])
-            right_cmd.gripper_pos = action.get(self._right_gripper_key, right_cmd.gripper_pos)
+            right_cmd.gripper_pos = action.get(
+                self._right_gripper_key, right_cmd.gripper_pos
+            )
             # Debug: Print commands before sending
             # print(
             #     f"Right arm command - pose_6d: {right_cmd.pose_6d()}, gripper: {right_cmd.gripper_pos}"
@@ -585,14 +667,18 @@ class BiARX5(Robot):
             left_pos = left_cmd.pos()
             for i, key in enumerate(self._left_action_keys):
                 left_pos[i] = action.get(key, left_pos[i])
-            left_cmd.gripper_pos = action.get(self._left_gripper_key, left_cmd.gripper_pos)
+            left_cmd.gripper_pos = action.get(
+                self._left_gripper_key, left_cmd.gripper_pos
+            )
             self.left_arm.set_joint_cmd(left_cmd)
 
             right_cmd = self._right_cmd_buffer
             right_pos = right_cmd.pos()
             for i, key in enumerate(self._right_action_keys):
                 right_pos[i] = action.get(key, right_pos[i])
-            right_cmd.gripper_pos = action.get(self._right_gripper_key, right_cmd.gripper_pos)
+            right_cmd.gripper_pos = action.get(
+                self._right_gripper_key, right_cmd.gripper_pos
+            )
             self.right_arm.set_joint_cmd(right_cmd)
 
         return action
@@ -608,7 +694,9 @@ class BiARX5(Robot):
 
     def move_joint_trajectory(
         self,
-        target_joint_poses: (dict[str, Sequence[float]] | Sequence[dict[str, Sequence[float]]]),
+        target_joint_poses: (
+            dict[str, Sequence[float]] | Sequence[dict[str, Sequence[float]]]
+        ),
         durations: float | Sequence[float],
         *,
         easing: str = "ease_in_out_quad",
@@ -647,7 +735,9 @@ class BiARX5(Robot):
             segment_durations = [float(d) for d in durations]
 
         if len(trajectory) != len(segment_durations):
-            raise ValueError("target_joint_poses and durations must have the same length")
+            raise ValueError(
+                "target_joint_poses and durations must have the same length"
+            )
 
         # Determine controller timestep (fallback to 10 ms if unavailable)
         controller_dt = getattr(self.config, "interpolation_controller_dt", 0.01)
@@ -657,7 +747,9 @@ class BiARX5(Robot):
             left_state = self.left_arm.get_joint_state()
             right_state = self.right_arm.get_joint_state()
             left = np.concatenate([left_state.pos().copy(), [left_state.gripper_pos]])
-            right = np.concatenate([right_state.pos().copy(), [right_state.gripper_pos]])
+            right = np.concatenate(
+                [right_state.pos().copy(), [right_state.gripper_pos]]
+            )
             return left, right
 
         current_left, current_right = _get_current_state()
@@ -668,12 +760,16 @@ class BiARX5(Robot):
             default_right: np.ndarray,
         ) -> tuple[np.ndarray, np.ndarray]:
             if not {"left", "right"}.issubset(segment):
-                raise ValueError("Each segment must contain both 'left' and 'right' targets")
+                raise ValueError(
+                    "Each segment must contain both 'left' and 'right' targets"
+                )
 
             def _to_array(values: Sequence[float], default: np.ndarray) -> np.ndarray:
                 arr = np.asarray(values, dtype=np.float64)
                 if arr.shape[0] not in (6, 7):
-                    raise ValueError("Each arm target must provide 6 joint values (+ optional gripper)")
+                    raise ValueError(
+                        "Each arm target must provide 6 joint values (+ optional gripper)"
+                    )
                 if arr.shape[0] == 6:
                     arr = np.concatenate([arr, [default[-1]]])
                 return arr
@@ -696,11 +792,21 @@ class BiARX5(Robot):
 
         try:
             for segment, duration in zip(trajectory, segment_durations, strict=True):
-                target_left, target_right = _parse_target(segment, current_left, current_right)
+                target_left, target_right = _parse_target(
+                    segment, current_left, current_right
+                )
 
                 if duration <= 0:
-                    action = dict(zip(left_joint_keys, target_left[:6].tolist(), strict=True))
-                    action.update(dict(zip(right_joint_keys, target_right[:6].tolist(), strict=True)))
+                    action = dict(
+                        zip(left_joint_keys, target_left[:6].tolist(), strict=True)
+                    )
+                    action.update(
+                        dict(
+                            zip(
+                                right_joint_keys, target_right[:6].tolist(), strict=True
+                            )
+                        )
+                    )
                     action["left_gripper.pos"] = float(target_left[6])
                     action["right_gripper.pos"] = float(target_right[6])
                     self.send_action(action)
@@ -717,10 +823,20 @@ class BiARX5(Robot):
                     progress = step / steps
                     ratio = _apply_easing(progress)
                     interp_left = current_left + (target_left - current_left) * ratio
-                    interp_right = current_right + (target_right - current_right) * ratio
+                    interp_right = (
+                        current_right + (target_right - current_right) * ratio
+                    )
 
-                    action = dict(zip(left_joint_keys, interp_left[:6].tolist(), strict=True))
-                    action.update(dict(zip(right_joint_keys, interp_right[:6].tolist(), strict=True)))
+                    action = dict(
+                        zip(left_joint_keys, interp_left[:6].tolist(), strict=True)
+                    )
+                    action.update(
+                        dict(
+                            zip(
+                                right_joint_keys, interp_right[:6].tolist(), strict=True
+                            )
+                        )
+                    )
                     action["left_gripper.pos"] = float(interp_left[6])
                     action["right_gripper.pos"] = float(interp_right[6])
 
@@ -729,11 +845,15 @@ class BiARX5(Robot):
 
                 current_left, current_right = target_left, target_right
         except KeyboardInterrupt:
-            self.logger.warn("Joint trajectory interrupted by user. Holding current pose.")
+            self.logger.warn(
+                "Joint trajectory interrupted by user. Holding current pose."
+            )
 
     def move_eef_trajectory(
         self,
-        target_eef_poses: (dict[str, Sequence[float]] | Sequence[dict[str, Sequence[float]]]),
+        target_eef_poses: (
+            dict[str, Sequence[float]] | Sequence[dict[str, Sequence[float]]]
+        ),
         durations: float | Sequence[float],
         *,
         easing: str = "linear",
@@ -764,7 +884,11 @@ class BiARX5(Robot):
         if self.config.control_mode != BiARX5ControlMode.CARTESIAN_CONTROL:
             raise ValueError("move_eef_trajectory requires CARTESIAN_CONTROL mode")
 
-        trajectory = [target_eef_poses] if isinstance(target_eef_poses, dict) else list(target_eef_poses)
+        trajectory = (
+            [target_eef_poses]
+            if isinstance(target_eef_poses, dict)
+            else list(target_eef_poses)
+        )
 
         if isinstance(durations, (int, float)):
             segment_durations = [float(durations)]
@@ -781,8 +905,12 @@ class BiARX5(Robot):
         def _get_current_state() -> tuple[np.ndarray, np.ndarray]:
             left_state = self.left_arm.get_eef_state()
             right_state = self.right_arm.get_eef_state()
-            left = np.concatenate([left_state.pose_6d().copy(), [left_state.gripper_pos]])
-            right = np.concatenate([right_state.pose_6d().copy(), [right_state.gripper_pos]])
+            left = np.concatenate(
+                [left_state.pose_6d().copy(), [left_state.gripper_pos]]
+            )
+            right = np.concatenate(
+                [right_state.pose_6d().copy(), [right_state.gripper_pos]]
+            )
             return left, right
 
         current_left, current_right = _get_current_state()
@@ -793,12 +921,16 @@ class BiARX5(Robot):
             default_right: np.ndarray,
         ) -> tuple[np.ndarray, np.ndarray]:
             if not {"left", "right"}.issubset(segment):
-                raise ValueError("Each segment must contain both 'left' and 'right' targets")
+                raise ValueError(
+                    "Each segment must contain both 'left' and 'right' targets"
+                )
 
             def _to_array(values: Sequence[float], default: np.ndarray) -> np.ndarray:
                 arr = np.asarray(values, dtype=np.float64)
                 if arr.shape[0] not in (6, 7):
-                    raise ValueError("Each arm target must provide 6 EEF values (+ optional gripper)")
+                    raise ValueError(
+                        "Each arm target must provide 6 EEF values (+ optional gripper)"
+                    )
                 if arr.shape[0] == 6:
                     arr = np.concatenate([arr, [default[-1]]])
                 return arr
@@ -817,12 +949,28 @@ class BiARX5(Robot):
 
         try:
             for segment, duration in zip(trajectory, segment_durations, strict=True):
-                target_left, target_right = _parse_target(segment, current_left, current_right)
+                target_left, target_right = _parse_target(
+                    segment, current_left, current_right
+                )
 
                 if duration <= 0:
-                    action = dict(zip(self._left_action_keys, target_left[:6].tolist(), strict=True))
+                    action = dict(
+                        zip(
+                            self._left_action_keys,
+                            target_left[:6].tolist(),
+                            strict=True,
+                        )
+                    )
                     action[self._left_gripper_key] = float(target_left[6])
-                    action.update(dict(zip(self._right_action_keys, target_right[:6].tolist(), strict=True)))
+                    action.update(
+                        dict(
+                            zip(
+                                self._right_action_keys,
+                                target_right[:6].tolist(),
+                                strict=True,
+                            )
+                        )
+                    )
                     action[self._right_gripper_key] = float(target_right[6])
                     self.send_action(action)
                     current_left, current_right = target_left, target_right
@@ -838,11 +986,27 @@ class BiARX5(Robot):
                     progress = step / steps
                     ratio = _apply_easing(progress)
                     interp_left = current_left + (target_left - current_left) * ratio
-                    interp_right = current_right + (target_right - current_right) * ratio
+                    interp_right = (
+                        current_right + (target_right - current_right) * ratio
+                    )
 
-                    action = dict(zip(self._left_action_keys, interp_left[:6].tolist(), strict=True))
+                    action = dict(
+                        zip(
+                            self._left_action_keys,
+                            interp_left[:6].tolist(),
+                            strict=True,
+                        )
+                    )
                     action[self._left_gripper_key] = float(interp_left[6])
-                    action.update(dict(zip(self._right_action_keys, interp_right[:6].tolist(), strict=True)))
+                    action.update(
+                        dict(
+                            zip(
+                                self._right_action_keys,
+                                interp_right[:6].tolist(),
+                                strict=True,
+                            )
+                        )
+                    )
                     action[self._right_gripper_key] = float(interp_right[6])
 
                     self.send_action(action)
@@ -850,7 +1014,9 @@ class BiARX5(Robot):
 
                 current_left, current_right = target_left, target_right
         except KeyboardInterrupt:
-            self.logger.warn("EEF trajectory interrupted by user. Holding current pose.")
+            self.logger.warn(
+                "EEF trajectory interrupted by user. Holding current pose."
+            )
 
     def disconnect(self):
         if not self._is_connected:
@@ -864,7 +1030,9 @@ class BiARX5(Robot):
             self.right_arm.set_to_damping()
             self.logger.info("✅ Both arms disconnected successfully")
         except KeyboardInterrupt:
-            self.logger.warn("Disconnect interrupted. Forcing damping mode on both arms...")
+            self.logger.warn(
+                "Disconnect interrupted. Forcing damping mode on both arms..."
+            )
             self.left_arm.set_to_damping()
             self.right_arm.set_to_damping()
             self.logger.info("✅ Both arms set to damping mode for safety")
@@ -897,7 +1065,9 @@ class BiARX5(Robot):
         }
 
         if level.upper() not in log_level_map:
-            raise ValueError(f"Invalid log level: {level}. Supported levels: {list(log_level_map.keys())}")
+            raise ValueError(
+                f"Invalid log level: {level}. Supported levels: {list(log_level_map.keys())}"
+            )
 
         log_level = log_level_map[level.upper()]
 
@@ -933,9 +1103,13 @@ class BiARX5(Robot):
 
         # Use SDK's set_to_gravity_compensation() which properly resets the interpolator
         if self._is_joint_control_mode:
-            self.logger.info("Switching to gravity compensation mode from joint control mode...")
+            self.logger.info(
+                "Switching to gravity compensation mode from joint control mode..."
+            )
         elif self._is_cartesian_control_mode:
-            self.logger.info("Switching to gravity compensation mode from cartesian control mode...")
+            self.logger.info(
+                "Switching to gravity compensation mode from cartesian control mode..."
+            )
 
         self.left_arm.set_to_gravity_compensation()
         self.right_arm.set_to_gravity_compensation()
@@ -981,7 +1155,9 @@ class BiARX5(Robot):
             self.logger.info("Both arms are already in normal position control mode")
             return
         else:
-            self.logger.warn(f"Can't switch to position control from mode: {self.config.control_mode}")
+            self.logger.warn(
+                f"Can't switch to position control from mode: {self.config.control_mode}"
+            )
             return
 
     def set_to_normal_cartesian_control(self):
@@ -991,7 +1167,9 @@ class BiARX5(Robot):
 
         self.logger.info("Switching to normal cartesian control mode...")
 
-        is_cartesian_mode = self.config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL
+        is_cartesian_mode = (
+            self.config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL
+        )
 
         if self._is_gravity_compensation_mode and is_cartesian_mode:
             # Reset to default gain
@@ -1017,7 +1195,9 @@ class BiARX5(Robot):
             self.logger.info("Both arms are already in normal cartesian control mode")
             return
         else:
-            self.logger.warn(f"Can't switch to cartesian control from mode: {self.config.control_mode}")
+            self.logger.warn(
+                f"Can't switch to cartesian control from mode: {self.config.control_mode}"
+            )
             return
 
     def _calculate_motion_duration(
@@ -1059,7 +1239,9 @@ class BiARX5(Robot):
         self.logger.info(f"Calculated motion duration: {duration:.1f} seconds")
         return duration
 
-    def smooth_go_start(self, duration: float | None = None, easing: str = "ease_in_out_quad") -> None:
+    def smooth_go_start(
+        self, duration: float | None = None, easing: str = "ease_in_out_quad"
+    ) -> None:
         """
         Smoothly move both arms to the start position using trajectory interpolation.
 
@@ -1089,7 +1271,9 @@ class BiARX5(Robot):
             target = np.array(self._start_position)  # Joint space target
             duration = self._calculate_motion_duration(target, target)
 
-        self.logger.info(f"Smoothly going to start position over {duration:.1f} seconds...")
+        self.logger.info(
+            f"Smoothly going to start position over {duration:.1f} seconds..."
+        )
 
         if self.config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL:
             # Cartesian mode: use EEF trajectory
@@ -1132,11 +1316,15 @@ class BiARX5(Robot):
             left_state = self.left_arm.get_joint_state()
             right_state = self.right_arm.get_joint_state()
 
-            current_left_cmd = arx5.JointState(self.robot_configs["left_config"].joint_dof)
+            current_left_cmd = arx5.JointState(
+                self.robot_configs["left_config"].joint_dof
+            )
             current_left_cmd.pos()[:] = left_state.pos()
             current_left_cmd.gripper_pos = left_state.gripper_pos
 
-            current_right_cmd = arx5.JointState(self.robot_configs["right_config"].joint_dof)
+            current_right_cmd = arx5.JointState(
+                self.robot_configs["right_config"].joint_dof
+            )
             current_right_cmd.pos()[:] = right_state.pos()
             current_right_cmd.gripper_pos = right_state.gripper_pos
 
@@ -1153,12 +1341,17 @@ class BiARX5(Robot):
             }
 
             # Execute smooth trajectory to start position
-            self.move_joint_trajectory(target_joint_poses=start_poses, durations=duration, easing=easing)
+            self.move_joint_trajectory(
+                target_joint_poses=start_poses, durations=duration, easing=easing
+            )
+
             self.logger.info(
                 f"✅ Successfully going to start position in {self.config.control_mode.value} mode"
             )
 
-    def smooth_go_home(self, duration: float | None = None, easing: str = "ease_in_out_quad") -> None:
+    def smooth_go_home(
+        self, duration: float | None = None, easing: str = "ease_in_out_quad"
+    ) -> None:
         """
         Smoothly move both arms to the home position using trajectory interpolation.
 
@@ -1187,7 +1380,9 @@ class BiARX5(Robot):
             target = np.array(self._home_position)  # Joint space target
             duration = self._calculate_motion_duration(target, target)
 
-        self.logger.info(f"Smoothly returning to home position over {duration:.1f} seconds...")
+        self.logger.info(
+            f"Smoothly returning to home position over {duration:.1f} seconds..."
+        )
 
         if self.config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL:
             # Cartesian mode: use EEF trajectory
@@ -1228,11 +1423,15 @@ class BiARX5(Robot):
             left_state = self.left_arm.get_joint_state()
             right_state = self.right_arm.get_joint_state()
 
-            current_left_cmd = arx5.JointState(self.robot_configs["left_config"].joint_dof)
+            current_left_cmd = arx5.JointState(
+                self.robot_configs["left_config"].joint_dof
+            )
             current_left_cmd.pos()[:] = left_state.pos()
             current_left_cmd.gripper_pos = left_state.gripper_pos
 
-            current_right_cmd = arx5.JointState(self.robot_configs["right_config"].joint_dof)
+            current_right_cmd = arx5.JointState(
+                self.robot_configs["right_config"].joint_dof
+            )
             current_right_cmd.pos()[:] = right_state.pos()
             current_right_cmd.gripper_pos = right_state.gripper_pos
 
@@ -1249,7 +1448,9 @@ class BiARX5(Robot):
             }
 
             # Execute smooth trajectory to home position
-            self.move_joint_trajectory(target_joint_poses=home_poses, durations=duration, easing=easing)
+            self.move_joint_trajectory(
+                target_joint_poses=home_poses, durations=duration, easing=easing
+            )
 
             # Switch back to gravity compensation mode
             self.set_to_gravity_compensation_mode()

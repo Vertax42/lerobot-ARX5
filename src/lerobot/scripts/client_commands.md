@@ -65,7 +65,7 @@ lerobot-teleoperate \
     --fps=30 \
     --debug_timing=false \
     --display_data=true
-``````
+```
 
 ## Flexiv Rizon4 Robot with Flare Gripper teleoperate by Pico4 command
 
@@ -161,16 +161,16 @@ lerobot-teleoperate \
 lerobot-record \
     --robot.type=bi_arx5 \
     --teleop.type=mock_teleop \
-    --dataset.repo_id=Vertax/xense_bi_arx5_tie_shoelaces \
+    --dataset.repo_id=Xense/xense_bi_arx5_test \
     --dataset.num_episodes=100 \
     --dataset.single_task="tie shoelaces" \
     --dataset.fps=30 \
     --dataset.episode_time_s=300 \
     --dataset.streaming_encoding=true \
     --dataset.vcodec=auto \
-    --display_data=false \
-    --resume=true \
-    --dataset.push_to_hub=true
+    --display_data=true \
+    --resume=false \
+    --dataset.push_to_hub=false
 ```
 
 ```python
@@ -417,18 +417,18 @@ lerobot-record \
 
 **Current controller mapping during recording:**
 
-| Button | Action |
-|---|---|
+| Button    | Action                                              |
+| --------- | --------------------------------------------------- |
 | Right `A` | Reset both arms to start pose (recording continues) |
 
 Other record-control shortcuts are currently keyboard-driven:
 
-| Input | Action |
-|---|---|
-| `Left Arrow` | Discard current episode and re-record |
-| `Right Arrow` | Finish current episode early |
-| `Esc` | Stop the recording session |
-| `Space` | Reset both arms to start pose (recording continues) |
+| Input         | Action                                              |
+| ------------- | --------------------------------------------------- |
+| `Left Arrow`  | Discard current episode and re-record               |
+| `Right Arrow` | Finish current episode early                        |
+| `Esc`         | Stop the recording session                          |
+| `Space`       | Reset both arms to start pose (recording continues) |
 
 ## ARX5 Robot lerobot-record command (use trlc_leader teleop)
 

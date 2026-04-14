@@ -717,41 +717,41 @@ def arx5_teleop_loop(
             obs_transition = robot_observation_processor(raw_observation)
             log_rerun_data(observation=obs_transition, action=raw_action)
 
-            if not debug_timing:
-                if is_bimanual:
-                    left_motors = {
-                        k: v for k, v in raw_action.items() if k.startswith("left_")
-                    }
-                    right_motors = {
-                        k: v for k, v in raw_action.items() if k.startswith("right_")
-                    }
-                    col_width = 25
-                    print("\n" + "-" * (col_width * 2 + 3))
-                    print(f"{'LEFT ARM':<{col_width}} | {'RIGHT ARM':<{col_width}}")
-                    print("-" * (col_width * 2 + 3))
-                    max_motors = max(len(left_motors), len(right_motors))
-                    left_items = list(left_motors.items())
-                    right_items = list(right_motors.items())
-                    for i in range(max_motors):
-                        left_str = ""
-                        right_str = ""
-                        if i < len(left_items):
-                            motor_name = left_items[i][0].replace("left_", "")
-                            left_str = f"{motor_name}: {left_items[i][1]:>7.3f}"
-                        if i < len(right_items):
-                            motor_name = right_items[i][0].replace("right_", "")
-                            right_str = f"{motor_name}: {right_items[i][1]:>7.3f}"
-                        print(f"{left_str:<{col_width}} | {right_str:<{col_width}}")
-                    move_cursor_up(max_motors + 4)
-                else:
-                    col_width = 20
-                    print("\n" + "-" * (col_width + 12))
-                    print(f"{'JOINT':<{col_width}} | {'VALUE':>7}")
-                    print("-" * (col_width + 12))
-                    motor_items = list(raw_action.items())
-                    for motor, value in motor_items:
-                        print(f"{motor:<{col_width}} | {value:>7.3f}")
-                    move_cursor_up(len(motor_items) + 4)
+            # if not debug_timing:
+            #     if is_bimanual:
+            #         left_motors = {
+            #             k: v for k, v in raw_action.items() if k.startswith("left_")
+            #         }
+            #         right_motors = {
+            #             k: v for k, v in raw_action.items() if k.startswith("right_")
+            #         }
+            #         col_width = 25
+            #         print("\n" + "-" * (col_width * 2 + 3))
+            #         print(f"{'LEFT ARM':<{col_width}} | {'RIGHT ARM':<{col_width}}")
+            #         print("-" * (col_width * 2 + 3))
+            #         max_motors = max(len(left_motors), len(right_motors))
+            #         left_items = list(left_motors.items())
+            #         right_items = list(right_motors.items())
+            #         for i in range(max_motors):
+            #             left_str = ""
+            #             right_str = ""
+            #             if i < len(left_items):
+            #                 motor_name = left_items[i][0].replace("left_", "")
+            #                 left_str = f"{motor_name}: {left_items[i][1]:>7.3f}"
+            #             if i < len(right_items):
+            #                 motor_name = right_items[i][0].replace("right_", "")
+            #                 right_str = f"{motor_name}: {right_items[i][1]:>7.3f}"
+            #             print(f"{left_str:<{col_width}} | {right_str:<{col_width}}")
+            #         move_cursor_up(max_motors + 4)
+            #     else:
+            # col_width = 20
+            # print("\n" + "-" * (col_width + 12))
+            # print(f"{'JOINT':<{col_width}} | {'VALUE':>7}")
+            # print("-" * (col_width + 12))
+            # motor_items = list(raw_action.items())
+            # for motor, value in motor_items:
+            #     print(f"{motor:<{col_width}} | {value:>7.3f}")
+            # move_cursor_up(len(motor_items) + 4)
 
         _teleop_loop_sleep(loop_start, fps, start, robot)
         loop_s = time.perf_counter() - loop_start
