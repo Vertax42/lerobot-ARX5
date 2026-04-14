@@ -703,7 +703,6 @@ def arx5_trlc_leader_teleop_loop(
     display_data: bool = False,
     duration: float | None = None,
     dryrun: bool = False,
-    debug_timing: bool = False,
 ):
     """
     Dedicated teleoperation loop for ARX5 + TRLC leader.
@@ -795,13 +794,6 @@ def arx5_trlc_leader_teleop_loop(
             )
             print("\n".join(panel_lines), flush=True)
             move_cursor_up(len(panel_lines))
-        elif debug_timing:
-            dryrun_tag = " | DRYRUN" if dryrun else ""
-            print(
-                f"\r\033[KARX5+TRLC obs: {obs_dt_ms:5.1f}ms | loop: {loop_s * 1e3:5.1f}ms ({1 / loop_s:4.0f}Hz){dryrun_tag}",
-                end="",
-                flush=True,
-            )
         else:
             action_summary = " ".join(
                 f"{k}={float(v):+.3f}" for k, v in robot_action_to_send.items()
@@ -827,7 +819,6 @@ def bi_arx5_bi_trlc_teleop_loop(
     display_data: bool = False,
     duration: float | None = None,
     dryrun: bool = False,
-    debug_timing: bool = False,
 ):
     """
     Dedicated teleoperation loop for BiARX5 + BiTRLC leader.
@@ -932,13 +923,6 @@ def bi_arx5_bi_trlc_teleop_loop(
             )
             print("\n".join(panel_lines), flush=True)
             move_cursor_up(len(panel_lines))
-        elif debug_timing:
-            dryrun_tag = " | DRYRUN" if dryrun else ""
-            print(
-                f"\r\033[KBiARX5+BiTRLC obs: {obs_dt_ms:5.1f}ms | loop: {loop_s * 1e3:5.1f}ms ({1 / loop_s:4.0f}Hz){dryrun_tag}",
-                end="",
-                flush=True,
-            )
         else:
             action_summary = " ".join(
                 f"{k}={float(v):+.3f}" for k, v in robot_action_to_send.items()
