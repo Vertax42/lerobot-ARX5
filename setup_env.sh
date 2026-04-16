@@ -306,7 +306,7 @@ install_xense() {
     # Install xensesdk dependencies explicitly
     uv pip install \
         "numpy>=1.26.4,<2.3.0" \
-        "opencv-python>=4.10" \
+        "opencv-python==4.12.0.88" \
         "pillow>=12.0" \
         "cryptography>=46.0" \
         "PyYAML>=6.0" \
