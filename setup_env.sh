@@ -174,6 +174,13 @@ install_flexiv() {
             export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "$CONDA_PREFIX" | paste -sd ':')
             unset CMAKE_PREFIX_PATH
 
+            # Patch tinyxml2 install script for CMake >= 3.31 compatibility
+            # (flexiv_rdk is the official upstream — we cannot push changes there,
+            #  so the patch is applied here before the build starts)
+            _tinyxml2_script="$LIB_DIR/flexiv_rdk/thirdparty/scripts/install_tinyxml2.sh"
+            sed -i 's/cmake_minimum_required(VERSION 2\.6 FATAL_ERROR)/cmake_minimum_required(VERSION 3.5 FATAL_ERROR)\ncmake_policy(VERSION 3.5)/' "$_tinyxml2_script"
+            sed -i 's/cmake_policy(SET CMP0063 OLD)/cmake_policy(SET CMP0063 NEW)/' "$_tinyxml2_script"
+
             # Build and install third-party dependencies
             bash "$LIB_DIR/flexiv_rdk/thirdparty/build_and_install_dependencies.sh" \
                 "$RDK_INSTALL" "$(nproc)"
