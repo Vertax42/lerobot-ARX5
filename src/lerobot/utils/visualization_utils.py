@@ -26,10 +26,10 @@ def init_rerun(
     session_name: str = "lerobot_control_loop", ip: str | None = None, port: int | None = None
 ) -> None:
     """Initializes the Rerun SDK for visualizing the control loop."""
-    batch_size = os.getenv("RERUN_FLUSH_NUM_BYTES", "8000")
+    batch_size = os.getenv("RERUN_FLUSH_NUM_BYTES", "65536")
     os.environ["RERUN_FLUSH_NUM_BYTES"] = batch_size
     rr.init(session_name)
-    memory_limit = os.getenv("LEROBOT_RERUN_MEMORY_LIMIT", "10%")
+    memory_limit = os.getenv("LEROBOT_RERUN_MEMORY_LIMIT", "500MB")
     if ip and port:
         rr.connect_grpc(url=f"rerun+http://{ip}:{port}/proxy")
     else:
@@ -66,7 +66,9 @@ def log_rerun_data(
     Args:
         observation: An optional dictionary containing observation data to log.
         action: An optional dictionary containing action data to log.
+        compress_images: If True, JPEG-compresses images before sending to Rerun.
     """
+    jpeg_quality = int(os.getenv("LEROBOT_RERUN_JPEG_QUALITY", "60"))
     if observation:
         for k, v in observation.items():
             if v is None:
@@ -138,7 +140,7 @@ def log_rerun_data(
                     depth = arr[..., 0] if (arr.ndim == 3 and arr.shape[-1] == 1) else arr
                     rr.log(key, rr.DepthImage(depth, meter=0.001, depth_range=(0.0, 0.1), colormap="turbo"))
                 else:
-                    img_entity = rr.Image(arr).compress() if compress_images else rr.Image(arr)
+                    img_entity = rr.Image(arr).compress(jpeg_quality=jpeg_quality) if compress_images else rr.Image(arr)
                     rr.log(key, entity=img_entity)
 
     if action:
