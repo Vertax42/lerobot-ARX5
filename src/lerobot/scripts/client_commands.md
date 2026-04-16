@@ -114,11 +114,9 @@ lerobot-record \
 ```bash
 lerobot-teleoperate \
     --robot.type=bi_flexiv_rizon4_rt \
-    --robot.bi_mount_type=forward \
-    --robot.left_robot_sn=Rizon4s-063458 \
-    --robot.right_robot_sn=Rizon4s-063670 \
+    --robot.bi_mount_type=diagonal \
     --teleop.type=bi_pico4 \
-    --fps=60 \
+    --fps=30 \
     --display_data=true
 ```
 
