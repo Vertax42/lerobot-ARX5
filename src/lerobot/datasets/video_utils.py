@@ -16,7 +16,6 @@
 import contextlib
 import glob
 import importlib
-import logging
 import queue
 import shutil
 import tempfile
@@ -45,16 +44,18 @@ logger = get_logger("video_utils")
 HW_ENCODERS = [
     "h264_videotoolbox",  # macOS
     "hevc_videotoolbox",  # macOS
-    "h264_nvenc",         # NVIDIA GPU
-    "hevc_nvenc",         # NVIDIA GPU
-    "h264_vaapi",         # Linux Intel/AMD
-    "h264_qsv",           # Intel Quick Sync
+    "h264_nvenc",  # NVIDIA GPU
+    "hevc_nvenc",  # NVIDIA GPU
+    "h264_vaapi",  # Linux Intel/AMD
+    "h264_qsv",  # Intel Quick Sync
 ]
 
 VALID_VIDEO_CODECS = {"h264", "hevc", "libsvtav1", "auto"} | set(HW_ENCODERS)
 
 
-def _get_codec_options(vcodec: str, g: int | None, crf: int | None, preset: str | None) -> dict:
+def _get_codec_options(
+    vcodec: str, g: int | None, crf: int | None, preset: str | None
+) -> dict:
     """Build PyAV options dict for the given encoder."""
     options = {}
     if "videotoolbox" in vcodec:
@@ -110,10 +111,12 @@ def resolve_vcodec(vcodec: str) -> str:
         hw = detect_available_hw_encoders()
         if hw:
             resolved = hw[0]
-            logging.info(f"vcodec='auto' resolved to hardware encoder: {resolved}")
+            logger.info(f"vcodec='auto' resolved to hardware encoder: {resolved}")
         else:
             resolved = "libsvtav1"
-            logging.info("vcodec='auto': no hardware encoder found, falling back to libsvtav1")
+            logger.info(
+                "vcodec='auto': no hardware encoder found, falling back to libsvtav1"
+            )
         return resolved
     return vcodec
 
@@ -184,7 +187,10 @@ class _CameraEncoderThread(threading.Thread):
         return output_container, output_stream
 
     def run(self) -> None:
-        from lerobot.datasets.compute_stats import RunningQuantileStats, auto_downsample_height_width
+        from lerobot.datasets.compute_stats import (
+            RunningQuantileStats,
+            auto_downsample_height_width,
+        )
 
         output_container = None
         output_stream = None
@@ -213,7 +219,9 @@ class _CameraEncoderThread(threading.Thread):
                 chw_downsampled = auto_downsample_height_width(chw_frame)
                 c, h, w = chw_downsampled.shape
                 # Reshape to (H*W, C) — each pixel is one sample in C-dim space
-                pixels = chw_downsampled.transpose(1, 2, 0).reshape(-1, c).astype(np.float64)
+                pixels = (
+                    chw_downsampled.transpose(1, 2, 0).reshape(-1, c).astype(np.float64)
+                )
                 try:
                     stats_tracker.update(pixels)
                 except Exception:
@@ -247,7 +255,7 @@ class _CameraEncoderThread(threading.Thread):
                 try:
                     video_stats = stats_tracker.get_statistics()
                 except Exception as e:
-                    logging.warning(f"_CameraEncoderThread: could not compute stats: {e}")
+                    logger.warn(f"_CameraEncoderThread: could not compute stats: {e}")
 
             self.result_queue.put(("ok", (self.video_path, video_stats)))
 
@@ -257,7 +265,7 @@ class _CameraEncoderThread(threading.Thread):
             if output_container is not None:
                 with contextlib.suppress(Exception):
                     output_container.close()
-            logging.error(f"_CameraEncoderThread error for {self.video_path}: {e}")
+            logger.error(f"_CameraEncoderThread error for {self.video_path}: {e}")
             self.result_queue.put(("error", str(e)))
 
 
@@ -307,7 +315,7 @@ class StreamingVideoEncoder:
     ) -> None:
         """Start encoder threads for a new episode."""
         if self._episode_active:
-            logging.warning(
+            logger.warn(
                 "StreamingVideoEncoder: episode already active, cancelling previous episode"
             )
             self.cancel_episode()
@@ -316,7 +324,9 @@ class StreamingVideoEncoder:
             raise ValueError("frame_shapes must be provided when wait_until_ready=True")
 
         if frame_shapes is not None:
-            missing_shapes = [video_key for video_key in video_keys if video_key not in frame_shapes]
+            missing_shapes = [
+                video_key for video_key in video_keys if video_key not in frame_shapes
+            ]
             if missing_shapes:
                 raise ValueError(
                     "frame_shapes is missing entries for: "
@@ -347,9 +357,9 @@ class StreamingVideoEncoder:
                 result_queue=result_q,
                 stop_event=self._stop_event,
                 encoder_threads=self.encoder_threads,
-                frame_shape=frame_shapes.get(video_key)
-                if frame_shapes is not None
-                else None,
+                frame_shape=(
+                    frame_shapes.get(video_key) if frame_shapes is not None else None
+                ),
                 ready_event=ready_event,
             )
             thread._start_t = time.monotonic()
@@ -375,8 +385,12 @@ class StreamingVideoEncoder:
                     raise RuntimeError(
                         f"StreamingVideoEncoder: failed to warm up '{video_key}': {thread.init_error}"
                     ) from thread.init_error
-                key_ms = (time.monotonic() - getattr(thread, "_start_t", t_wait_start)) * 1e3
-                logger.info(f"[streaming_encoder] encoder ready: {video_key} ({key_ms:.1f}ms)")
+                key_ms = (
+                    time.monotonic() - getattr(thread, "_start_t", t_wait_start)
+                ) * 1e3
+                logger.info(
+                    f"[streaming_encoder] encoder ready: {video_key} ({key_ms:.1f}ms)"
+                )
 
     def feed_frame(self, video_key: str, image: np.ndarray) -> None:
         """Feed one frame to the encoder thread for ``video_key``."""
@@ -403,7 +417,7 @@ class StreamingVideoEncoder:
         for video_key, thread in self._threads.items():
             thread.join(timeout=120)
             if thread.is_alive():
-                logging.warning(
+                logger.warn(
                     f"StreamingVideoEncoder: thread for '{video_key}' did not finish in 120 s, "
                     "forcing stop"
                 )
@@ -415,12 +429,12 @@ class StreamingVideoEncoder:
                 if status == "ok":
                     results[video_key] = data  # (Path, stats | None)
                 else:
-                    logging.error(
+                    logger.error(
                         f"StreamingVideoEncoder: encoder error for '{video_key}': {data}"
                     )
                     results[video_key] = (thread.video_path, None)
             except queue.Empty:
-                logging.error(
+                logger.error(
                     f"StreamingVideoEncoder: no result received for '{video_key}'"
                 )
                 results[video_key] = (thread.video_path, None)
@@ -428,7 +442,7 @@ class StreamingVideoEncoder:
         # Report dropped frames
         for video_key, count in self._dropped_frames.items():
             if count > 0:
-                logging.warning(
+                logger.warn(
                     f"StreamingVideoEncoder: dropped {count} frame(s) for '{video_key}'"
                 )
 
@@ -473,7 +487,7 @@ def get_safe_default_codec():
     if importlib.util.find_spec("torchcodec"):
         return "torchcodec"
     else:
-        logging.warning(
+        logger.warn(
             "'torchcodec' is not available in your platform, falling back to 'pyav' as a default decoder"
         )
         return "pyav"
@@ -565,7 +579,7 @@ def decode_video_frames_torchvision(
     for frame in reader:
         current_ts = frame["pts"]
         if log_loaded_timestamps:
-            logging.info(f"frame loaded at timestamp={current_ts:.4f}")
+            logger.info(f"frame loaded at timestamp={current_ts:.4f}")
         loaded_frames.append(frame["data"])
         loaded_ts.append(current_ts)
         if current_ts >= last_ts:
@@ -600,7 +614,7 @@ def decode_video_frames_torchvision(
     closest_ts = loaded_ts[argmin_]
 
     if log_loaded_timestamps:
-        logging.info(f"{closest_ts=}")
+        logger.info(f"{closest_ts=}")
 
     # convert to the pytorch format which is float32 in [0,1] range (and channel first)
     closest_frames = closest_frames.type(torch.float32) / 255
@@ -700,7 +714,7 @@ def decode_video_frames_torchcodec(
         loaded_frames.append(frame)
         loaded_ts.append(pts.item())
         if log_loaded_timestamps:
-            logging.info(f"Frame loaded at timestamp={pts:.4f}")
+            logger.info(f"Frame loaded at timestamp={pts:.4f}")
 
     query_ts = torch.tensor(timestamps)
     loaded_ts = torch.tensor(loaded_ts)
@@ -725,7 +739,7 @@ def decode_video_frames_torchcodec(
     closest_ts = loaded_ts[argmin_]
 
     if log_loaded_timestamps:
-        logging.info(f"{closest_ts=}")
+        logger.info(f"{closest_ts=}")
 
     # convert to float32 in [0,1] range
     closest_frames = (closest_frames / 255.0).type(torch.float32)
@@ -747,7 +761,7 @@ def encode_video_frames(
     g: int | None = 2,
     crf: int | None = 30,
     fast_decode: int = 0,
-    log_level: int | None = av.logging.WARNING,
+    log_level: int | None = None,
     overwrite: bool = False,
     encoder_threads: int | None = None,
 ) -> None:
@@ -758,14 +772,14 @@ def encode_video_frames(
     imgs_dir = Path(imgs_dir)
 
     if video_path.exists() and not overwrite:
-        logging.warning(f"Video file already exists: {video_path}. Skipping encoding.")
+        logger.warn(f"Video file already exists: {video_path}. Skipping encoding.")
         return
 
     video_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Encoders/pixel formats incompatibility check
     if (vcodec == "libsvtav1" or vcodec == "hevc") and pix_fmt == "yuv444p":
-        logging.warning(
+        logger.warn(
             f"Incompatible pixel format 'yuv444p' for codec {vcodec}, auto-selecting format 'yuv420p'"
         )
         pix_fmt = "yuv420p"
@@ -796,14 +810,11 @@ def encode_video_frames(
         if vcodec == "libsvtav1":
             existing = video_options.get("svtav1-params", "")
             lp_param = f"lp={encoder_threads}"
-            video_options["svtav1-params"] = f"{existing}:{lp_param}" if existing else lp_param
+            video_options["svtav1-params"] = (
+                f"{existing}:{lp_param}" if existing else lp_param
+            )
         elif vcodec in ["h264", "hevc"]:
             video_options["threads"] = str(encoder_threads)
-
-    # Set logging level
-    if log_level is not None:
-        # "While less efficient, it is generally preferable to modify logging with Python's logging"
-        logging.getLogger("libav").setLevel(log_level)
 
     # Create and open output file (overwrite by default)
     with av.open(str(video_path), "w") as output:
@@ -826,7 +837,7 @@ def encode_video_frames(
         if packet:
             output.mux(packet)
 
-    # Reset logging level
+    # Reset logger level
     if log_level is not None:
         av.logging.restore_default_callback()
 
@@ -858,7 +869,7 @@ def concatenate_video_files(
     output_video_path = Path(output_video_path)
 
     if output_video_path.exists() and not overwrite:
-        logging.warning(
+        logger.warn(
             f"Video file already exists: {output_video_path}. Skipping concatenation."
         )
         return
@@ -958,8 +969,7 @@ with warnings.catch_warnings():
 
 
 def get_audio_info(video_path: Path | str) -> dict:
-    # Set logging level
-    logging.getLogger("libav").setLevel(av.logging.ERROR)
+    # Set logger level
 
     # Getting audio stream information
     audio_info = {}
@@ -967,7 +977,7 @@ def get_audio_info(video_path: Path | str) -> dict:
         try:
             audio_stream = audio_file.streams.audio[0]
         except IndexError:
-            # Reset logging level
+            # Reset logger level
             av.logging.restore_default_callback()
             return {"has_audio": False}
 
@@ -985,15 +995,15 @@ def get_audio_info(video_path: Path | str) -> dict:
         audio_info["audio.channel_layout"] = audio_stream.layout.name
         audio_info["has_audio"] = True
 
-    # Reset logging level
+    # Reset logger level
     av.logging.restore_default_callback()
 
     return audio_info
 
 
 def get_video_info(video_path: Path | str) -> dict:
-    # Set logging level
-    logging.getLogger("libav").setLevel(av.logging.ERROR)
+    # Set logger level
+    # logger.getLogger("libav").setLevel(av.logging.ERROR)
 
     # Getting video stream information
     video_info = {}
@@ -1001,7 +1011,7 @@ def get_video_info(video_path: Path | str) -> dict:
         try:
             video_stream = video_file.streams.video[0]
         except IndexError:
-            # Reset logging level
+            # Reset logger level
             av.logging.restore_default_callback()
             return {}
 
@@ -1017,7 +1027,7 @@ def get_video_info(video_path: Path | str) -> dict:
         pixel_channels = get_video_pixel_channels(video_stream.pix_fmt)
         video_info["video.channels"] = pixel_channels
 
-    # Reset logging level
+    # Reset logger level
     av.logging.restore_default_callback()
 
     # Adding audio stream information
@@ -1090,17 +1100,18 @@ class VideoEncodingManager:
             # Handle any remaining episodes that haven't been batch encoded
             if self.dataset.episodes_since_last_encoding > 0:
                 if exc_type is not None:
-                    logging.info(
+                    logger.info(
                         "Exception occurred. Encoding remaining episodes before exit..."
                     )
                 else:
-                    logging.info("Recording stopped. Encoding remaining episodes...")
+                    logger.info("Recording stopped. Encoding remaining episodes...")
 
                 start_ep = (
-                    self.dataset.num_episodes - self.dataset.episodes_since_last_encoding
+                    self.dataset.num_episodes
+                    - self.dataset.episodes_since_last_encoding
                 )
                 end_ep = self.dataset.num_episodes
-                logging.info(
+                logger.info(
                     f"Encoding remaining {self.dataset.episodes_since_last_encoding} episodes, "
                     f"from episode {start_ep} to {end_ep - 1}"
                 )
@@ -1119,7 +1130,7 @@ class VideoEncodingManager:
                     frame_index=0,
                 ).parent
                 if img_dir.exists():
-                    logging.debug(
+                    logger.debug(
                         f"Cleaning up interrupted episode images for episode {interrupted_episode_index}, camera {key}"
                     )
                     shutil.rmtree(img_dir)
@@ -1132,9 +1143,9 @@ class VideoEncodingManager:
             # Only remove the images directory if no PNG files remain
             if img_dir.exists():
                 shutil.rmtree(img_dir)
-                logging.debug("Cleaned up empty images directory")
+                logger.debug("Cleaned up empty images directory")
         else:
-            logging.debug(
+            logger.debug(
                 f"Images directory is not empty, containing {len(png_files)} PNG files"
             )
 
