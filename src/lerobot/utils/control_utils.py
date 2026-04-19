@@ -19,20 +19,13 @@
 
 import logging
 import traceback
-from contextlib import nullcontext
-from copy import copy
 from functools import cache
 from typing import Any
 
-import numpy as np
-import torch
 from deepdiff import DeepDiff
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.datasets.utils import DEFAULT_FEATURES
-from lerobot.policies.pretrained import PreTrainedPolicy
-from lerobot.policies.utils import prepare_observation_for_inference
-from lerobot.processor import PolicyAction, PolicyProcessorPipeline
 from lerobot.robots import Robot
 
 
@@ -62,63 +55,6 @@ def is_headless():
         traceback.print_exc()
         print()
         return True
-
-
-def predict_action(
-    observation: dict[str, np.ndarray],
-    policy: PreTrainedPolicy,
-    device: torch.device,
-    preprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
-    postprocessor: PolicyProcessorPipeline[PolicyAction, PolicyAction],
-    use_amp: bool,
-    task: str | None = None,
-    robot_type: str | None = None,
-):
-    """
-    Performs a single-step inference to predict a robot action from an observation.
-
-    This function encapsulates the full inference pipeline:
-    1. Prepares the observation by converting it to PyTorch tensors and adding a batch dimension.
-    2. Runs the preprocessor pipeline on the observation.
-    3. Feeds the processed observation to the policy to get a raw action.
-    4. Runs the postprocessor pipeline on the raw action.
-    5. Formats the final action by removing the batch dimension and moving it to the CPU.
-
-    Args:
-        observation: A dictionary of NumPy arrays representing the robot's current observation.
-        policy: The `PreTrainedPolicy` model to use for action prediction.
-        device: The `torch.device` (e.g., 'cuda' or 'cpu') to run inference on.
-        preprocessor: The `PolicyProcessorPipeline` for preprocessing observations.
-        postprocessor: The `PolicyProcessorPipeline` for postprocessing actions.
-        use_amp: A boolean to enable/disable Automatic Mixed Precision for CUDA inference.
-        task: An optional string identifier for the task.
-        robot_type: An optional string identifier for the robot type.
-
-    Returns:
-        A `torch.Tensor` containing the predicted action, ready for the robot.
-    """
-    observation = copy(observation)
-    with (
-        torch.inference_mode(),
-        (
-            torch.autocast(device_type=device.type)
-            if device.type == "cuda" and use_amp
-            else nullcontext()
-        ),
-    ):
-        # Convert to pytorch format: channel first and float32 in [0,1] with batch dimension
-        observation = prepare_observation_for_inference(
-            observation, device, task, robot_type
-        )
-        observation = preprocessor(observation)
-
-        # Compute the next action with the policy
-        # based on the current observation
-        action = policy.select_action(observation)
-
-        action = postprocessor(action)
-
-    return action
 
 
 def init_keyboard_listener(teleop: Any | None = None):

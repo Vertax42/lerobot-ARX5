@@ -53,12 +53,11 @@ from lerobot.cameras.configs import CameraConfig
 from lerobot.configs import parser
 from lerobot.robots.config import RobotConfig
 from lerobot.teleoperators.config import TeleoperatorConfig
-from lerobot.utils.robot_utils import emergency_stop_flexiv_rt_robot, quaternion_to_rotation_6d
+from lerobot.utils.robot_utils import quaternion_to_rotation_6d
 from lerobot.utils.utils import init_logging
 # Delay import of rerun and visualization utils - only needed for camera tests
 # import rerun as rr
 # from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
-# from lerobot.processor import make_default_processors
 
 logger = logging.getLogger(__name__)
 
@@ -110,39 +109,6 @@ def _test_robot(
             logger.exception("Connection failed")
             raise
         
-        # Send initial TCP pose action (only for CARTESIAN_MOTION_FORCE mode)
-        try:
-            from lerobot.robots.flexiv_rizon4.config_flexiv_rizon4 import ControlMode
-            if hasattr(robot.config, 'control_mode') and robot.config.control_mode == ControlMode.CARTESIAN_MOTION_FORCE:
-                target_tcp_pose = [0.68783, -0.115326, 0.328386, 0.004519, 0.003284, 0.999984, 0.001275]
-                # Format: [x, y, z, qw, qx, qy, qz] -> convert to 6D rotation
-                r6d = quaternion_to_rotation_6d(
-                    target_tcp_pose[3], target_tcp_pose[4], target_tcp_pose[5], target_tcp_pose[6]
-                )
-                action = {
-                    "tcp.x": target_tcp_pose[0],
-                    "tcp.y": target_tcp_pose[1],
-                    "tcp.z": target_tcp_pose[2],
-                    "tcp.r1": r6d[0],
-                    "tcp.r2": r6d[1],
-                    "tcp.r3": r6d[2],
-                    "tcp.r4": r6d[3],
-                    "tcp.r5": r6d[4],
-                    "tcp.r6": r6d[5],
-                    "gripper.pos": 0.0,  # Keep gripper at current position or set to 0
-                }
-                logger.info(f"Sending initial TCP pose action: {target_tcp_pose}")
-                time.sleep(0.5)
-                robot.send_action(action)
-                logger.info("✅ Initial TCP pose action sent.")
-                time.sleep(0.5)  # Give robot time to start moving
-        except (ImportError, AttributeError):
-            # Not a Flexiv robot or control_mode not available, skip
-            pass
-        except Exception as e:
-            logger.warning(f"Failed to send initial TCP pose action: {e}")
-            # Continue anyway - this is not critical
-        
         # Continuous observation loop
         loop_count = 0
         try:
@@ -186,8 +152,6 @@ def _test_robot(
                     logger.info("✅ Robot safely disconnected.")
             except Exception as e:
                 logger.error(f"Error during robot disconnect: {e}")
-                if emergency_stop_flexiv_rt_robot(robot, logger):
-                    logger.warning("Emergency stop fallback completed for Flexiv RT robot.")
 
 
 def _test_camera(
@@ -200,14 +164,11 @@ def _test_camera(
     # Lazy import of heavy dependencies - only needed for camera tests
     import rerun as rr
     from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
-    from lerobot.processor import make_default_processors
     from lerobot.cameras import make_cameras_from_configs
-    
+
     init_rerun(session_name=f"{camera_config.type}-test")
     config = {camera_config.type: camera_config}
-    
-    _, _, robot_observation_processor = make_default_processors()
-    
+
     cameras = make_cameras_from_configs(config)
     logger.info(f"Initializing cameras: {cameras}")
     for cam_key, cam in cameras.items():
@@ -293,8 +254,7 @@ def _test_camera(
     try:
         while True:
             obs = get_observation()
-            obs_processed = robot_observation_processor(obs)
-            log_rerun_data(observation=obs_processed)
+            log_rerun_data(observation=obs)
             time.sleep(1 / 60)
     except KeyboardInterrupt:
         pass
@@ -367,16 +327,12 @@ def _register_builtin_devices(device_types: list[str] | None = None) -> dict[str
             "lerobot.cameras.xense.configuration_xense",
         ],
         "robots": [
-            "lerobot.robots.bi_arx5.config_bi_arx5",
-            "lerobot.robots.arx5_follower.config_arx5_follower",
-            "lerobot.robots.flexiv_rizon4.config_flexiv_rizon4",
+            "lerobot.robots.mock_robot",
         ],
         "teleoperators": [
             "lerobot.teleoperators.keyboard.configuration_keyboard",
             "lerobot.teleoperators.mock_teleop",
             "lerobot.teleoperators.gamepad.configuration_gamepad",
-            "lerobot.teleoperators.pico4.config_pico4",
-            "lerobot.teleoperators.spacemouse.config_spacemouse",
         ],
     }
 
@@ -524,18 +480,11 @@ def _build_sample_configs() -> dict[str, Any]:
 
     # Robots (configs only; do NOT connect/instantiate hardware)
     try:
-        from lerobot.robots.arx5_follower.config_arx5_follower import ARX5FollowerConfig
+        from lerobot.robots.mock_robot import MockRobotConfig
 
-        samples["arx5_robot_cfg"] = ARX5FollowerConfig(port="/dev/ttyUSB0")
+        samples["mock_robot_cfg"] = MockRobotConfig()
     except Exception as e:
-        samples["arx5_robot_cfg_error"] = f"{type(e).__name__}: {e}"
-
-    try:
-        from lerobot.robots.bi_arx5.config_bi_arx5 import BiARX5Config
-
-        samples["bi_arx5_robot_cfg"] = BiARX5Config(enable_tactile_sensors=False)
-    except Exception as e:
-        samples["bi_arx5_robot_cfg_error"] = f"{type(e).__name__}: {e}"
+        samples["mock_robot_cfg_error"] = f"{type(e).__name__}: {e}"
 
     return samples
 
@@ -554,8 +503,8 @@ def test_with_config(cfg: TestConfig):
     """Test device using configuration interface.
     
     Examples:
-        lerobot-test --robot.type=flexiv_rizon4
-        lerobot-test --teleop.type=spacemouse
+        lerobot-test --robot.type=mock
+        lerobot-test --teleop.type=keyboard
         lerobot-test --camera.type=opencv
     """
     init_logging()

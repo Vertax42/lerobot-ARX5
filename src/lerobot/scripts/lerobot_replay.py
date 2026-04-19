@@ -24,17 +24,10 @@ from pprint import pformat
 
 from lerobot.configs import parser
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
-from lerobot.processor import (
-    make_default_robot_action_processor,
-)
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
-    arx5_follower,
-    bi_arx5,
-    flexiv_rizon4,  # noqa: F401
     make_robot_from_config,
-    pylibfranka_research3,  # noqa: F401
 )
 from lerobot.utils.constants import ACTION
 from lerobot.utils.import_utils import register_third_party_devices
@@ -47,7 +40,7 @@ from lerobot.utils.utils import (
 
 @dataclass
 class DatasetReplayConfig:
-    # Dataset identifier. By convention it should match '{hf_username}/{dataset_name}' (e.g. `lerobot/test`).
+    # Dataset identifier. By convention it should match '{hf_username}/{dataset_name}'.
     repo_id: str
     # Episode to replay.
     episode: int
@@ -70,8 +63,6 @@ def replay(cfg: ReplayConfig):
     init_logging()
     logging.info(pformat(asdict(cfg)))
 
-    robot_action_processor = make_default_robot_action_processor()
-
     robot = make_robot_from_config(cfg.robot)
     dataset = LeRobotDataset(
         cfg.dataset.repo_id, root=cfg.dataset.root, episodes=[cfg.dataset.episode]
@@ -85,12 +76,6 @@ def replay(cfg: ReplayConfig):
 
     try:
         robot.connect()
-        # Switch to normal position control if supported (for BiARX5)
-        if isinstance(robot, bi_arx5.BiARX5) and callable(
-            robot.set_to_normal_position_control
-        ):
-            logging.info("Switching robot to normal position control mode for replay")
-            robot.set_to_normal_position_control()
 
         log_say("Replaying episode", cfg.play_sounds, blocking=True)
         for idx in range(len(episode_frames)):
@@ -101,11 +86,7 @@ def replay(cfg: ReplayConfig):
             for i, name in enumerate(dataset.features[ACTION]["names"]):
                 action[name] = action_array[i]
 
-            robot_obs = robot.get_observation()
-
-            processed_action = robot_action_processor((action, robot_obs))
-
-            _ = robot.send_action(processed_action)
+            _ = robot.send_action(action)
 
             dt_s = time.perf_counter() - start_episode_t
             busy_wait(1 / dataset.fps - dt_s)
@@ -116,7 +97,7 @@ def replay(cfg: ReplayConfig):
         if robot.is_connected:
             logging.info("Disconnecting robot...")
             robot.disconnect()
-            logging.info("✅ Robot disconnected safely")
+            logging.info("Robot disconnected safely")
 
 
 def main():

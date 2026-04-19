@@ -18,7 +18,7 @@ import importlib
 import gymnasium as gym
 from gymnasium.envs.registration import registry as gym_registry
 
-from lerobot.envs.configs import AlohaEnv, EnvConfig, LiberoEnv, PushtEnv
+from lerobot.envs.configs import AlohaEnv, EnvConfig, PushtEnv
 
 
 def make_env_config(env_type: str, **kwargs) -> EnvConfig:
@@ -26,8 +26,6 @@ def make_env_config(env_type: str, **kwargs) -> EnvConfig:
         return AlohaEnv(**kwargs)
     elif env_type == "pusht":
         return PushtEnv(**kwargs)
-    elif env_type == "libero":
-        return LiberoEnv(**kwargs)
     else:
         raise ValueError(f"Policy type '{env_type}' is not available.")
 
@@ -58,33 +56,6 @@ def make_env(
         raise ValueError("`n_envs` must be at least 1")
 
     env_cls = gym.vector.AsyncVectorEnv if use_async_envs else gym.vector.SyncVectorEnv
-
-    if "libero" in cfg.type:
-        from lerobot.envs.libero import create_libero_envs
-
-        if cfg.task is None:
-            raise ValueError("LiberoEnv requires a task to be specified")
-
-        return create_libero_envs(
-            task=cfg.task,
-            n_envs=n_envs,
-            camera_name=cfg.camera_name,
-            init_states=cfg.init_states,
-            gym_kwargs=cfg.gym_kwargs,
-            env_cls=env_cls,
-        )
-    elif "metaworld" in cfg.type:
-        from lerobot.envs.metaworld import create_metaworld_envs
-
-        if cfg.task is None:
-            raise ValueError("MetaWorld requires a task to be specified")
-
-        return create_metaworld_envs(
-            task=cfg.task,
-            n_envs=n_envs,
-            gym_kwargs=cfg.gym_kwargs,
-            env_cls=env_cls,
-        )
 
     if cfg.gym_id not in gym_registry:
         print(f"gym id '{cfg.gym_id}' not found, attempting to import '{cfg.package_name}'...")
