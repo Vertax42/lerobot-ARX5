@@ -20,8 +20,9 @@ from typing import Any
 import draccus
 
 from lerobot.motors.motors_bus import MotorCalibration
-from lerobot.processor import RobotAction
 from lerobot.utils.constants import HF_LEROBOT_CALIBRATION, TELEOPERATORS
+
+RobotAction = dict[str, Any]
 
 from .config import TeleoperatorConfig
 

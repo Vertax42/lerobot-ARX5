@@ -27,7 +27,10 @@ from lerobot.utils.constants import HF_LEROBOT_CALIBRATION, ROBOTS
 from .config import RobotConfig
 
 if TYPE_CHECKING:
-    from lerobot.processor import RobotAction, RobotObservation
+    from typing import Any
+
+    RobotAction = dict[str, Any]
+    RobotObservation = dict[str, Any]
 
 
 # TODO(aliberts): action/obs typing such as Generic[ObsType, ActType] similar to gym.Env ?
