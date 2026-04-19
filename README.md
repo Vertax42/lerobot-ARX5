@@ -13,11 +13,10 @@ transport stacks, and the sim envs (LIBERO / MetaWorld).
 - `cameras/` — OpenCV, RealSense, and **Xense tactile**.
 - `robots/` — base `Robot` class + `MockRobot`.
 - `teleoperators/` — base `Teleoperator` + `keyboard` + `gamepad` + `MockTeleop`.
-- `envs/` — `AlohaEnv`, `PushtEnv`, `HILSerlRobotEnvConfig` base.
 - CLI entry points: `lerobot-record`, `lerobot-replay`, `lerobot-teleoperate`, `lerobot-test`,
   `lerobot-calibrate`, `lerobot-find-cameras`, `lerobot-find-port`, `lerobot-info`,
   `lerobot-dataset-viz`, `lerobot-edit-dataset`, `lerobot-annotate-reward`,
-  `lerobot-find-joint-limits`, `lerobot-imgtransform-viz`.
+  `lerobot-imgtransform-viz`.
 
 ## What was removed
 
@@ -27,8 +26,9 @@ transport stacks, and the sim envs (LIBERO / MetaWorld).
   pylibfranka_research3, xense_flare, xense_multisensor, bi_xense_flare_grippers).
 - All vendor `teleoperators/` (bi_pico4, bi_trlc, btgamepad, phone, pico4, spacemouse,
   trlc_leader, vive_tracker, xense_flare).
-- `envs/libero.py`, `envs/metaworld.py`.
-- `scripts/lerobot_train.py`, `scripts/lerobot_eval.py` (no policies left to train/eval).
+- `envs/` (sim env factory + aloha / pusht / libero / metaworld configs).
+- `model/` (placo kinematics).
+- `scripts/lerobot_train.py`, `scripts/lerobot_eval.py`, `scripts/lerobot_find_joint_limits.py`.
 - `third_party/` — except `xensesdk` (required by `cameras/xense`).
 - `setup_env.sh`, `setup_can.sh`, `gripper_fix.md`, `conda_environment.yaml`, `docker/`,
   `docs/`, `docs-requirements.txt`.
