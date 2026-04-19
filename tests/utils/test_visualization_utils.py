@@ -21,8 +21,14 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from lerobot.processor import TransitionKey
+from enum import Enum
+
 from lerobot.utils.constants import OBS_STATE
+
+
+class TransitionKey(str, Enum):
+    OBSERVATION = "observation"
+    ACTION = "action"
 
 
 @pytest.fixture
