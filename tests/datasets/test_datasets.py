@@ -25,10 +25,8 @@ from huggingface_hub import HfApi
 from PIL import Image
 from safetensors.torch import load_file
 
-import lerobot
+import lerobot  # noqa: F401
 from lerobot.configs.default import DatasetConfig
-from lerobot.configs.train import TrainPipelineConfig
-from lerobot.datasets.factory import make_dataset
 from lerobot.datasets.image_writer import image_array_to_pil_image
 from lerobot.datasets.lerobot_dataset import (
     LeRobotDataset,
@@ -45,8 +43,6 @@ from lerobot.datasets.utils import (
     hw_to_dataset_features,
 )
 from lerobot.datasets.video_utils import VALID_VIDEO_CODECS
-from lerobot.envs.factory import make_env_config
-from lerobot.policies.factory import make_policy_config
 from lerobot.robots import make_robot_from_config
 from lerobot.utils.constants import ACTION, DONE, OBS_IMAGES, OBS_STATE, OBS_STR, REWARD
 from tests.fixtures.constants import DUMMY_CHW, DUMMY_HWC, DUMMY_REPO_ID
@@ -426,76 +422,9 @@ def test_tmp_mixed_deletion(tmp_path, empty_lerobot_dataset_factory):
 # - [ ] remove old tests
 
 
-@pytest.mark.parametrize(
-    "env_name, repo_id, policy_name",
-    # Single dataset
-    lerobot.env_dataset_policy_triplets,
-    # Multi-dataset
-    # TODO after fix multidataset
-    # + [("aloha", ["lerobot/aloha_sim_insertion_human", "lerobot/aloha_sim_transfer_cube_human"], "act")],
-)
-def test_factory(env_name, repo_id, policy_name):
-    """
-    Tests that:
-        - we can create a dataset with the factory.
-        - for a commonly used set of data keys, the data dimensions are correct.
-    """
-    cfg = TrainPipelineConfig(
-        # TODO(rcadene, aliberts): remove dataset download
-        dataset=DatasetConfig(repo_id=repo_id, episodes=[0]),
-        env=make_env_config(env_name),
-        policy=make_policy_config(policy_name),
-    )
-
-    dataset = make_dataset(cfg)
-    delta_timestamps = dataset.delta_timestamps
-    camera_keys = dataset.meta.camera_keys
-
-    item = dataset[0]
-
-    keys_ndim_required = [
-        (ACTION, 1, True),
-        ("episode_index", 0, True),
-        ("frame_index", 0, True),
-        ("timestamp", 0, True),
-        # TODO(rcadene): should we rename it agent_pos?
-        (OBS_STATE, 1, True),
-        (REWARD, 0, False),
-        (DONE, 0, False),
-    ]
-
-    # test number of dimensions
-    for key, ndim, required in keys_ndim_required:
-        if key not in item:
-            if required:
-                assert key in item, f"{key}"
-            else:
-                logging.warning(f'Missing key in dataset: "{key}" not in {dataset}.')
-                continue
-
-        if delta_timestamps is not None and key in delta_timestamps:
-            assert item[key].ndim == ndim + 1, f"{key}"
-            assert item[key].shape[0] == len(delta_timestamps[key]), f"{key}"
-        else:
-            assert item[key].ndim == ndim, f"{key}"
-
-        if key in camera_keys:
-            assert item[key].dtype == torch.float32, f"{key}"
-            # TODO(rcadene): we assume for now that image normalization takes place in the model
-            assert item[key].max() <= 1.0, f"{key}"
-            assert item[key].min() >= 0.0, f"{key}"
-
-            if delta_timestamps is not None and key in delta_timestamps:
-                # test t,c,h,w
-                assert item[key].shape[1] == 3, f"{key}"
-            else:
-                # test c,h,w
-                assert item[key].shape[0] == 3, f"{key}"
-
-    if delta_timestamps is not None:
-        # test missing keys in delta_timestamps
-        for key in delta_timestamps:
-            assert key in item, f"{key}"
+# (test_factory removed — relied on lerobot.configs.train.TrainPipelineConfig,
+# lerobot.envs.factory.make_env_config, lerobot.policies.factory.make_policy_config,
+# and lerobot.datasets.factory.make_dataset, none of which exist in this build.)
 
 
 # TODO(alexander-soare): If you're hunting for savings on testing time, this takes about 5 seconds.
