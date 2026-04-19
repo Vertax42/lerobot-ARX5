@@ -1,0 +1,13 @@
+name: lerobot-minimal
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - cmake
+  - ninja
+  - cxx-compiler
+  - pybind11
+  - libstdcxx-ng  # for xensevr_pc_service_sdk (pico4) build
+  - libhidapi      # for spacemouse / gamepad
+  - ffmpeg         # for av / imageio ffmpeg backend
