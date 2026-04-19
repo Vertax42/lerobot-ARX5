@@ -12,7 +12,9 @@ transport stacks, and the sim envs (LIBERO / MetaWorld).
 - `datasets/` — LeRobot dataset format, record & replay.
 - `cameras/` — OpenCV, RealSense, and **Xense tactile**.
 - `robots/` — base `Robot` class + `MockRobot`.
-- `teleoperators/` — base `Teleoperator` + `keyboard` + `gamepad` + `MockTeleop`.
+- `teleoperators/` — base `Teleoperator` + `keyboard` + `gamepad` + `spacemouse`
+  + `pico4` + `MockTeleop`. Pico4 additionally needs `xensevr_pc_service_sdk`
+  (install manually; was previously bundled via `third_party/XenseVR-PC-Service`).
 - CLI entry points: `lerobot-record`, `lerobot-replay`, `lerobot-teleoperate`, `lerobot-test`,
   `lerobot-calibrate`, `lerobot-find-cameras`, `lerobot-find-port`, `lerobot-info`,
   `lerobot-dataset-viz`, `lerobot-edit-dataset`, `lerobot-annotate-reward`,
@@ -24,8 +26,8 @@ transport stacks, and the sim envs (LIBERO / MetaWorld).
   `src/lerobot/async_inference/`, `src/lerobot/transport/`.
 - All vendor `robots/` (arx5_*, bi_arx5, flexiv_rizon4*, bi_flexiv_rizon4_rt,
   pylibfranka_research3, xense_flare, xense_multisensor, bi_xense_flare_grippers).
-- All vendor `teleoperators/` (bi_pico4, bi_trlc, btgamepad, phone, pico4, spacemouse,
-  trlc_leader, vive_tracker, xense_flare).
+- Vendor `teleoperators/` (bi_pico4, bi_trlc, btgamepad, phone, trlc_leader,
+  vive_tracker, xense_flare). `pico4` and `spacemouse` are kept.
 - `envs/` (sim env factory + aloha / pusht / libero / metaworld configs).
 - `model/` (placo kinematics).
 - `scripts/lerobot_train.py`, `scripts/lerobot_eval.py`, `scripts/lerobot_find_joint_limits.py`.

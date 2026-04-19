@@ -90,6 +90,9 @@ dependencies = [
     "pynput>=1.7.7,<1.9.0",
     "pyserial>=3.5,<4.0",
 
+    # SpaceMouse teleop (runtime is lazy-imported)
+    "pyspacemouse",
+
     # Torch stack
     "torch>=2.2.1,<2.8.1",
     "torchcodec==0.7.0; sys_platform != 'win32' and (sys_platform != 'linux' or (platform_machine != 'aarch64' and platform_machine != 'arm64' and platform_machine != 'armv7l')) and (sys_platform != 'darwin' or platform_machine != 'x86_64')",
