@@ -18,8 +18,7 @@ import random
 from functools import cached_property
 from typing import Any
 
-from lerobot.processor import RobotAction
-from lerobot.teleoperators.teleoperator import Teleoperator
+from lerobot.teleoperators.teleoperator import RobotAction, Teleoperator
 from lerobot.utils.decorators import check_if_already_connected, check_if_not_connected
 
 from .config_mock_teleop import MockTeleopConfig

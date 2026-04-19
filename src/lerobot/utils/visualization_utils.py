@@ -14,13 +14,15 @@
 
 import numbers
 import os
+from typing import Any
 
 import numpy as np
 import rerun as rr
 
-from lerobot.processor import RobotAction, RobotObservation
-
 from .constants import ACTION, ACTION_PREFIX, OBS_PREFIX, OBS_STR
+
+RobotAction = dict[str, Any]
+RobotObservation = dict[str, Any]
 
 
 def init_rerun(

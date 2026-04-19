@@ -20,10 +20,9 @@ from typing import Any
 
 import numpy as np
 
-from lerobot.processor import RobotAction
 from lerobot.utils.decorators import check_if_not_connected
 
-from ..teleoperator import Teleoperator
+from ..teleoperator import RobotAction, Teleoperator
 from ..utils import TeleopEvents
 from .configuration_gamepad import GamepadTeleopConfig
 
