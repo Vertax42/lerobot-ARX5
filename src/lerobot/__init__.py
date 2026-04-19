@@ -156,8 +156,9 @@ available_datasets = sorted(
     set(itertools.chain(*available_datasets_per_env.values(), available_real_world_datasets))
 )
 
-# lists all available policies from `lerobot/policies`
-available_policies = ["act", "diffusion", "tdmpc", "vqbet"]
+# Policies are not bundled in this build.
+available_policies: list[str] = []
+available_policies_per_env: dict[str, list[str]] = {}
 
 # lists all available robots from `lerobot/robots`
 available_robots = [
@@ -172,6 +173,7 @@ available_robots = [
 available_cameras = [
     "opencv",
     "intelrealsense",
+    "xense",
 ]
 
 # lists all available motors from `lerobot/motors`
@@ -180,21 +182,7 @@ available_motors = [
     "feetech",
 ]
 
-# keys and values refer to yaml files
-available_policies_per_env = {
-    "aloha": ["act"],
-    "pusht": ["diffusion", "vqbet"],
-    "koch_real": ["act_koch_real"],
-    "aloha_real": ["act_aloha_real"],
-}
-
 env_task_pairs = [(env, task) for env, tasks in available_tasks_per_env.items() for task in tasks]
 env_dataset_pairs = [
     (env, dataset) for env, datasets in available_datasets_per_env.items() for dataset in datasets
-]
-env_dataset_policy_triplets = [
-    (env, dataset, policy)
-    for env, datasets in available_datasets_per_env.items()
-    for dataset in datasets
-    for policy in available_policies_per_env[env]
 ]
