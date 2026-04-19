@@ -20,6 +20,7 @@
 import logging
 import traceback
 from functools import cache
+from typing import Any
 
 from deepdiff import DeepDiff
 
@@ -56,26 +57,44 @@ def is_headless():
         return True
 
 
-def init_keyboard_listener():
+def init_keyboard_listener(teleop: Any | None = None):
     """
     Initializes a non-blocking keyboard listener for real-time user interaction.
 
-    This function sets up a listener for specific keys (right arrow, left arrow, escape) to control
-    the program flow during execution, such as stopping recording or exiting loops. It gracefully
-    handles headless environments where keyboard listening is not possible.
+    This function sets up a listener for specific keys (right arrow, left arrow, escape, space)
+    to control the program flow during execution. When `teleop` is provided and exposes
+    ``poll_buttons()`` + ``get_reset_button()``, the teleop's reset button is mapped to the same
+    ``go_start`` event as the Space key. Headless environments skip the keyboard listener but
+    still surface the event dict so recording loops keep working.
+
+    Args:
+        teleop: Optional teleoperator whose button events should be mapped into the same
+            `events` dictionary as keyboard shortcuts.
 
     Returns:
         A tuple containing:
         - The `pynput.keyboard.Listener` instance, or `None` if in a headless environment.
         - A dictionary of event flags (e.g., `exit_early`) that are set by key presses.
     """
-    # Allow to exit early while recording an episode or resetting the environment,
-    # by tapping the right arrow key '->'. This might require a sudo permission
-    # to allow your terminal to monitor keyboard events.
-    events = {}
+    events: dict[str, Any] = {}
     events["exit_early"] = False
     events["rerecord_episode"] = False
     events["stop_recording"] = False
+    events["go_start"] = False
+
+    def refresh_events_from_teleop() -> None:
+        if teleop is None:
+            return
+        try:
+            if hasattr(teleop, "poll_buttons"):
+                teleop.poll_buttons()
+            # Only A button (reset) is mapped — B/X/Y caused accidental triggers.
+            if hasattr(teleop, "get_reset_button") and teleop.get_reset_button():
+                events["go_start"] = True
+        except Exception as e:
+            logging.debug(f"Error refreshing teleop control events: {e}")
+
+    events["_refresh_events"] = refresh_events_from_teleop
 
     if is_headless():
         logging.warning(
@@ -100,6 +119,9 @@ def init_keyboard_listener():
                 print("Escape key pressed. Stopping data recording...")
                 events["stop_recording"] = True
                 events["exit_early"] = True
+            elif key == keyboard.Key.space:
+                print("Space key pressed. Robot will go to start pose while recording continues...")
+                events["go_start"] = True
         except Exception as e:
             print(f"Error handling key press: {e}")
 
@@ -107,6 +129,13 @@ def init_keyboard_listener():
     listener.start()
 
     return listener, events
+
+
+def refresh_listener_events(events: dict[str, Any]) -> None:
+    """Polls teleop-derived control events attached by init_keyboard_listener()."""
+    refresh = events.get("_refresh_events")
+    if callable(refresh):
+        refresh()
 
 
 def sanity_check_dataset_name(repo_id):
