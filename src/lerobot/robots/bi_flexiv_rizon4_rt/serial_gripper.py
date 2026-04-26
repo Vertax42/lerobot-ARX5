@@ -34,6 +34,19 @@ from lerobot.utils.robot_utils import get_logger
 # interfere with each other's serial read_board_sn() queries.
 _scan_lock = Lock()
 
+# Log an error only after repeated real communication-health failures.
+# Mere status-query timeouts are expected while the MCU is idle and are not errors.
+_POLL_FAIL_LOG_THRESHOLD = 20
+_POLL_FAIL_REPEAT_INTERVAL = 100
+_POLL_FAIL_SLEEP_S = 0.05
+
+# Hybrid initialization: skip motion if already near target, otherwise prefer a
+# sync move only before the background poller starts. Once the poller is running,
+# avoid blocking sync waits that would contend for the same serial status channel.
+_INIT_POSITION_TOLERANCE = 0.02
+_INIT_STATUS_TIMEOUT_S = 0.2
+_INIT_SYNC_TIMEOUT_S = 3.0
+
 
 def find_port_by_sn(sn: str, baudrate: int = 115200, device_id: int = 1) -> str:
     """Scan all ttyUSB/ttyACM ports and return the one whose board SN matches.
@@ -71,8 +84,8 @@ class SerialGripper:
         0.0  →  fully closed (SDK position = gripper_min_pos, e.g.  0 mm)
         1.0  →  fully open   (SDK position = gripper_max_pos, e.g. 85 mm)
 
-    Note: XenseSerialGripper uses 0 = closed, 85 = open internally.
-    Normalized maps directly: normalized * span → SDK position.
+    Note: XenseSerialGripper uses 0 mm = fully closed, 85 mm = fully open internally.
+    Normalized maps directly: normalized * span + min_pos → SDK position.
 
     Example::
 
@@ -102,8 +115,11 @@ class SerialGripper:
         self._is_connected: bool = False
         self._gripper: XenseSerialGripper | None = None
 
-        # Cached position updated by background poller — avoids blocking get_observation()
-        self._cached_position: float = 0.0
+        # Cached position updated by background poller — avoids blocking get_observation().
+        # Pre-seeded from init_open so get_gripper_position() returns a sensible value
+        # before the poller thread gets its first valid MCU response (MCU does not
+        # respond to status queries while idle, so the first update may be delayed).
+        self._cached_position: float = 1.0 if config.init_open else 0.0
         self._poll_thread: Thread | None = None
         self._poll_running: bool = False
 
@@ -116,7 +132,9 @@ class SerialGripper:
 
         # Resolve port from SN if not explicitly set
         if self._config.sn:
-            self._logger.info(f"Scanning serial ports for gripper SN={self._config.sn!r}...")
+            self._logger.info(
+                f"Scanning serial ports for gripper SN={self._config.sn!r}..."
+            )
             self._port = find_port_by_sn(
                 self._config.sn,
                 baudrate=self._config.baudrate,
@@ -136,22 +154,24 @@ class SerialGripper:
                 timeout=self._config.serial_timeout,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to open serial gripper on {self._port}: {e}") from e
+            raise RuntimeError(
+                f"Failed to open serial gripper on {self._port}: {e}"
+            ) from e
 
         self._is_connected = True
+        self._cached_position = 1.0 if self._init_open else 0.0
         self._logger.info(f"Serial gripper connected on {self._port}.")
 
         if self._init_open:
-            self._logger.info("Initializing gripper to fully open position (non-blocking)...")
             try:
-                # Use non-blocking set_position: MCU does not respond to status queries
-                # while idle, so set_position_sync would spin for ~4s even when already open.
-                self._gripper.set_position(
-                    self._gripper_max_pos,
+                self.initialize_gripper_position(
+                    1.0,
+                    tolerance=_INIT_POSITION_TOLERANCE,
+                    status_timeout=_INIT_STATUS_TIMEOUT_S,
+                    sync_timeout=_INIT_SYNC_TIMEOUT_S,
                     vmax=self._gripper_v_max,
                     fmax=self._gripper_f_max / 2,
                 )
-                self._logger.info("Gripper open command sent.")
             except Exception as e:
                 self._logger.warn(f"Gripper init-open failed (non-fatal): {e}")
 
@@ -163,23 +183,80 @@ class SerialGripper:
     def _position_poll_loop(self) -> None:
         """Background thread: continuously refresh _cached_position via serial query."""
         span = self._gripper_max_pos - self._gripper_min_pos
+        consecutive_failures = 0
         while self._poll_running:
             gripper = self._gripper
             if gripper is None:
                 break
             try:
                 status = gripper.get_gripper_status(timeout=0.05)
-                if status is not None:
-                    raw_pos = float(status.get("position", 0.0))
-                    raw_pos = max(self._gripper_min_pos, min(raw_pos, self._gripper_max_pos))
-                    self._cached_position = (raw_pos - self._gripper_min_pos) / span
-            except Exception:
-                pass
+                failure_reason = gripper.get_receive_thread_failure_reason()
+                if failure_reason is not None:
+                    consecutive_failures += 1
+                    self._maybe_log_poll_failure(
+                        f"receive thread unhealthy: {failure_reason}",
+                        consecutive_failures,
+                    )
+                    time.sleep(_POLL_FAIL_SLEEP_S)
+                    continue
+
+                if consecutive_failures >= _POLL_FAIL_LOG_THRESHOLD:
+                    self._logger.info(
+                        f"Gripper communication recovered on {self._port} after "
+                        f"{consecutive_failures} health-check failures."
+                    )
+                consecutive_failures = 0
+
+                raw_pos = None if status is None else status.get("position")
+                if raw_pos is None:
+                    time.sleep(_POLL_FAIL_SLEEP_S)
+                    continue
+
+                raw_pos = max(
+                    self._gripper_min_pos, min(float(raw_pos), self._gripper_max_pos)
+                )
+                self._cached_position = (raw_pos - self._gripper_min_pos) / span
+            except Exception as e:
+                consecutive_failures += 1
+                self._maybe_log_poll_failure(
+                    f"status poll error: {type(e).__name__}: {e}",
+                    consecutive_failures,
+                )
+                time.sleep(_POLL_FAIL_SLEEP_S)
+
+    def _maybe_log_poll_failure(self, reason: str, consecutive_failures: int) -> None:
+        if consecutive_failures == _POLL_FAIL_LOG_THRESHOLD:
+            self._logger.error(
+                f"Gripper communication unhealthy on {self._port}: {reason} — "
+                f"position cache is stale after {consecutive_failures} consecutive failures."
+            )
+        elif (
+            consecutive_failures > _POLL_FAIL_LOG_THRESHOLD
+            and (consecutive_failures - _POLL_FAIL_LOG_THRESHOLD) % _POLL_FAIL_REPEAT_INTERVAL == 0
+        ):
+            self._logger.error(
+                f"Gripper communication still unhealthy on {self._port}: {reason} — "
+                f"{consecutive_failures} consecutive failures."
+            )
 
     def disconnect(self) -> None:
-        """Stop the background thread and close the serial port."""
+        """Open gripper fully, stop the background thread, and close the serial port."""
         if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        # Open gripper before disconnecting so it doesn't stay closed
+        if self._gripper is not None:
+            try:
+                self._logger.info("Opening gripper before disconnect...")
+                self._gripper.set_position(
+                    self._gripper_max_pos,
+                    vmax=self._gripper_v_max,
+                    fmax=self._gripper_f_max / 2,
+                )
+            except Exception as e:
+                self._logger.warn(
+                    f"Gripper open before disconnect failed (non-fatal): {e}"
+                )
 
         self._poll_running = False
         if self._poll_thread is not None:
@@ -207,25 +284,117 @@ class SerialGripper:
         poll cycle behind reality — acceptable for 30 Hz teleoperation.
 
         Returns:
-            0.0 = fully open, 1.0 = fully closed.
+            0.0 = fully closed, 1.0 = fully open.
         """
         if not self._is_connected:
             return 0.0
         return self._cached_position
+
+    def _position_mm_to_normalized(self, position_mm: float) -> float:
+        span = self._gripper_max_pos - self._gripper_min_pos
+        clamped = max(self._gripper_min_pos, min(float(position_mm), self._gripper_max_pos))
+        return (clamped - self._gripper_min_pos) / span
+
+    def initialize_gripper_position(
+        self,
+        normalized_pos: float,
+        tolerance: float = _INIT_POSITION_TOLERANCE,
+        status_timeout: float = _INIT_STATUS_TIMEOUT_S,
+        sync_timeout: float = _INIT_SYNC_TIMEOUT_S,
+        vmax: float | None = None,
+        fmax: float | None = None,
+    ) -> None:
+        """Hybrid initialization for a target position.
+
+        Behavior:
+        - If current position is known and already near target, skip motion.
+        - If current position is known from a direct status read before the
+          background poller starts, use a sync move.
+        - Otherwise fall back to a non-blocking position command.
+        """
+        if not self._is_connected or self._gripper is None:
+            raise DeviceNotConnectedError("Serial gripper is not connected.")
+        if not 0.0 <= normalized_pos <= 1.0:
+            raise ValueError(f"normalized_pos must be in [0, 1], got {normalized_pos}.")
+        if tolerance < 0.0:
+            raise ValueError(f"tolerance must be non-negative, got {tolerance}.")
+
+        current_normalized: float | None = None
+        current_source = "unavailable"
+        poller_running = self._poll_thread is not None and self._poll_thread.is_alive()
+
+        if poller_running:
+            current_normalized = self._cached_position
+            current_source = "cache"
+        else:
+            try:
+                status = self._gripper.get_gripper_status(timeout=status_timeout)
+            except Exception as e:
+                self._logger.warn(
+                    f"Gripper init status read failed on {self._port}; "
+                    f"falling back to non-blocking command: {e}"
+                )
+                status = None
+            raw_pos = None if status is None else status.get("position")
+            if raw_pos is not None:
+                current_normalized = self._position_mm_to_normalized(raw_pos)
+                current_source = "status"
+                self._cached_position = current_normalized
+
+        if current_normalized is not None:
+            error = abs(current_normalized - normalized_pos)
+            if error <= tolerance:
+                self._logger.info(
+                    f"Gripper already near init target on {self._port} "
+                    f"({current_source}: current={current_normalized:.3f}, target={normalized_pos:.3f}); skipping move."
+                )
+                return
+
+        if current_source == "status":
+            self._logger.info(
+                f"Initializing gripper on {self._port} with sync move "
+                f"(current={current_normalized:.3f}, target={normalized_pos:.3f})..."
+            )
+            try:
+                self.set_gripper_position_sync(
+                    normalized_pos,
+                    timeout=sync_timeout,
+                    vmax=vmax,
+                    fmax=fmax,
+                )
+                self._cached_position = normalized_pos
+                self._logger.info("Gripper init sync move completed.")
+                return
+            except Exception as e:
+                self._logger.warn(
+                    f"Gripper init sync move failed on {self._port}; "
+                    f"falling back to non-blocking command: {e}"
+                )
+
+        span = self._gripper_max_pos - self._gripper_min_pos
+        target_mm = self._gripper_min_pos + normalized_pos * span
+        self._gripper.set_position(
+            target_mm,
+            vmax=vmax if vmax is not None else self._gripper_v_max,
+            fmax=fmax if fmax is not None else self._gripper_f_max,
+        )
+        action = "open" if normalized_pos >= 0.999 else "close" if normalized_pos <= 0.001 else "position"
+        self._logger.info(
+            f"Gripper init {action} command sent on {self._port} "
+            f"(non-blocking fallback, source={current_source})."
+        )
 
     def set_gripper_position(self, normalized_pos: float) -> None:
         """Send a position command to the gripper.
 
         Args:
             normalized_pos: Target position in [0, 1].
-                            0.0 = fully open, 1.0 = fully closed.
+                            0.0 = fully closed, 1.0 = fully open.
         """
         if not self._is_connected or self._gripper is None:
             raise DeviceNotConnectedError("Serial gripper is not connected.")
         if not 0.0 <= normalized_pos <= 1.0:
-            raise ValueError(
-                f"normalized_pos must be in [0, 1], got {normalized_pos}."
-            )
+            raise ValueError(f"normalized_pos must be in [0, 1], got {normalized_pos}.")
         span = self._gripper_max_pos - self._gripper_min_pos
         target_mm = self._gripper_min_pos + normalized_pos * span
         self._gripper.set_position(
@@ -244,7 +413,7 @@ class SerialGripper:
         """Send a position command and block until the gripper reaches the target.
 
         Args:
-            normalized_pos: Target position in [0, 1] (0.0 = open, 1.0 = closed).
+            normalized_pos: Target position in [0, 1] (0.0 = closed, 1.0 = open).
             timeout:        Maximum wait time in seconds (default: 10.0).
             vmax:           Override velocity limit mm/s; uses config default if None.
             fmax:           Override force limit N; uses config default if None.
