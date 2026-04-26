@@ -45,7 +45,9 @@ class FlexivRizon4RTConfig(RobotConfig):
     Attributes:
         robot_sn: Serial number of the robot (e.g., "Rizon4-063423")
         use_force: Enable force control axes (when True, action includes target wrench)
-        control_frequency: Python-side control loop frequency in Hz (RT thread always 1 kHz)
+        use_joint_observation: Include joint states in observation (even in Cartesian mode)
+        inner_control_hz: How often the 1 kHz RT thread consumes a new Python command (1-1000 Hz)
+        interpolate_cmds: Enable linear interpolation between consumed commands
 
         force_control_frame: Reference frame for force control (CoordType.WORLD or TCP)
         force_control_axis: Which axes to enable force control [x, y, z, rx, ry, rz]
@@ -72,9 +74,11 @@ class FlexivRizon4RTConfig(RobotConfig):
 
     # Force control
     use_force: bool = False
+    use_joint_observation: bool = False
 
-    # Python-side frequency (RT thread is always 1 kHz internally)
-    control_frequency: float = 100.0  # Hz
+    # RT command consumption parameters (match flexiv_rt defaults)
+    inner_control_hz: int = 1000
+    interpolate_cmds: bool = True
 
     # Connection behavior
     go_to_start: bool = True
@@ -118,26 +122,6 @@ class FlexivRizon4RTConfig(RobotConfig):
     connect_retries: int = 3
     retry_interval_sec: float = 1.0
 
-    # ========== RT thread frequency control ==========
-    # inner_control_hz: how often the C++ RT callback (1 kHz) consumes a new
-    #   Python command.  Range: [1, 1000].  Default = 1000 (consume every
-    #   1-ms cycle — original behaviour, maximum responsiveness).
-    #   Examples:
-    #     500 Hz → decimation=2, RT polls Python every 2 ms
-    #     200 Hz → decimation=5, RT polls Python every 5 ms
-    #     100 Hz → decimation=10, RT polls Python every 10 ms
-    #   NOTE: The Flexiv SDK always requires the robot to receive commands at
-    #   1 kHz.  This parameter only controls how often new Python targets are
-    #   consumed; between polls the RT thread holds (or interpolates) the pose.
-    inner_control_hz: int = 1000
-
-    # interpolate_cmds: when True AND inner_control_hz < 1000, each new Python
-    #   command triggers a MinJerk trajectory over one command period
-    #   (1/inner_control_hz seconds) for smooth motion at low command rates.
-    #   When False (default), the RT thread snaps to the new command immediately
-    #   (original behaviour).
-    interpolate_cmds: bool = False
-
     # ========== Gripper (end-effector) settings ==========
     use_gripper: bool = True
     gripper_type: str = "flare_gripper"  # Options: "flare_gripper", "xense_gripper"
@@ -163,6 +147,17 @@ class FlexivRizon4RTConfig(RobotConfig):
 
     def __post_init__(self):
         super().__post_init__()
+
+        if isinstance(self.inner_control_hz, bool) or not isinstance(self.inner_control_hz, int):
+            raise TypeError(
+                "inner_control_hz must be an integer in [1, 1000], "
+                f"got {self.inner_control_hz!r}"
+            )
+
+        if not 1 <= self.inner_control_hz <= 1000:
+            raise ValueError(
+                f"inner_control_hz must be between 1 and 1000, got {self.inner_control_hz}"
+            )
 
         # Validate Cartesian/force parameters
         if len(self.force_control_axis) != 6:

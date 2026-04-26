@@ -270,9 +270,19 @@ class FlexivRizon4(Robot):
             features.update(dict.fromkeys(self._joint_effort_keys, float))
 
         elif self.config.control_mode == ControlMode.CARTESIAN_MOTION_FORCE:
-            features.update(dict.fromkeys(self._tcp_pose_keys, float))
-            if self.config.use_force:
-                features.update(dict.fromkeys(self._wrench_keys, float))
+            if self.config.use_joint_observation:
+                # Joint positions (7D)
+                features.update(dict.fromkeys(self._joint_pos_keys, float))
+                # Joint velocities (7D)
+                features.update(dict.fromkeys(self._joint_vel_keys, float))
+                # Joint efforts/torques (7D)
+                features.update(dict.fromkeys(self._joint_effort_keys, float))
+            else:
+                # TCP pose (9D: xyz + 6D rotation)
+                features.update(dict.fromkeys(self._tcp_pose_keys, float))
+                if self.config.use_force:
+                    # + external wrench (6D)
+                    features.update(dict.fromkeys(self._wrench_keys, float))
 
         else:
             raise ValueError(f"Unsupported control_mode: {self.config.control_mode}")
@@ -718,14 +728,18 @@ class FlexivRizon4(Robot):
             for i, key in enumerate(self._joint_effort_keys):
                 obs_dict[key] = states.tau[i]
 
-        elif self.config.control_mode == ControlMode.CARTESIAN_MOTION_FORCE:
+        elif self.config.control_mode == ControlMode.CARTESIAN_MOTION_FORCE and not self.config.use_joint_observation:
+            # TCP pose from SDK: [x, y, z, qw, qx, qy, qz]
             tcp_pose = states.tcp_pose
 
+            # Position (3D)
             obs_dict["tcp.x"] = tcp_pose[0]
             obs_dict["tcp.y"] = tcp_pose[1]
             obs_dict["tcp.z"] = tcp_pose[2]
 
+            # Convert quaternion to 6D rotation representation
             r6d = quaternion_to_rotation_6d(tcp_pose[3], tcp_pose[4], tcp_pose[5], tcp_pose[6])
+
             obs_dict["tcp.r1"] = r6d[0]
             obs_dict["tcp.r2"] = r6d[1]
             obs_dict["tcp.r3"] = r6d[2]
@@ -734,9 +748,23 @@ class FlexivRizon4(Robot):
             obs_dict["tcp.r6"] = r6d[5]
 
             if self.config.use_force:
+                # + external wrench (6D)
                 ext_wrench = states.ext_wrench_in_tcp
                 for i, key in enumerate(self._wrench_keys):
                     obs_dict[key] = ext_wrench[i]
+
+        elif self.config.control_mode == ControlMode.CARTESIAN_MOTION_FORCE and self.config.use_joint_observation:
+            # Joint positions (7D)
+            for i, key in enumerate(self._joint_pos_keys):
+                obs_dict[key] = states.q[i]
+
+            # Joint velocities (7D)
+            for i, key in enumerate(self._joint_vel_keys):
+                obs_dict[key] = states.dq[i]
+
+            # Joint efforts/torques (7D)
+            for i, key in enumerate(self._joint_effort_keys):
+                obs_dict[key] = states.tau[i]
 
         else:
             raise ValueError(f"Unsupported control_mode: {self.config.control_mode}")
