@@ -406,15 +406,13 @@ class BiFlexivRizon4RT(Robot):
             self._configure_arm(self._right_robot, "right")
 
             # --- 7. Start RT threads ---
-            self._left_cc = self._left_robot.start_cartesian_control(task_name="CartesianRT_L")
-            self.logger.info("Left arm: C++ RT thread started (1 kHz)")
+            self._left_cc = self._start_cartesian_control(self._left_robot, "CartesianRT_L", "left")
 
             # Seed the RT thread with current TCP pose to avoid jump
             left_init_pose = list(self._left_robot.states().tcp_pose)
             self._left_cc.set_target_pose(left_init_pose)
 
-            self._right_cc = self._right_robot.start_cartesian_control(task_name="CartesianRT_R")
-            self.logger.info("Right arm: C++ RT thread started (1 kHz)")
+            self._right_cc = self._start_cartesian_control(self._right_robot, "CartesianRT_R", "right")
 
             right_init_pose = list(self._right_robot.states().tcp_pose)
             self._right_cc.set_target_pose(right_init_pose)
@@ -433,9 +431,10 @@ class BiFlexivRizon4RT(Robot):
 
         Steps:
         1. Stop RT threads
-        2. Move both arms to home position
-        3. Stop robots
-        4. Disconnect grippers and cameras
+        2. Send gripper open command (non-blocking, runs in parallel with arm home)
+        3. Move both arms to home position (blocking)
+        4. Stop robots
+        5. Disconnect grippers and cameras
         """
         if not self._is_connected:
             self.logger.warn(f"{self} is not connected, skipping disconnect.")
@@ -465,7 +464,20 @@ class BiFlexivRizon4RT(Robot):
             self._left_cc = None
             self._right_cc = None
 
-            # 2. Move both arms to home in parallel
+            # 2. Trigger gripper open *before* the blocking arm home movement so
+            #    the gripper opens in parallel while the arms are returning home.
+            for side, gripper, use_gripper in [
+                ("left", self._left_gripper, self.config.left_use_gripper),
+                ("right", self._right_gripper, self.config.right_use_gripper),
+            ]:
+                if gripper and use_gripper:
+                    try:
+                        gripper.set_gripper_position(1.0)
+                        self.logger.info(f"{side} gripper: open command sent.")
+                    except Exception as e:
+                        self.logger.warn(f"{side} gripper open command failed (non-fatal): {e}")
+
+            # 3. Move both arms to home in parallel
             with ThreadPoolExecutor(max_workers=2) as executor:
                 home_futures = {
                     "left": executor.submit(self._go_to_home_arm, self._left_robot, "left"),
@@ -477,7 +489,7 @@ class BiFlexivRizon4RT(Robot):
                     except Exception as e:
                         self.logger.warn(f"Failed to move {side} arm to home: {e}")
 
-            # 3. Stop robots
+            # 4. Stop robots
             for side, robot in [("left", self._left_robot), ("right", self._right_robot)]:
                 if robot is not None:
                     try:
@@ -485,7 +497,7 @@ class BiFlexivRizon4RT(Robot):
                     except Exception as e:
                         self.logger.warn(f"{side} arm: error calling Stop(): {e}")
 
-            # 4. Disconnect grippers + cameras
+            # 5. Disconnect grippers + cameras
             for side, gripper, use_gripper in [
                 ("left", self._left_gripper, self.config.left_use_gripper),
                 ("right", self._right_gripper, self.config.right_use_gripper),
@@ -716,14 +728,12 @@ class BiFlexivRizon4RT(Robot):
         )
         self.logger.info(f"{side} arm: MoveJ sent, waiting for completion...")
 
-        # Initialize gripper during move
+        # Initialize gripper during arm motion with hybrid logic:
+        # skip if already near target, otherwise fall back to a non-blocking
+        # command when the background gripper poller is already running.
         if gripper is not None and use_gripper:
             target_normalized = 1.0 if gripper_init_open else 0.0
-            gripper.set_gripper_position_sync(
-                target_normalized,
-                vmax=gripper_v_max / 2,
-                fmax=gripper_f_max / 2,
-            )
+            gripper.initialize_gripper_position(target_normalized)
 
         timeout = 30.0
         start_time = time.time()
@@ -894,7 +904,12 @@ class BiFlexivRizon4RT(Robot):
         """Read gripper position into obs_dict."""
         if gripper is None or not use_gripper:
             return
-        obs_dict[gripper_key] = gripper.get_gripper_position()
+        try:
+            obs_dict[gripper_key] = gripper.get_gripper_position()
+        except Exception as e:
+            raise RuntimeError(
+                f"{gripper_key} observation unavailable: gripper status link is not responding. {e}"
+            ) from e
 
     # =========================================================================
     # Action
@@ -1039,7 +1054,13 @@ class BiFlexivRizon4RT(Robot):
                 tcp_pose = robot.states().tcp_pose
             gripper_pos = 0.0
             if gripper is not None and use_gripper:
-                gripper_pos = gripper.get_gripper_position()
+                try:
+                    gripper_pos = gripper.get_gripper_position()
+                except Exception as e:
+                    raise RuntimeError(
+                        "Current TCP pose unavailable because gripper status link is not responding. "
+                        f"{e}"
+                    ) from e
             return np.array([*tcp_pose, gripper_pos], dtype=np.float32)
 
         left_pose = _read_arm_pose(
@@ -1055,6 +1076,25 @@ class BiFlexivRizon4RT(Robot):
     # =========================================================================
     # Utility methods
     # =========================================================================
+
+    def _start_cartesian_control(
+        self,
+        robot: frt.Robot,
+        task_name: str,
+        side: str,
+    ) -> frt.CartesianMotionForceControl:
+        """Start one arm's flexiv_rt Cartesian RT thread using configured SHM consumption params."""
+        ctrl = robot.start_cartesian_control(
+            task_name=task_name,
+            inner_control_hz=self.config.inner_control_hz,
+            interpolate_cmds=self.config.interpolate_cmds,
+        )
+        self.logger.info(
+            f"{side} arm: C++ RT thread started "
+            f"(inner_control_hz={self.config.inner_control_hz}, "
+            f"interpolate_cmds={self.config.interpolate_cmds})"
+        )
+        return ctrl
 
     def reset_to_initial_position(self) -> None:
         """Reset both arms to their initial start positions via RT trajectory.
@@ -1118,7 +1158,11 @@ class BiFlexivRizon4RT(Robot):
 
                 self._switch_to_rt_mode(robot, side)
                 self._configure_arm(robot, side)
-                new_cc = robot.start_cartesian_control(task_name=f"CartesianRT_{side[0].upper()}")
+                new_cc = self._start_cartesian_control(
+                    robot,
+                    task_name=f"CartesianRT_{side[0].upper()}",
+                    side=side,
+                )
                 init_pose = list(robot.states().tcp_pose)
                 new_cc.set_target_pose(init_pose)
                 time.sleep(0.1)
