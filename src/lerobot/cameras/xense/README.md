@@ -50,12 +50,12 @@ for sensor in sensors:
 ```python
 from lerobot.cameras.xense import (
     XenseTactileCamera,
-    XenseCameraConfig,
+    XenseTactileCameraConfig,
     XenseOutputType,
 )
 
 # Configure sensor
-config = XenseCameraConfig(
+config = XenseTactileCameraConfig(
     serial_number="OG000344",
     fps=60,
     output_types=[
@@ -134,11 +134,11 @@ Choose from:
 To add Xense sensors to your robot configuration:
 
 ```python
-from lerobot.cameras.xense import XenseCameraConfig, XenseOutputType
+from lerobot.cameras.xense import XenseTactileCameraConfig, XenseOutputType
 
 cameras = {
     # ... existing cameras ...
-    "right_tactile": XenseCameraConfig(
+    "right_tactile": XenseTactileCameraConfig(
         serial_number="OG000344",
         fps=60,
         output_types=[
@@ -146,7 +146,7 @@ cameras = {
             XenseOutputType.FORCE_RESULTANT,
         ],
     ),
-    "left_tactile": XenseCameraConfig(
+    "left_tactile": XenseTactileCameraConfig(
         serial_number="OG000352",
         fps=60,
         output_types=[
@@ -194,7 +194,7 @@ The camera automatically handles V4L2 timeouts:
 #### 1. Reduce FPS (Most Effective)
 ```python
 # Lower FPS reduces V4L2 load significantly
-XenseCameraConfig(
+XenseTactileCameraConfig(
     serial_number="OG000344",
     fps=30,  # Reduced from 60 to 30 Hz
     output_types=[XenseOutputType.DIFFERENCE],
@@ -204,7 +204,7 @@ XenseCameraConfig(
 #### 2. Reduce Resolution (High Impact)
 ```python
 # Reducing rectify_size improves performance by 4x
-XenseCameraConfig(
+XenseTactileCameraConfig(
     serial_number="OG000344",
     fps=60,
     output_types=[XenseOutputType.DIFFERENCE],
@@ -216,7 +216,7 @@ XenseCameraConfig(
 #### 3. Use Only Necessary Output Types
 ```python
 # Request only needed data types to reduce processing
-XenseCameraConfig(
+XenseTactileCameraConfig(
     serial_number="OG000344",
     fps=60,
     output_types=[XenseOutputType.DIFFERENCE],  # Only difference, not force + depth
@@ -226,7 +226,7 @@ XenseCameraConfig(
 #### 4. Increase Warmup Time
 ```python
 # Longer warmup helps stabilize sensor under load
-XenseCameraConfig(
+XenseTactileCameraConfig(
     serial_number="OG000344",
     fps=60,
     warmup_s=1.5,  # Increased from 0.5s
@@ -236,7 +236,7 @@ XenseCameraConfig(
 #### 5. Recommended High-Load Configuration
 ```python
 # Optimized configuration for recording with multiple cameras
-XenseCameraConfig(
+XenseTactileCameraConfig(
     serial_number="OG000344",
     fps=30,  # Reduced FPS
     output_types=[XenseOutputType.DIFFERENCE],  # Minimal output
@@ -256,7 +256,7 @@ XenseCameraConfig(
    ```python
    # Reduce all camera FPS proportionally
    RealSenseCameraConfig(fps=30, ...)  # Instead of 60
-   XenseCameraConfig(fps=30, ...)      # Instead of 60
+   XenseTactileCameraConfig(fps=30, ...)      # Instead of 60
    ```
 
 3. **Monitor System Load**: Use `htop` to check CPU/memory usage during recording
@@ -284,7 +284,7 @@ See xensesdk documentation for Qt-related troubleshooting.
 
 ## API Reference
 
-### XenseCameraConfig
+### XenseTactileCameraConfig (config class)
 
 Configuration class for Xense sensors.
 
