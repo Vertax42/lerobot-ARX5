@@ -14,15 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-try:
-    import flexivrdk
+import flexivrdk
 
-    from .config_flexiv_rizon4 import ControlMode  # noqa: F401
-    from .config_flexiv_rizon4 import FlexivRizon4Config  # noqa: F401
-    from .flexiv_rizon4 import FlexivRizon4  # noqa: F401
+from .config_flexiv_rizon4 import ControlMode  # noqa: F401
+from .config_flexiv_rizon4 import FlexivRizon4Config  # noqa: F401
+from .flexiv_rizon4 import FlexivRizon4  # noqa: F401
 
-    # Export flexivrdk types for direct access
-    Mode = flexivrdk.Mode  # noqa: F401
-    CoordType = flexivrdk.CoordType  # noqa: F401
-except ImportError:
-    pass
+# Export flexivrdk types for direct access
+Mode = flexivrdk.Mode  # noqa: F401
+CoordType = flexivrdk.CoordType  # noqa: F401

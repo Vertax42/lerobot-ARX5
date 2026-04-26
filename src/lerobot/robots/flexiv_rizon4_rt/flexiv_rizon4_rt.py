@@ -32,11 +32,11 @@ Control Architecture:
 Control Mode: RT_CARTESIAN_MOTION_FORCE only (for now)
     - Pure motion (use_force=False):
       Action:  TCP pose (9D: xyz + 6D rotation) + gripper (1D) = 10D
-      Observation: TCP pose (9D) + gripper (1D) = 10D
+      Observation: joint states (21D) or TCP pose (9D) + gripper (1D)
 
     - Motion + force (use_force=True):
       Action:  TCP pose (9D) + wrench (6D) + gripper (1D) = 16D
-      Observation: TCP pose (9D) + wrench (6D) + gripper (1D) = 16D
+      Observation: joint states (21D) or TCP pose (9D) + wrench (6D) + gripper (1D)
 
 Key Differences from NRT Driver (flexiv_rizon4):
     - Uses flexiv_rt.Robot instead of flexivrdk.Robot
@@ -183,6 +183,11 @@ class FlexivRizon4RT(Robot):
             "tcp.wz",
         )
 
+        # Joint state keys (for use_joint_observation)
+        self._joint_pos_keys = tuple(f"joint_{i}.pos" for i in range(1, JOINT_DOF + 1))
+        self._joint_vel_keys = tuple(f"joint_{i}.vel" for i in range(1, JOINT_DOF + 1))
+        self._joint_effort_keys = tuple(f"joint_{i}.effort" for i in range(1, JOINT_DOF + 1))
+
         # Action TCP pose keys
         self._action_tcp_pose_keys = self._tcp_pose_keys
 
@@ -219,14 +224,24 @@ class FlexivRizon4RT(Robot):
 
     @property
     def _proprioception_ft(self) -> dict[str, type]:
-        """Observation proprioception features for RT Cartesian mode.
+        """Return observation features for RT Cartesian mode.
 
-        TCP pose (9D) + wrench (6D, if use_force) + gripper (1D).
+        Observation space (always includes gripper):
+        - use_joint_observation=True: joint pos (7D) + vel (7D) + effort (7D) + gripper (1D) = 22D
+        - use_joint_observation=False + use_force=False: TCP pose (9D) + gripper (1D) = 10D
+        - use_joint_observation=False + use_force=True: TCP pose (9D) + wrench (6D) + gripper (1D) = 16D
         """
         features = {}
-        features.update(dict.fromkeys(self._tcp_pose_keys, float))
-        if self.config.use_force:
-            features.update(dict.fromkeys(self._wrench_keys, float))
+
+        if self.config.use_joint_observation:
+            features.update(dict.fromkeys(self._joint_pos_keys, float))
+            features.update(dict.fromkeys(self._joint_vel_keys, float))
+            features.update(dict.fromkeys(self._joint_effort_keys, float))
+        else:
+            features.update(dict.fromkeys(self._tcp_pose_keys, float))
+            if self.config.use_force:
+                features.update(dict.fromkeys(self._wrench_keys, float))
+
         features[self._gripper_key] = float
         return features
 
@@ -380,21 +395,7 @@ class FlexivRizon4RT(Robot):
             # The Flexiv Scheduler's mlockall() is intercepted at link time
             # by __wrap_mlockall (no-op), so no OOM risk regardless of
             # Python process size.  See CMakeLists.txt --wrap=mlockall.
-            #
-            # inner_control_hz: how often the RT callback (always 1 kHz) consumes
-            #   a new Python command.  Defaults to 1000 (original behaviour).
-            #   Set to e.g. 500 to only update every 2nd 1-ms cycle.
-            # interpolate_cmds: if True, each new command triggers a MinJerk
-            #   trajectory over one command period for smooth motion at low rates.
-            self._cc = self._robot.start_cartesian_control(
-                inner_control_hz=self.config.inner_control_hz,
-                interpolate_cmds=self.config.interpolate_cmds,
-            )
-            self.logger.info(
-                f"C++ RT thread started (1 kHz, inner_control_hz="
-                f"{self.config.inner_control_hz}, "
-                f"interpolate_cmds={self.config.interpolate_cmds})"
-            )
+            self._cc = self._start_cartesian_control()
 
             # Seed the RT thread with the current TCP pose so it doesn't jump
             init_pose = list(self._robot.states().tcp_pose)
@@ -449,9 +450,7 @@ class FlexivRizon4RT(Robot):
         try:
             self.logger.info("Disconnecting from Flexiv robot (RT)...")
 
-            # 1. Stop RT thread (blocks until thread joins).
-            #    cc.stop() also calls robot_.Stop() at the C++ level,
-            #    so no separate Python-level Stop() is needed.
+            # 1. Stop RT thread first (blocks until thread joins)
             if self._cc is not None:
                 self.logger.info("Stopping RT thread...")
                 try:
@@ -490,21 +489,15 @@ class FlexivRizon4RT(Robot):
         except Exception as e:
             self.logger.error(f"Error during disconnect: {e}")
         finally:
-            self._cc = None
             if self._robot is not None:
                 try:
                     self._robot.close()
                 except Exception:
                     pass
-            robot_ref = self._robot
             self._robot = None
-            del robot_ref
+            self._cc = None
             self._gripper = None
             self._is_connected = False
-
-            import gc
-            gc.collect()
-
             self.logger.info("Flexiv Rizon4 RT disconnected.")
 
     # =========================================================================
@@ -754,8 +747,9 @@ class FlexivRizon4RT(Robot):
         returns a snapshot of the latest state written by the RT thread.
 
         Returns a dictionary with observation data:
-        - use_force=False: tcp.{x,y,z,r1-r6} (9D) + gripper (1D) = 10D
-        - use_force=True: tcp pose (9D) + wrench (6D) + gripper (1D) = 16D
+        - use_joint_observation=True: joint_1-7.{pos,vel,effort} (21D) + gripper (1D) = 22D
+        - use_joint_observation=False + use_force=False: tcp.{x,y,z,r1-r6} (9D) + gripper (1D) = 10D
+        - use_joint_observation=False + use_force=True: tcp pose (9D) + wrench (6D) + gripper (1D) = 16D
 
         Also includes camera images if configured.
         """
@@ -768,46 +762,71 @@ class FlexivRizon4RT(Robot):
             # RT mode: read from shared memory via CartesianState
             state = self._cc.get_state()
 
-            tcp_pose = state.tcp_pose
+            if self.config.use_joint_observation:
+                # Joint positions (7D)
+                for i, key in enumerate(self._joint_pos_keys):
+                    obs_dict[key] = state.q[i]
 
-            obs_dict["tcp.x"] = tcp_pose[0]
-            obs_dict["tcp.y"] = tcp_pose[1]
-            obs_dict["tcp.z"] = tcp_pose[2]
+                # Joint velocities: not directly in CartesianState, read from robot states
+                robot_states = self._robot.states()
+                for i, key in enumerate(self._joint_vel_keys):
+                    obs_dict[key] = robot_states.dq[i]
 
-            r6d = quaternion_to_rotation_6d(tcp_pose[3], tcp_pose[4], tcp_pose[5], tcp_pose[6])
-            obs_dict["tcp.r1"] = r6d[0]
-            obs_dict["tcp.r2"] = r6d[1]
-            obs_dict["tcp.r3"] = r6d[2]
-            obs_dict["tcp.r4"] = r6d[3]
-            obs_dict["tcp.r5"] = r6d[4]
-            obs_dict["tcp.r6"] = r6d[5]
+                # Joint efforts/torques: use tau_ext from CartesianState
+                for i, key in enumerate(self._joint_effort_keys):
+                    obs_dict[key] = state.tau_ext[i]
 
-            if self.config.use_force:
-                ext_wrench = state.ext_wrench_in_tcp
-                for i, key in enumerate(self._wrench_keys):
-                    obs_dict[key] = ext_wrench[i]
+            else:
+                # TCP pose from CartesianState: [x, y, z, qw, qx, qy, qz]
+                tcp_pose = state.tcp_pose
+
+                obs_dict["tcp.x"] = tcp_pose[0]
+                obs_dict["tcp.y"] = tcp_pose[1]
+                obs_dict["tcp.z"] = tcp_pose[2]
+
+                # Convert quaternion to 6D rotation
+                r6d = quaternion_to_rotation_6d(tcp_pose[3], tcp_pose[4], tcp_pose[5], tcp_pose[6])
+                obs_dict["tcp.r1"] = r6d[0]
+                obs_dict["tcp.r2"] = r6d[1]
+                obs_dict["tcp.r3"] = r6d[2]
+                obs_dict["tcp.r4"] = r6d[3]
+                obs_dict["tcp.r5"] = r6d[4]
+                obs_dict["tcp.r6"] = r6d[5]
+
+                if self.config.use_force:
+                    ext_wrench = state.ext_wrench_in_tcp
+                    for i, key in enumerate(self._wrench_keys):
+                        obs_dict[key] = ext_wrench[i]
 
         else:
             # Fallback: not in RT mode, read from robot.states() directly
             states = self._robot.states()
 
-            tcp_pose = states.tcp_pose
-            obs_dict["tcp.x"] = tcp_pose[0]
-            obs_dict["tcp.y"] = tcp_pose[1]
-            obs_dict["tcp.z"] = tcp_pose[2]
+            if self.config.use_joint_observation:
+                for i, key in enumerate(self._joint_pos_keys):
+                    obs_dict[key] = states.q[i]
+                for i, key in enumerate(self._joint_vel_keys):
+                    obs_dict[key] = states.dq[i]
+                for i, key in enumerate(self._joint_effort_keys):
+                    obs_dict[key] = states.tau[i]
+            else:
+                tcp_pose = states.tcp_pose
+                obs_dict["tcp.x"] = tcp_pose[0]
+                obs_dict["tcp.y"] = tcp_pose[1]
+                obs_dict["tcp.z"] = tcp_pose[2]
 
-            r6d = quaternion_to_rotation_6d(tcp_pose[3], tcp_pose[4], tcp_pose[5], tcp_pose[6])
-            obs_dict["tcp.r1"] = r6d[0]
-            obs_dict["tcp.r2"] = r6d[1]
-            obs_dict["tcp.r3"] = r6d[2]
-            obs_dict["tcp.r4"] = r6d[3]
-            obs_dict["tcp.r5"] = r6d[4]
-            obs_dict["tcp.r6"] = r6d[5]
+                r6d = quaternion_to_rotation_6d(tcp_pose[3], tcp_pose[4], tcp_pose[5], tcp_pose[6])
+                obs_dict["tcp.r1"] = r6d[0]
+                obs_dict["tcp.r2"] = r6d[1]
+                obs_dict["tcp.r3"] = r6d[2]
+                obs_dict["tcp.r4"] = r6d[3]
+                obs_dict["tcp.r5"] = r6d[4]
+                obs_dict["tcp.r6"] = r6d[5]
 
-            if self.config.use_force:
-                ext_wrench = states.ext_wrench_in_tcp
-                for i, key in enumerate(self._wrench_keys):
-                    obs_dict[key] = ext_wrench[i]
+                if self.config.use_force:
+                    ext_wrench = states.ext_wrench_in_tcp
+                    for i, key in enumerate(self._wrench_keys):
+                        obs_dict[key] = ext_wrench[i]
 
         # --- Gripper data (gripper + wrist_cam + tactile) ---
         if self._gripper is not None and self.config.use_gripper:
@@ -938,6 +957,22 @@ class FlexivRizon4RT(Robot):
     # Utility methods
     # =========================================================================
 
+    def _start_cartesian_control(self) -> frt.CartesianMotionForceControl:
+        """Start the flexiv_rt Cartesian RT thread using configured SHM consumption params."""
+        if self._robot is None:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        ctrl = self._robot.start_cartesian_control(
+            inner_control_hz=self.config.inner_control_hz,
+            interpolate_cmds=self.config.interpolate_cmds,
+        )
+        self.logger.info(
+            "C++ RT thread started "
+            f"(inner_control_hz={self.config.inner_control_hz}, "
+            f"interpolate_cmds={self.config.interpolate_cmds})"
+        )
+        return ctrl
+
     def zero_ft_sensor(self) -> None:
         """Zero force-torque sensor (public API).
 
@@ -954,7 +989,7 @@ class FlexivRizon4RT(Robot):
 
         if was_running and self._robot is not None:
             self._switch_to_rt_mode()
-            self._cc = self._robot.start_cartesian_control()
+            self._cc = self._start_cartesian_control()
             init_pose = list(self._robot.states().tcp_pose)
             self._cc.set_target_pose(init_pose)
             time.sleep(0.1)
@@ -1032,7 +1067,7 @@ class FlexivRizon4RT(Robot):
         # Restart RT mode
         self._switch_to_rt_mode()
         self.configure()
-        self._cc = self._robot.start_cartesian_control()
+        self._cc = self._start_cartesian_control()
         init_pose = list(self._robot.states().tcp_pose)
         self._cc.set_target_pose(init_pose)
         time.sleep(0.1)

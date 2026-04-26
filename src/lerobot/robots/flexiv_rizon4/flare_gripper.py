@@ -89,7 +89,7 @@ class FlareGripper:
         try:
             # connect camera
             camera_id = call_service(f"master_{self._mac_addr}", "list_camera")
-            if not camera_id:
+            if camera_id is None:
                 self._logger.warn("No camera found")
             else:
                 self._camera = XenseCamera(
@@ -99,7 +99,7 @@ class FlareGripper:
                 )
                 self._logger.info("✅ Camera successfully connected.")
         except Exception as e:
-            self._logger.warn(f"Failed to connect camera: {e}")
+            raise RuntimeError(f"Error connecting to Flare Gripper camera: {e}") from e
 
         try:
             # connect gripper

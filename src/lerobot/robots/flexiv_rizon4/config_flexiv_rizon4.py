@@ -87,7 +87,7 @@ class FlexivRizon4Config(RobotConfig):
     """
 
     # Robot identification
-    robot_sn: str = "Rizon4-063423"  # Robot serial number
+    robot_sn: str = "Rizon4-062855"  # Robot serial number
 
     # Control settings
     # control_mode: JOINT_IMPEDANCE or CARTESIAN_MOTION_FORCE
@@ -192,7 +192,7 @@ class FlexivRizon4Config(RobotConfig):
     use_gripper: bool = True
 
     # Gripper identification (MAC address / serial number)
-    gripper_mac_addr: str = "e2b26adbb104"
+    gripper_mac_addr: str = "bef1504b5391"
 
     # Camera settings (wrist camera resolution)
     gripper_cam_size: tuple[int, int] = (640, 480)
@@ -202,8 +202,8 @@ class FlexivRizon4Config(RobotConfig):
     gripper_sensor_output_type: SensorOutputType = SensorOutputType.RECTIFY
     gripper_sensor_keys: dict[str, str] = field(
         default_factory=lambda: {
-            "OG000450": "right_tactile",
-            "OG000657": "left_tactile",
+            "OG000619": "right_tactile",
+            "OG000628": "left_tactile",
         }
     )
 
@@ -216,6 +216,9 @@ class FlexivRizon4Config(RobotConfig):
     gripper_f_max: float = 20.0  # Maximum force N
     # Initialize gripper to fully open on connect
     gripper_init_open: bool = True
+
+    # force to use joint observation
+    use_joint_observation: bool = True
 
     # Auto-created in __post_init__ from gripper_* parameters (do not set directly)
     gripper: Union[GripperConfig, FlareGripperConfig] | None = field(default=None, init=False)
@@ -289,8 +292,8 @@ class FlexivRizon4Config(RobotConfig):
         #     ),
         #   }
 
-        # self.cameras = {
-        #     "top": RealSenseCameraConfig(
-        #         serial_number_or_name="135522074323", fps=30, width=1280, height=720
-        #     ),
-        # }
+        self.cameras = {
+            "top": RealSenseCameraConfig(
+                serial_number_or_name="135522074323", fps=30, width=1280, height=720
+            ),
+        }

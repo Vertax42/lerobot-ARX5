@@ -14,14 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-try:
-    import flexiv_rt
+import flexiv_rt
 
-    from .config_flexiv_rizon4_rt import FlexivRizon4RTConfig  # noqa: F401
-    from .flexiv_rizon4_rt import FlexivRizon4RT  # noqa: F401
+from .config_flexiv_rizon4_rt import FlexivRizon4RTConfig  # noqa: F401
+from .flexiv_rizon4_rt import FlexivRizon4RT  # noqa: F401
 
-    # Export flexiv_rt types for direct access
-    Mode = flexiv_rt.Mode  # noqa: F401
-    CoordType = flexiv_rt.CoordType  # noqa: F401
-except ImportError:
-    pass
+# Export flexiv_rt types for direct access
+Mode = flexiv_rt.Mode  # noqa: F401
+CoordType = flexiv_rt.CoordType  # noqa: F401
