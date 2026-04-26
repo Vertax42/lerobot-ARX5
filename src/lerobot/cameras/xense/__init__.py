@@ -13,6 +13,6 @@
 # limitations under the License.
 
 from .camera_xense import XenseTactileCamera
-from .configuration_xense import XenseOutputType, XenseTactileCameraConfig
+from .configuration_xense import XenseTactileCameraConfig, XenseOutputType
 
 __all__ = ["XenseTactileCamera", "XenseTactileCameraConfig", "XenseOutputType"]

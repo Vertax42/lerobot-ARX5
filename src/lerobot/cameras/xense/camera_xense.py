@@ -27,7 +27,7 @@ from lerobot.utils.robot_utils import get_logger
 from xensesdk import CameraSource
 
 from ..camera import Camera
-from .configuration_xense import XenseOutputType, XenseTactileCameraConfig
+from .configuration_xense import XenseTactileCameraConfig, XenseOutputType
 
 logger = get_logger("XenseCam")
 
@@ -107,7 +107,7 @@ class XenseTactileCamera(Camera):
 
     Example:
         ```python
-        from lerobot.cameras.xense import XenseOutputType, XenseTactileCamera, XenseTactileCameraConfig
+        from lerobot.cameras.xense import XenseTactileCamera, XenseTactileCameraConfig, XenseOutputType
 
         # Basic usage with force sensing
         config = XenseTactileCameraConfig(
@@ -181,7 +181,7 @@ class XenseTactileCamera(Camera):
         """Checks if the sensor is currently connected."""
         return self.sensor is not None
 
-    def connect(self, warmup: bool = False):
+    def connect(self, warmup: bool = True):
         """
         Connects to the Xense sensor specified in the configuration.
 
