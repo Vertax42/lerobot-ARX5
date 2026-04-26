@@ -118,7 +118,7 @@ class BiARX5(Robot):
         if config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL:
             self.config.start_position = [0.0, 0.967, 1.290, -0.970, 0.0, 0.0, 0.0]
         else:
-            self.config.start_position = [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 0.0]
+            self.config.start_position = [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 1.57]
 
         # Define home position (all joints at 0, gripper closed)
         self._home_position = self.config.home_position
