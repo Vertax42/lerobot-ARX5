@@ -1,85 +1,82 @@
-<p align="center">
-  <img alt="LeRobot, Hugging Face Robotics Library" src="./media/readme/lerobot-logo-thumbnail.png" width="100%">
-</p>
+# 🎯 Project Overview
 
-<div align="center">
+🤗 This repository is a fork of [`lerobot`](https://github.com/huggingface/lerobot)
+by XenseRobotics, used for Xense's multimodal tactile data acquisition system.
+This branch tracks **upstream lerobot v5.1**, with Xense-specific robots
+(BiARX5, BiFlexiv Rizon4 RT, Xense Flare), teleoperators (Pico4, dual
+SpaceMouse) and tactile cameras layered on top. For generic lerobot
+usage (datasets, policies, training scripts) refer to the
+[upstream README](https://github.com/huggingface/lerobot#readme).
 
-[![Tests](https://github.com/huggingface/lerobot/actions/workflows/nightly.yml/badge.svg?branch=main)](https://github.com/huggingface/lerobot/actions/workflows/nightly.yml?query=branch%3Amain)
-[![Python versions](https://img.shields.io/pypi/pyversions/lerobot)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/huggingface/lerobot/blob/main/LICENSE)
-[![Status](https://img.shields.io/pypi/status/lerobot)](https://pypi.org/project/lerobot/)
-[![Version](https://img.shields.io/pypi/v/lerobot)](https://pypi.org/project/lerobot/)
-[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-v2.1-ff69b4.svg)](https://github.com/huggingface/lerobot/blob/main/CODE_OF_CONDUCT.md)
-[![Discord](https://img.shields.io/badge/Discord-Join_Us-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/q8Dzzpym3f)
+## 🔧 Installation
 
-</div>
-
-**LeRobot** aims to provide models, datasets, and tools for real-world robotics in PyTorch. The goal is to lower the barrier to entry so that everyone can contribute to and benefit from shared datasets and pretrained models.
-
-🤗 A hardware-agnostic, Python-native interface that standardizes control across diverse platforms, from low-cost arms (SO-100) to humanoids.
-
-🤗 A standardized, scalable LeRobotDataset format (Parquet + MP4 or images) hosted on the Hugging Face Hub, enabling efficient storage, streaming and visualization of massive robotic datasets.
-
-🤗 State-of-the-art policies that have been shown to transfer to the real-world ready for training and deployment.
-
-🤗 Comprehensive support for the open-source ecosystem to democratize physical AI.
-
-## Quick Start
-
-This fork is installed from source and is currently tested on Ubuntu 22.04. The recommended path is `Miniforge` or `Mambaforge`, then `setup_env.sh`.
-
-### 1. Clone the repository
+Tested on Ubuntu 22.04, NVIDIA driver ≥ 570.144. Use
+[`Mamba`](https://github.com/conda-forge/miniforge?tab=readme-ov-file#install)
+(strongly recommended over plain conda — it's much faster on the
+robostack-staging channel that ships ROS Humble + SOEM). v5.1 pins
+**Python 3.12** and **PyTorch ≥ 2.2** with CUDA 12.8.
 
 ```bash
-cd /path/to/workspace
+curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
+bash Miniforge3-$(uname)-$(uname -m).sh
+```
+
+### 📦 Environment Setup
+
+**Step 1:** 📂 Clone the repository with all submodules:
+
+```bash
 git clone \
   --recurse-submodules \
-  git@github.com:Vertax42/lerobot-xense.git \
-  lerobot-xense
-
+  https://github.com/Vertax42/lerobot-xense.git
 cd lerobot-xense
-
-# If you already cloned the repo without submodules:
-git submodule update --init --recursive --progress
 ```
 
-### 2. Create the conda/mamba environment
+> If you already cloned without submodules, initialize them manually:
 
-`setup_env.sh` supports both `conda` and `mamba`, but `mamba` is the expected default on Miniforge/Mambaforge.
+> ```bash
+> git submodule update --init --recursive --progress
+> ```
+
+This repository uses `third_party/` git submodules to manage hardware SDK dependencies:
+
+| Submodule | Installed package |
+|-----------|-------------------|
+| `third_party/ARX5_SDK` | `pyarx` |
+| `third_party/libpyflexiv` | `flexiv_rt` |
+| `third_party/XenseVR-PC-Service` | `xensevr_pc_service_sdk` |
+| `third_party/xensesdk` | `xensesdk` |
+| `third_party/XGripper` | `xensegripper` |
+| `third_party/xense_franka` | `xense_franka` |
+
+**Step 2:** 🐍 Create and activate the mamba environment:
 
 ```bash
-bash setup_env.sh --mamba
+bash ./setup_env.sh --mamba lerobot-xense-py312
+mamba activate lerobot-xense-py312
 ```
 
-### 3. Activate the environment
+> The default env name baked into `conda_environment.yaml` is
+> `lerobot-xense-py312`. You can pass a different name to `--mamba`,
+> but the rest of this README and the openpi project assume
+> `lerobot-xense-py312`.
+
+**Step 3:** 📦 Install LeRobot-Xense and all hardware SDK bindings:
 
 ```bash
-mamba activate lerobot-xense
-```
-
-If your shell has not loaded conda/mamba yet, initialize it first:
-
-```bash
-source ~/miniforge3/etc/profile.d/conda.sh
-source ~/miniforge3/etc/profile.d/mamba.sh
-mamba activate lerobot-xense
-```
-
-### 4. Install LeRobot-Xense and all local hardware SDK bindings
-
-```bash
-bash setup_env.sh --install
+bash ./setup_env.sh --install
 ```
 
 This step will:
 
-- update the conda environment from `conda_environment.yaml`
-- install the main package from `pyproject.toml`
-- build and install local `third_party` packages, including `pyarx`, `flexiv_rt`, `xensevr_pc_service_sdk`, `xensesdk`, `XGripper`, and `pyxensexu`
+- Update the conda environment from `conda_environment.yaml`
+- Install the main package from `pyproject.toml`
+- Build and install all `third_party` SDK packages: `pyarx`, `flexiv_rt`, `xensevr_pc_service_sdk`, `xensesdk`, `xensegripper`, `xense_franka`
+- Configure SpaceMouse udev rules and HID permissions automatically
 
-### 5. Verify the installation
+> You will be prompted for `sudo` password during installation (for ARX5 real-time capability and udev rules).
 
-After `bash setup_env.sh --install` completes, verify that the local hardware SDK bindings can be imported:
+**Step 4:** ✅ Verify the installation:
 
 ```bash
 python -c 'import pyarx; print("pyarx OK ->", pyarx.__file__)'
@@ -87,139 +84,348 @@ python -c 'import flexiv_rt; print("flexiv_rt OK ->", flexiv_rt.__file__)'
 python -c 'import xensevr_pc_service_sdk; print("xensevr_pc_service_sdk OK ->", xensevr_pc_service_sdk.__file__)'
 python -c 'import xensesdk; print("xensesdk OK ->", xensesdk.__file__)'
 python -c 'import xensegripper; print("xensegripper OK ->", xensegripper.__file__)'
-python -c 'from xensesdk.utils.flashRW import xense_flash_manager; print("pyxensexu available ->", xense_flash_manager.is_available)'
 ```
 
-Expected result:
-
-- each package imports without error
-- `pyxensexu available -> True`
-
-> [!IMPORTANT]
-> The script is designed around this repository layout and its vendored `third_party` modules. Run it from the repository root.
-
-### 6. ARX5 CAN real-time thread (manual, requires sudo)
-
-The ARX5 SDK uses `SCHED_FIFO` on its CAN thread for real-time performance. This requires `CAP_SYS_NICE` to be set on the Python interpreter **once per environment**. Run this after installation:
+**Step 5:** 📌 **Note on FFmpeg / video:** v5.1 no longer pins `ffmpeg`
+through conda (the robostack ICU pin conflicted with newer ffmpeg
+builds). Video encoding/decoding is handled by `torchcodec` + `av`
+wheels installed via `setup_env.sh --install`. If you need a system
+ffmpeg with `libsvtav1`, install it separately (apt or upstream
+static build):
 
 ```bash
-# Find the real interpreter path (not a symlink — setcap rejects symlinks)
-PY_EXE=$(python -c 'import sys; import os; p = sys.executable; \
-    [p := os.path.realpath(p)]; print(p)')
-echo "Target: $PY_EXE"
+# Optional: verify torchcodec wheel is loadable
+python -c 'import torchcodec; print("torchcodec OK ->", torchcodec.__version__)'
+```
 
-# Grant CAP_SYS_NICE (requires sudo)
+### ARX5 Real-time Thread Permissions
+
+The ARX5 SDK requires `CAP_SYS_NICE` on the Python interpreter for real-time CAN thread scheduling. This is handled by `setup_env.sh --install`, but can be set manually:
+
+```bash
+PY_EXE=$(python -c 'import sys, os; p = sys.executable; print(os.path.realpath(p))')
 sudo setcap cap_sys_nice+ep "$PY_EXE"
-
-# Verify
-getcap "$PY_EXE"
+getcap "$PY_EXE"  # should show: cap_sys_nice+ep
 ```
 
-Expected output: `...python3.x = cap_sys_nice+ep`
+## 🐭 SpaceMouse Teleoperation System
 
-> [!NOTE]
-> This step is optional. ARX5 still works without it but may experience higher CAN thread latency. Re-run if you recreate the conda environment or upgrade Python.
+This project includes advanced SpaceMouse support with both single and dual-device modes for precise robotic control.
 
-## Robots & Control
+### Dependencies
 
-<div align="center">
-  <img src="./media/readme/robots_control_video.webp" width="640px" alt="Reachy 2 Demo">
-</div>
+**System Requirements:**
 
-LeRobot provides a unified `Robot` class interface that decouples control logic from hardware specifics. It supports a wide range of robots and teleoperation devices.
+- Ubuntu 22.04 (tested) or other Linux distributions
+- Python 3.12+
+- libhidapi (installed via apt)
 
-```python
-from lerobot.robots.myrobot import MyRobot
+**Python Packages:**
 
-# Connect to a robot
-robot = MyRobot(config=...)
-robot.connect()
+- `pyspacemouse` - Modern cross-platform SpaceMouse library
+- `hidapi` - Python wrapper for HID API
+- `easyhid` - Easy-to-use HID library (dependency of pyspacemouse)
 
-# Read observation and send action
-obs = robot.get_observation()
-action = model.select_action(obs)
-robot.send_action(action)
-```
+All Python dependencies are automatically installed by `setup_env.sh --install`.
 
-**Supported Hardware:** SO100, LeKiwi, Koch, HopeJR, OMX, EarthRover, Reachy2, Gamepads, Keyboards, Phones, OpenARM, Unitree G1.
+### Permissions Setup
 
-While these devices are natively integrated into the LeRobot codebase, the library is designed to be extensible. You can easily implement the Robot interface to utilize LeRobot's data collection, training, and visualization tools for your own custom robot.
+SpaceMouse requires proper udev rules to allow non-root access. See **Step 2** in the Installation section above for complete setup instructions.
 
-For detailed hardware setup guides, see the [Hardware Documentation](https://huggingface.co/docs/lerobot/integrate_hardware).
+### Testing Your SpaceMouse
 
-## LeRobot Dataset
-
-To solve the data fragmentation problem in robotics, we utilize the **LeRobotDataset** format.
-
-- **Structure:** Synchronized MP4 videos (or images) for vision and Parquet files for state/action data.
-- **HF Hub Integration:** Explore thousands of robotics datasets on the [Hugging Face Hub](https://huggingface.co/lerobot).
-- **Tools:** Seamlessly delete episodes, split by indices/fractions, add/remove features, and merge multiple datasets.
-
-```python
-from lerobot.datasets.lerobot_dataset import LeRobotDataset
-
-# Load a dataset from the Hub
-dataset = LeRobotDataset("lerobot/aloha_mobile_cabinet")
-
-# Access data (automatically handles video decoding)
-episode_index=0
-print(f"{dataset[episode_index]['action'].shape=}\n")
-```
-
-Learn more about it in the [LeRobotDataset Documentation](https://huggingface.co/docs/lerobot/lerobot-dataset-v3)
-
-## SoTA Models
-
-LeRobot implements state-of-the-art policies in pure PyTorch, covering Imitation Learning, Reinforcement Learning, and Vision-Language-Action (VLA) models, with more coming soon. It also provides you with the tools to instrument and inspect your training process.
-
-<p align="center">
-  <img alt="Gr00t Architecture" src="./media/readme/VLA_architecture.jpg" width="640px">
-</p>
-
-Training a policy is as simple as running a script configuration:
+After installation and permissions setup, test your SpaceMouse:
 
 ```bash
-lerobot-train \
-  --policy=act \
-  --dataset.repo_id=lerobot/aloha_mobile_cabinet
+# Basic functionality test (prints real-time 6-DoF values)
+python test_pyspacemouse_basic.py
+
+# Test with lerobot integration
+python test_spacemouse.py
 ```
 
-| Category                   | Models                                                                                                                                                                                                       |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Imitation Learning**     | [ACT](./docs/source/policy_act_README.md), [Diffusion](./docs/source/policy_diffusion_README.md), [VQ-BeT](./docs/source/policy_vqbet_README.md)                                                             |
-| **Reinforcement Learning** | [HIL-SERL](./docs/source/hilserl.mdx), [TDMPC](./docs/source/policy_tdmpc_README.md) & QC-FQL (coming soon)                                                                                                  |
-| **VLAs Models**            | [Pi0Fast](./docs/source/pi0fast.mdx), [Pi0.5](./docs/source/pi05.mdx), [GR00T N1.5](./docs/source/policy_groot_README.md), [SmolVLA](./docs/source/policy_smolvla_README.md), [XVLA](./docs/source/xvla.mdx) |
+The test script will display real-time position (x, y, z) and orientation (roll, pitch, yaw) values as you move the SpaceMouse.
 
-Similarly to the hardware, you can easily implement your own policy & leverage LeRobot's data collection, training, and visualization tools, and share your model to the HF Hub
+> 📝 **Note:** If you're using a 3Dconnexion Universal Receiver (wireless), you may see multiple devices listed (e.g., 14 "UniversalReceiver" entries). This is normal - the receiver exposes multiple HID interfaces for different functions. PySpaceMouse will automatically select the correct interface for 6-DoF input.
 
-For detailed policy setup guides, see the [Policy Documentation](https://huggingface.co/docs/lerobot/bring_your_own_policies).
+### Features
 
-## Inference & Evaluation
+- ✅ **Modern PySpaceMouse Integration**: Uses PySpaceMouse library for cross-platform SpaceMouse support
+- ✅ **No System Services Required**: Direct HID communication, no need for spacenavd daemon  
+- ✅ **Single Device Mode**: Traditional 6-DoF control with one SpaceMouse
+- ✅ **Dual Device Mode**: Advanced left/right hand coordination for complex manipulation
+- ✅ **Flexible Axis Assignment**: Configure which device controls position vs orientation
+- ✅ **Independent Sensitivity**: Per-device sensitivity settings for optimal control
 
-Evaluate your policies in simulation or on real hardware using the unified evaluation script. LeRobot supports standard benchmarks like **LIBERO**, **MetaWorld** and more to come.
+### Single Device Configuration
 
-```bash
-# Evaluate a policy on the LIBERO benchmark
-lerobot-eval \
-  --policy.path=lerobot/pi0_libero_finetuned \
-  --env.type=libero \
-  --env.task=libero_object \
-  --eval.n_episodes=10
+```python
+from lerobot.teleoperators.spacemouse import SpacemouseConfig, SpacemouseTeleop
+
+# Standard single SpaceMouse setup (default)
+config = SpacemouseConfig(
+    pos_sensitivity=0.8,     # Position control sensitivity
+    ori_sensitivity=1.5,     # Orientation control sensitivity
+    deadzone=0.1,           # Deadzone threshold
+    frequency=200,          # Polling frequency (Hz)
+)
+
+teleop = SpacemouseTeleop(config)
 ```
 
-Learn how to implement your own simulation environment or benchmark and distribute it from the HF Hub by following the [EnvHub Documentation](https://huggingface.co/docs/lerobot/envhub)
+### Dual Device Configuration
 
-## Resources
+Perfect for complex robotic tasks requiring precise position and orientation control:
 
-- **[Documentation](https://huggingface.co/docs/lerobot/index):** The complete guide to tutorials & API.
-- **[Chinese Tutorials: LeRobot+SO-ARM101中文教程-同济子豪兄](https://zihao-ai.feishu.cn/wiki/space/7589642043471924447)** Detailed doc for assembling, teleoperate, dataset, train, deploy. Verified by Seed Studio and 5 global hackathon players.
-- **[Discord](https://discord.gg/q8Dzzpym3f):** Join the `LeRobot` server to discuss with the community.
-- **[X](https://x.com/LeRobotHF):** Follow us on X to stay up-to-date with the latest developments.
-- **[Robot Learning Tutorial](https://huggingface.co/spaces/lerobot/robot-learning-tutorial):** A free, hands-on course to learn robot learning using LeRobot.
+```python
+from lerobot.teleoperators.spacemouse import SpacemouseConfig, DeviceConfig
+
+# Left hand controls position, right hand controls orientation
+config = SpacemouseConfig(
+    multi_device_mode=True,
+    left_device=DeviceConfig(
+        device_index=0,
+        enabled_axes=(True, True, True, False, False, False),  # X, Y, Z position only
+        pos_sensitivity=0.8,
+        ori_sensitivity=0.0,  # Disabled
+    ),
+    right_device=DeviceConfig(
+        device_index=1, 
+        enabled_axes=(False, False, False, True, True, True),  # Roll, pitch, yaw only
+        pos_sensitivity=0.0,  # Disabled
+        ori_sensitivity=1.5,
+    )
+)
+
+teleop = SpacemouseTeleop(config)
+```
+
+### Example Configurations
+
+See [examples/spacemouse_dual_config_example.py](examples/spacemouse_dual_config_example.py) for complete configuration examples including:
+- Position/Orientation split control
+- Dual-arm robot control  
+- Fine/Coarse movement control
+
+### Use Cases
+
+- 🤖 **Dual-Arm Robots**: Independent control of two robotic arms
+- 🎯 **Precision Manipulation**: Decouple position and orientation control for fine tasks
+- 🔄 **Complex Assembly**: Left hand positions, right hand orients components
+- 🏭 **Industrial Applications**: Enhanced ergonomics and control precision
+
+### Hardware Requirements
+
+- **Single Mode**: Any 3Dconnexion SpaceMouse device
+- **Dual Mode**: Two identical SpaceMouse devices (e.g., two SpaceNavigators)
+
+### Supported Devices
+
+All 3Dconnexion devices supported by PySpaceMouse:
+- SpaceNavigator
+- SpaceMouse Pro
+- SpaceMouse Wireless
+- SpaceMouse Compact
+- And more...
+
+## 🤖 Flexiv Rizon4 Robot with Flare Gripper Policy Implementation
+
+Lerobot record XenseFlare dataset can be directly used for FlexivRizon4 policy training.  🎉
+
+### Bimanual Flexiv Rizon4 RT + BiPico4 Record Controls
+
+For `lerobot-record` with `--robot.type=bi_flexiv_rizon4_rt --teleop.type=bi_pico4`, the controller buttons are mapped as follows:
+
+| Controller button | Keyboard equivalent | Action |
+|---|---|---|
+| Right `A` | `go_start` | Reset both arms to start pose (RT non-blocking, recording continues) |
+| Left `X` | `rerecord_episode` | Discard current episode and re-record |
+| Left `Y` | `exit_early` | Finish current episode early |
+| Right `B` | `stop_recording` | Stop the recording session |
+
+Button state is refreshed via `BiPico4.poll_buttons()` at the top of each loop iteration, before event checks. Keyboard events and controller buttons are unified into the same `events[]` checks — both are equal-priority input sources.
+
+During RT reset, the record loop keeps running: observations are still sampled, teleop actions are still read, and the teleop pose is re-synced to the robot once the reset trajectory finishes.
+
+## Record Loop Implementation (`flexiv_rizon4_rt_record_loop`)
+
+This section documents the dataset construction logic in `flexiv_rizon4_rt_record_loop`, which handles both normal teleoperation recording and the RT reset trajectory recording for `bi_flexiv_rizon4_rt + bi_pico4`.
+
+### Loop Structure
+
+```
+while timestamp < control_time_s:
+    poll_buttons()              # lightweight button refresh (no pose computation)
+
+    # Unified event checks — keyboard OR controller button, symmetric
+    stop_recording  / B  →  break
+    rerecord        / X  →  break
+    exit_early      / Y  →  break
+    go_start        / A  →  reset_to_initial_position(), recording continues
+
+    get_observation()
+    check robot_is_moving + sync teleop if reset just finished
+    get_action()
+    send_action / dataset write
+```
+
+### State Variables
+
+| Variable | Role |
+|---|---|
+| `reset_triggered` | Per-frame flag. Set `True` the frame reset is triggered. Skips `send_action` and dataset write for that frame only. Resets to `False` at the start of every iteration. |
+| `prev_rt_moving` | Edge-detection flag. Set `True` while `robot.rt_moving` is `True`. Cleared to `False` when movement stops, triggering one call to `_sync_rt_teleop_to_robot_pose()`. |
+| `prev_observation_frame` | Holds the previous frame's observation. Used by shifted-frame logic to pair `obs[t-1]` with the robot's actual position at `obs[t]` as the action. |
+
+### Three Frame Modes
+
+#### 1. Normal teleoperation (`robot_is_moving=False`, `reset_triggered=False`)
+
+```
+robot.send_action(teleop_action) → sent_action
+dataset: { obs[t],  action = sent_action[t] }   # direct frame
+prev_observation_frame = obs[t]
+```
+
+#### 2. Reset trigger frame (`reset_triggered=True`)
+
+```
+robot.reset_to_initial_position()   # C++ RT thread takes over arm control
+send_action  → skipped
+dataset      → skipped
+prev_observation_frame = obs[T]     # saved as anchor for next iteration
+```
+
+`obs[T]` is intentionally not written to the dataset. It is used as `prev_observation_frame` for the first shifted frame on the next iteration, so it appears exactly once — without this skip it would appear twice (once as a direct frame, once as the prev of the first shifted frame).
+
+#### 3. RT reset in progress (`robot_is_moving=True`)
+
+```
+send_action  → skipped (C++ RT thread drives the arm autonomously)
+current_as_action = { key: obs[t][key] for key in robot.action_features }
+# robot.action_features = left/right TCP pose (9D each) + gripper (1D each) = 20D total
+# Iterates action_features keys only — image keys in obs[t] are excluded automatically.
+dataset: { obs[t-1],  action = current_as_action }   # shifted frame
+prev_observation_frame = obs[t]
+```
+
+The action is extracted from the current observation using the same keys as `robot.action_features`. This records where the robot actually moved to, not what the teleop commanded — the same shifted-frame convention used by `bi_arx5_record_loop`.
+
+### Per-Frame Decision Table
+
+| Frame | `reset_triggered` | `robot_is_moving` | `send_action` | Dataset write | `prev_obs` updated to |
+|---|---|---|---|---|---|
+| T-1 (normal teleop) | False | False | ✓ | `{obs[T-1], action[T-1]}` direct | obs[T-1] |
+| **T (reset triggered)** | **True** | **False** | **skipped** | **skipped** | **obs[T]** |
+| T+1 (RT moving) | False | True | skipped | `{obs[T], state_20d[T+1]}` shifted | obs[T+1] |
+| T+2 (RT moving) | False | True | skipped | `{obs[T+1], state_20d[T+2]}` shifted | obs[T+2] |
+| … | False | True | skipped | shifted | … |
+| N+1 (reset done, teleop synced) | False | False | ✓ | `{obs[N+1], action[N+1]}` direct | obs[N+1] |
+
+`state_20d[t]` = `{k: obs[t][k] for k in robot.action_features}` — left/right TCP pose (9D each) + gripper (1D each), image keys excluded.
+
+### Complete Frame Sequence Around a Reset
+
+```
+frame T-2  normal teleop  →  dataset: { obs[T-2], action[T-2] }
+frame T-1  normal teleop  →  dataset: { obs[T-1], action[T-1] },  prev=obs[T-1]
+frame T    reset trigger  →  dataset: skipped,                     prev=obs[T]
+frame T+1  rt_moving      →  dataset: { obs[T],   state_20d[T+1] },  prev=obs[T+1]
+frame T+2  rt_moving      →  dataset: { obs[T+1], state_20d[T+2] },  prev=obs[T+2]
+  ...
+frame N    rt_moving      →  dataset: { obs[N-1], state_20d[N] },    prev=obs[N]
+frame N+1  reset done     →  _sync_rt_teleop_to_robot_pose()
+           normal teleop  →  dataset: { obs[N+1], action[N+1] }
+```
+
+### Post-Reset Teleop Sync
+
+When `prev_rt_moving` transitions `True → False` (frame N+1), `_sync_rt_teleop_to_robot_pose()` is called once. This reads the robot's current TCP pose (now at start position) and calls `teleop.reset_to_pose()`, updating the Pico4's internal `_start_pos` reference. Without this sync the teleop would compute position deltas from the pre-reset pose, causing the arm to jump on the first grip after reset.
+
+## 🔑 The `LeRobotDataset` format
+
+A dataset in `LeRobotDataset` format is very simple to use. It can be loaded from a repository on the Hugging Face hub or a local folder simply with e.g. `dataset = LeRobotDataset("lerobot/aloha_static_coffee")` and can be indexed into like any Hugging Face and PyTorch dataset. For instance `dataset[0]` will retrieve a single temporal frame from the dataset containing observation(s) and an action as PyTorch tensors ready to be fed to a model.
+
+A specificity of `LeRobotDataset` is that, rather than retrieving a single frame by its index, we can retrieve several frames based on their temporal relationship with the indexed frame, by setting `delta_timestamps` to a list of relative times with respect to the indexed frame. For example, with `delta_timestamps = {"observation.image": [-1, -0.5, -0.2, 0]}` one can retrieve, for a given index, 4 frames: 3 "previous" frames 1 second, 0.5 seconds, and 0.2 seconds before the indexed frame, and the indexed frame itself (corresponding to the 0 entry). See example [1_load_lerobot_dataset.py](https://github.com/huggingface/lerobot/blob/main/examples/dataset/load_lerobot_dataset.py) for more details on `delta_timestamps`.
+
+Under the hood, the `LeRobotDataset` format makes use of several ways to serialize data which can be useful to understand if you plan to work more closely with this format. We tried to make a flexible yet simple dataset format that would cover most type of features and specificities present in reinforcement learning and robotics, in simulation and in real-world, with a focus on cameras and robot states but easily extended to other types of sensory inputs as long as they can be represented by a tensor.
+
+Here are the important details and internal structure organization of a typical `LeRobotDataset` instantiated with `dataset = LeRobotDataset("lerobot/aloha_static_coffee")`. The exact features will change from dataset to dataset but not the main aspects:
+
+```
+dataset attributes:
+  ├ hf_dataset: a Hugging Face dataset (backed by Arrow/parquet). Typical features example:
+  │  ├ observation.images.cam_high (VideoFrame):
+  │  │   VideoFrame = {'path': path to a mp4 video, 'timestamp' (float32): timestamp in the video}
+  │  ├ observation.state (list of float32): position of an arm joints (for instance)
+  │  ... (more observations)
+  │  ├ action (list of float32): goal position of an arm joints (for instance)
+  │  ├ episode_index (int64): index of the episode for this sample
+  │  ├ frame_index (int64): index of the frame for this sample in the episode ; starts at 0 for each episode
+  │  ├ timestamp (float32): timestamp in the episode
+  │  ├ next.done (bool): indicates the end of an episode ; True for the last frame in each episode
+  │  └ index (int64): general index in the whole dataset
+  ├ meta: a LeRobotDatasetMetadata object containing:
+  │  ├ info: a dictionary of metadata on the dataset
+  │  │  ├ codebase_version (str): this is to keep track of the codebase version the dataset was created with
+  │  │  ├ fps (int): frame per second the dataset is recorded/synchronized to
+  │  │  ├ features (dict): all features contained in the dataset with their shapes and types
+  │  │  ├ total_episodes (int): total number of episodes in the dataset
+  │  │  ├ total_frames (int): total number of frames in the dataset
+  │  │  ├ robot_type (str): robot type used for recording
+  │  │  ├ data_path (str): formattable string for the parquet files
+  │  │  └ video_path (str): formattable string for the video files (if using videos)
+  │  ├ episodes: a DataFrame containing episode metadata with columns:
+  │  │  ├ episode_index (int): index of the episode
+  │  │  ├ tasks (list): list of tasks for this episode
+  │  │  ├ length (int): number of frames in this episode
+  │  │  ├ dataset_from_index (int): start index of this episode in the dataset
+  │  │  └ dataset_to_index (int): end index of this episode in the dataset
+  │  ├ stats: a dictionary of statistics (max, mean, min, std) for each feature in the dataset, for instance
+  │  │  ├ observation.images.front_cam: {'max': tensor with same number of dimensions (e.g. `(c, 1, 1)` for images, `(c,)` for states), etc.}
+  │  │  └ ...
+  │  └ tasks: a DataFrame containing task information with task names as index and task_index as values
+  ├ root (Path): local directory where the dataset is stored
+  ├ image_transforms (Callable): optional image transformations to apply to visual modalities
+  └ delta_timestamps (dict): optional delta timestamps for temporal queries
+```
+
+A `LeRobotDataset` is serialised using several widespread file formats for each of its parts, namely:
+
+- hf_dataset stored using Hugging Face datasets library serialization to parquet
+- videos are stored in mp4 format to save space
+- metadata are stored in plain json/jsonl files
+
+Dataset can be uploaded/downloaded from the HuggingFace hub seamlessly. To work on a local dataset, you can specify its location with the `root` argument if it's not in the default `~/.cache/huggingface/lerobot` location.
+
+## 📝 Recent Updates
+
+### SpaceMouse System Upgrade (2025-01-23)
+
+🎉 **Major SpaceMouse System Overhaul:**
+
+- **Modern Library Migration**: Migrated from legacy `spnav` to modern `PySpaceMouse` library
+- **Cross-Platform Support**: Now supports Linux, macOS, and Windows
+- **No System Dependencies**: Removed requirement for `spacenavd` system service
+- **Dual-Device Support**: Revolutionary dual SpaceMouse mode for advanced manipulation
+- **Flexible Configuration**: Per-device sensitivity and axis assignment
+- **Hardware Independence**: Direct HID communication for better reliability
+
+**Breaking Changes:**
+- `spacenavd` service is no longer required
+- Configuration options have been expanded with new dual-device parameters
+- Old single-device configurations remain fully compatible
+
+**Migration Benefits:**
+- ✅ Easier setup (no system services to configure)
+- ✅ Better cross-platform compatibility  
+- ✅ More responsive input handling
+- ✅ Advanced dual-hand control capabilities
+- ✅ Future-proof with active library maintenance
 
 ## Citation
 
-If you use LeRobot in your project, please cite the GitHub repository to acknowledge the ongoing development and contributors:
+If you use this codebase, please cite the original LeRobot project:
 
 ```bibtex
 @misc{cadene2024lerobot,
@@ -229,32 +435,3 @@ If you use LeRobot in your project, please cite the GitHub repository to acknowl
     year = {2024}
 }
 ```
-
-If you are referencing our research or the academic paper, please also cite our ICLR publication:
-
-<details>
-<summary><b>ICLR 2026 Paper</b></summary>
-
-```bibtex
-@inproceedings{cadenelerobot,
-  title={LeRobot: An Open-Source Library for End-to-End Robot Learning},
-  author={Cadene, Remi and Alibert, Simon and Capuano, Francesco and Aractingi, Michel and Zouitine, Adil and Kooijmans, Pepijn and Choghari, Jade and Russi, Martino and Pascal, Caroline and Palma, Steven and Shukor, Mustafa and Moss, Jess and Soare, Alexander and Aubakirova, Dana and Lhoest, Quentin and Gallou\'edec, Quentin and Wolf, Thomas},
-  booktitle={The Fourteenth International Conference on Learning Representations},
-  year={2026},
-  url={https://arxiv.org/abs/2602.22818}
-}
-```
-
-</details>
-
-## Contribute
-
-We welcome contributions from everyone in the community! To get started, please read our [CONTRIBUTING.md](./CONTRIBUTING.md) guide. Whether you're adding a new feature, improving documentation, or fixing a bug, your help and feedback are invaluable. We're incredibly excited about the future of open-source robotics and can't wait to work with you on what's next—thank you for your support!
-
-<p align="center">
-  <img alt="SO101 Video" src="./media/readme/so100_video.webp" width="640px">
-</p>
-
-<div align="center">
-<sub>Built by the <a href="https://huggingface.co/lerobot">LeRobot</a> team at <a href="https://huggingface.co">Hugging Face</a> with ❤️</sub>
-</div>
