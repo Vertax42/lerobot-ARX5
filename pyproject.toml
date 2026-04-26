@@ -36,12 +36,12 @@ authors = [
     { name = "Alexander Soare", email = "alexander.soare159@gmail.com" },
     { name = "Quentin Gallouédec", email = "quentin.gallouedec@ec-lyon.fr" },
     { name = "Steven Palma", email = "imstevenpmwork@ieee.org" },
-    { name = "Pepijn Kooijmans", email = "pepijnkooijmans@outlook.com"},
-    { name = "Michel Aractingi", email = "michel.aractingi@gmail.com"},
+    { name = "Pepijn Kooijmans", email = "pepijnkooijmans@outlook.com" },
+    { name = "Michel Aractingi", email = "michel.aractingi@gmail.com" },
     { name = "Adil Zouitine", email = "adilzouitinegm@gmail.com" },
-    { name = "Dana Aubakirova", email = "danaaubakirova17@gmail.com"},
-    { name = "Caroline Pascal", email = "caroline8.pascal@gmail.com"},
-    { name = "Martino Russi", email = "nopyeps@gmail.com"},
+    { name = "Dana Aubakirova", email = "danaaubakirova17@gmail.com" },
+    { name = "Caroline Pascal", email = "caroline8.pascal@gmail.com" },
+    { name = "Martino Russi", email = "nopyeps@gmail.com" },
     { name = "Thomas Wolf", email = "thomaswolfcontact@gmail.com" },
 ]
 classifiers = [
@@ -55,7 +55,13 @@ classifiers = [
     "Topic :: Software Development :: Build Tools",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-keywords = ["lerobot", "huggingface", "robotics",  "machine learning", "artificial intelligence"]
+keywords = [
+    "lerobot",
+    "huggingface",
+    "robotics",
+    "machine learning",
+    "artificial intelligence",
+]
 
 dependencies = [
     # Hugging Face dependencies (kept: datasets + hub for dataset IO)
@@ -63,7 +69,7 @@ dependencies = [
     "huggingface-hub>=1.0.0,<2.0.0",
 
     # Core dependencies
-    "numpy>=1.26.4", # robostack resolves to 1.26; pip-only installs can use 2.x (tested with 2.2.6)
+    "numpy>=1.26.4",          # robostack resolves to 1.26; pip-only installs can use 2.x (tested with 2.2.6)
     "cmake>=3.29.0.1,<4.2.0",
     "packaging>=24.2",
 
@@ -79,7 +85,7 @@ dependencies = [
     "pynput>=1.7.8,<1.9.0",
     "pygame>=2.5.1,<2.7.0",
     "wandb>=0.24.0,<0.25.0",
-    "draccus==0.10.0", # TODO: Relax version constraint
+    "draccus==0.10.0",                       # TODO: Relax version constraint
     "rerun-sdk>=0.24.0,<0.27.0",
 
     # Support dependencies
@@ -147,21 +153,26 @@ reachy2 = ["reachy2_sdk>=1.0.15,<1.1.0"]
 #   conda install -c conda-forge soem=1.4.0  # x86_64 only
 #   conda install -c robostack-staging ros-humble-kdl-parser ros-humble-ament-cmake
 # Then build ARX5 Python bindings from source (third_party/ARX5_SDK/).
-arx5 = [
-    "pyarx",
-    "click",
-    "pyzmq>=26.2.1,<28.0.0",
-    "atomics",
-]
+arx5 = ["pyarx", "click", "pyzmq>=26.2.1,<28.0.0", "atomics"]
 intelrealsense = [
     "pyrealsense2>=2.55.1.6486,<2.57.0 ; sys_platform != 'darwin'",
     "pyrealsense2-macosx>=2.54,<2.57.0 ; sys_platform == 'darwin'",
 ]
-phone = ["hebi-py>=2.8.0,<2.12.0", "teleop>=0.1.0,<0.2.0", "fastapi<1.0", "lerobot[scipy-dep]"]
+phone = [
+    "hebi-py>=2.8.0,<2.12.0",
+    "teleop>=0.1.0,<0.2.0",
+    "fastapi<1.0",
+    "lerobot[scipy-dep]",
+]
 
 # Development
 dev = ["pre-commit>=3.7.0,<5.0.0", "debugpy>=1.8.1,<1.9.0", "mypy>=1.19.1"]
-test = ["pytest>=8.1.0,<9.0.0", "pytest-timeout>=2.4.0,<3.0.0", "pytest-cov>=5.0.0,<8.0.0", "mock-serial>=0.0.1,<0.1.0 ; sys_platform != 'win32'"]
+test = [
+    "pytest>=8.1.0,<9.0.0",
+    "pytest-timeout>=2.4.0,<3.0.0",
+    "pytest-cov>=5.0.0,<8.0.0",
+    "mock-serial>=0.0.1,<0.1.0 ; sys_platform != 'win32'",
+]
 video_benchmark = ["scikit-image>=0.23.2,<0.26.0", "pandas>=2.2.2,<2.4.0"]
 
 # All hardware extras
@@ -187,19 +198,19 @@ all = [
 ]
 
 [project.scripts]
-lerobot-calibrate="lerobot.scripts.lerobot_calibrate:main"
-lerobot-find-cameras="lerobot.scripts.lerobot_find_cameras:main"
-lerobot-find-port="lerobot.scripts.lerobot_find_port:main"
-lerobot-record="lerobot.scripts.lerobot_record:main"
-lerobot-replay="lerobot.scripts.lerobot_replay:main"
-lerobot-setup-motors="lerobot.scripts.lerobot_setup_motors:main"
-lerobot-teleoperate="lerobot.scripts.lerobot_teleoperate:main"
-lerobot-dataset-viz="lerobot.scripts.lerobot_dataset_viz:main"
-lerobot-info="lerobot.scripts.lerobot_info:main"
-lerobot-imgtransform-viz="lerobot.scripts.lerobot_imgtransform_viz:main"
-lerobot-edit-dataset="lerobot.scripts.lerobot_edit_dataset:main"
-lerobot-setup-can="lerobot.scripts.lerobot_setup_can:main"
-lerobot-annotate-reward="lerobot.scripts.lerobot_annotate_reward:main"
+lerobot-calibrate = "lerobot.scripts.lerobot_calibrate:main"
+lerobot-find-cameras = "lerobot.scripts.lerobot_find_cameras:main"
+lerobot-find-port = "lerobot.scripts.lerobot_find_port:main"
+lerobot-record = "lerobot.scripts.lerobot_record:main"
+lerobot-replay = "lerobot.scripts.lerobot_replay:main"
+lerobot-setup-motors = "lerobot.scripts.lerobot_setup_motors:main"
+lerobot-teleoperate = "lerobot.scripts.lerobot_teleoperate:main"
+lerobot-dataset-viz = "lerobot.scripts.lerobot_dataset_viz:main"
+lerobot-info = "lerobot.scripts.lerobot_info:main"
+lerobot-imgtransform-viz = "lerobot.scripts.lerobot_imgtransform_viz:main"
+lerobot-edit-dataset = "lerobot.scripts.lerobot_edit_dataset:main"
+lerobot-setup-can = "lerobot.scripts.lerobot_setup_can:main"
+lerobot-annotate-reward = "lerobot.scripts.lerobot_annotate_reward:main"
 
 # ---------------- Tool Configurations ----------------
 [tool.setuptools.packages.find]
@@ -211,9 +222,7 @@ line-length = 120
 exclude = ["tests/artifacts/**/*.safetensors", "*_pb2.py", "*_pb2_grpc.py"]
 
 [tool.ruff.lint]
-select = [
-    "E", "W", "F", "I", "B", "C4", "T20", "N", "UP", "SIM"
-]
+select = ["E", "W", "F", "I", "B", "C4", "T20", "N", "UP", "SIM"]
 ignore = [
     "E501", # Line too long
     "T201", # Print statement found
@@ -259,7 +268,7 @@ default.extend-ignore-identifiers-re = [
     "thw",
     "inpt",
     "ROBOTIS",
-    "OT_VALUE"
+    "OT_VALUE",
 ]
 
 [tool.mypy]
