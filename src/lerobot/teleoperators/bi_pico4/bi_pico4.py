@@ -79,7 +79,7 @@ class BiPico4(Teleoperator):
         self._xrt = None
         self.logger = get_logger("BiPico4")
 
-        # A button edge detection (handled at BiPico4 level for both arms together)
+        # Edge detection for the controller button currently used by teleop / record flows
         self._was_reset_button_pressed: bool = False
 
         # Build per-arm Pico4 configs from shared BiPico4Config fields
@@ -257,8 +257,14 @@ class BiPico4(Teleoperator):
             self._init_pico4_instance(self._left_pico4, xrt, left_tcp_pose_quat)
             self._init_pico4_instance(self._right_pico4, xrt, right_tcp_pose_quat)
 
-            self._was_reset_button_pressed = False
             self._is_connected = True
+
+            # Seed edge-detection state from the actual current A-button state so
+            # that a held button at connect time does not fire as a false
+            # "just pressed" event on the first poll_buttons() call.
+            self.poll_buttons()
+            self._was_reset_button_pressed = self._right_pico4._last_a_button
+
             self.logger.info("BiPico4 connected (left + right controllers).")
 
         except DeviceNotConnectedError:
@@ -289,9 +295,12 @@ class BiPico4(Teleoperator):
         pico4._quat_offset = None
         pico4._enabled = False
         pico4._was_enabled = False
-        pico4._was_reset_button_pressed = False
         pico4._orientation_control_active = True
         pico4._last_raw_pose = None
+        pico4._last_a_button = False
+        pico4._last_b_button = False
+        pico4._last_x_button = False
+        pico4._last_y_button = False
         pico4._is_connected = True
 
     def calibrate(self) -> None:
@@ -337,6 +346,17 @@ class BiPico4(Teleoperator):
         """
         self._left_pico4.reset_to_pose(left_pose_7d, left_gripper_pos)
         self._right_pico4.reset_to_pose(right_pose_7d, right_gripper_pos)
+
+    def poll_buttons(self) -> None:
+        """Refresh cached controller button states without a full pose/action computation.
+
+        Call this at the top of a control loop when button state is needed before get_action().
+        get_action() will re-read the same buttons, which is safe (idempotent reads).
+        Only the right-controller A button is currently consumed by teleop / record flows.
+        """
+        if not self._is_connected or self._xrt is None:
+            return
+        self._right_pico4._last_a_button = bool(self._xrt.get_A_button())
 
     def get_reset_button(self) -> bool:
         """Get rising-edge state of the A button (right controller).

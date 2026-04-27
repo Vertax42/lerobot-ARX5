@@ -130,11 +130,22 @@ class Pico4(Teleoperator):
         )
         self._was_reset_button_pressed: bool = False  # Track previous reset button state for edge detection
         self._last_grip: float = 0.0  # Last grip value for debugging
-        self._last_a_button: bool = False  # Last A button state (cached from get_action)
+        # Physical button states cached each get_action() call.
+        # Right controller populates _last_a_button / _last_b_button.
+        # Left  controller populates _last_x_button / _last_y_button.
+        self._last_a_button: bool = False
+        self._last_b_button: bool = False
+        self._last_x_button: bool = False
+        self._last_y_button: bool = False
 
         # Position jump filtering
         self._last_raw_pose: np.ndarray | None = None  # Last raw pose for jump detection
         self._jump_filter_count: int = 0  # Count of filtered jumps for debugging
+
+        # Output rate limiter state
+        self._last_action_time: float | None = None  # Timestamp of last get_action call
+        self._prev_target_pos: np.ndarray | None = None  # Previous frame target position
+        self._prev_target_quat: np.ndarray | None = None  # Previous frame target quaternion
 
     @property
     def is_connected(self) -> bool:
@@ -313,6 +324,11 @@ class Pico4(Teleoperator):
 
         # Reset jump filter state
         self._last_raw_pose = None
+
+        # Reset rate limiter state so the new pose is accepted without clamping
+        self._prev_target_pos = self._target_pos.copy()
+        self._prev_target_quat = self._target_quat.copy()
+        self._last_action_time = None
 
         self.logger.info(
             f"Reset target pose to: pos={pose_7d[:3]}, quat={pose_7d[3:7]}, gripper={gripper_pos}"
@@ -527,17 +543,18 @@ class Pico4(Teleoperator):
             pose = self._xrt.get_right_controller_pose()
             controller_grip = float(self._xrt.get_right_grip())
             controller_trigger = float(self._xrt.get_right_trigger())
-            a_button = bool(self._xrt.get_A_button())
+            self._last_a_button = bool(self._xrt.get_A_button())
+            self._last_b_button = bool(self._xrt.get_B_button())
         elif self.config.use_left_controller:
             pose = self._xrt.get_left_controller_pose()
             controller_grip = float(self._xrt.get_left_grip())
             controller_trigger = float(self._xrt.get_left_trigger())
-            a_button = bool(self._xrt.get_X_button())
+            self._last_x_button = bool(self._xrt.get_X_button())
+            self._last_y_button = bool(self._xrt.get_Y_button())
         else:
             raise RuntimeError("No controller configured")
         controller_pose_raw = np.array(pose, dtype=np.float32)  # [x, y, z, qx, qy, qz, qw] in Pico4 frame
-        self._last_grip = controller_grip  # Save for debugging
-        self._last_a_button = a_button  # Cache A button state for get_reset_button()
+        self._last_grip = controller_grip
 
         # Step 1.5: Filter out position jumps (VR tracking glitches)
         if self._last_raw_pose is not None and self.config.position_jump_threshold > 0:
@@ -566,7 +583,7 @@ class Pico4(Teleoperator):
         else:
             self._enabled = controller_grip > self.config.grip_enable_threshold
         if self._enabled != prev_enabled:
-            self.logger.info(
+            self.logger.debug(
                 f"[ENABLE] State changed: {prev_enabled} -> {self._enabled}, "
                 f"grip={controller_grip:.3f} "
                 f"(enable_thresh={self.config.grip_enable_threshold}, "
@@ -598,7 +615,7 @@ class Pico4(Teleoperator):
             self._last_raw_pose = None
 
         if just_enabled or self._ref_pos is None:
-            self.logger.info(
+            self.logger.debug(
                 f"[REF_RESET] {'just_enabled' if just_enabled else 'ref_pos is None'}: "
                 f"ref_pos={filtered_pos_flexiv}, start_pos={self._target_pos}, "
                 f"filtered_quat={filtered_quat_flexiv}"
@@ -695,6 +712,44 @@ class Pico4(Teleoperator):
             # If orientation control is disabled, target_quat stays at the value when grip was pressed
         # When not enabled, target pose stays at last position (no update)
 
+        # Step 5.5: Output rate limiter — clamp _target_pos / _target_quat
+        # velocity to physically plausible human hand speed.
+        now = time.time()
+        if self._prev_target_pos is not None and self._last_action_time is not None:
+            dt = now - self._last_action_time
+            if dt > 0:
+                # --- position rate limit ---
+                if self.config.max_pos_velocity > 0:
+                    max_delta = self.config.max_pos_velocity * dt
+                    delta_pos = self._target_pos - self._prev_target_pos
+                    delta_norm = np.linalg.norm(delta_pos)
+                    if delta_norm > max_delta:
+                        self.logger.warn(
+                            f"[RATE_LIMIT] Position velocity {delta_norm/dt:.2f} m/s "
+                            f"exceeds limit {self.config.max_pos_velocity} m/s, clamping."
+                        )
+                        self._target_pos = self._prev_target_pos + delta_pos * (max_delta / delta_norm)
+
+                # --- orientation rate limit ---
+                if self.config.max_rot_velocity > 0:
+                    max_angle = self.config.max_rot_velocity * dt
+                    # Angle between two quaternions: θ = 2 * arccos(|q1 · q2|)
+                    dot = np.clip(abs(np.dot(self._target_quat, self._prev_target_quat)), 0.0, 1.0)
+                    angle = 2.0 * np.arccos(dot)
+                    if angle > max_angle:
+                        self.logger.warn(
+                            f"[RATE_LIMIT] Rotation velocity {np.degrees(angle/dt):.1f} deg/s "
+                            f"exceeds limit {np.degrees(self.config.max_rot_velocity):.1f} deg/s, clamping."
+                        )
+                        t = max_angle / angle
+                        self._target_quat = self._slerp_quaternion(
+                            self._prev_target_quat, self._target_quat, t
+                        )
+
+        self._prev_target_pos = self._target_pos.copy()
+        self._prev_target_quat = self._target_quat.copy()
+        self._last_action_time = now
+
         # Step 6: Update gripper position from trigger value
         # Trigger value [0, 1] maps directly to gripper position [0, gripper_width]
         # trigger=0 -> gripper closed (0), trigger=1 -> gripper open (gripper_width)
@@ -748,19 +803,31 @@ class Pico4(Teleoperator):
         """Pico4 doesn't support feedback."""
         raise NotImplementedError("Feedback is not implemented for Pico4 teleoperator.")
 
+    def poll_buttons(self) -> None:
+        """Refresh cached physical button states without computing a full action."""
+        if not self._is_connected or self._xrt is None:
+            return
+
+        if self.config.use_right_controller:
+            self._last_a_button = bool(self._xrt.get_A_button())
+            self._last_b_button = bool(self._xrt.get_B_button())
+        if self.config.use_left_controller:
+            self._last_x_button = bool(self._xrt.get_X_button())
+            self._last_y_button = bool(self._xrt.get_Y_button())
+
     def get_reset_button(self) -> bool:
         """Get the state of the reset button with edge detection.
 
         Only returns True on the rising edge (button just pressed), not while held.
         This prevents multiple resets when the button is held down.
 
-        Note: This uses the cached A button state from the last get_action() call
-        to avoid additional SDK calls. Make sure get_action() is called before this.
+        Note: This uses the cached A button state from the last get_action()
+        or poll_buttons() call to avoid additional SDK calls.
 
         Returns:
             True if reset button was just pressed (rising edge), False otherwise.
         """
-        # Use cached button state from get_action() to avoid extra SDK calls
+        # Use cached button state from get_action() / poll_buttons() to avoid extra SDK calls
         current_pressed = self._last_a_button
 
         # Edge detection: only trigger on rising edge (was not pressed, now pressed)
