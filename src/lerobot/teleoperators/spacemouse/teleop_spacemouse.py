@@ -21,11 +21,13 @@ This teleoperator provides 6-DoF absolute pose control (translation + rotation)
 and gripper control via buttons. It outputs accumulated target_pose_6d that can
 be directly sent to a Cartesian controller (e.g., Arx5CartesianController).
 
-The output format matches ARX5 SDK's spacemouse_teleop.py example:
+The output format matches the legacy ARX5 SDK spacemouse example:
 - target_pose_6d: [x, y, z, roll, pitch, yaw] - absolute EEF pose
 - gripper_pos: absolute gripper position in meters
 
-Based on the 3Dconnexion SpaceMouse using the spnav library.
+This implementation uses the modern `pyspacemouse` backend.
+
+On Linux, if opening the device fails, see ``README.md`` in this package for ``hidraw``/udev setup.
 """
 
 import time
@@ -44,6 +46,20 @@ from lerobot.utils.robot_utils import (
     normalize_quaternion,
     quaternion_to_rotation_6d,
 )
+
+# Appended to errors when pyspacemouse/easyhid cannot open the HID device (common on Linux).
+_SPACEMOUSE_HID_OPEN_HINTS = """
+Linux HID troubleshooting (Failed to open device):
+  • Quit other programs using the SpaceMouse: 3DxWare / 3Dconnexion driver, spacenavd,
+    Blender/other apps with SpaceMouse support, or a second lerobot-teleoperate instance.
+  • If you see "UniversalReceiver" in the log, a Logitech receiver stack may be involved;
+    try unplugging other Logitech dongles or disabling their daemon temporarily.
+  • Permissions: install udev rules for your device (3Dconnexion / SpaceMouse VID:PID),
+    add your user to plugdev (or the group owning /dev/hidraw*), run
+    `sudo udevadm control --reload-rules && sudo udevadm trigger`, then replug USB.
+  • Quick checks: `ls -l /dev/hidraw*` (readable?) and `sudo fuser -v /dev/hidraw*`
+    to see which process holds the device.
+"""
 
 
 class SpacemouseTeleop(Teleoperator):
@@ -191,7 +207,13 @@ class SpacemouseTeleop(Teleoperator):
             self.logger.info("✅ 3D Spacemouse connected successfully.")
 
         except Exception as e:
-            raise RuntimeError(f"❌ Failed to connect to 3D Spacemouse: {e}") from e
+            err = str(e).lower()
+            hint = (
+                _SPACEMOUSE_HID_OPEN_HINTS
+                if ("open device" in err or "hid" in err or "easyhid" in err)
+                else ""
+            )
+            raise RuntimeError(f"❌ Failed to connect to 3D Spacemouse: {e}{hint}") from e
 
     def calibrate(self) -> None:
         """No calibration needed for spacemouse."""

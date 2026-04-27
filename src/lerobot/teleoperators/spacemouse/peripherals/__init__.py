@@ -15,4 +15,3 @@
 # limitations under the License.
 
 from .spacemouse import Spacemouse  # noqa: F401
-from .keystroke_counter import KeystrokeCounter  # noqa: F401
