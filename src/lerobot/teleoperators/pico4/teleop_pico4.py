@@ -712,6 +712,18 @@ class Pico4(Teleoperator):
             # If orientation control is disabled, target_quat stays at the value when grip was pressed
         # When not enabled, target pose stays at last position (no update)
 
+        # Step 5.4: Quaternion hemisphere continuity.
+        # q and -q encode the same rotation, but a naive slerp between them
+        # walks the long-way (~360°) around the unit sphere. After grip
+        # release/re-engage REF_RESET, _target_quat = controller * offset can
+        # land on the opposite hemisphere from _prev_target_quat even though
+        # the rotation itself barely moved. The downstream Flexiv RT thread
+        # interpolates at 1 kHz and will trip a safety fault on that ghost
+        # 360° spin, killing the RT thread silently. Force continuity so
+        # consecutive frames stay on the same hemisphere.
+        if self._prev_target_quat is not None and np.dot(self._target_quat, self._prev_target_quat) < 0.0:
+            self._target_quat = -self._target_quat
+
         # Step 5.5: Output rate limiter — clamp _target_pos / _target_quat
         # velocity to physically plausible human hand speed.
         now = time.time()
