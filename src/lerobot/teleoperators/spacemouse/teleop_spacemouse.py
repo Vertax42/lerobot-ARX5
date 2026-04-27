@@ -62,7 +62,7 @@ Linux HID troubleshooting (Failed to open device):
 """
 
 
-class Spacemouse(Teleoperator):
+class SpacemouseTeleop(Teleoperator):
     """
     3D Spacemouse teleoperator for end-effector control.
 
@@ -89,7 +89,7 @@ class Spacemouse(Teleoperator):
     def __init__(self, config: SpacemouseConfig):
         super().__init__(config)
         self.config = config
-        self.logger = get_logger("Spacemouse")
+        self.logger = get_logger("SpacemouseTeleop")
         self._is_connected = False
         self._spacemouse = None
         self._start_pose_6d: np.ndarray = np.zeros(6, dtype=np.float32)

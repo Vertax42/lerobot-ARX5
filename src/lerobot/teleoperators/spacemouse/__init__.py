@@ -15,4 +15,4 @@
 # limitations under the License.
 
 from .config_spacemouse import DeviceConfig, SpacemouseConfig  # noqa: F401
-from .teleop_spacemouse import Spacemouse  # noqa: F401
+from .teleop_spacemouse import SpacemouseTeleop  # noqa: F401
