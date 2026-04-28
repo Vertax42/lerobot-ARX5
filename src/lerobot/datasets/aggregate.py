@@ -127,8 +127,13 @@ def update_meta_data(
         pd.DataFrame: Updated DataFrame with adjusted indices and timestamps.
     """
 
-    df["meta/episodes/chunk_index"] = df["meta/episodes/chunk_index"] + meta_idx["chunk"]
-    df["meta/episodes/file_index"] = df["meta/episodes/file_index"] + meta_idx["file"]
+    # Set meta/episodes file indices to the actual destination (current meta_idx).
+    # Simple offset addition is wrong when source datasets have non-sequential meta file indices
+    # (e.g. source has file-000 and file-008 but the merged result writes both to file-000).
+    # All rows in one source parquet file always land in the same destination file since
+    # episodes metadata is tiny and file rotation never triggers.
+    df["meta/episodes/chunk_index"] = meta_idx["chunk"]
+    df["meta/episodes/file_index"] = meta_idx["file"]
 
     # Remap data/chunk_index and data/file_index using the per-source-file mapping
     # built in aggregate_data(). A simple offset addition is wrong when source datasets
