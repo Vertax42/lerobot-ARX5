@@ -1379,7 +1379,15 @@ def bi_pico4_teleop_loop(
         obs = robot.get_observation()
         t_obs = time.perf_counter()
 
-        raw_action = teleop.get_action()
+        # Fetch live TCP from RT shared memory so Pico4's grip-press drift
+        # guard can compare its cached `_target_quat` against the real TCP
+        # and refuse to engage when they've drifted apart (prevents Flexiv
+        # 301005 orientation-error faults).
+        left_pose_now, right_pose_now = robot.get_current_tcp_pose_quat()
+        raw_action = teleop.get_action(
+            left_tcp_pose_quat=left_pose_now,
+            right_tcp_pose_quat=right_pose_now,
+        )
         t_action = time.perf_counter()
 
         reset_button = teleop.get_reset_button()

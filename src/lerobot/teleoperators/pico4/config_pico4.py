@@ -42,6 +42,12 @@ class Pico4Config(TeleoperatorConfig):
         orientation_offset_warning_deg: Warning threshold in degrees for orientation offset at enable.
                                         If controller-robot orientation difference exceeds this,
                                         a warning is logged and orientation control is disabled.
+        target_tcp_drift_max_deg: Max allowed angle between Python's last commanded _target_quat
+                                  and the actual TCP quaternion at grip-press. Above this, REF_RESET
+                                  is aborted and _target_quat is resynced to the actual TCP, so the
+                                  next frame sends a no-op. Kept below Flexiv's 90° safety limit
+                                  (301005 fault) to leave headroom for RT tracking error and filter
+                                  delay. Only active when the caller passes live TCP into get_action().
     """
 
     use_left_controller: bool = False
@@ -53,6 +59,7 @@ class Pico4Config(TeleoperatorConfig):
     grip_enable_threshold: float = 0.5  # Threshold for grip to enable control (must exceed to enable)
     grip_disable_threshold: float = 0.3  # Threshold for grip to disable control (must drop below to disable)
     orientation_offset_warning_deg: float = 180.0  # Warning threshold for orientation offset (degrees). Set to 180 to disable check.
+    target_tcp_drift_max_deg: float = 45.0  # Max _target_quat vs actual TCP drift at grip-press (degrees). Set to 180 to disable.
     position_jump_threshold: float = 0.1  # Max allowed position change per frame (meters). Larger jumps are filtered out.
     max_pos_velocity: float = 1.0  # Max allowed position velocity (m/s) for output rate limiter. 0 = disabled.
     max_rot_velocity: float = 6.28  # Max allowed angular velocity (rad/s) for output rate limiter. 0 = disabled.

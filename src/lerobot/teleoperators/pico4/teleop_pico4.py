@@ -512,7 +512,7 @@ class Pico4(Teleoperator):
 
         return transformed_pos, transformed_quat
 
-    def get_action(self) -> dict[str, Any]:
+    def get_action(self, current_tcp_pose_quat: np.ndarray | None = None) -> dict[str, Any]:
         """
         Get the current target pose from the Pico4 VR controller.
 
@@ -529,6 +529,15 @@ class Pico4(Teleoperator):
         5. If enabled: compute relative movement and update target pose
         6. Update gripper position from trigger value
         7. Return in Flexiv Rizon4 format
+
+        Args:
+            current_tcp_pose_quat: Optional 8D actual TCP pose
+                [x, y, z, qw, qx, qy, qz, gripper_pos] (Flexiv frame). When provided,
+                a drift guard fires at grip-press: if Python's cached `_target_quat`
+                differs from the actual TCP by more than
+                `config.target_tcp_drift_max_deg`, REF_RESET is aborted and the
+                cached target is resynced to the actual TCP. Prevents Flexiv 301005
+                orientation-error faults. When None, behavior is unchanged.
 
         Returns a dictionary with absolute EEF pose (matching Flexiv Rizon4 format):
         - tcp.x, tcp.y, tcp.z: absolute TCP position (meters) in Flexiv frame
@@ -614,6 +623,45 @@ class Pico4(Teleoperator):
             # Without this, a prior jump clamp would lock position permanently.
             self._last_raw_pose = None
 
+            # Drift guard: Python's cached `_target_quat` is the last commanded
+            # target — between a grip-release and the next grip-press, the
+            # actual TCP can drift away from it (RT tracking error, external
+            # forces, IK precision). If we anchor the new REF_RESET on a stale
+            # `_target_quat`, the very first commanded pose may already exceed
+            # Flexiv's 90° orientation-error safety limit and trip a 301005
+            # fault. Detect that here and abort the engagement.
+            if current_tcp_pose_quat is not None:
+                actual_tcp_quat = normalize_quaternion(
+                    current_tcp_pose_quat[3:7], input_format="wxyz"
+                )
+                drift_dot = abs(float(np.dot(self._target_quat, actual_tcp_quat)))
+                drift_angle_deg = float(
+                    np.degrees(2.0 * np.arccos(np.clip(drift_dot, 0.0, 1.0)))
+                )
+                if drift_angle_deg > self.config.target_tcp_drift_max_deg:
+                    self.logger.warn(
+                        f"[REF_RESET] Aborted: _target_quat drifted "
+                        f"{drift_angle_deg:.1f}° from actual TCP "
+                        f"(threshold {self.config.target_tcp_drift_max_deg:.1f}°). "
+                        f"Resyncing _target_quat to actual TCP — release grip "
+                        f"and re-engage. _target_quat={self._target_quat}, "
+                        f"actual_tcp={actual_tcp_quat}"
+                    )
+                    # Force-sync cached target to the real TCP so the rest of
+                    # this frame (REF_RESET block below + ACTION packaging)
+                    # computes from a clean slate. We also disengage so this
+                    # frame doesn't advance the target — the user must release
+                    # grip and re-press to actually start moving.
+                    self._target_quat = actual_tcp_quat
+                    self._target_pos = current_tcp_pose_quat[:3].copy().astype(np.float32)
+                    self._enabled = False
+                    self._was_enabled = False
+                    # Skip rate limiter & hemisphere check next time: their
+                    # `_prev_*` baseline is stale after a forced resync.
+                    self._prev_target_pos = None
+                    self._prev_target_quat = None
+                    self._last_action_time = None
+
         if just_enabled or self._ref_pos is None:
             self.logger.debug(
                 f"[REF_RESET] {'just_enabled' if just_enabled else 'ref_pos is None'}: "
@@ -634,25 +682,11 @@ class Pico4(Teleoperator):
             self._quat_offset = self._quaternion_multiply(ref_quat_inv, self._target_quat)
             self._quat_offset = normalize_quaternion(self._quat_offset, input_format="wxyz")
 
-            # Check orientation offset angle (rotation difference between controller and robot)
-            # θ = 2 * arccos(|qw|), where qw is the scalar part of the offset quaternion
-            # For shortest path: q and -q represent the same rotation, so we choose the one with smaller angle
-            # If angle > 90°, use -q to get the shorter path (180° - angle)
-            offset_w = self._quat_offset[0]
-            offset_angle_rad = 2.0 * np.arccos(np.clip(abs(offset_w), 0.0, 1.0))
-            offset_angle_deg = np.degrees(offset_angle_rad)
-
-            # If angle > 90°, use the shorter path by negating the quaternion
-            # This ensures we always use the quaternion representation with angle <= 90°
-            if offset_angle_deg > 90.0:
-                # Use the shorter path: negate quaternion and recalculate angle
-                self._quat_offset = -self._quat_offset
-                self._quat_offset = normalize_quaternion(self._quat_offset, input_format="wxyz")
-                offset_angle_rad = 2.0 * np.arccos(np.clip(self._quat_offset[0], 0.0, 1.0))
-                offset_angle_deg = np.degrees(offset_angle_rad)
-                self.logger.debug(
-                    f"Using shorter path: offset angle = {offset_angle_deg:.1f}° (was {180.0 - offset_angle_deg:.1f}°)"
-                )
+            # Check orientation offset angle (rotation difference between controller and robot).
+            # θ = 2 * arccos(|qw|) yields the short-path angle directly in [0°, 180°],
+            # so q vs -q ambiguity is absorbed by abs() — no separate hemisphere flip needed here.
+            offset_angle_rad = 2.0 * np.arccos(np.clip(abs(self._quat_offset[0]), 0.0, 1.0))
+            offset_angle_deg = float(np.degrees(offset_angle_rad))
 
             # Log offset details for debugging
             self.logger.debug(

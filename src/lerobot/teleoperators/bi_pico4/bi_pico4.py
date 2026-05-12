@@ -309,11 +309,22 @@ class BiPico4(Teleoperator):
     def configure(self) -> None:
         pass
 
-    def get_action(self) -> dict[str, Any]:
+    def get_action(
+        self,
+        left_tcp_pose_quat: np.ndarray | None = None,
+        right_tcp_pose_quat: np.ndarray | None = None,
+    ) -> dict[str, Any]:
         """Get action from both controllers.
 
         Delegates to each Pico4 instance and prefixes the returned keys with
         "left_" / "right_" to match BiFlexivRizon4RT's action space.
+
+        Args:
+            left_tcp_pose_quat: Optional 8D actual TCP pose for the left arm,
+                [x, y, z, qw, qx, qy, qz, gripper_pos] (Flexiv frame). Enables
+                the per-arm drift guard inside Pico4.get_action(). See
+                `Pico4.get_action` for details.
+            right_tcp_pose_quat: Same as left_tcp_pose_quat but for the right arm.
 
         Returns:
             Flat dict with keys: left_tcp.{x,y,z,r1-r6}, left_gripper.pos,
@@ -322,8 +333,8 @@ class BiPico4(Teleoperator):
         if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
-        left_action = self._left_pico4.get_action()
-        right_action = self._right_pico4.get_action()
+        left_action = self._left_pico4.get_action(current_tcp_pose_quat=left_tcp_pose_quat)
+        right_action = self._right_pico4.get_action(current_tcp_pose_quat=right_tcp_pose_quat)
 
         return {f"left_{k}": v for k, v in left_action.items()} | {
             f"right_{k}": v for k, v in right_action.items()
