@@ -114,7 +114,7 @@ lerobot-record \
 ```bash
 lerobot-teleoperate \
     --robot.type=bi_flexiv_rizon4_rt \
-    --robot.bi_mount_type=diagonal \
+    --robot.bi_mount_type=forward \
     --teleop.type=bi_pico4 \
     --fps=30 \
     --display_data=true
@@ -378,7 +378,7 @@ lerobot-record \
     --robot.left_robot_sn=Rizon4s-063458 \
     --robot.right_robot_sn=Rizon4s-063670 \
     --teleop.type=bi_pico4 \
-    --dataset.repo_id=Xense/assemble_box_with_phone_stand0410 \
+    --dataset.repo_id=Xense/assemble_box_with_phone_stand0430_merged \
     --dataset.num_episodes=5 \
     --dataset.single_task="Assemble the packaging by folding the flat box into shape, placing the metal phone stand inside, and closing the box properly" \
     --dataset.fps=30 \
@@ -386,7 +386,7 @@ lerobot-record \
     --dataset.reset_time_s=120 \
     --dataset.streaming_encoding=true \
     --dataset.vcodec=auto \
-    --resume=false \
+    --resume=true \
     --dataset.push_to_hub=true \
     --display_data=false
 ```
