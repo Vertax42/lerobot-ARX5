@@ -33,6 +33,7 @@ from lerobot.datasets.utils import (
     DEFAULT_EPISODES_PATH,
     DEFAULT_VIDEO_FILE_SIZE_IN_MB,
     DEFAULT_VIDEO_PATH,
+    EPISODES_DIR,
     get_file_size_in_mb,
     get_parquet_file_size_in_mb,
     to_parquet_with_hf_images,
@@ -493,6 +494,26 @@ def aggregate_metadata(src_meta, dst_meta, meta_idx, data_idx, videos_idx):
             strict=False,
         )
     }
+
+    # Cross-validate stored indices against physical files on disk.
+    episodes_root = src_meta.root / EPISODES_DIR
+    physical_ids = {
+        (int(p.parent.name.split("-")[1]), int(p.stem.split("-")[1]))
+        for p in episodes_root.glob("chunk-*/file-*.parquet")
+    }
+    missing = chunk_file_ids - physical_ids
+    if missing:
+        raise FileNotFoundError(
+            f"{src_meta.repo_id}: stored meta/episodes indices reference files that do not exist on disk: "
+            f"{sorted(missing)}. Physical files found: {sorted(physical_ids)}"
+        )
+    unreferenced = physical_ids - chunk_file_ids
+    if unreferenced:
+        logging.warning(
+            "%s: physical episode files not referenced by stored indices (will be skipped): %s",
+            src_meta.repo_id,
+            sorted(unreferenced),
+        )
 
     chunk_file_ids = sorted(chunk_file_ids)
     for chunk_idx, file_idx in chunk_file_ids:
