@@ -147,6 +147,9 @@ class Pico4(Teleoperator):
         self._prev_target_pos: np.ndarray | None = None  # Previous frame target position
         self._prev_target_quat: np.ndarray | None = None  # Previous frame target quaternion
 
+        # Steady-state commanded-vs-actual clamp state (rising-edge logging)
+        self._was_clamped: bool = False
+
     @property
     def is_connected(self) -> bool:
         """Check if the Pico4 VR headset is connected."""
@@ -329,6 +332,9 @@ class Pico4(Teleoperator):
         self._prev_target_pos = self._target_pos.copy()
         self._prev_target_quat = self._target_quat.copy()
         self._last_action_time = None
+
+        # Reset steady-state clamp edge tracking
+        self._was_clamped = False
 
         self.logger.info(
             f"Reset target pose to: pos={pose_7d[:3]}, quat={pose_7d[3:7]}, gripper={gripper_pos}"
@@ -533,11 +539,17 @@ class Pico4(Teleoperator):
         Args:
             current_tcp_pose_quat: Optional 8D actual TCP pose
                 [x, y, z, qw, qx, qy, qz, gripper_pos] (Flexiv frame). When provided,
-                a drift guard fires at grip-press: if Python's cached `_target_quat`
-                differs from the actual TCP by more than
-                `config.target_tcp_drift_max_deg`, REF_RESET is aborted and the
-                cached target is resynced to the actual TCP. Prevents Flexiv 301005
-                orientation-error faults. When None, behavior is unchanged.
+                two orientation safeties become active:
+                  1. Grip-press drift guard: if Python's cached `_target_quat`
+                     differs from the actual TCP by more than
+                     `config.target_tcp_drift_max_deg`, REF_RESET is aborted and the
+                     cached target is resynced to the actual TCP.
+                  2. Steady-state clamp: every frame, the commanded `_target_quat`
+                     is slerp-projected back to within
+                     `config.commanded_actual_max_deg` of the live TCP. Prevents
+                     silent accumulation past Flexiv's 90° orientation-error
+                     envelope when the robot gets pinned at a joint limit.
+                When None, behavior is unchanged.
 
         Returns a dictionary with absolute EEF pose (matching Flexiv Rizon4 format):
         - tcp.x, tcp.y, tcp.z: absolute TCP position (meters) in Flexiv frame
@@ -791,6 +803,49 @@ class Pico4(Teleoperator):
                         self._target_quat = self._slerp_quaternion(
                             self._prev_target_quat, self._target_quat, t
                         )
+
+        # Step 5.6: Steady-state commanded-vs-actual clamp.
+        # The grip-press drift guard above only fires once at engagement. During
+        # a held grip, if the actual TCP gets pinned by a joint/workspace limit
+        # while the controller keeps rotating, (commanded - actual) accumulates
+        # silently every frame and eventually trips Flexiv's 90° orientation-
+        # error safety (301005), killing the RT thread (~600ms before Python
+        # notices). Project _target_quat back to within commanded_actual_max_deg
+        # of the live TCP every frame, so the envelope is enforced in Python
+        # rather than relying on the hardware fault. The clamped value also
+        # feeds _prev_target_quat below, so the rate limiter and hemisphere
+        # check on the next frame see a consistent baseline.
+        if (
+            current_tcp_pose_quat is not None
+            and self.config.commanded_actual_max_deg < 180.0
+        ):
+            actual_quat = normalize_quaternion(
+                current_tcp_pose_quat[3:7], input_format="wxyz"
+            )
+            cmd_dot = abs(float(np.dot(self._target_quat, actual_quat)))
+            cmd_angle_deg = float(
+                np.degrees(2.0 * np.arccos(np.clip(cmd_dot, 0.0, 1.0)))
+            )
+            if cmd_angle_deg > self.config.commanded_actual_max_deg:
+                t = self.config.commanded_actual_max_deg / cmd_angle_deg
+                self._target_quat = self._slerp_quaternion(
+                    actual_quat, self._target_quat, t
+                )
+                if not self._was_clamped:
+                    self.logger.warn(
+                        f"[CLAMP] commanded vs actual {cmd_angle_deg:.1f}° "
+                        f"> {self.config.commanded_actual_max_deg:.1f}°, "
+                        f"slerp-projected back. Robot likely pinned at a "
+                        f"limit — release grip or change wrist direction."
+                    )
+                self._was_clamped = True
+            else:
+                if self._was_clamped:
+                    self.logger.info(
+                        f"[CLAMP] released, commanded-actual back to "
+                        f"{cmd_angle_deg:.1f}°"
+                    )
+                self._was_clamped = False
 
         self._prev_target_pos = self._target_pos.copy()
         self._prev_target_quat = self._target_quat.copy()
