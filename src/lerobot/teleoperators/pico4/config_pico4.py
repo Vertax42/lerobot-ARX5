@@ -48,6 +48,12 @@ class Pico4Config(TeleoperatorConfig):
                                   next frame sends a no-op. Kept below Flexiv's 90° safety limit
                                   (301005 fault) to leave headroom for RT tracking error and filter
                                   delay. Only active when the caller passes live TCP into get_action().
+        commanded_actual_max_deg: Steady-state envelope on the angle between commanded _target_quat
+                                  and live TCP quaternion. Applied every frame (not just grip-press).
+                                  When the actual TCP is pinned by a joint limit but the controller
+                                  keeps rotating, this projects _target_quat back via slerp so the
+                                  commanded pose never exceeds Flexiv's 90° orientation-error envelope.
+                                  Set to 180 to disable. Only active when the caller passes live TCP.
     """
 
     use_left_controller: bool = False
@@ -60,6 +66,7 @@ class Pico4Config(TeleoperatorConfig):
     grip_disable_threshold: float = 0.3  # Threshold for grip to disable control (must drop below to disable)
     orientation_offset_warning_deg: float = 180.0  # Warning threshold for orientation offset (degrees). Set to 180 to disable check.
     target_tcp_drift_max_deg: float = 45.0  # Max _target_quat vs actual TCP drift at grip-press (degrees). Set to 180 to disable.
+    commanded_actual_max_deg: float = 60.0  # Steady-state envelope on commanded vs actual TCP (degrees). Below 90° hardware limit. Set to 180 to disable.
     position_jump_threshold: float = 0.1  # Max allowed position change per frame (meters). Larger jumps are filtered out.
     max_pos_velocity: float = 1.0  # Max allowed position velocity (m/s) for output rate limiter. 0 = disabled.
     max_rot_velocity: float = 6.28  # Max allowed angular velocity (rad/s) for output rate limiter. 0 = disabled.
