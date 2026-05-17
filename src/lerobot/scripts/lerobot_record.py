@@ -477,7 +477,11 @@ class RecordConfig:
     resume: bool = False
 
     def __post_init__(self):
-        if self.teleop is None:
+        # Robots that act as both observation source and action source
+        # (i.e. "self-driven" data-collection devices like handheld grippers)
+        # do not require a separate teleoperator. ``xense_flare`` was the
+        # first; ``taccap_gripper`` follows the same pattern.
+        if self.teleop is None and self.robot.type not in ("xense_flare", "taccap_gripper"):
             raise ValueError("A teleoperator configuration is required to control the robot.")
 
 
@@ -1057,7 +1061,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
 
                 # Dispatch the record loop by robot type
-                if cfg.robot.type == "xense_flare":
+                if cfg.robot.type in ("xense_flare", "taccap_gripper"):
                     xense_flare_record_loop(
                         robot=robot,
                         events=events,
