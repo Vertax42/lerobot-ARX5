@@ -113,9 +113,6 @@ xense = ["xensesdk>=1.7.0"]
 # Xense fork: hardware drivers not on PyPI (installed from local wheels or source)
 # List them here so tooling can document the requirements.
 hardware = [
-    # Flexiv NRT SDK (Non-Real-Time): required for flexiv_rizon4 robot
-    # Install from: https://github.com/flexivrobotics/flexiv_rdk
-    "flexivrdk",
     # Flexiv RT SDK (Real-Time): required for flexiv_rizon4_rt and bi_flexiv_rizon4_rt
     # Install from internal Flexiv RT SDK wheel
     "flexiv-rt",
