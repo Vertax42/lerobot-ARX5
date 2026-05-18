@@ -48,47 +48,6 @@ lerobot-teleoperate \
     --fps=30
 ```
 
-Example (Flexiv Rizon4 + Pico4):
-
-```shell
-lerobot-teleoperate \
-    --robot.type=flexiv_rizon4 \
-    --robot.robot_sn=Rizon4-062855 \
-    --teleop.type=pico4 \
-    --fps=60
-```
-
-Example (Flexiv Rizon4 + SpaceMouse):
-
-```shell
-lerobot-teleoperate \
-    --robot.type=flexiv_rizon4 \
-    --robot.robot_sn=Rizon4-062855 \
-    --teleop.type=spacemouse \
-    --fps=30 \
-    --display_data=true
-```
-
-Example (Flexiv Rizon4 + Vive Tracker):
-
-```shell
-lerobot-teleoperate \
-    --robot.type=flexiv_rizon4 \
-    --robot.robot_sn=Rizon4-062855 \
-    --teleop.type=vive_tracker \
-    --fps=60
-```
-
-Example (Flexiv Rizon4 + Xense Flare teleoperator):
-
-```shell
-lerobot-teleoperate \
-    --robot.type=flexiv_rizon4 \
-    --robot.robot_sn=Rizon4-062855 \
-    --teleop.type=xense_flare \
-    --fps=60
-```
-
 Example (Flexiv Rizon4 RT + Pico4):
 
 ```shell
@@ -188,7 +147,6 @@ from lerobot.robots import (  # noqa: F401
     arx5_follower,
     bi_arx5,
     bi_flexiv_rizon4_rt,
-    flexiv_rizon4,
     flexiv_rizon4_rt,
     make_robot_from_config,
     pylibfranka_research3,
@@ -271,16 +229,6 @@ def _cleanup(robot, teleop, display_data: bool) -> None:
             logger.warning(f"Error shutting down rerun: {e}")
     _safe_disconnect(teleop, teleop.__class__.__name__ if teleop else "teleop")
     _safe_disconnect(robot, robot.__class__.__name__ if robot else "robot")
-
-
-def _check_cartesian_mode(robot, teleop_name: str) -> None:
-    from lerobot.robots.flexiv_rizon4.config_flexiv_rizon4 import ControlMode
-
-    if robot.config.control_mode != ControlMode.CARTESIAN_MOTION_FORCE:
-        raise ValueError(
-            f"{teleop_name} requires CARTESIAN_MOTION_FORCE mode, "
-            f"got {robot.config.control_mode}"
-        )
 
 
 def _print_obs_state(obs: dict, display_len: int, status: str) -> None:
@@ -839,13 +787,6 @@ def spacemouse_teleop_loop(
     start = time.perf_counter()
     timing_stats = {"obs_times": [], "loop_times": []}
 
-    from lerobot.robots.flexiv_rizon4.config_flexiv_rizon4 import ControlMode
-
-    is_flexiv_nrt = (
-        robot.name == "flexiv_rizon4"
-        and hasattr(robot.config, "control_mode")
-        and robot.config.control_mode == ControlMode.CARTESIAN_MOTION_FORCE
-    )
     is_flexiv_rt = robot.name == "flexiv_rizon4_rt"
     # pylibfranka_research3 in Cartesian impedance mode also needs special handling for reset
     is_pylibfranka_cartesian = (
@@ -853,7 +794,7 @@ def spacemouse_teleop_loop(
         and hasattr(robot.config, "control_mode")
         and robot.config.control_mode.value == "cartesian_impedance"
     )
-    is_flexiv = (is_flexiv_nrt or is_flexiv_rt) and teleop.name == "spacemouse"
+    is_flexiv = is_flexiv_rt and teleop.name == "spacemouse"
 
     _prev_rt_moving = False
     _reset_display_cleared = False
@@ -1476,89 +1417,6 @@ def vive_tracker_teleop_loop(
         if duration is not None and time.perf_counter() - start >= duration:
             return
 
-
-def xense_flare_flexiv_teleop_loop(
-    teleop: Teleoperator,
-    robot: Robot,
-    fps: int,
-    display_data: bool = False,
-    duration: float | None = None,
-    dryrun: bool = False,
-    debug_timing: bool = False,
-):
-    """
-    Teleop loop for Xense Flare teleoperator with Flexiv Rizon4 robot.
-
-    Xense Flare outputs actions in Flexiv format:
-    - tcp.x, tcp.y, tcp.z: absolute TCP position (meters)
-    - tcp.r1-r6: absolute TCP orientation (6D rotation representation)
-    - gripper.pos: gripper position from encoder (0=closed, 1=open)
-    """
-    start = time.perf_counter()
-
-    while True:
-        loop_start = time.perf_counter()
-
-        obs_start = time.perf_counter()
-        obs = robot.get_observation()
-        obs_time = time.perf_counter() - obs_start
-
-        teleop_start = time.perf_counter()
-        try:
-            raw_action = teleop.get_action()
-        except Exception as e:
-            logger.error(f"Error getting Xense Flare action: {e}")
-            dt_s = time.perf_counter() - loop_start
-            precise_sleep(max(1 / fps - dt_s, 0))
-            continue
-        teleop_time = time.perf_counter() - teleop_start
-
-        teleop_action = raw_action
-        robot_action_to_send = teleop_action
-
-        send_time = 0.0
-        if not dryrun:
-            send_start = time.perf_counter()
-            try:
-                _ = robot.send_action(teleop_action)
-            except Exception as e:
-                logger.error(f"Error sending action to robot: {e}")
-            send_time = time.perf_counter() - send_start
-
-        if display_data:
-            obs_transition = obs
-            log_rerun_data(observation=obs_transition, action=teleop_action)
-
-        dt_s = time.perf_counter() - loop_start
-        precise_sleep(max(1 / fps - dt_s, 0))
-        loop_s = time.perf_counter() - loop_start
-
-        gripper_str = f"grip={robot_action_to_send.get('gripper.pos', 0.0):.2f}"
-        pos_str = (
-            f"pos=[{robot_action_to_send.get('tcp.x', 0):.3f}, "
-            f"{robot_action_to_send.get('tcp.y', 0):.3f}, "
-            f"{robot_action_to_send.get('tcp.z', 0):.3f}]"
-        )
-        dryrun_str = "[DRY] " if dryrun else ""
-
-        if debug_timing:
-            timing_str = f"obs:{obs_time * 1e3:.1f} teleop:{teleop_time * 1e3:.1f} send:{send_time * 1e3:.1f}"
-            print(
-                f"\r\033[K{loop_s * 1e3:.1f}ms ({1 / loop_s:.0f}Hz) | {timing_str} | {dryrun_str}{pos_str} | {gripper_str}",
-                end="",
-                flush=True,
-            )
-        else:
-            print(
-                f"\r\033[Ktime: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz) | {dryrun_str}{pos_str} | {gripper_str}",
-                end="",
-                flush=True,
-            )
-
-        if duration is not None and time.perf_counter() - start >= duration:
-            return
-
-
 def xense_flare_teleop_loop(
     robot: Robot,
     fps: int,
@@ -2039,98 +1897,6 @@ def teleoperate(cfg: TeleoperateConfig):
                 )
             except KeyboardInterrupt:
                 pass
-
-        # --- flexiv_rizon4 + pico4 ---
-        elif cfg.robot.type == "flexiv_rizon4" and cfg.teleop.type == "pico4":
-            logger.info("Detected Flexiv Rizon4 + Pico4")
-            robot = make_robot_from_config(cfg.robot)
-            _check_cartesian_mode(robot, "Pico4")
-            robot.connect(go_to_start=True)
-            logger.info(f"Start EEF pose: {robot.get_current_tcp_pose_quat()}")
-            teleop = make_teleoperator_from_config(cfg.teleop)
-            teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
-            try:
-                pico4_teleop_loop(
-                    teleop=teleop,
-                    robot=robot,
-                    fps=cfg.fps,
-                    display_data=cfg.display_data,
-                    duration=cfg.teleop_time_s,
-                    dryrun=cfg.dryrun,
-                )
-            except KeyboardInterrupt:
-                logger.info("Teleoperation interrupted by user")
-
-        # --- flexiv_rizon4 + spacemouse ---
-        elif cfg.robot.type == "flexiv_rizon4" and cfg.teleop.type == "spacemouse":
-            logger.info("Detected Flexiv Rizon4 + SpaceMouse")
-            robot = make_robot_from_config(cfg.robot)
-            _check_cartesian_mode(robot, "SpaceMouse")
-            robot.connect(go_to_start=True)
-            start_obs = robot.get_observation()
-            tcp_keys = [k for k in start_obs if k.startswith("tcp.")]
-            logger.info(
-                "Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys)
-            )
-            teleop = make_teleoperator_from_config(cfg.teleop)
-            teleop.connect(current_tcp_pose_euler=robot.get_current_tcp_pose_euler())
-            try:
-                spacemouse_teleop_loop(
-                    teleop=teleop,
-                    robot=robot,
-                    fps=cfg.fps,
-                    display_data=cfg.display_data,
-                    duration=cfg.teleop_time_s,
-                    dryrun=cfg.dryrun,
-                    debug_timing=cfg.debug_timing,
-                )
-            except KeyboardInterrupt:
-                logger.info("Teleoperation interrupted by user")
-
-        # --- flexiv_rizon4 + vive_tracker ---
-        elif cfg.robot.type == "flexiv_rizon4" and cfg.teleop.type == "vive_tracker":
-            logger.info("Detected Flexiv Rizon4 + Vive Tracker")
-            robot = make_robot_from_config(cfg.robot)
-            _check_cartesian_mode(robot, "Vive Tracker")
-            robot.connect(go_to_start=False)
-            logger.info(f"Start TCP pose (quat): {robot.get_current_tcp_pose_quat()}")
-            teleop = make_teleoperator_from_config(cfg.teleop)
-            current_tcp_pose = robot.get_current_tcp_pose_quat()[:7]
-            teleop.connect(current_tcp_pose_quat=current_tcp_pose)
-            try:
-                vive_tracker_teleop_loop(
-                    teleop=teleop,
-                    robot=robot,
-                    fps=cfg.fps,
-                    display_data=cfg.display_data,
-                    duration=cfg.teleop_time_s,
-                    dryrun=cfg.dryrun,
-                )
-            except KeyboardInterrupt:
-                logger.info("Teleoperation interrupted by user")
-
-        # --- flexiv_rizon4 + xense_flare (teleop) ---
-        elif cfg.robot.type == "flexiv_rizon4" and cfg.teleop.type == "xense_flare":
-            logger.info("Detected Flexiv Rizon4 + Xense Flare teleoperator")
-            robot = make_robot_from_config(cfg.robot)
-            _check_cartesian_mode(robot, "Xense Flare")
-            robot.connect(go_to_start=False)
-            logger.info(f"Start TCP pose (quat): {robot.get_current_tcp_pose_quat()}")
-            teleop = make_teleoperator_from_config(cfg.teleop)
-            current_tcp_pose = robot.get_current_tcp_pose_quat()[:7]
-            teleop.connect(current_tcp_pose_quat=current_tcp_pose)
-            try:
-                xense_flare_flexiv_teleop_loop(
-                    teleop=teleop,
-                    robot=robot,
-                    fps=cfg.fps,
-                    display_data=cfg.display_data,
-                    duration=cfg.teleop_time_s,
-                    dryrun=cfg.dryrun,
-                    debug_timing=cfg.debug_timing,
-                )
-            except KeyboardInterrupt:
-                logger.info("Teleoperation interrupted by user")
 
         # --- flexiv_rizon4_rt + spacemouse ---
         elif cfg.robot.type == "flexiv_rizon4_rt" and cfg.teleop.type == "spacemouse":

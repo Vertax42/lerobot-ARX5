@@ -120,7 +120,6 @@ from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
     bi_flexiv_rizon4_rt,
-    flexiv_rizon4,
     flexiv_rizon4_rt,
     make_robot_from_config,
     xense_flare as xense_flare_robot,
@@ -247,8 +246,6 @@ def _record_loop_sleep(
 
 RAW_PASSTHROUGH_RECORD_PAIRS = frozenset(
     {
-        ("flexiv_rizon4", "pico4"),
-        ("flexiv_rizon4", "btgamepad"),
         ("flexiv_rizon4_rt", "pico4"),
         ("bi_flexiv_rizon4_rt", "bi_pico4"),
         ("pylibfranka_research3", "pico4"),
@@ -659,135 +656,6 @@ def xense_flare_record_loop(
 
 
 @safe_stop_image_writer
-def flexiv_rizon4_record_loop(
-    robot: Robot,
-    events: dict,
-    fps: int,
-    dataset: LeRobotDataset | None = None,
-    teleop: Teleoperator | list[Teleoperator] | None = None,
-    control_time_s: int | None = None,
-    single_task: str | None = None,
-    display_data: bool = False,
-):
-    if dataset is not None and dataset.fps != fps:
-        raise ValueError(
-            f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
-        )
-
-    if isinstance(teleop, list):
-        raise ValueError("Multi-teleop mode is not supported in this version.")
-
-    timestamp = 0
-    start_episode_t = time.perf_counter()
-    is_resetting = False
-
-    while timestamp < control_time_s:
-        start_loop_t = time.perf_counter()
-        refresh_listener_events(events)
-
-        if events["exit_early"]:
-            events["exit_early"] = False
-            break
-
-        if events["rerecord_episode"]:
-            logger.info("Re-record episode requested, exiting record loop early")
-            break
-
-        # Snapshot reset flag once per iteration to avoid race conditions
-        resetting_this_frame = is_resetting
-
-        # Get robot observation (always runs, even during reset)
-        current_observation = robot.get_observation()
-        current_observation_frame = None
-
-        if dataset is not None:
-            current_observation_frame = build_dataset_frame(
-                dataset.features, current_observation, prefix=OBS_STR
-            )
-
-        if isinstance(teleop, Teleoperator):
-            robot_action_to_send = teleop.get_action()
-
-            if events["go_start"]:
-                events["go_start"] = False
-                if (
-                    hasattr(robot, "reset_to_initial_position")
-                    and not resetting_this_frame
-                ):
-                    is_resetting = True
-
-                    def _clear_reset():
-                        nonlocal is_resetting
-                        is_resetting = False
-
-                    _start_reset_in_background(robot, teleop, set_done=_clear_reset)
-
-                    if display_data:
-                        log_rerun_data(observation=current_observation)
-
-                    _record_loop_sleep(
-                        start_loop_t=start_loop_t,
-                        fps=fps,
-                        start_episode_t=start_episode_t,
-                        robot=robot,
-                    )
-                    timestamp = time.perf_counter() - start_episode_t
-                    continue
-        else:
-            logger.info(
-                "No policy or teleoperator provided, skipping action generation."
-                "This is likely to happen when resetting the environment without a teleop device."
-                "The robot won't be at its rest position at the start of the next episode."
-            )
-            _record_loop_sleep(
-                start_loop_t=start_loop_t,
-                fps=fps,
-                start_episode_t=start_episode_t,
-                robot=robot,
-            )
-            timestamp = time.perf_counter() - start_episode_t
-            continue
-
-        if resetting_this_frame:
-            if display_data:
-                log_rerun_data(observation=current_observation)
-
-            _record_loop_sleep(
-                start_loop_t=start_loop_t,
-                fps=fps,
-                start_episode_t=start_episode_t,
-                robot=robot,
-            )
-            timestamp = time.perf_counter() - start_episode_t
-            continue
-
-        sent_action = robot.send_action(robot_action_to_send)
-
-        if dataset is not None:
-            action_frame = build_dataset_frame(
-                dataset.features, sent_action, prefix=ACTION
-            )
-            frame = {
-                **current_observation_frame,
-                **action_frame,
-                "task": single_task,
-            }
-            dataset.add_frame(frame)
-
-        if display_data:
-            log_rerun_data(observation=current_observation, action=sent_action)
-
-        _record_loop_sleep(
-            start_loop_t=start_loop_t,
-            fps=fps,
-            start_episode_t=start_episode_t,
-            robot=robot,
-        )
-
-        timestamp = time.perf_counter() - start_episode_t
-
-
-@safe_stop_image_writer
 def flexiv_rizon4_rt_record_loop(
     robot: Robot,
     events: dict,
@@ -1003,10 +871,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             )
 
         # Vendor-specific robot.connect dispatch
-        if teleop_type == "pico4" and cfg.robot.type == "flexiv_rizon4":
-            robot.connect(go_to_start=True)
-            logger.info(f"Start EEF pose: {robot.get_current_tcp_pose_quat()}")
-        elif teleop_type == "pico4" and cfg.robot.type == "flexiv_rizon4_rt":
+        if teleop_type == "pico4" and cfg.robot.type == "flexiv_rizon4_rt":
             robot.connect(go_to_start=True)
             logger.info(f"Start EEF pose: {robot.get_current_tcp_pose_quat()}")
         elif (
@@ -1032,13 +897,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
         # Vendor-specific teleop.connect dispatch
         if teleop is not None:
-            if teleop_type == "pico4" and cfg.robot.type == "flexiv_rizon4":
-                teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
-                logger.info("Teleop initialized with robot EEF pose.")
-            elif teleop_type == "btgamepad" and cfg.robot.type == "flexiv_rizon4":
-                teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
-                logger.info("Teleop initialized with robot EEF pose.")
-            elif teleop_type == "pico4" and cfg.robot.type == "flexiv_rizon4_rt":
+            if teleop_type == "pico4" and cfg.robot.type == "flexiv_rizon4_rt":
                 teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
                 logger.info("Teleop initialized with robot EEF pose.")
             elif teleop_type == "bi_pico4" and cfg.robot.type == "bi_flexiv_rizon4_rt":
@@ -1066,17 +925,6 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         robot=robot,
                         events=events,
                         fps=cfg.dataset.fps,
-                        dataset=dataset,
-                        control_time_s=cfg.dataset.episode_time_s,
-                        single_task=cfg.dataset.single_task,
-                        display_data=cfg.display_data,
-                    )
-                elif cfg.robot.type == "flexiv_rizon4":
-                    flexiv_rizon4_record_loop(
-                        robot=robot,
-                        events=events,
-                        fps=cfg.dataset.fps,
-                        teleop=teleop,
                         dataset=dataset,
                         control_time_s=cfg.dataset.episode_time_s,
                         single_task=cfg.dataset.single_task,
