@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import elite_cs66  # noqa: F401
 from .config import RobotConfig
 from .robot import Robot
 from .utils import make_robot_from_config

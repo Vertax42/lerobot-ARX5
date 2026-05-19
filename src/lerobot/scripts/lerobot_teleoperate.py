@@ -147,6 +147,7 @@ from lerobot.robots import (  # noqa: F401
     arx5_follower,
     bi_arx5,
     bi_flexiv_rizon4_rt,
+    elite_cs66,
     flexiv_rizon4_rt,
     make_robot_from_config,
     pylibfranka_research3,
@@ -976,6 +977,140 @@ def spacemouse_teleop_loop(
             gripper = robot_action_to_send.get(
                 "gripper.pos", teleop_action.get("gripper_pos", 0)
             )
+            roll = teleop_action.get("roll", 0)
+            pitch = teleop_action.get("pitch", 0)
+            yaw = teleop_action.get("yaw", 0)
+            pos_str = f"pos=[{pos_x:+.3f}, {pos_y:+.3f}, {pos_z:+.3f}]"
+            ori_str = f"rpy=[{roll:+.3f}, {pitch:+.3f}, {yaw:+.3f}]"
+            grip_str = f"grip={gripper:.2f}"
+            flag_str = "[DRYRUN] " if dryrun else ""
+            print(
+                f"\r\033[K{loop_s * 1e3:5.1f}ms ({1 / loop_s:3.0f}Hz) | {flag_str}{pos_str} | {ori_str} | {grip_str}",
+                end="",
+                flush=True,
+            )
+
+        if duration is not None and time.perf_counter() - start >= duration:
+            return
+
+
+def elite_cs66_spacemouse_teleop_loop(
+    teleop: Teleoperator,
+    robot: Robot,
+    fps: int,
+    display_data: bool = False,
+    duration: float | None = None,
+    dryrun: bool = False,
+    debug_timing: bool = False,
+):
+    """Teleop loop for Elite CS66 + SpaceMouse.
+
+    SpaceMouse maintains an absolute Euler pose; Elite CS66 accepts Cartesian
+    actions with 6D rotation (tcp.x/y/z + tcp.r1..r6 + gripper.pos). Both-buttons
+    triggers the arm's non-blocking reset_to_initial_position(); while rt_moving
+    we skip send_action and re-sync the teleop target once the reset completes.
+    """
+    display_len = max(len(key) for key in robot.action_features)
+    start = time.perf_counter()
+    timing_stats = {"obs_times": [], "loop_times": []}
+
+    _prev_rt_moving = False
+    _reset_display_cleared = False
+    _spacemouse_both_buttons_prev = False
+
+    while True:
+        loop_start = time.perf_counter()
+
+        obs_start = time.perf_counter()
+        obs = robot.get_observation()
+        obs_time = time.perf_counter() - obs_start
+        timing_stats["obs_times"].append(obs_time * 1000)
+
+        raw_action = teleop.get_action()
+
+        button_left = teleop._spacemouse.is_left_button_pressed()
+        button_right = teleop._spacemouse.is_right_button_pressed()
+        both_buttons = button_left and button_right
+        both_buttons_rising = both_buttons and not _spacemouse_both_buttons_prev
+        _spacemouse_both_buttons_prev = both_buttons
+
+        if both_buttons:
+            if dryrun:
+                logger.info("[DRYRUN] Reset to initial position triggered by both buttons")
+                teleop.reset_to_pose(teleop._start_pose_6d, teleop._start_gripper_pos)
+            elif both_buttons_rising and hasattr(robot, "reset_to_initial_position"):
+                try:
+                    robot.reset_to_initial_position()
+                    logger.info("Elite CS66 reset to initial position triggered by both buttons")
+                except Exception as e:
+                    logger.error(
+                        f"Failed to reset robot position: {e}\n{traceback.format_exc()}"
+                    )
+            if display_data and obs is not None:
+                log_rerun_data(observation=obs)
+            if obs is not None:
+                if not _reset_display_cleared:
+                    print("\033[2J\033[H", end="", flush=True)
+                    _reset_display_cleared = True
+                _print_obs_state(obs, display_len, "RESETTING")
+            continue
+
+        if hasattr(robot, "rt_moving") and robot.rt_moving:
+            if display_data and obs is not None:
+                log_rerun_data(observation=obs)
+            if obs is not None:
+                if not _reset_display_cleared:
+                    print("\033[2J\033[H", end="", flush=True)
+                    _reset_display_cleared = True
+                _print_obs_state(obs, display_len, "MOVING")
+            _prev_rt_moving = True
+            continue
+
+        if _prev_rt_moving:
+            _prev_rt_moving = False
+            _reset_display_cleared = False
+            try:
+                current_pose_euler = robot.get_current_tcp_pose_euler()
+                teleop.reset_to_pose(current_pose_euler[:6], current_pose_euler[6])
+                teleop._start_pose_6d = current_pose_euler[:6].copy()
+                teleop._start_gripper_pos = current_pose_euler[6]
+                logger.info("Teleop synced to robot pose after reset complete")
+            except Exception as e:
+                logger.error(f"Failed to sync teleop after reset: {e}")
+            continue
+
+        teleop_action = raw_action
+        robot_action_to_send = teleop.convert_to_flexiv_action(teleop_action)
+
+        if not dryrun:
+            _ = robot.send_action(robot_action_to_send)
+
+        if display_data:
+            log_rerun_data(observation=obs, action=teleop_action)
+            if not debug_timing:
+                print("\n" + "-" * (display_len + 10))
+                print(f"{'NAME':<{display_len}} | {'NORM':>7}")
+                for motor, value in robot_action_to_send.items():
+                    print(f"{motor:<{display_len}} | {value:>7.3f}")
+                move_cursor_up(len(robot_action_to_send) + 5)
+
+        dt_s = time.perf_counter() - loop_start
+        precise_sleep(max(1 / fps - dt_s, 0))
+        loop_s = time.perf_counter() - loop_start
+        timing_stats["loop_times"].append(loop_s * 1000)
+
+        if debug_timing:
+            print(
+                f"\r\033[Kobs: {obs_time * 1000:5.1f}ms | loop: {loop_s * 1000:5.1f}ms | "
+                f"target: {1000 / fps:.1f}ms | eff: {(1 / fps) / loop_s * 100:5.1f}%",
+                end="",
+                flush=True,
+            )
+        elif not display_data:
+            pos_x = robot_action_to_send.get("tcp.x", 0)
+            pos_y = robot_action_to_send.get("tcp.y", 0)
+            pos_z = robot_action_to_send.get("tcp.z", 0)
+            gripper = robot_action_to_send.get("gripper.pos", teleop_action.get("gripper_pos", 0))
             roll = teleop_action.get("roll", 0)
             pitch = teleop_action.get("pitch", 0)
             yaw = teleop_action.get("yaw", 0)
@@ -1912,6 +2047,31 @@ def teleoperate(cfg: TeleoperateConfig):
             teleop.connect(current_tcp_pose_euler=robot.get_current_tcp_pose_euler())
             try:
                 spacemouse_teleop_loop(
+                    teleop=teleop,
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    dryrun=cfg.dryrun,
+                    debug_timing=cfg.debug_timing,
+                )
+            except KeyboardInterrupt:
+                logger.info("Teleoperation interrupted by user")
+
+        # --- elite_cs66 + spacemouse ---
+        elif cfg.robot.type == "elite_cs66" and cfg.teleop.type == "spacemouse":
+            logger.info("Detected Elite CS66 + SpaceMouse")
+            robot = make_robot_from_config(cfg.robot)
+            robot.connect(go_to_start=True)
+            start_obs = robot.get_observation()
+            tcp_keys = [k for k in start_obs if k.startswith("tcp.")]
+            logger.info(
+                "Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys)
+            )
+            teleop = make_teleoperator_from_config(cfg.teleop)
+            teleop.connect(current_tcp_pose_euler=robot.get_current_tcp_pose_euler())
+            try:
+                elite_cs66_spacemouse_teleop_loop(
                     teleop=teleop,
                     robot=robot,
                     fps=cfg.fps,
