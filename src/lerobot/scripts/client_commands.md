@@ -120,6 +120,15 @@ lerobot-teleoperate \
     --display_data=true
 ```
 
+```bash
+lerobot-teleoperate \
+    --robot.type=bi_flexiv_rizon4_rt \
+    --robot.bi_mount_type=forward_dewu \
+    --teleop.type=bi_pico4 \
+    --fps=30 \
+    --display_data=true
+```
+
 ## Flexiv Rizon4 Robot with Flare Gripper lerobot-record by Beitong Gamepad command
 
 ```python
@@ -381,6 +390,46 @@ lerobot-record \
     --dataset.repo_id=Xense/assemble_box_with_phone_stand0430_merged \
     --dataset.num_episodes=5 \
     --dataset.single_task="Assemble the packaging by folding the flat box into shape, placing the metal phone stand inside, and closing the box properly" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=600 \
+    --dataset.reset_time_s=120 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
+    --resume=true \
+    --dataset.push_to_hub=true \
+    --display_data=false
+```
+
+```bash
+lerobot-record \
+    --robot.type=bi_flexiv_rizon4_rt \
+    --robot.bi_mount_type=forward_dewu \
+    --robot.left_robot_sn=Rizon4s-063458 \
+    --robot.right_robot_sn=Rizon4s-063670 \
+    --teleop.type=bi_pico4 \
+    --dataset.repo_id=Xense/shoe_insole_retrieval_and_packing0515 \
+    --dataset.num_episodes=10 \
+    --dataset.single_task="Open the shoe tongue, take the insole out of the shoe, put the insole back into the shoe, and pack the shoe into the shoebox" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=600 \
+    --dataset.reset_time_s=120 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
+    --resume=true \
+    --dataset.push_to_hub=true \
+    --display_data=false
+```
+
+```bash
+lerobot-record \
+    --robot.type=bi_flexiv_rizon4_rt \
+    --robot.bi_mount_type=forward_dewu \
+    --robot.left_robot_sn=Rizon4s-063458 \
+    --robot.right_robot_sn=Rizon4s-063670 \
+    --teleop.type=bi_pico4 \
+    --dataset.repo_id=Xense/newbalance_shoe_insole_retrieval_and_packing0515 \
+    --dataset.num_episodes=10 \
+    --dataset.single_task="Open the shoe tongue, take the insole out of the shoe, put the insole back into the shoe, and pack the shoe into the shoebox" \
     --dataset.fps=30 \
     --dataset.episode_time_s=600 \
     --dataset.reset_time_s=120 \
