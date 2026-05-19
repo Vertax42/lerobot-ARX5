@@ -1,0 +1,15 @@
+speed_slider_mask
+speed_slider_fraction
+standard_digital_output_mask
+standard_digital_output
+configurable_digital_output_mask
+configurable_digital_output
+tool_digital_output_mask
+tool_digital_output
+standard_analog_output_mask
+standard_analog_output_type
+standard_analog_output_0
+standard_analog_output_1
+external_force_torque
+input_bit_registers0_to_31
+input_bit_registers32_to_63
