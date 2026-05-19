@@ -82,11 +82,16 @@ def make_device_from_device_class(config: ChoiceRegistry) -> Any:
     """
     Dynamically instantiates an object from its `ChoiceRegistry` configuration.
 
-    This factory uses the module path and class name from the `config` object's
-    type to locate and instantiate the corresponding device class (not the config).
-    It derives the device class name by removing a trailing 'Config' from the config
-    class name and tries a few candidate modules where the device implementation is
-    commonly located.
+    Resolution order:
+      1. For each candidate module, scan its top-level classes for one whose
+         ``config_class`` attribute matches ``type(config)``. This is the
+         authoritative match — robot/teleop base classes already require
+         subclasses to declare ``config_class``, so naming drift between the
+         config class (e.g. ``SpacemouseConfig``) and the device class (e.g.
+         ``SpacemouseTeleop``) does not break dispatch.
+      2. Fall back to the name-based rule (strip ``Config`` suffix and look up
+         that attribute) for third-party packages that follow the naming
+         convention but don't declare ``config_class``.
     """
     if not isinstance(config, ChoiceRegistry):
         raise ValueError(f"Config should be an instance of `ChoiceRegistry`, got {type(config)}")
@@ -95,7 +100,7 @@ def make_device_from_device_class(config: ChoiceRegistry) -> Any:
     module_path = config_cls.__module__  # typical: lerobot_teleop_mydevice.config_mydevice
     config_name = config_cls.__name__  # typical: MyDeviceConfig
 
-    # Derive device class name (strip "Config")
+    # Derive device class name (strip "Config") for the name-based fallback.
     if not config_name.endswith("Config"):
         raise ValueError(f"Config class name '{config_name}' does not end with 'Config'")
 
@@ -119,6 +124,7 @@ def make_device_from_device_class(config: ChoiceRegistry) -> Any:
     candidates = [c for c in candidates if not (c in seen or seen.add(c))]
 
     tried: list[str] = []
+    name_match: tuple[str, type] | None = None
     for candidate in candidates:
         tried.append(candidate)
         try:
@@ -126,20 +132,40 @@ def make_device_from_device_class(config: ChoiceRegistry) -> Any:
         except ImportError:
             continue
 
-        if hasattr(module, device_class_name):
-            cls = getattr(module, device_class_name)
-            if callable(cls):
+        # 1) Authoritative: any class in the module whose config_class is ours.
+        for attr_name in dir(module):
+            attr = getattr(module, attr_name, None)
+            if not isinstance(attr, type):
+                continue
+            if getattr(attr, "config_class", None) is config_cls:
                 try:
-                    return cls(config)
+                    return attr(config)
                 except TypeError as e:
                     raise TypeError(
-                        f"Failed to instantiate '{device_class_name}' from module '{candidate}': {e}"
+                        f"Failed to instantiate '{attr_name}' from module '{candidate}': {e}"
                     ) from e
 
+        # 2) Remember the name-based fallback but keep searching other candidates
+        # in case a later module declares config_class.
+        if name_match is None and hasattr(module, device_class_name):
+            cls = getattr(module, device_class_name)
+            if isinstance(cls, type):
+                name_match = (candidate, cls)
+
+    if name_match is not None:
+        candidate, cls = name_match
+        try:
+            return cls(config)
+        except TypeError as e:
+            raise TypeError(
+                f"Failed to instantiate '{cls.__name__}' from module '{candidate}': {e}"
+            ) from e
+
     raise ImportError(
-        f"Could not locate device class '{device_class_name}' for config '{config_name}'. "
-        f"Tried modules: {tried}. Ensure your device class name is the config class name without "
-        f"'Config' and that it's importable from one of those modules."
+        f"Could not locate device class for config '{config_name}' (no class with "
+        f"config_class={config_name} found, and no '{device_class_name}' attribute either). "
+        f"Tried modules: {tried}. Declare `config_class = {config_name}` on the device class, "
+        f"or rename the device class to '{device_class_name}'."
     )
 
 
