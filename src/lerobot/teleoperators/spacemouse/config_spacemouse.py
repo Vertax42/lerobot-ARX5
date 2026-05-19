@@ -25,9 +25,9 @@ class DeviceConfig:
     """Configuration for a single SpaceMouse device."""
     device_name: Optional[str] = None  # Specific device name, None for auto-detect
     device_index: int = 0  # Device index when multiple same devices
-    pos_sensitivity: float = 0.8  # Position sensitivity multiplier (m/s at max deflection)
-    ori_sensitivity: float = 1.5  # Orientation sensitivity multiplier (rad/s at max deflection)
-    gripper_speed: float = 0.6  # Gripper speed
+    pos_sensitivity: float = 1.0  # Position sensitivity multiplier (m/s at max deflection)
+    ori_sensitivity: float = 1.0  # Orientation sensitivity multiplier (rad/s at max deflection)
+    gripper_speed: float = 1.0  # Gripper speed
     deadzone: float = 0.02  # Deadzone threshold (smaller = more responsive)
     # Axis inversion after coordinate transformation [x, y, z, roll, pitch, yaw]
     # x: True (SpaceMouse forward=-Y needs inversion to become Robot +X)
@@ -70,14 +70,14 @@ class SpacemouseConfig(TeleoperatorConfig):
     left_device: DeviceConfig = field(default_factory=lambda: DeviceConfig(
         device_index=0,
         enabled_axes=(True, True, True, False, False, False),  # Position only
-        pos_sensitivity=0.8,
+        pos_sensitivity=1.0,
         ori_sensitivity=0.0,  # Disabled
     ))
     right_device: DeviceConfig = field(default_factory=lambda: DeviceConfig(
         device_index=1,  # Second physical device (0-based index)
         enabled_axes=(False, False, False, True, True, True),  # Orientation only
         pos_sensitivity=0.0,  # Disabled
-        ori_sensitivity=1.5,
+        ori_sensitivity=1.0,
     ))
 
     # Global settings
@@ -86,9 +86,9 @@ class SpacemouseConfig(TeleoperatorConfig):
     gripper_width: float = 1.0  # Maximum gripper position (ratio of gripper_max_pos)
 
     # Legacy single-device settings (used when multi_device_mode=False)
-    pos_sensitivity: float = 0.4  # default 0.4 m/s at max deflection
-    ori_sensitivity: float = 0.8  # default 0.8 rad/s at max deflection
-    gripper_speed: float = 0.6  # ratio of gripper_max_pos / s for gripper open/close
+    pos_sensitivity: float = 1.0  # m/s at max deflection
+    ori_sensitivity: float = 1.0  # rad/s at max deflection
+    gripper_speed: float = 1.0  # ratio of gripper_max_pos / s for gripper open/close
     deadzone: float = 0.02  # [0-1] threshold for filtering noise (smaller = more responsive)
     # Axis inversion after coordinate transformation [x, y, z, roll, pitch, yaw]
     # x: True (SpaceMouse forward=-Y needs inversion to become Robot +X)
