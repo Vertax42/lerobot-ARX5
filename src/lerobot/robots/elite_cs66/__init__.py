@@ -1,0 +1,12 @@
+#!/usr/bin/env python
+
+# Copyright 2026 The XenseRobotics Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+from .config_elite_cs66 import EliteCS66Config, EliteCS66ControlMode  # noqa: F401
+from .elite_cs66 import EliteCS66  # noqa: F401
