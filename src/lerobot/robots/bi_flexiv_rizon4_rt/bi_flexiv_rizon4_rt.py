@@ -52,8 +52,10 @@ from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import (
     get_logger,
+    normalize_quaternion,
     quaternion_to_rotation_6d,
     rotation_6d_to_quaternion,
+    slerp_quaternion,
 )
 
 # Constants (per arm)
@@ -136,6 +138,11 @@ class BiFlexivRizon4RT(Robot):
         # Cached start TCP poses for RT-mode reset
         self._left_start_tcp_pose: list[float] | None = None
         self._right_start_tcp_pose: list[float] | None = None
+
+        # Rising-edge tracking for the per-arm orientation clamp in send_action
+        # (see commanded_actual_max_deg). Only used to dedupe log spam.
+        self._left_was_clamped: bool = False
+        self._right_was_clamped: bool = False
 
         # Initialize key tuples
         self._init_keys()
@@ -922,15 +929,25 @@ class BiFlexivRizon4RT(Robot):
         If an arm's RT thread is executing a trajectory (is_moving), arm commands
         are skipped for that arm. Gripper commands are always sent.
 
+        Orientation safety: for each arm, the commanded TCP quaternion is
+        slerp-projected back to within `config.commanded_actual_max_deg` of the
+        live TCP read from the RT shared memory, before being written to the
+        RT thread. This holds the command inside Flexiv's 90° orientation-error
+        envelope (event 301005) even if upstream (teleop or policy) drifts past
+        a joint limit. The returned action dict carries the clamped TCP values,
+        so callers (e.g. dataset recording) capture the safe envelope.
+
         Action format (use_force=False):
             left_tcp.{x,y,z,r1-r6} (9D) + left_gripper.pos (1D)
             right_tcp.{x,y,z,r1-r6} (9D) + right_gripper.pos (1D)
 
         Args:
-            action: Dictionary of action values
+            action: Dictionary of action values. Mutated in place when a clamp
+                fires, so the returned dict and the caller's dict reflect the
+                value that was actually sent.
 
         Returns:
-            The action dict that was sent
+            The action dict that was sent (clamped if applicable).
         """
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
@@ -945,6 +962,7 @@ class BiFlexivRizon4RT(Robot):
             self._send_arm_action(
                 action, self._left_cc, self._left_tcp_pose_keys,
                 wrench_keys=self._left_wrench_keys if self.config.use_force else None,
+                side="left",
             )
         self._send_gripper_action(
             action, self._left_gripper, self.config.left_use_gripper, self._left_gripper_key
@@ -955,6 +973,7 @@ class BiFlexivRizon4RT(Robot):
             self._send_arm_action(
                 action, self._right_cc, self._right_tcp_pose_keys,
                 wrench_keys=self._right_wrench_keys if self.config.use_force else None,
+                side="right",
             )
         self._send_gripper_action(
             action, self._right_gripper, self.config.right_use_gripper, self._right_gripper_key
@@ -968,8 +987,14 @@ class BiFlexivRizon4RT(Robot):
         cc: frt.CartesianMotionForceControl,
         tcp_pose_keys: tuple,
         wrench_keys: tuple | None,
+        side: str,
     ) -> None:
-        """Build target pose from action dict and send to one arm's RT thread."""
+        """Build target pose from action dict and send to one arm's RT thread.
+
+        Applies the steady-state orientation clamp (see send_action docstring)
+        and writes the clamped r1..r6 back into `action` so callers see the
+        value that actually reached the robot.
+        """
         x = action[tcp_pose_keys[0]]
         y = action[tcp_pose_keys[1]]
         z = action[tcp_pose_keys[2]]
@@ -985,6 +1010,55 @@ class BiFlexivRizon4RT(Robot):
             ]
         )
         quat = rotation_6d_to_quaternion(r6d)  # [qw, qx, qy, qz]
+
+        # Steady-state orientation clamp: keep commanded quat within
+        # commanded_actual_max_deg of the live TCP read off RT shared memory.
+        # Below 90° hardware envelope (Flexiv event 301005). When the clamp
+        # fires we also rewrite r1..r6 in `action` so the returned dict and
+        # any recorded dataset frame reflect the value actually sent.
+        max_deg = self.config.commanded_actual_max_deg
+        if max_deg < 180.0:
+            try:
+                actual_pose = cc.get_state().tcp_pose  # [x, y, z, qw, qx, qy, qz]
+            except Exception:
+                actual_pose = None
+            if actual_pose is not None and len(actual_pose) >= 7:
+                actual_quat = normalize_quaternion(
+                    np.array(actual_pose[3:7], dtype=np.float32), input_format="wxyz"
+                )
+                cmd_quat = normalize_quaternion(quat, input_format="wxyz")
+                cmd_dot = abs(float(np.dot(cmd_quat, actual_quat)))
+                cmd_angle_deg = float(
+                    np.degrees(2.0 * np.arccos(np.clip(cmd_dot, 0.0, 1.0)))
+                )
+                was_clamped_attr = f"_{side}_was_clamped"
+                prev_clamped = getattr(self, was_clamped_attr)
+                if cmd_angle_deg > max_deg:
+                    t = max_deg / cmd_angle_deg
+                    quat = slerp_quaternion(
+                        actual_quat, cmd_quat, t, input_format="wxyz"
+                    )
+                    clamped_r6d = quaternion_to_rotation_6d(
+                        float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3])
+                    )
+                    for i in range(6):
+                        action[tcp_pose_keys[3 + i]] = float(clamped_r6d[i])
+                    if not prev_clamped:
+                        self.logger.warn(
+                            f"{side} arm: [CLAMP] commanded vs actual "
+                            f"{cmd_angle_deg:.1f}° > {max_deg:.1f}°, "
+                            f"slerp-projected back. Arm likely pinned at a "
+                            f"joint or workspace limit."
+                        )
+                    setattr(self, was_clamped_attr, True)
+                else:
+                    if prev_clamped:
+                        self.logger.info(
+                            f"{side} arm: [CLAMP] released, commanded-actual "
+                            f"back to {cmd_angle_deg:.1f}°"
+                        )
+                    setattr(self, was_clamped_attr, False)
+
         target_pose = [x, y, z, float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3])]
 
         if wrench_keys is not None:

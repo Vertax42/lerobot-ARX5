@@ -62,6 +62,13 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         target_wrench: Default target wrench for force control
         ext_force_threshold: External TCP force threshold for collision detection [N]
         ext_torque_threshold: External joint torque threshold for collision detection [Nm]
+        commanded_actual_max_deg: Steady-state envelope (per arm) on the angle between the
+            commanded TCP orientation in send_action and the live TCP orientation read from
+            the RT shared memory. If exceeded, the commanded quaternion is slerp-projected
+            back to within this angle of actual before being written to the RT thread.
+            Default 60° keeps a 30° margin below Flexiv's 90° orientation-error safety
+            (event 301005). The returned action dict carries the clamped value, so any
+            dataset frame built from it records the safe envelope. Set to 180 to disable.
     """
 
     # Robot identification
@@ -101,6 +108,10 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     # Collision detection thresholds
     ext_force_threshold: float = 10.0  # N
     ext_torque_threshold: float = 5.0  # Nm
+
+    # Per-arm steady-state clamp on commanded vs actual TCP orientation (degrees).
+    # Below Flexiv's 90° orientation-error safety (event 301005). Set to 180 to disable.
+    commanded_actual_max_deg: float = 60.0
 
     # Start position parameters (left arm)
     left_start_position_degree: list[float] = field(
