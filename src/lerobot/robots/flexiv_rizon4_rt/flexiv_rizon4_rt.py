@@ -71,9 +71,11 @@ from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import (
     get_logger,
+    normalize_quaternion,
     quaternion_to_euler,
     quaternion_to_rotation_6d,
     rotation_6d_to_quaternion,
+    slerp_quaternion,
 )
 
 # Constants
@@ -140,6 +142,10 @@ class FlexivRizon4RT(Robot):
 
         # Start TCP pose - cached after initial MoveJ for RT reset
         self._start_tcp_pose: list[float] | None = None
+
+        # Rising-edge tracking for the orientation clamp in send_action
+        # (see commanded_actual_max_deg). Only used to dedupe log spam.
+        self._was_clamped: bool = False
 
         # Gripper key
         self._gripper_key = "gripper.pos"
@@ -868,6 +874,14 @@ class FlexivRizon4RT(Robot):
         The action uses 6D rotation representation which is converted to quaternion
         for the Flexiv SDK.
 
+        Orientation safety: the commanded TCP quaternion is slerp-projected back
+        to within `config.commanded_actual_max_deg` of the live TCP read from RT
+        shared memory before being written to the RT thread. This holds the
+        command inside Flexiv's 90° orientation-error envelope (event 301005)
+        even if upstream drifts past a joint limit. The action dict is mutated
+        in place (r1..r6) so the returned dict (and any recorded dataset frame
+        built from it) carries the safe envelope.
+
         Action format:
         - use_force=False: {tcp.x, y, z, r1-r6} (9D) + gripper.pos (1D) = 10D
         - use_force=True: tcp pose (9D) + {tcp.fx, fy, fz, mx, my, mz} (6D) + gripper.pos (1D) = 16D
@@ -876,7 +890,7 @@ class FlexivRizon4RT(Robot):
             action: Dictionary of action values
 
         Returns:
-            The action that was actually sent
+            The action that was actually sent (clamped if applicable)
         """
         if not self.is_connected or self._robot is None:
             raise DeviceNotConnectedError(f"{self} is not connected.")
@@ -902,6 +916,56 @@ class FlexivRizon4RT(Robot):
             action["tcp.r6"],
         ])
         quat = rotation_6d_to_quaternion(r6d)  # [qw, qx, qy, qz]
+
+        # Steady-state orientation clamp: keep commanded quat within
+        # commanded_actual_max_deg of the live TCP read off RT shared memory.
+        # Below 90° hardware envelope (Flexiv event 301005). When the clamp
+        # fires we also rewrite r1..r6 in `action` so the returned dict and
+        # any recorded dataset frame reflect the value actually sent.
+        max_deg = self.config.commanded_actual_max_deg
+        if max_deg < 180.0:
+            try:
+                actual_pose = self._cc.get_state().tcp_pose
+            except Exception:
+                actual_pose = None
+            if actual_pose is not None and len(actual_pose) >= 7:
+                actual_quat = normalize_quaternion(
+                    np.array(actual_pose[3:7], dtype=np.float32), input_format="wxyz"
+                )
+                cmd_quat = normalize_quaternion(quat, input_format="wxyz")
+                cmd_dot = abs(float(np.dot(cmd_quat, actual_quat)))
+                cmd_angle_deg = float(
+                    np.degrees(2.0 * np.arccos(np.clip(cmd_dot, 0.0, 1.0)))
+                )
+                if cmd_angle_deg > max_deg:
+                    t = max_deg / cmd_angle_deg
+                    quat = slerp_quaternion(
+                        actual_quat, cmd_quat, t, input_format="wxyz"
+                    )
+                    clamped_r6d = quaternion_to_rotation_6d(
+                        float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3])
+                    )
+                    action["tcp.r1"] = float(clamped_r6d[0])
+                    action["tcp.r2"] = float(clamped_r6d[1])
+                    action["tcp.r3"] = float(clamped_r6d[2])
+                    action["tcp.r4"] = float(clamped_r6d[3])
+                    action["tcp.r5"] = float(clamped_r6d[4])
+                    action["tcp.r6"] = float(clamped_r6d[5])
+                    if not self._was_clamped:
+                        self.logger.warn(
+                            f"[CLAMP] commanded vs actual {cmd_angle_deg:.1f}° "
+                            f"> {max_deg:.1f}°, slerp-projected back. Arm "
+                            f"likely pinned at a joint or workspace limit."
+                        )
+                    self._was_clamped = True
+                else:
+                    if self._was_clamped:
+                        self.logger.info(
+                            f"[CLAMP] released, commanded-actual back to "
+                            f"{cmd_angle_deg:.1f}°"
+                        )
+                    self._was_clamped = False
+
         target_pose = [x, y, z, float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3])]
 
         # --- Build target wrench (if force control) ---

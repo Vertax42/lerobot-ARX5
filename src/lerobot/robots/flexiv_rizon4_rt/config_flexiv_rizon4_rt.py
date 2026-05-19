@@ -67,6 +67,14 @@ class FlexivRizon4RTConfig(RobotConfig):
 
         connect_retries: Number of connection retries for flexiv_rt.Robot
         retry_interval_sec: Seconds between connection retries
+
+        commanded_actual_max_deg: Steady-state envelope on the angle between the commanded
+            TCP orientation in send_action and the live TCP orientation read from RT shared
+            memory. If exceeded, the commanded quaternion is slerp-projected back to within
+            this angle of actual before being written to the RT thread. Default 60° keeps a
+            30° margin below Flexiv's 90° orientation-error safety (event 301005). The
+            returned action dict carries the clamped value so recorded frames see the safe
+            envelope. Set to 180 to disable.
     """
 
     # Robot identification
@@ -105,6 +113,10 @@ class FlexivRizon4RTConfig(RobotConfig):
     # Collision detection thresholds
     ext_force_threshold: float = 10.0  # N
     ext_torque_threshold: float = 5.0  # Nm
+
+    # Steady-state clamp on commanded vs actual TCP orientation (degrees).
+    # Below Flexiv's 90° orientation-error safety (event 301005). Set to 180 to disable.
+    commanded_actual_max_deg: float = 60.0
 
     # Start position parameters
     start_position_degree: list[float] = field(
