@@ -78,14 +78,15 @@ dependencies = [
     "torchvision>=0.21.0,<0.26.0",
 
     "einops>=0.8.0,<0.9.0",
-    "opencv-python-headless>=4.9.0,<4.14.0",
+    "opencv-python-headless==4.12.0.88",
+    "opencv-python==4.12.0.88",
     "av>=15.0.0,<16.0.0",
     "jsonlines>=4.0.0,<5.0.0",
     "pyserial>=3.5,<4.0",
     "pynput>=1.7.8,<1.9.0",
     "pygame>=2.5.1,<2.7.0",
     "wandb>=0.26.0",
-    "draccus==0.10.0",                       # TODO: Relax version constraint
+    "draccus==0.10.0",                   # TODO: Relax version constraint
     "rerun-sdk>=0.24.0,<0.27.0",
 
     # Support dependencies
