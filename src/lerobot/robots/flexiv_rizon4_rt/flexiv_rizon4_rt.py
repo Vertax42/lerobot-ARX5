@@ -64,8 +64,8 @@ import flexiv_rt as frt
 import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
-from lerobot.robots.flexiv_rizon4.flare_gripper import FlareGripper
-from lerobot.robots.flexiv_rizon4.xense_gripper import Gripper
+from lerobot.robots.flexiv_rizon4_rt.flare_gripper import FlareGripper
+from lerobot.robots.flexiv_rizon4_rt.xense_gripper import Gripper
 from lerobot.robots.flexiv_rizon4_rt.config_flexiv_rizon4_rt import FlexivRizon4RTConfig
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
