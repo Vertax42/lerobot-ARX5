@@ -197,7 +197,10 @@ class EliteCS66(Robot):
 
     @property
     def is_calibrated(self) -> bool:
-        return self.is_connected
+        # Elite CS66 is factory calibrated; there is no runtime calibration step,
+        # so always return True (matches flexiv_rizon4_rt). Connection state is
+        # a separate concern, checked via ``is_connected``.
+        return True
 
     def calibrate(self) -> None:
         if not self.is_connected:
@@ -251,7 +254,7 @@ class EliteCS66(Robot):
             cfg.script_file_path = self._resolve_sdk_resource("external_control.script")
         return cfg
 
-    def connect(self, calibrate: bool = False, go_to_start: bool = False) -> None:
+    def connect(self, calibrate: bool = False, go_to_start: bool = True) -> None:
         if self.is_connected:
             raise DeviceAlreadyConnectedError(f"{self} already connected, do not run connect() twice.")
 
@@ -344,6 +347,7 @@ class EliteCS66(Robot):
                 self._start_servo_loop()
 
     def _cleanup_after_failed_connect(self) -> None:
+        # Drop the driver / dashboard / RTSI handles first.
         try:
             if self._driver is not None:
                 self._driver.stopControl(1000)
@@ -359,6 +363,14 @@ class EliteCS66(Robot):
                 self._rtsi.disconnect()
         except Exception:
             pass
+        # Also release any cameras that may have been opened in connect()'s
+        # try-block before the failure point.
+        for cam in self.cameras.values():
+            try:
+                if cam.is_connected:
+                    cam.disconnect()
+            except Exception:
+                pass
         self._driver = None
         self._dashboard = None
         self._rtsi = None
@@ -775,8 +787,11 @@ class EliteCS66(Robot):
         return sent
 
     def disconnect(self) -> None:
+        # Idempotent: re-running disconnect after a failed connect or after a
+        # previous successful disconnect should be a quiet no-op, not raise.
         if not self._is_connected and self._driver is None and self._rtsi is None and self._dashboard is None:
-            raise DeviceNotConnectedError(f"{self} is not connected.")
+            self.logger.warn(f"{self} is not connected, skipping disconnect.")
+            return
 
         for cam in self.cameras.values():
             if cam.is_connected:

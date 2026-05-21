@@ -53,7 +53,6 @@ class EliteCS66Config(RobotConfig):
     servoj_gain: int = 2000
     command_timeout_ms: int = 200
     use_background_servo_loop: bool = True
-    target_interpolation: bool = True
     command_stale_timeout_s: float = 0.5
     reset_duration_s: float = 3.0
 
