@@ -385,6 +385,28 @@ def _sync_rt_teleop_to_robot_pose(robot: Robot, teleop: Teleoperator | None) -> 
         teleop.reset_to_pose(pose[:7], pose[7])
 
 
+def _sync_elite_teleop_to_robot_pose(robot: Robot, teleop: Teleoperator | None) -> None:
+    """Re-seed teleop's internal target from Elite CS66's current TCP pose.
+
+    Called after a non-blocking ``reset_to_initial_position()`` trajectory
+    completes so the next ``send_action`` doesn't slam the controller with a
+    stale (pre-reset) target. Dispatches by teleop type: SpaceMouse's internal
+    accumulator is Euler, Pico4 uses quaternion.
+    """
+    if teleop is None or not hasattr(teleop, "reset_to_pose"):
+        return
+    if teleop.name == "spacemouse":
+        pose_euler = robot.get_current_tcp_pose_euler()
+        teleop.reset_to_pose(pose_euler[:6], pose_euler[6])
+        if hasattr(teleop, "_start_pose_6d"):
+            teleop._start_pose_6d = pose_euler[:6].copy()
+        if hasattr(teleop, "_start_gripper_pos"):
+            teleop._start_gripper_pos = float(pose_euler[6])
+    elif teleop.name == "pico4":
+        pose_quat = robot.get_current_tcp_pose_quat()
+        teleop.reset_to_pose(pose_quat[:7], pose_quat[7])
+
+
 def _use_raw_passthrough_record(robot_type: str, teleop_type: str | None) -> bool:
     return (robot_type, teleop_type) in RAW_PASSTHROUGH_RECORD_PAIRS
 
@@ -805,6 +827,173 @@ def flexiv_rizon4_rt_record_loop(
         timestamp = time.perf_counter() - start_episode_t
 
 
+def elite_cs66_record_loop(
+    robot: Robot,
+    events: dict,
+    fps: int,
+    dataset: LeRobotDataset | None = None,
+    teleop: Teleoperator | list[Teleoperator] | None = None,
+    control_time_s: int | None = None,
+    single_task: str | None = None,
+    display_data: bool = False,
+):
+    """Recording loop for Elite CS66 + SpaceMouse / Pico4.
+
+    Mirrors the elite_cs66_*_teleop_loop semantics:
+    - Keyboard ``go_start`` or SpaceMouse both-buttons (rising edge) or Pico4
+      A-button trigger ``robot.reset_to_initial_position()``.
+    - While ``rt_moving`` is true the background servo trajectory owns the
+      arm; Python skips ``send_action`` and records a shifted frame
+      (previous observation + current-pose-as-action), matching the
+      convention used by ``flexiv_rizon4_rt_record_loop``.
+    - After the trajectory ends, the teleop's internal target is resynced to
+      the robot's current TCP so the next send_action doesn't jump.
+    """
+    if dataset is not None and dataset.fps != fps:
+        raise ValueError(
+            f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
+        )
+    if isinstance(teleop, list):
+        raise ValueError("Multi-teleop mode is not supported for elite_cs66.")
+
+    teleop_name = teleop.name if isinstance(teleop, Teleoperator) else None
+
+    timestamp = 0
+    start_episode_t = time.perf_counter()
+    prev_rt_moving = False
+    prev_observation_frame = None
+    both_buttons_prev = False
+
+    while timestamp < control_time_s:
+        start_loop_t = time.perf_counter()
+        reset_triggered = False
+        refresh_listener_events(events)
+
+        if events["stop_recording"]:
+            logger.info("Stop recording requested, exiting record loop early")
+            break
+        if events["rerecord_episode"]:
+            logger.info("Re-record episode requested, exiting record loop early")
+            break
+        if events["exit_early"]:
+            events["exit_early"] = False
+            logger.info("Exit early requested, exiting record loop early")
+            break
+
+        # Reset trigger sources: keyboard go_start, SpaceMouse both-buttons
+        # rising edge, Pico4 A-button.
+        trigger_reset = bool(events["go_start"])
+        if isinstance(teleop, Teleoperator):
+            if teleop_name == "spacemouse":
+                both = (
+                    teleop._spacemouse.is_left_button_pressed()
+                    and teleop._spacemouse.is_right_button_pressed()
+                )
+                if both and not both_buttons_prev:
+                    trigger_reset = True
+                both_buttons_prev = both
+            elif teleop_name == "pico4" and hasattr(teleop, "get_reset_button"):
+                if teleop.get_reset_button():
+                    trigger_reset = True
+
+        if trigger_reset:
+            events["go_start"] = False
+            if hasattr(robot, "reset_to_initial_position"):
+                try:
+                    logger.info("Elite CS66 reset to initial position")
+                    robot.reset_to_initial_position()
+                    reset_triggered = True
+                except Exception as e:
+                    logger.error(f"Error during reset_to_initial_position: {e}")
+
+        current_observation = robot.get_observation()
+        current_observation_frame = None
+        if dataset is not None:
+            current_observation_frame = build_dataset_frame(
+                dataset.features, current_observation, prefix=OBS_STR
+            )
+
+        robot_is_moving = hasattr(robot, "rt_moving") and robot.rt_moving
+        if robot_is_moving:
+            prev_rt_moving = True
+
+        if prev_rt_moving and not robot_is_moving:
+            prev_rt_moving = False
+            try:
+                _sync_elite_teleop_to_robot_pose(robot, teleop)
+                logger.info("Synced teleop target to robot pose after reset")
+            except Exception as e:
+                logger.error(f"Failed to sync teleop after reset: {e}")
+
+        if isinstance(teleop, Teleoperator):
+            # SpaceMouse / Pico4 / Elite CS66 all share the unified
+            # tcp.x/y/z + tcp.r1..r6 + gripper.pos schema — no conversion.
+            teleop_action = teleop.get_action()
+
+            if reset_triggered or robot_is_moving:
+                sent_action = teleop_action  # not sent; for display only
+            else:
+                sent_action = robot.send_action(teleop_action)
+
+            if dataset is not None and not reset_triggered:
+                if robot_is_moving and prev_observation_frame is not None:
+                    # Shifted-frame: action = current proprio so the dataset
+                    # has something well-defined during the autonomous RT
+                    # trajectory.
+                    current_as_action = {
+                        k: current_observation[k]
+                        for k in robot.action_features
+                        if k in current_observation
+                    }
+                    action_frame = build_dataset_frame(
+                        dataset.features, current_as_action, prefix=ACTION
+                    )
+                    frame = {
+                        **prev_observation_frame,
+                        **action_frame,
+                        "task": single_task,
+                    }
+                    dataset.add_frame(frame)
+                elif not robot_is_moving:
+                    action_frame = build_dataset_frame(
+                        dataset.features, sent_action, prefix=ACTION
+                    )
+                    frame = {
+                        **current_observation_frame,
+                        **action_frame,
+                        "task": single_task,
+                    }
+                    dataset.add_frame(frame)
+
+            prev_observation_frame = current_observation_frame
+            display_action = sent_action
+        else:
+            logger.info(
+                "No teleoperator provided; recording observations only. "
+                "The robot will stay at its current pose between episodes."
+            )
+            _record_loop_sleep(
+                start_loop_t=start_loop_t,
+                fps=fps,
+                start_episode_t=start_episode_t,
+                robot=robot,
+            )
+            timestamp = time.perf_counter() - start_episode_t
+            continue
+
+        if display_data:
+            log_rerun_data(observation=current_observation, action=display_action)
+
+        _record_loop_sleep(
+            start_loop_t=start_loop_t,
+            fps=fps,
+            start_episode_t=start_episode_t,
+            robot=robot,
+        )
+
+        timestamp = time.perf_counter() - start_episode_t
+
+
 @parser.wrap()
 def record(cfg: RecordConfig) -> LeRobotDataset:
     init_logging()
@@ -893,6 +1082,13 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             left_pose, right_pose = robot.get_current_tcp_pose_quat()
             logger.info(f"Left start pose:  {left_pose}")
             logger.info(f"Right start pose: {right_pose}")
+        elif cfg.robot.type == "elite_cs66" and teleop_type in ("spacemouse", "pico4"):
+            robot.connect(go_to_start=True)
+            start_obs = robot.get_observation()
+            tcp_keys = [k for k in start_obs if k.startswith("tcp.")]
+            logger.info(
+                "Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys)
+            )
         else:
             robot.connect()
 
@@ -905,6 +1101,12 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 left_pose, right_pose = robot.get_current_tcp_pose_quat()
                 teleop.connect(left_tcp_pose_quat=left_pose, right_tcp_pose_quat=right_pose)
                 logger.info("BiPico4 initialized with both robot EEF poses.")
+            elif cfg.robot.type == "elite_cs66" and teleop_type == "spacemouse":
+                teleop.connect(current_tcp_pose_euler=robot.get_current_tcp_pose_euler())
+                logger.info("Elite CS66 + SpaceMouse: teleop seeded from current TCP pose")
+            elif cfg.robot.type == "elite_cs66" and teleop_type == "pico4":
+                teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
+                logger.info("Elite CS66 + Pico4: teleop seeded from current TCP pose")
             else:
                 teleop.connect()
 
@@ -926,6 +1128,17 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         robot=robot,
                         events=events,
                         fps=cfg.dataset.fps,
+                        dataset=dataset,
+                        control_time_s=cfg.dataset.episode_time_s,
+                        single_task=cfg.dataset.single_task,
+                        display_data=cfg.display_data,
+                    )
+                elif cfg.robot.type == "elite_cs66":
+                    elite_cs66_record_loop(
+                        robot=robot,
+                        events=events,
+                        fps=cfg.dataset.fps,
+                        teleop=teleop,
                         dataset=dataset,
                         control_time_s=cfg.dataset.episode_time_s,
                         single_task=cfg.dataset.single_task,
