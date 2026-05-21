@@ -29,7 +29,94 @@ from lerobot.cameras.utils import make_cameras_from_configs
 from lerobot.robots.bi_arx5.config_bi_arx5 import BiARX5Config, BiARX5ControlMode
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
-from lerobot.utils.robot_utils import get_logger
+from lerobot.utils.robot_utils import (
+    euler_to_quaternion,
+    get_logger,
+    normalize_quaternion,
+    quaternion_to_euler,
+    quaternion_to_rotation_6d,
+    rotation_6d_to_quaternion,
+)
+
+# Per-arm unified Cartesian schema (matches bi_flexiv_rizon4_rt naming).
+_BI_CARTESIAN_TCP_KEYS = ("tcp.x", "tcp.y", "tcp.z")
+_BI_CARTESIAN_R6D_KEYS = ("tcp.r1", "tcp.r2", "tcp.r3", "tcp.r4", "tcp.r5", "tcp.r6")
+_BI_CARTESIAN_GRIPPER_KEY = "gripper.pos"
+
+
+def _prefixed_keys(prefix: str, keys: Sequence[str]) -> tuple[str, ...]:
+    return tuple(f"{prefix}_{k}" for k in keys)
+
+
+def _euler_pose_to_tcp_6d(pose_xyzrpy: Sequence[float], prefix: str) -> dict[str, float]:
+    """Convert ARX5 SDK's native [x, y, z, roll, pitch, yaw] into a unified
+    Cartesian dict prefixed with ``left_`` / ``right_``.
+    """
+    x, y, z, roll, pitch, yaw = (float(v) for v in pose_xyzrpy)
+    quat = euler_to_quaternion(roll, pitch, yaw)
+    quat = normalize_quaternion(quat, input_format="wxyz")
+    r6d = quaternion_to_rotation_6d(float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3]))
+    return {
+        f"{prefix}_tcp.x": x,
+        f"{prefix}_tcp.y": y,
+        f"{prefix}_tcp.z": z,
+        f"{prefix}_tcp.r1": float(r6d[0]),
+        f"{prefix}_tcp.r2": float(r6d[1]),
+        f"{prefix}_tcp.r3": float(r6d[2]),
+        f"{prefix}_tcp.r4": float(r6d[3]),
+        f"{prefix}_tcp.r5": float(r6d[4]),
+        f"{prefix}_tcp.r6": float(r6d[5]),
+    }
+
+
+def _tcp_6d_action_to_euler(
+    action: dict[str, Any], prefix: str, fallback_xyzrpy: Sequence[float]
+) -> tuple[float, float, float, float, float, float]:
+    """Extract Euler [x, y, z, roll, pitch, yaw] for one arm from an action dict.
+
+    Primary input schema uses prefixed unified keys
+    (``{prefix}_tcp.x/y/z`` + ``{prefix}_tcp.r1..r6``). Legacy Euler keys
+    (``{prefix}_x/y/z/roll/pitch/yaw``) are kept as fallback so internal
+    trajectory helpers that still interpolate in Euler keep working.
+    """
+    tcp_keys = _prefixed_keys(prefix, _BI_CARTESIAN_TCP_KEYS)
+    r6d_keys = _prefixed_keys(prefix, _BI_CARTESIAN_R6D_KEYS)
+
+    def _pick(new_key: str, legacy_key: str, default: float) -> float:
+        if new_key in action:
+            return float(action[new_key])
+        if legacy_key in action:
+            return float(action[legacy_key])
+        return float(default)
+
+    x = _pick(tcp_keys[0], f"{prefix}_x", fallback_xyzrpy[0])
+    y = _pick(tcp_keys[1], f"{prefix}_y", fallback_xyzrpy[1])
+    z = _pick(tcp_keys[2], f"{prefix}_z", fallback_xyzrpy[2])
+
+    if all(k in action for k in r6d_keys):
+        r6d = np.array([float(action[k]) for k in r6d_keys], dtype=np.float64)
+        quat_wxyz = rotation_6d_to_quaternion(r6d)
+        roll, pitch, yaw = quaternion_to_euler(
+            float(quat_wxyz[0]),
+            float(quat_wxyz[1]),
+            float(quat_wxyz[2]),
+            float(quat_wxyz[3]),
+        )
+    elif any(k in action for k in r6d_keys):
+        raise ValueError(
+            f"Incomplete rotation-6D action for prefix {prefix!r}: expected all of "
+            f"{r6d_keys}."
+        )
+    elif all(k in action for k in (f"{prefix}_roll", f"{prefix}_pitch", f"{prefix}_yaw")):
+        roll = float(action[f"{prefix}_roll"])
+        pitch = float(action[f"{prefix}_pitch"])
+        yaw = float(action[f"{prefix}_yaw"])
+    else:
+        roll = float(fallback_xyzrpy[3])
+        pitch = float(fallback_xyzrpy[4])
+        yaw = float(fallback_xyzrpy[5])
+
+    return x, y, z, float(roll), float(pitch), float(yaw)
 
 try:
     import pyarx as arx5
@@ -83,7 +170,14 @@ class BiARX5(Robot):
             self.default_preview_time = 0.0
             self.logger.info(f"Joint control mode (teleop): using preview_time {self.default_preview_time}s")
 
-        # Pre-compute action keys for faster lookup (performance optimization)
+        # Pre-compute action keys for faster lookup (performance optimization).
+        # NOTE: In CARTESIAN_CONTROL these are the *legacy Euler keys* used only
+        # by internal trajectory helpers (move_eef_trajectory, smooth_go_*),
+        # which interpolate in Euler space. send_action() accepts both the new
+        # unified ``left_tcp.* / right_tcp.*`` 6D-rotation schema (public, used
+        # by teleop / record) and these legacy Euler keys, so trajectory
+        # helpers keep working without rewrites. Do NOT use these names in
+        # external action dicts — see action_features for the public schema.
         if config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL:
             self._left_action_keys = [
                 "left_x",
@@ -209,23 +303,19 @@ class BiARX5(Robot):
     def _motors_ft(self) -> dict[str, type]:
         """Return motor features based on control mode."""
         if self.config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL:
-            # Cartesian mode: EEF pose (x, y, z, roll, pitch, yaw) + gripper for each arm
-            return {
-                "left_x": float,
-                "left_y": float,
-                "left_z": float,
-                "left_roll": float,
-                "left_pitch": float,
-                "left_yaw": float,
-                "left_gripper_pos": float,
-                "right_x": float,
-                "right_y": float,
-                "right_z": float,
-                "right_roll": float,
-                "right_pitch": float,
-                "right_yaw": float,
-                "right_gripper_pos": float,
-            }
+            # External Cartesian schema: per-arm position + 6D rotation + gripper.
+            # Internally the ARX5 SDK still consumes Euler; conversion happens in
+            # send_action()/get_observation(). Matches bi_flexiv_rizon4_rt's
+            # left_tcp.* / right_tcp.* / left_gripper.pos / right_gripper.pos
+            # naming so bimanual datasets share one schema across vendors.
+            features: dict[str, type] = {}
+            for prefix in ("left", "right"):
+                for key in _BI_CARTESIAN_TCP_KEYS:
+                    features[f"{prefix}_{key}"] = float
+                for key in _BI_CARTESIAN_R6D_KEYS:
+                    features[f"{prefix}_{key}"] = float
+                features[f"{prefix}_{_BI_CARTESIAN_GRIPPER_KEY}"] = float
+            return features
         else:
             # Joint mode (including teach mode): 6 joints + gripper per arm
             joint_names = [f"joint_{i}" for i in range(1, 7)] + ["gripper"]
@@ -502,27 +592,17 @@ class BiARX5(Robot):
         obs_dict = {}
 
         if self.config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL:
-            # Cartesian mode: get EEF states
+            # SDK returns Euler [x, y, z, roll, pitch, yaw] per arm; publish the
+            # unified left_tcp.* / right_tcp.* + 6D rotation schema.
             left_eef_state = self.left_arm.get_eef_state()
-            left_pose_6d = left_eef_state.pose_6d().copy()
-            for i, key in enumerate(["left_x", "left_y", "left_z", "left_roll", "left_pitch", "left_yaw"]):
-                obs_dict[key] = float(left_pose_6d[i])
-            obs_dict["left_gripper_pos"] = float(left_eef_state.gripper_pos)
+            left_pose_xyzrpy = np.asarray(left_eef_state.pose_6d(), dtype=np.float64).reshape(6)
+            obs_dict.update(_euler_pose_to_tcp_6d(left_pose_xyzrpy, prefix="left"))
+            obs_dict[f"left_{_BI_CARTESIAN_GRIPPER_KEY}"] = float(left_eef_state.gripper_pos)
 
             right_eef_state = self.right_arm.get_eef_state()
-            right_pose_6d = right_eef_state.pose_6d().copy()
-            for i, key in enumerate(
-                [
-                    "right_x",
-                    "right_y",
-                    "right_z",
-                    "right_roll",
-                    "right_pitch",
-                    "right_yaw",
-                ]
-            ):
-                obs_dict[key] = float(right_pose_6d[i])
-            obs_dict["right_gripper_pos"] = float(right_eef_state.gripper_pos)
+            right_pose_xyzrpy = np.asarray(right_eef_state.pose_6d(), dtype=np.float64).reshape(6)
+            obs_dict.update(_euler_pose_to_tcp_6d(right_pose_xyzrpy, prefix="right"))
+            obs_dict[f"right_{_BI_CARTESIAN_GRIPPER_KEY}"] = float(right_eef_state.gripper_pos)
         else:
             # Joint mode (including teach mode): get joint states
             left_joint_state = self.left_arm.get_joint_state()
@@ -556,29 +636,33 @@ class BiARX5(Robot):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         if self.config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL:
-            # Cartesian mode: use EEF commands
-            # Note: timestamp is not set here, SDK will use controller_config.default_preview_time
-            left_cmd = self._left_eef_cmd_buffer
-            left_pose_6d = left_cmd.pose_6d()
-            for i, key in enumerate(self._left_action_keys):
-                left_pose_6d[i] = action.get(key, left_pose_6d[i])
-            left_cmd.gripper_pos = action.get(self._left_gripper_key, left_cmd.gripper_pos)
-            # Debug: Print commands before sending
-            # print(
-            #     f"Left arm command - pose_6d: {left_cmd.pose_6d()}, gripper: {left_cmd.gripper_pos}"
-            # )
-            self.left_arm.set_eef_cmd(left_cmd)
-
-            right_cmd = self._right_eef_cmd_buffer
-            right_pose_6d = right_cmd.pose_6d()
-            for i, key in enumerate(self._right_action_keys):
-                right_pose_6d[i] = action.get(key, right_pose_6d[i])
-            right_cmd.gripper_pos = action.get(self._right_gripper_key, right_cmd.gripper_pos)
-            # Debug: Print commands before sending
-            # print(
-            #     f"Right arm command - pose_6d: {right_cmd.pose_6d()}, gripper: {right_cmd.gripper_pos}"
-            # )
-            self.right_arm.set_eef_cmd(right_cmd)
+            # External schema is left_tcp.* / right_tcp.* (6D rotation) + gripper.
+            # SDK still wants Euler; do the conversion at the boundary, one arm
+            # at a time, falling back to the current buffer for any missing
+            # axis so partial actions hold that component.
+            for prefix, cmd, arm in (
+                ("left", self._left_eef_cmd_buffer, self.left_arm),
+                ("right", self._right_eef_cmd_buffer, self.right_arm),
+            ):
+                pose_xyzrpy = cmd.pose_6d()
+                fallback = [float(pose_xyzrpy[i]) for i in range(6)]
+                x, y, z, roll, pitch, yaw = _tcp_6d_action_to_euler(action, prefix, fallback)
+                pose_xyzrpy[0] = x
+                pose_xyzrpy[1] = y
+                pose_xyzrpy[2] = z
+                pose_xyzrpy[3] = roll
+                pose_xyzrpy[4] = pitch
+                pose_xyzrpy[5] = yaw
+                # Accept either the unified key ({prefix}_gripper.pos) or the
+                # legacy one ({prefix}_gripper_pos) used by internal trajectory
+                # helpers.
+                gkey_new = f"{prefix}_{_BI_CARTESIAN_GRIPPER_KEY}"
+                gkey_legacy = f"{prefix}_gripper_pos"
+                if gkey_new in action:
+                    cmd.gripper_pos = float(action[gkey_new])
+                elif gkey_legacy in action:
+                    cmd.gripper_pos = float(action[gkey_legacy])
+                arm.set_eef_cmd(cmd)
         else:
             # Joint mode (including teach mode): use joint commands
             left_cmd = self._left_cmd_buffer
