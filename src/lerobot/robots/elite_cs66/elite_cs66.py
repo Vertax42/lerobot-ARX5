@@ -653,18 +653,18 @@ class EliteCS66(Robot):
             if not all(key in action for key in TCP_ROTATION_6D_KEYS):
                 raise ValueError("Incomplete rotation-6D action. Expected tcp.r1 through tcp.r6 together.")
             r6d = np.array([float(action[key]) for key in TCP_ROTATION_6D_KEYS], dtype=np.float64)
-            # Send principal-branch rotvec only (norm ≤ π). Elite RTSI's
-            # reported rotvec is unstable near θ≈π (it can flip rx sign by a
-            # whole 2π·axis between consecutive ticks even though the robot
-            # didn't move, because at that angle two genuinely different
-            # rotations share the same |v|). Earlier code tried to "match"
-            # the reported branch via a continuity shift, but that ended up
-            # tracking the RTSI artifact and sending wildly different
-            # rotations to servoj — Elite then triggered "External Control
-            # speed limit" and protective-stopped. Trust the IK seed
-            # (cmd_servo_joints, kept inside external_control.script) to
-            # resolve wrist-flip ambiguity instead.
-            target[3:6] = _quaternion_to_rotvec(rotation_6d_to_quaternion(r6d))
+            # Convert the target rotation to a rotvec, then put it on the
+            # same ±2π·axis branch as the rotvec we sent last tick. We use
+            # **our own last-commanded rotvec** (target[3:6], seeded from
+            # _last_tcp_command on entry) as the continuity anchor — NOT
+            # RTSI's reported `current`. RTSI's rotvec is unstable near
+            # θ≈π and can flip rx sign without the robot moving; chasing it
+            # caused the prior "External Control speed limit" trips. Our
+            # own rotvec stream is by construction continuous frame-to-
+            # frame, so Elite SDK's IK (seeded with cmd_servo_joints) sees
+            # small joint deltas and stays inside the velocity envelope.
+            target_principal = _quaternion_to_rotvec(rotation_6d_to_quaternion(r6d))
+            target[3:6] = _rotvec_continuity_shift(target_principal, target[3:6])
 
         if self.config.max_relative_translation > 0:
             delta = target[:3] - current[:3]
