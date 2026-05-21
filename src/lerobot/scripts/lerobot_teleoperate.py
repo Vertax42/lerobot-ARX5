@@ -1116,7 +1116,14 @@ def elite_cs66_spacemouse_teleop_loop(
             _prev_rt_moving = False
             _reset_display_cleared = False
             try:
-                current_pose_euler = robot.get_current_tcp_pose_euler()
+                # Use the robot's last *commanded* pose (not RTSI's reading)
+                # for re-seeding the SpaceMouse accumulator: near orientation
+                # singularities RTSI's rotvec is unstable and can encode a
+                # rotation 100°+ off what we've actually been commanding,
+                # which would cause the next send_action to jump and trip
+                # the joint velocity limit.
+                pose_source = getattr(robot, "get_commanded_tcp_pose_euler", None) or robot.get_current_tcp_pose_euler
+                current_pose_euler = pose_source()
                 teleop.reset_to_pose(current_pose_euler[:6], current_pose_euler[6])
                 teleop._start_pose_6d = current_pose_euler[:6].copy()
                 teleop._start_gripper_pos = current_pose_euler[6]
@@ -1139,7 +1146,10 @@ def elite_cs66_spacemouse_teleop_loop(
             idle_frame_count += 1
             if idle_frame_count >= release_resync_idle_frames and not just_resynced:
                 try:
-                    current_pose_euler = robot.get_current_tcp_pose_euler()
+                    # Same rationale as the rt_moving sync above: snap to
+                    # commanded pose, not RTSI's noisy current.
+                    pose_source = getattr(robot, "get_commanded_tcp_pose_euler", None) or robot.get_current_tcp_pose_euler
+                    current_pose_euler = pose_source()
                     teleop.reset_to_pose(
                         current_pose_euler[:6], current_pose_euler[6]
                     )
