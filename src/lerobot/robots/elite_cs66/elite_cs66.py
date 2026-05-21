@@ -490,7 +490,12 @@ class EliteCS66(Robot):
 
         start_quat = _rotvec_to_quaternion(start[3:6])
         target_quat = _rotvec_to_quaternion(target[3:6])
-        pose[3:6] = _quaternion_to_rotvec(_slerp_quaternion_wxyz(start_quat, target_quat, alpha))
+        interp_principal = _quaternion_to_rotvec(
+            _slerp_quaternion_wxyz(start_quat, target_quat, alpha)
+        )
+        # Keep every interp step on the same ±2π·axis branch as ``start``,
+        # so consecutive servoj rotvecs along the trajectory are smooth.
+        pose[3:6] = _rotvec_continuity_shift(interp_principal, start[3:6])
         return pose
 
     def _get_servo_target_locked(self, now: float) -> tuple[np.ndarray | None, bool]:
@@ -896,6 +901,30 @@ class EliteCS66(Robot):
             dtype=np.float64,
         )
 
+    def get_commanded_tcp_pose_euler(self) -> np.ndarray:
+        """Last commanded TCP pose in Euler form, including gripper.
+
+        Use this instead of ``get_current_tcp_pose_euler`` when re-seeding a
+        teleop accumulator: the latter reads RTSI's rotvec which can be in a
+        branch encoding a different physical rotation than the one we've
+        been commanding (RTSI is unstable near orientation singularities).
+        ``_last_tcp_command`` is by construction continuous with our servoj
+        stream, so seeding the teleop from it never introduces a phantom
+        100°+ jump on the next send_action.
+        """
+        if not self.is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+        if self._last_tcp_command is None:
+            return self.get_current_tcp_pose_euler()
+        tcp_pose = np.asarray(self._last_tcp_command, dtype=np.float64)
+        quat = _rotvec_to_quaternion(tcp_pose[3:6])
+        euler = quaternion_to_euler(float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3]))
+        gripper_pos = self._gripper_position if self.config.use_gripper else 0.0
+        return np.array(
+            [tcp_pose[0], tcp_pose[1], tcp_pose[2], euler[0], euler[1], euler[2], gripper_pos],
+            dtype=np.float64,
+        )
+
     def reset_to_initial_position(self) -> None:
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
@@ -910,9 +939,30 @@ class EliteCS66(Robot):
             with self._servo_lock:
                 if self._is_reset_moving_locked(now):
                     return
-                current_tcp = np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64)
-                self._reset_start_tcp_pose = current_tcp.copy()
-                self._reset_target_tcp_pose = self._start_tcp_pose.copy()
+                # Anchor reset interp to our self-consistent commanded pose,
+                # not RTSI: near orientation singularities RTSI's rotvec can
+                # be in a branch encoding a *different* physical rotation
+                # than what we've been commanding, which would make the
+                # interp try to bridge a phantom 110° rotation and trip the
+                # joint velocity limit. Fall back to RTSI only if we never
+                # had a commanded pose yet.
+                if self._last_tcp_command is not None:
+                    self._reset_start_tcp_pose = self._last_tcp_command.copy()
+                else:
+                    self._reset_start_tcp_pose = np.asarray(
+                        self._rtsi.getActualTCPPose(), dtype=np.float64
+                    )
+                # Express the reset target's rotvec on the same ±2π branch as
+                # the start, so the slerp output stays in a single branch
+                # throughout the trajectory.
+                target_pose = self._start_tcp_pose.copy()
+                target_principal = _quaternion_to_rotvec(
+                    _rotvec_to_quaternion(target_pose[3:6])
+                )
+                target_pose[3:6] = _rotvec_continuity_shift(
+                    target_principal, self._reset_start_tcp_pose[3:6]
+                )
+                self._reset_target_tcp_pose = target_pose
                 self._reset_start_time = now
                 self._reset_end_time = now + self.config.reset_duration_s
                 self._reset_moving = True
@@ -921,8 +971,13 @@ class EliteCS66(Robot):
 
         assert self._driver is not None
         assert self._rtsi is not None
-        start_pose = np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64)
+        if self._last_tcp_command is not None:
+            start_pose = self._last_tcp_command.copy()
+        else:
+            start_pose = np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64)
         target_pose = self._start_tcp_pose.copy()
+        target_principal = _quaternion_to_rotvec(_rotvec_to_quaternion(target_pose[3:6]))
+        target_pose[3:6] = _rotvec_continuity_shift(target_principal, start_pose[3:6])
         start_time = time.monotonic()
         duration = max(self.config.reset_duration_s, self.config.servoj_time)
 
