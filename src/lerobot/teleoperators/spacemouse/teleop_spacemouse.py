@@ -115,50 +115,44 @@ class SpacemouseTeleop(Teleoperator):
 
     @property
     def action_features(self) -> dict:
-        """
-        Return action features matching ARX5 SDK's target_pose_6d format.
+        """Return action features in the Cartesian 6D-rotation schema.
 
-        Returns a dictionary with dtype, shape, and names for the action space:
-        - x, y, z: absolute EEF position (meters)
-        - roll, pitch, yaw: absolute EEF orientation (radians)
-        - gripper_pos: absolute gripper position (meters)
-        
-        For dual-hand mode, the output combines both devices according to their enabled_axes configuration.
+        Matches the format used by Flexiv Rizon4 RT, Elite CS66, and Pico4
+        teleoperators so any of them can be wired into a Cartesian arm without
+        bespoke conversion in the loop.
+
+        - tcp.x, tcp.y, tcp.z: absolute TCP position (meters)
+        - tcp.r1..tcp.r6: absolute TCP orientation as the first two columns
+          of the rotation matrix (Zhou et al. 6D rep)
+        - gripper.pos: absolute gripper position
         """
+        names = {
+            "tcp.x": 0,
+            "tcp.y": 1,
+            "tcp.z": 2,
+            "tcp.r1": 3,
+            "tcp.r2": 4,
+            "tcp.r3": 5,
+            "tcp.r4": 6,
+            "tcp.r5": 7,
+            "tcp.r6": 8,
+            "gripper.pos": 9,
+        }
         if self.config.multi_device_mode:
-            # In dual-hand mode, we still output the same unified format
-            # but internally combine inputs from left (position) and right (orientation) devices
             return {
                 "dtype": "float32",
-                "shape": (7,),
-                "names": {
-                    "x": 0,        # from left device (if enabled)
-                    "y": 1,        # from left device (if enabled) 
-                    "z": 2,        # from left device (if enabled)
-                    "roll": 3,     # from right device (if enabled)
-                    "pitch": 4,    # from right device (if enabled)
-                    "yaw": 5,      # from right device (if enabled)
-                    "gripper_pos": 6,  # from either device (buttons combined)
-                },
+                "shape": (10,),
+                "names": names,
                 "_mode": "dual_hand",
                 "_left_axes": self.config.left_device.enabled_axes,
                 "_right_axes": self.config.right_device.enabled_axes,
             }
-        else:
-            return {
-                "dtype": "float32",
-                "shape": (7,),
-                "names": {
-                    "x": 0,
-                    "y": 1,
-                    "z": 2,
-                    "roll": 3,
-                    "pitch": 4,
-                    "yaw": 5,
-                    "gripper_pos": 6,
-                },
-                "_mode": "single_device",
-            }
+        return {
+            "dtype": "float32",
+            "shape": (10,),
+            "names": names,
+            "_mode": "single_device",
+        }
 
     @property
     def feedback_features(self) -> dict[str, type]:
@@ -265,13 +259,17 @@ class SpacemouseTeleop(Teleoperator):
         return np.mean(np.array(list(self._motion_queue.queue)), axis=0)
 
     def get_action(self) -> dict[str, Any]:
-        """
-        Get the current target pose from the Spacemouse.
+        """Get the current target pose in Cartesian 6D-rotation schema.
 
-        Returns a dictionary with absolute EEF pose (matching ARX5 SDK format):
-        - x, y, z: absolute EEF position (meters)
-        - roll, pitch, yaw: absolute EEF orientation (radians)
-        - gripper_pos: absolute gripper position (meters)
+        The 3-DoF SpaceMouse stick is integrated as a velocity command in the
+        intuitive Euler space (roll/pitch/yaw), but the **output** is converted
+        to the same schema used by Flexiv RT, Elite CS66, and Pico4 teleop:
+
+            {tcp.x, tcp.y, tcp.z, tcp.r1..tcp.r6, gripper.pos}
+
+        ``tcp.r1..r3`` and ``tcp.r4..r6`` are the first and second columns of
+        the rotation matrix respectively (Zhou et al., matches
+        ``quaternion_to_rotation_6d`` in lerobot.utils.robot_utils).
         """
         if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
@@ -280,72 +278,71 @@ class SpacemouseTeleop(Teleoperator):
         self._spacemouse.poll()
 
         # Use fixed control_dt for consistent velocity scaling
-        # This should match the external control loop period (e.g., 1/fps)
         dt = self.config.control_dt
 
-        # Get filtered motion state (uses cached data from poll())
         state = self._get_filtered_state()  # (6,) normalized [-1, 1]
 
-        # Get button states (uses cached data from poll())
-        # Use device-aware methods that handle different button layouts
         button_left = self._spacemouse.is_left_button_pressed()
         button_right = self._spacemouse.is_right_button_pressed()
 
-        # Compute gripper command based on buttons
         if self.config.swap_gripper_buttons:
             button_open, button_close = button_left, button_right
         else:
             button_open, button_close = button_right, button_left
 
         if button_open and not button_close:
-            gripper_cmd = 1  # Open
+            gripper_cmd = 1
         elif button_close and not button_open:
-            gripper_cmd = -1  # Close
+            gripper_cmd = -1
         else:
-            gripper_cmd = 0  # Stay
+            gripper_cmd = 0
 
-        # Update target pose with increments, using device-specific sensitivities in multi-device mode
+        # Integrate translation + Euler orientation in the internal accumulator.
         if self.config.multi_device_mode:
-            # Apply sensitivities based on which device controls each axis
-            for i in range(3):  # Position axes (x, y, z)
+            for i in range(3):
                 if self.config.left_device.enabled_axes[i]:
                     self._target_pose_6d[i] += state[i] * self.config.left_device.pos_sensitivity * dt
                 elif self.config.right_device.enabled_axes[i]:
                     self._target_pose_6d[i] += state[i] * self.config.right_device.pos_sensitivity * dt
-            
-            for i in range(3, 6):  # Orientation axes (roll, pitch, yaw)
+            for i in range(3, 6):
                 if self.config.left_device.enabled_axes[i]:
                     self._target_pose_6d[i] += state[i] * self.config.left_device.ori_sensitivity * dt
                 elif self.config.right_device.enabled_axes[i]:
                     self._target_pose_6d[i] += state[i] * self.config.right_device.ori_sensitivity * dt
+            gripper_speed = max(
+                self.config.left_device.gripper_speed, self.config.right_device.gripper_speed
+            )
         else:
-            # Single device mode (original behavior)
             self._target_pose_6d[:3] += state[:3] * self.config.pos_sensitivity * dt
             self._target_pose_6d[3:] += state[3:] * self.config.ori_sensitivity * dt
-
-        # Update gripper position with clamping
-        if self.config.multi_device_mode:
-            # Use gripper speed from whichever device has buttons pressed (or default)
-            gripper_speed = max(self.config.left_device.gripper_speed, self.config.right_device.gripper_speed)
-        else:
             gripper_speed = self.config.gripper_speed
-            
+
         self._target_gripper_pos += gripper_cmd * gripper_speed * dt
         self._target_gripper_pos = np.clip(self._target_gripper_pos, 0, self.config.gripper_width)
 
-        # Check if any input is active
         motion_active = np.any(np.abs(state) > 0.01)
         self._enabled = motion_active or button_left or button_right
 
-        # Return absolute pose dict
+        # Convert internal Euler accumulator -> output 6D rotation schema.
+        quat = euler_to_quaternion(
+            float(self._target_pose_6d[3]),
+            float(self._target_pose_6d[4]),
+            float(self._target_pose_6d[5]),
+        )
+        quat = normalize_quaternion(quat, input_format="wxyz")
+        r6d = quaternion_to_rotation_6d(float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3]))
+
         return {
-            "x": self._target_pose_6d[0],
-            "y": self._target_pose_6d[1],
-            "z": self._target_pose_6d[2],
-            "roll": self._target_pose_6d[3],
-            "pitch": self._target_pose_6d[4],
-            "yaw": self._target_pose_6d[5],
-            "gripper_pos": self._target_gripper_pos,
+            "tcp.x": float(self._target_pose_6d[0]),
+            "tcp.y": float(self._target_pose_6d[1]),
+            "tcp.z": float(self._target_pose_6d[2]),
+            "tcp.r1": float(r6d[0]),
+            "tcp.r2": float(r6d[1]),
+            "tcp.r3": float(r6d[2]),
+            "tcp.r4": float(r6d[3]),
+            "tcp.r5": float(r6d[4]),
+            "tcp.r6": float(r6d[5]),
+            "gripper.pos": float(self._target_gripper_pos),
         }
 
     def get_target_pose_array(self) -> tuple[np.ndarray, float]:
@@ -435,45 +432,6 @@ class SpacemouseTeleop(Teleoperator):
 
         self._is_connected = False
         self.logger.info(f"{self} disconnected.")
-
-    def convert_to_flexiv_action(self, spacemouse_action: dict[str, Any]) -> dict[str, Any]:
-        """Convert spacemouse action (Euler angles) to Flexiv Rizon4 action (6D rotation).
-
-        This matches the behavior of spacemouse_teleop.py example:
-        - Spacemouse maintains absolute pose in Euler angles [x, y, z, roll, pitch, yaw]
-        - Convert to 6D rotation format [x, y, z, r1-r6] for Flexiv robot
-
-        Args:
-            spacemouse_action: Dictionary with keys {x, y, z, roll, pitch, yaw, gripper_pos}
-        Returns:
-            Dictionary with keys {tcp.x, tcp.y, tcp.z, tcp.r1-r6, gripper.pos}
-        """
-        # Convert Euler angles to quaternion first
-        quat = euler_to_quaternion(
-            spacemouse_action["roll"],
-            spacemouse_action["pitch"],
-            spacemouse_action["yaw"],
-        )  # Returns np.ndarray [qw, qx, qy, qz]
-
-        # Normalize quaternion to ensure unit length
-        quat = normalize_quaternion(quat, input_format="wxyz")
-
-        # Convert quaternion to 6D rotation representation
-        r6d = quaternion_to_rotation_6d(quat[0], quat[1], quat[2], quat[3])
-
-        # Map to Flexiv action format with 6D rotation
-        return {
-            "tcp.x": spacemouse_action["x"],
-            "tcp.y": spacemouse_action["y"],
-            "tcp.z": spacemouse_action["z"],
-            "tcp.r1": r6d[0],
-            "tcp.r2": r6d[1],
-            "tcp.r3": r6d[2],
-            "tcp.r4": r6d[3],
-            "tcp.r5": r6d[4],
-            "tcp.r6": r6d[5],
-            "gripper.pos": spacemouse_action["gripper_pos"],
-        }
 
     def __del__(self):
         """Cleanup on deletion."""

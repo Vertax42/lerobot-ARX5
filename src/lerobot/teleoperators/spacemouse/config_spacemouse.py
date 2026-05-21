@@ -25,6 +25,10 @@ class DeviceConfig:
     """Configuration for a single SpaceMouse device."""
     device_name: Optional[str] = None  # Specific device name, None for auto-detect
     device_index: int = 0  # Device index when multiple same devices
+    # SpaceMouse outputs Cartesian targets in the 6D-rotation schema
+    # (tcp.x/y/z + tcp.r1..r6 + gripper.pos). Internally the integrator still
+    # accumulates roll/pitch/yaw (Euler) because that's what's intuitive at the
+    # stick; the conversion happens once per get_action() call.
     pos_sensitivity: float = 1.0  # Position sensitivity multiplier (m/s at max deflection)
     ori_sensitivity: float = 1.0  # Orientation sensitivity multiplier (rad/s at max deflection)
     gripper_speed: float = 1.0  # Gripper speed
