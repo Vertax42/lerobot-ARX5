@@ -692,8 +692,14 @@ class EliteCS66(Robot):
         Emits two records per send_action:
           1. ``elite-trace`` (DEBUG) — full target / current / delta dump on every
              call; goes only to the file sink.
-          2. ``elite-trace-warn`` (WARN) — promoted when the per-step linear or
-             angular delta exceeds the configured thresholds; visible on console.
+          2. ``elite-trace-warn`` (WARN) — promoted when the per-step delta
+             *between consecutive sent targets* (vs_last) exceeds the
+             configured thresholds. We deliberately do NOT alarm on the
+             delta against RTSI's reported current pose: RTSI's rotvec
+             encoding is unstable near orientation singularities and can
+             flip 2π·axis between consecutive ticks without the robot
+             physically moving, which generates a constant stream of
+             false positives. ``vs_last`` is host-side-only and stable.
         """
         if not self.config.trace_servoj:
             return
@@ -737,12 +743,16 @@ class EliteCS66(Robot):
         )
         self.logger.debug(msg)
 
+        # Alarm on host-side jumps only (vs_last). vs_cur deltas can be huge
+        # near orientation singularities purely from RTSI's rotvec axis-sign
+        # noise; alarming on that drowns the log in false warnings while the
+        # robot is in fact tracking smoothly.
         if (
             self.config.trace_translation_threshold > 0
-            and d_lin_vs_current > self.config.trace_translation_threshold
+            and d_lin_vs_last > self.config.trace_translation_threshold
         ) or (
             self.config.trace_rotation_threshold > 0
-            and d_ang_vs_current > self.config.trace_rotation_threshold
+            and d_ang_vs_last > self.config.trace_rotation_threshold
         ):
             self.logger.warn(f"LARGE STEP {msg}")
 
