@@ -199,6 +199,23 @@ class BiFlexivRizon4RTConfig(RobotConfig):
 
         # ── Apply preset positions and device identifiers based on mounting type ──
         _PRESETS = {
+            "forward-04": {
+                "left_sn": "Rizon4-063774",
+                "right_sn": "Rizon4R-062090",
+                "left_gripper_sn": "000001",
+                "right_gripper_sn": "000002",
+                "left_start": [86.49, 68.19, 23.81, 109.42, -0.84, 89.45, 1.14],
+                "right_start": [86.22, 69.05, 23.55, 109.83, -0.65, 89.22, 1.39],
+                "left_home": [86.49, 68.19, 23.81, 109.42, -0.84, 89.45, 1.14],
+                "right_home": [86.22, 69.05, 23.55, 109.83, -0.65, 89.22, 1.39],
+                "head_camera_sn": "344522070461",
+                "left_wrist_camera_sn": "XC000001",
+                "right_wrist_camera_sn": "XC000002",
+                "left_tactile_camera_sn_0": "OG000863",
+                "left_tactile_camera_sn_1": "OG000864",
+                "right_tactile_camera_sn_0": "OG000861",
+                "right_tactile_camera_sn_1": "OG000862",
+            },
             "forward": {
                 "left_sn": "Rizon4s-063458",
                 "right_sn": "Rizon4s-063670",
