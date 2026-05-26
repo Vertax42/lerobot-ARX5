@@ -146,6 +146,15 @@ class Pico4TrackerReader:
         poll_hz: float = TRACKER_POLL_HZ,
         logger_name: str | None = None,
     ):
+        """Init does NOT touch the network — call ``connect()`` for that.
+
+        Pass ``current_tcp_pose_quat`` to ``connect()`` to enable
+        UMI-style frame alignment: the first valid tracker pose is
+        snapshotted at connect time and a rigid transform is computed so
+        all subsequent ``get_pose_ee()`` / ``get_action()`` outputs are
+        in the same frame as ``current_tcp_pose_quat`` (typically the
+        deployment robot's base frame). Default (no arg) emits the raw
+        xrt-native frame, matching the historical behaviour."""
         self.tracker_sn = tracker_sn
         self.tracker_to_ee_pos = np.asarray(tracker_to_ee_pos, dtype=np.float64)
         self.tracker_to_ee_quat = np.asarray(tracker_to_ee_quat, dtype=np.float64)
@@ -171,10 +180,19 @@ class Pico4TrackerReader:
         # Cached state, guarded by _pose_lock and produced by _poller_thread.
         self._pose_lock = threading.Lock()
         self._latest_raw_wxyz: np.ndarray | None = None   # [x,y,z,qw,qx,qy,qz]
-        self._latest_ee_wxyz: np.ndarray | None = None    # [x,y,z,qw,qx,qy,qz] after rigid + hemisphere
+        self._latest_ee_wxyz: np.ndarray | None = None    # [x,y,z,qw,qx,qy,qz] after rigid + (optional align) + hemisphere
         self._latest_ts: float | None = None              # time.monotonic() of latest valid pose
         self._stale_warned: bool = False                  # gate stale-pose warning to once per drop-out
         self._missing_warned_at: float = 0.0              # throttle missing-SN warning
+
+        # UMI-style frame alignment state. _ee_init_matrix is set by
+        # connect() when the caller passes current_tcp_pose_quat;
+        # _align_matrix is computed lazily by the poller on the first
+        # valid frame so all subsequent poses land in the caller's frame.
+        # Both are read-only after computation (poller writes once,
+        # consumers read under _pose_lock).
+        self._ee_init_matrix: np.ndarray | None = None
+        self._align_matrix: np.ndarray | None = None
 
         # Poller thread.
         self._poller_thread: threading.Thread | None = None
@@ -184,9 +202,25 @@ class Pico4TrackerReader:
     def is_connected(self) -> bool:
         return self._is_connected
 
-    def connect(self) -> None:
+    def connect(
+        self,
+        current_tcp_pose_quat: np.ndarray | list[float] | None = None,
+    ) -> None:
         """Initialise the SDK, pin the requested tracker, and start the
         background poll thread.
+
+        Args:
+            current_tcp_pose_quat: Optional 7-vector
+                ``[x, y, z, qw, qx, qy, qz]`` of the robot's TCP pose at
+                the moment the operator holds the handheld gripper in
+                its "init" stance. When provided, the poller snapshots
+                the first valid tracker pose and computes a rigid
+                alignment transform so all subsequent
+                ``get_pose_ee()`` / ``get_action()`` outputs are in the
+                same frame as this argument (mirrors xense_flare /
+                vive_tracker's UMI behaviour). When omitted, the raw
+                xrt-native frame is emitted (drop-in compatible with
+                pre-Phase-C callers).
 
         Raises:
             DeviceAlreadyConnectedError: if already connected.
@@ -198,6 +232,21 @@ class Pico4TrackerReader:
         """
         if self._is_connected:
             raise DeviceAlreadyConnectedError("Pico4TrackerReader already connected")
+
+        if current_tcp_pose_quat is not None:
+            ee_init = np.asarray(current_tcp_pose_quat, dtype=np.float64)
+            if ee_init.shape != (7,):
+                raise ValueError(
+                    f"current_tcp_pose_quat must be shape (7,) [x,y,z,qw,qx,qy,qz], "
+                    f"got {ee_init.shape}"
+                )
+            self._ee_init_matrix = quaternion_to_matrix(ee_init, input_format="wxyz")
+            self.logger.info(
+                f"UMI alignment requested: target init pose = {ee_init.tolist()}. "
+                "T_align will be computed on the poller's first valid frame."
+            )
+        else:
+            self._ee_init_matrix = None
 
         with Pico4TrackerReader._init_lock:
             if not Pico4TrackerReader._xrt_initialized:
@@ -311,6 +360,8 @@ class Pico4TrackerReader:
             self._latest_raw_wxyz = None
             self._latest_ee_wxyz = None
             self._latest_ts = None
+            self._align_matrix = None
+        self._ee_init_matrix = None
         self.logger.info("Pico4TrackerReader disconnected (xrt left open for other subscribers).")
 
     # ---- Background poller --------------------------------------------------
@@ -360,10 +411,26 @@ class Pico4TrackerReader:
             # Apply tracker→EE rigid transform.
             t_world_tracker = quaternion_to_matrix(raw_wxyz, input_format="wxyz")
             t_world_ee = t_world_tracker @ self._tracker_to_ee_matrix
+
+            # UMI alignment: snapshot the first valid pose so all
+            # subsequent reports are in the caller's frame. Matches
+            # vive_tracker.py:316-324 exactly:
+            #   T_align = T_ee_init @ inv(T_vive_init @ T_vive_to_ee)
+            #   T_world_ee_aligned = T_align @ T_world_ee_raw
+            if self._ee_init_matrix is not None and self._align_matrix is None:
+                self._align_matrix = self._ee_init_matrix @ np.linalg.inv(t_world_ee)
+                self.logger.info(
+                    "UMI alignment latched: subsequent poses are in the "
+                    "caller-supplied frame."
+                )
+            if self._align_matrix is not None:
+                t_world_ee = self._align_matrix @ t_world_ee
+
             ee_pose = matrix_to_pose7d(t_world_ee, output_format="wxyz")
 
             # Hemisphere continuity — applied here (sequential), so even
-            # slow consumers see no sign flips.
+            # slow consumers see no sign flips. Runs AFTER alignment so
+            # any sign flip introduced by the align matrix is corrected.
             if self.hemisphere_fix and prev_ee_quat is not None:
                 q_new = ee_pose[3:7]
                 if float(np.dot(q_new, prev_ee_quat)) < 0.0:

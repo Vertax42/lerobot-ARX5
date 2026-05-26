@@ -90,6 +90,23 @@ class TaccapGripperConfig(RobotConfig):
     tracker_wait_timeout: float = 10.0
     """Seconds to wait for the first valid tracker pose at connect time."""
 
+    # ---- UMI-style init-pose alignment (reserved, off by default) --------
+    enable_init_pose_alignment: bool = False
+    """If True, snapshot the first valid tracker pose at connect time
+    and compute a rigid transform so all subsequent recorded poses are
+    in the same frame as ``init_tcp_pose`` (typically the deployment
+    robot's base frame at the home configuration). Mirrors
+    ``xense_flare`` + ``vive_tracker``'s UMI behaviour. Off by default
+    pending live verification on real Flexiv hardware."""
+
+    init_tcp_pose: tuple[float, float, float, float, float, float, float] = (
+        0.693307, -0.114902, 0.14589, 0.004567, 0.003238, 0.999984, 0.001246,
+    )
+    """Robot TCP pose at the operator's "init" stance, as
+    ``[x, y, z, qw, qx, qy, qz]``. Default is Flexiv Rizon4's home
+    pose (same value xense_flare uses). Only consumed when
+    ``enable_init_pose_alignment`` is True."""
+
     # ---- Cameras (tactile + extras) --------------------------------------
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
     """Camera configs keyed by feature name. Typical entries for the

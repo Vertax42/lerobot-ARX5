@@ -223,8 +223,19 @@ class TaccapGripper(Robot):
                 device_wait_timeout=self.config.tracker_wait_timeout,
                 logger_name=self.config.id or "robot",
             )
-            self._tracker.connect()
-            self.logger.info("  ✅ Pico4 tracker connected")
+            init_pose = (
+                np.asarray(self.config.init_tcp_pose, dtype=np.float64)
+                if self.config.enable_init_pose_alignment
+                else None
+            )
+            self._tracker.connect(current_tcp_pose_quat=init_pose)
+            if init_pose is not None:
+                self.logger.info(
+                    f"  ✅ Pico4 tracker connected with UMI alignment "
+                    f"(init_tcp_pose={init_pose.tolist()})"
+                )
+            else:
+                self.logger.info("  ✅ Pico4 tracker connected (raw xrt frame)")
 
         # 3. Cameras (tactile + wrist).
         for cam_name, cam in self.cameras.items():

@@ -25,10 +25,10 @@ through demonstrations.
 
 ## Coordinate frame
 
-Recorded pose is in the **raw xrt-native frame** — the same frame the
-controllers come out of (`xrt.get_*_controller_pose()`), since both
-endpoints share one PC Service. The world origin is the headset
-position the moment the Unity VR Client app started.
+Recorded pose is in the **raw xrt-native frame by default** — the
+same frame the controllers come out of (`xrt.get_*_controller_pose()`),
+since both endpoints share one PC Service. The world origin is the
+headset position the moment the Unity VR Client app started.
 
 This is **not** any robot's base frame. Downstream policies must
 reframe explicitly. If you want this device to act as a drop-in
@@ -43,6 +43,37 @@ verification on real hardware.**
 
 **Do not restart the Unity client between episodes** or all subsequent
 recordings will be in a different origin.
+
+### Opt-in: UMI-style init-pose alignment (reserved for Flexiv)
+
+Mirrors the `xense_flare` / `vive_tracker` UMI flow. When enabled,
+`Pico4TrackerReader.connect()` snapshots the first valid tracker pose
+and computes a rigid transform so all subsequent recorded poses are
+in the **same frame as `init_tcp_pose`** (typically the deployment
+robot's base frame at its home configuration).
+
+Config fields (default OFF — needs live Flexiv verification first):
+
+```python
+enable_init_pose_alignment: bool = False
+init_tcp_pose: tuple[float, ...] = (
+    0.693307, -0.114902, 0.14589,
+    0.004567, 0.003238, 0.999984, 0.001246,
+)  # Flexiv Rizon4 home pose, same default as xense_flare
+```
+
+Workflow when ready to enable:
+1. Place the gripper in its "init" stance — physically matching the
+   robot's home configuration on a workbench (same orientation +
+   roughly the height the robot's EE would reach).
+2. Set `--robot.enable_init_pose_alignment=true`.
+3. Run `lerobot-record`. The first valid tracker pose is latched and
+   alignment is computed automatically. From frame 0 the recorded
+   `tcp.x/y/z/r1-r6` are in the robot's base frame and can train
+   directly without post-processing.
+
+When alignment is off (default), records stay in the raw xrt frame
+and downstream tooling must reframe.
 
 ## Hardware bring-up sequence
 
