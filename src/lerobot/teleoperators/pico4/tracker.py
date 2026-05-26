@@ -21,18 +21,55 @@ The XenseVR service exposes up to three independent trackers. We pin to
 one tracker by serial number; if no SN is given we take whichever one
 the service reports at index 0.
 
-Coordinate frame: raw Pico4 native (X right, Y up, Z toward the headset
-operator at Unity-launch time). Callers that need a different frame
-should apply ``tracker_to_ee_pos`` / ``tracker_to_ee_quat`` (passed in
-at construction) for the rigid mount transform, or a separate world-
-frame transform downstream.
+Coordinate frame
+----------------
+The tracker pose this reader emits is in the **same xrt-native frame
+as the controller poses** that ``teleop_pico4.get_*_controller_pose()``
+returns — both come from the same XenseVR PC Service via the same
+pybind, just different endpoint calls (``get_motion_tracker_pose`` vs.
+``get_left/right_controller_pose``). So if you want this reader to act
+as a drop-in replacement for the controller in a teleop flow, apply
+the same coordinate transform that the controller-based teleop applies
+(e.g. ``teleop_pico4`` does a Pico→Flexiv remap at line ~447-513 of
+``teleop_pico4.py``; you'd reuse that on top of ``get_pose_raw()``).
 
-Concurrency: ``xrt.init()`` is a process-level singleton. This module
-guards it with a class-level flag so multiple readers (e.g. a robot
-and a teleop sharing the same process) won't double-init. We never
-call ``xrt.close()`` — relying on process exit — because tearing down
-the service while a second subscriber is still active crashes the
-first.
+For pure handheld data collection (taccap_gripper) there is no arm,
+so we don't remap — we emit the raw xrt frame and leave reframing to
+post-processing.
+
+The world origin is the headset position the moment the Unity VR app
+started — *not* when xrt.init() ran, *not* when you clicked Connect in
+Unity. Restarting Unity mid-session relocates the origin.
+
+The axis convention (handedness, Z direction) is documented inconsistently
+upstream — Pico docs say right-handed, SDK example notes left-handed.
+Treat this as **TBD pending live verification on real hardware**. The
+reader returns what xrt gives us, untouched apart from the configurable
+rigid mount transform (``tracker_to_ee_pos`` / ``tracker_to_ee_quat``).
+
+Concurrency
+-----------
+``xrt.init()`` is a process-level singleton. This module guards it with
+a class-level flag so multiple readers in one process share the same
+SDK instance. ``xrt.close()`` is intentionally NOT called on disconnect
+— if a second subscriber is still alive, closing tears it down too.
+Rely on process exit.
+
+Threading model — background poller
+-----------------------------------
+A daemon thread polls ``xrt.get_motion_tracker_pose()`` at the Pico
+tracker's native rate (~90 Hz) and caches the latest pose under a
+lock. ``get_pose_raw()`` / ``get_pose_ee()`` / ``get_action()`` read
+from this cache, never block the SDK. Benefits:
+
+  * A hung PC Service cannot stall the observation thread.
+  * The tracker runs at its native rate regardless of how slowly the
+    consumer polls (slower → simply gets the freshest sample).
+  * Hemisphere-continuity fix is applied in-thread sequentially, so
+    even very slow consumers see a continuous quaternion stream.
+
+Matches the architecture of the SDK's
+``examples/rerun_dual_with_tracker.py`` ``TrackerPoller``.
 """
 
 from __future__ import annotations
@@ -51,6 +88,21 @@ from lerobot.utils.robot_utils import (
     quaternion_to_rotation_6d,
 )
 
+# Pico tracker's native sampling rate. Polling slower wastes data;
+# faster just returns duplicates. SDK example uses the same constant.
+TRACKER_POLL_HZ = 90.0
+
+# How long to remember the last known pose after the tracker drops out
+# before logging a stale-pose warning. Below this threshold,
+# get_pose_ee() returns the cached pose silently; above, it warns once
+# and continues returning the stale value (callers can decide what to
+# do with it).
+STALE_WARN_THRESHOLD_S = 0.5
+
+# Minimum interval between "tracker SN X not visible" warnings to keep
+# the log readable when the service is up but a tracker is unplugged.
+MISSING_SN_WARN_INTERVAL_S = 5.0
+
 
 class Pico4TrackerReader:
     """Read a single Pico4 Ultra motion tracker via the XenseVR PC Service.
@@ -63,13 +115,14 @@ class Pico4TrackerReader:
         tracker_to_ee_quat: Rigid rotation from the tracker frame to the
             end-effector frame, [qw, qx, qy, qz]. Default: identity.
         device_wait_timeout: Seconds to wait for the service to report
-            non-zero tracker data after ``xrt.init()``. Raises
+            non-zero tracker data at connect time. Raises
             ``DeviceNotConnectedError`` on timeout.
         hemisphere_fix: If True, flip the sign of incoming quaternions
             so the dot product with the previous frame's quaternion is
             non-negative. Prevents discontinuities in the 6D rotation
             representation when the quaternion crosses a hemisphere
             boundary. See commit af2b2939.
+        poll_hz: Background poll rate. Default ``TRACKER_POLL_HZ`` (90).
         logger_name: Optional logger name suffix.
     """
 
@@ -90,6 +143,7 @@ class Pico4TrackerReader:
         tracker_to_ee_quat: tuple[float, float, float, float] | list[float] = (1.0, 0.0, 0.0, 0.0),
         device_wait_timeout: float = 10.0,
         hemisphere_fix: bool = True,
+        poll_hz: float = TRACKER_POLL_HZ,
         logger_name: str | None = None,
     ):
         self.tracker_sn = tracker_sn
@@ -97,6 +151,7 @@ class Pico4TrackerReader:
         self.tracker_to_ee_quat = np.asarray(tracker_to_ee_quat, dtype=np.float64)
         self.device_wait_timeout = float(device_wait_timeout)
         self.hemisphere_fix = bool(hemisphere_fix)
+        self._poll_period = 1.0 / max(1e-3, float(poll_hz))
 
         suffix = logger_name or (tracker_sn if tracker_sn else "auto")
         with Pico4TrackerReader._counter_lock:
@@ -112,14 +167,26 @@ class Pico4TrackerReader:
         self._is_connected: bool = False
         self._tracker_index: int | None = None
         self._resolved_sn: str | None = None
-        self._prev_quat_wxyz: np.ndarray | None = None  # for hemisphere continuity
+
+        # Cached state, guarded by _pose_lock and produced by _poller_thread.
+        self._pose_lock = threading.Lock()
+        self._latest_raw_wxyz: np.ndarray | None = None   # [x,y,z,qw,qx,qy,qz]
+        self._latest_ee_wxyz: np.ndarray | None = None    # [x,y,z,qw,qx,qy,qz] after rigid + hemisphere
+        self._latest_ts: float | None = None              # time.monotonic() of latest valid pose
+        self._stale_warned: bool = False                  # gate stale-pose warning to once per drop-out
+        self._missing_warned_at: float = 0.0              # throttle missing-SN warning
+
+        # Poller thread.
+        self._poller_thread: threading.Thread | None = None
+        self._stop_evt = threading.Event()
 
     @property
     def is_connected(self) -> bool:
         return self._is_connected
 
     def connect(self) -> None:
-        """Connect to the XenseVR service and pin the requested tracker.
+        """Initialise the SDK, pin the requested tracker, and start the
+        background poll thread.
 
         Raises:
             DeviceAlreadyConnectedError: if already connected.
@@ -165,25 +232,35 @@ class Pico4TrackerReader:
         while time.monotonic() < deadline:
             n_trackers = xrt.num_motion_data_available()
             if n_trackers > 0:
-                # Wait one more poll to make sure data is real, not just
-                # an enumeration flicker.
                 poses = xrt.get_motion_tracker_pose()
                 sns = xrt.get_motion_tracker_serial_numbers()
                 if poses and any(abs(v) > 1e-6 for v in poses[0][:3]):
                     self._resolve_tracker_index(poses, sns, n_trackers)
-                    self._is_connected = True
-                    self.logger.info(
-                        f"Pico4TrackerReader connected to tracker idx={self._tracker_index} "
-                        f"sn={self._resolved_sn!r} after {attempt + 1} polls."
-                    )
-                    return
+                    break
             time.sleep(0.1)
             attempt += 1
+        else:
+            raise DeviceNotConnectedError(
+                f"No Pico4 motion-tracker data after {self.device_wait_timeout:.1f}s. "
+                "Check: 1) the VR Client app is running on the Pico4 headset, "
+                "2) the PC service is up, 3) the tracker is powered on and paired."
+            )
 
-        raise DeviceNotConnectedError(
-            f"No Pico4 motion-tracker data after {self.device_wait_timeout:.1f}s. "
-            "Check: 1) the VR Client app is running on the Pico4 headset, "
-            "2) the PC service is up, 3) the tracker is powered on and paired."
+        # Spin up the poller. Use is_connected as the flag *before* the
+        # thread starts so it can run its first tick immediately without
+        # racing against connect()'s return.
+        self._is_connected = True
+        self._stop_evt.clear()
+        self._poller_thread = threading.Thread(
+            target=self._poller_loop,
+            name=f"pico4-tracker-poller-{self._resolved_sn or 'auto'}",
+            daemon=True,
+        )
+        self._poller_thread.start()
+        self.logger.info(
+            f"Pico4TrackerReader connected to tracker idx={self._tracker_index} "
+            f"sn={self._resolved_sn!r} after {attempt + 1} polls; "
+            f"poller started at {1.0 / self._poll_period:.0f} Hz."
         )
 
     def _resolve_tracker_index(
@@ -210,70 +287,162 @@ class Pico4TrackerReader:
         )
 
     def disconnect(self) -> None:
-        """Mark the reader disconnected.
+        """Stop the poller thread and mark the reader disconnected.
 
         NOTE: we deliberately do NOT call ``xrt.close()`` — the service
-        is a process-level singleton and other readers (e.g. a teleop
-        running in the same process) may still need it. The OS reclaims
-        the service connection at process exit.
+        is a process-level singleton and other readers in the same
+        process may still need it. The OS reclaims the service
+        connection at process exit.
         """
         if not self._is_connected:
             return
+
+        self._stop_evt.set()
+        if self._poller_thread is not None:
+            self._poller_thread.join(timeout=2.0)
+            if self._poller_thread.is_alive():
+                self.logger.warn("Poller thread did not exit within 2s.")
+            self._poller_thread = None
+
         self._is_connected = False
         self._tracker_index = None
         self._resolved_sn = None
-        self._prev_quat_wxyz = None
+        with self._pose_lock:
+            self._latest_raw_wxyz = None
+            self._latest_ee_wxyz = None
+            self._latest_ts = None
         self.logger.info("Pico4TrackerReader disconnected (xrt left open for other subscribers).")
 
-    def _raw_pose_xyzw(self) -> np.ndarray | None:
-        """Return the raw tracker pose [x, y, z, qx, qy, qz, qw] (xyzw)
-        from the SDK, or ``None`` if the tracker dropped out."""
+    # ---- Background poller --------------------------------------------------
+
+    def _poller_loop(self) -> None:
+        """Body of the background thread. Polls xrt at the requested rate
+        and updates the cached pose under the lock. Lifecycle is driven
+        by ``_stop_evt`` (set by ``disconnect()``)."""
         xrt = Pico4TrackerReader._xrt
-        n = xrt.num_motion_data_available()
-        if n == 0 or self._tracker_index is None or self._tracker_index >= n:
-            return None
-        poses = xrt.get_motion_tracker_pose()
-        if not poses or self._tracker_index >= len(poses):
-            return None
-        return np.asarray(poses[self._tracker_index], dtype=np.float64)
+        prev_ee_quat: np.ndarray | None = None
+
+        while not self._stop_evt.wait(self._poll_period):
+            try:
+                n = xrt.num_motion_data_available()
+            except Exception as e:  # pragma: no cover — defensive
+                self.logger.warn(f"num_motion_data_available failed: {e}")
+                continue
+
+            if n == 0:
+                self._maybe_warn_missing()
+                continue
+
+            try:
+                poses = xrt.get_motion_tracker_pose()
+                sns = xrt.get_motion_tracker_serial_numbers()
+            except Exception as e:  # pragma: no cover — defensive
+                self.logger.warn(f"tracker pose query failed: {e}")
+                continue
+
+            # The tracker index might have shifted if other trackers
+            # plugged/unplugged between connect and now. Re-resolve.
+            idx = self._resolve_current_index(sns, n)
+            if idx is None:
+                self._maybe_warn_missing()
+                continue
+            if idx >= len(poses):
+                continue
+
+            raw_xyzw = np.asarray(poses[idx], dtype=np.float64)
+            # Reorder xyzw → wxyz so downstream utilities (all wxyz) match.
+            raw_wxyz = np.array(
+                [raw_xyzw[0], raw_xyzw[1], raw_xyzw[2],
+                 raw_xyzw[6], raw_xyzw[3], raw_xyzw[4], raw_xyzw[5]],
+                dtype=np.float64,
+            )
+
+            # Apply tracker→EE rigid transform.
+            t_world_tracker = quaternion_to_matrix(raw_wxyz, input_format="wxyz")
+            t_world_ee = t_world_tracker @ self._tracker_to_ee_matrix
+            ee_pose = matrix_to_pose7d(t_world_ee, output_format="wxyz")
+
+            # Hemisphere continuity — applied here (sequential), so even
+            # slow consumers see no sign flips.
+            if self.hemisphere_fix and prev_ee_quat is not None:
+                q_new = ee_pose[3:7]
+                if float(np.dot(q_new, prev_ee_quat)) < 0.0:
+                    ee_pose[3:7] = -q_new
+            prev_ee_quat = ee_pose[3:7].copy()
+
+            with self._pose_lock:
+                self._latest_raw_wxyz = raw_wxyz
+                self._latest_ee_wxyz = ee_pose
+                self._latest_ts = time.monotonic()
+                self._stale_warned = False
+
+    def _resolve_current_index(self, sns: list, n: int) -> int | None:
+        """Locate the current index of our pinned tracker. Returns None
+        if it has dropped out."""
+        if self.tracker_sn is None:
+            # Anonymous: just keep using the same slot; if it shrunk to
+            # 0 trackers we already returned None above.
+            return self._tracker_index if (self._tracker_index or 0) < n else None
+        for idx in range(min(n, len(sns))):
+            sn = sns[idx]
+            if isinstance(sn, bytes):
+                sn = sn.decode()
+            if sn == self.tracker_sn:
+                if idx != self._tracker_index:
+                    self.logger.info(
+                        f"Tracker SN {self.tracker_sn!r} index shifted "
+                        f"{self._tracker_index} -> {idx}"
+                    )
+                    self._tracker_index = idx
+                return idx
+        return None
+
+    def _maybe_warn_missing(self) -> None:
+        """Log 'tracker SN not visible' at most every ``MISSING_SN_WARN_INTERVAL_S``."""
+        now = time.monotonic()
+        if now - self._missing_warned_at < MISSING_SN_WARN_INTERVAL_S:
+            return
+        self._missing_warned_at = now
+        sn = self.tracker_sn or "<index 0>"
+        self.logger.warn(
+            f"Tracker SN={sn!r} not currently visible to the PC Service. "
+            "Check that it is paired and powered on."
+        )
+
+    # ---- Public accessors (read from cache) --------------------------------
 
     def get_pose_raw(self) -> np.ndarray | None:
         """Raw Pico4 tracker pose in scalar-first (wxyz) convention.
 
-        Returns ``[x, y, z, qw, qx, qy, qz]`` or ``None`` if the tracker
-        dropped out this poll.
-        """
+        Returns ``[x, y, z, qw, qx, qy, qz]`` or ``None`` if the
+        tracker has dropped out and there is no cached value."""
         if not self._is_connected:
             raise DeviceNotConnectedError("Pico4TrackerReader is not connected")
-        raw = self._raw_pose_xyzw()
-        if raw is None:
-            return None
-        # Reorder xyzw → wxyz so downstream utilities (all wxyz) match.
-        return np.array(
-            [raw[0], raw[1], raw[2], raw[6], raw[3], raw[4], raw[5]],
-            dtype=np.float64,
-        )
+        with self._pose_lock:
+            if self._latest_raw_wxyz is None:
+                return None
+            return self._latest_raw_wxyz.copy()
 
     def get_pose_ee(self) -> np.ndarray | None:
-        """Pose of the end-effector frame, computed as
-        ``T_world_tracker @ T_tracker_ee`` and re-extracted to a
-        7-vector ``[x, y, z, qw, qx, qy, qz]``. Applies the hemisphere
-        continuity fix if enabled. Returns ``None`` if the tracker
-        dropped out."""
-        raw_wxyz = self.get_pose_raw()
-        if raw_wxyz is None:
-            return None
+        """Latest pose of the end-effector frame (rigid-transformed,
+        hemisphere-corrected) as ``[x, y, z, qw, qx, qy, qz]``.
 
-        t_world_tracker = quaternion_to_matrix(raw_wxyz, input_format="wxyz")
-        t_world_ee = t_world_tracker @ self._tracker_to_ee_matrix
-        ee_pose = matrix_to_pose7d(t_world_ee, output_format="wxyz")
-
-        if self.hemisphere_fix and self._prev_quat_wxyz is not None:
-            q_new = ee_pose[3:7]
-            if float(np.dot(q_new, self._prev_quat_wxyz)) < 0.0:
-                ee_pose[3:7] = -q_new
-        self._prev_quat_wxyz = ee_pose[3:7].copy()
-        return ee_pose
+        Logs a stale-pose warning once if the cached pose is older than
+        ``STALE_WARN_THRESHOLD_S`` (the consumer keeps getting the last
+        good value)."""
+        if not self._is_connected:
+            raise DeviceNotConnectedError("Pico4TrackerReader is not connected")
+        with self._pose_lock:
+            if self._latest_ee_wxyz is None:
+                return None
+            age = time.monotonic() - (self._latest_ts or 0.0)
+            if age > STALE_WARN_THRESHOLD_S and not self._stale_warned:
+                self._stale_warned = True
+                self.logger.warn(
+                    f"Pose stale by {age:.2f}s — tracker may have dropped out. "
+                    "Returning last-known pose."
+                )
+            return self._latest_ee_wxyz.copy()
 
     def get_action(self) -> dict[str, Any]:
         """Return the same 9-field dict that ``ViveTrackerTeleop.get_action()``
@@ -281,13 +450,10 @@ class Pico4TrackerReader:
 
         Keys: ``tcp.x``, ``tcp.y``, ``tcp.z``, ``tcp.r1``..``tcp.r6``.
 
-        If the tracker drops out, returns the last-known 6D rotation with
-        position zeroed — callers should treat this as a stale-pose hint
-        and log/warn appropriately.
-        """
+        If the tracker never produced a pose, returns an identity-rotation
+        zero pose so the observation schema stays well-formed."""
         ee_pose = self.get_pose_ee()
         if ee_pose is None:
-            self.logger.warn("Tracker dropped out; returning identity-rotation zero-pose.")
             return {
                 "tcp.x": 0.0,
                 "tcp.y": 0.0,
@@ -337,7 +503,7 @@ def _smoke_test() -> None:
                     f"ee xyz={ee[:3]} wxyz={ee[3:]}"
                 )
             else:
-                print(f"[{i:03d}] (tracker dropped out)")
+                print(f"[{i:03d}] (no pose yet)")
             time.sleep(0.1)
     finally:
         reader.disconnect()

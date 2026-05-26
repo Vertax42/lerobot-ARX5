@@ -25,14 +25,24 @@ through demonstrations.
 
 ## Coordinate frame
 
-Recorded pose is in **raw Pico4 native** frame (per the SDK example:
-**LEFT-handed Y-up**, X right, Y up, Z forward/in — despite the docs
-claiming right-handed). The world origin is the headset position the
-moment the Unity VR Client app started.
+Recorded pose is in the **raw xrt-native frame** — the same frame the
+controllers come out of (`xrt.get_*_controller_pose()`), since both
+endpoints share one PC Service. The world origin is the headset
+position the moment the Unity VR Client app started.
 
 This is **not** any robot's base frame. Downstream policies must
-reframe explicitly. **Do not restart the Unity client between
-episodes** or all subsequent recordings will be in a different origin.
+reframe explicitly. If you want this device to act as a drop-in
+replacement for the existing `teleop_pico4` controller flow, apply the
+same Pico→Flexiv coordinate remap that `teleop_pico4.py` does on
+controller poses.
+
+The axis convention (handedness, Z direction) is documented
+inconsistently upstream — Pico docs claim right-handed, the SDK's
+`rerun_dual_with_tracker.py` notes left-handed. **TBD pending live
+verification on real hardware.**
+
+**Do not restart the Unity client between episodes** or all subsequent
+recordings will be in a different origin.
 
 ## Hardware bring-up sequence
 
