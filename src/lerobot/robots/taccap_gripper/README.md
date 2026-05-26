@@ -14,8 +14,10 @@ Components:
 - **Pose:** Pico4 Ultra **independent motion tracker** mounted on top
   of the gripper. Reached via `xensevr_pc_service_sdk` and read by
   `lerobot.teleoperators.pico4.tracker.Pico4TrackerReader`.
-- **Cameras:** plain LeRobot `cameras/` framework — tactile via
-  `cameras/xense/` (by OG serial), wrist via `cameras/opencv/` (V4L2).
+- **Cameras:** plain LeRobot `cameras/` framework. The wrist UVC camera
+  is **auto-wired** via `GripperEndpoints.wrist_video` reported by the
+  SDK at `connect()` time — no need to hard-code `/dev/videoN`. Tactile
+  sensors come through `cameras/xense/` keyed by OG serial.
 
 The device is passive: `send_action()` is a no-op; the motor is never
 enabled. The operator drives the jaw mechanically and walks the device
@@ -78,17 +80,21 @@ the config (`tracker_to_ee_pos`, `tracker_to_ee_quat`).
 Verifies the robot stack independently of `lerobot-record`:
 
 ```bash
-# Gripper only:
+# Default: gripper + auto-wired wrist camera (V4L2 path from SDK).
 python -m lerobot.robots.taccap_gripper.taccap_gripper_example \
     --closed-rad <closed> --open-rad <open>
+
+# Gripper only, skip the wrist camera:
+python -m lerobot.robots.taccap_gripper.taccap_gripper_example \
+    --no-wrist-cam --closed-rad <closed> --open-rad <open>
 
 # + Pico4 tracker:
 python -m lerobot.robots.taccap_gripper.taccap_gripper_example \
     --tracker --closed-rad <closed> --open-rad <open>
 
-# + tactile + wrist cameras (default wrist on /dev/video0):
+# + tactile sensors (left + right OG):
 python -m lerobot.robots.taccap_gripper.taccap_gripper_example \
-    --tracker --cameras --closed-rad <closed> --open-rad <open>
+    --tracker --tactile --closed-rad <closed> --open-rad <open>
 ```
 
 The script prints 10 observation frames (scalar fields + image
@@ -108,12 +114,17 @@ lerobot-record \
     --robot.id=right \
     --robot.gripper_closed_rad=<closed> \
     --robot.gripper_open_rad=<open> \
-    --robot.cameras='{wrist_cam: {type: opencv, index_or_path: /dev/video0, width: 640, height: 480, fps: 30}, tactile_left: {type: xense, serial_number: OG000XXX, fps: 30, width: 400, height: 700}, tactile_right: {type: xense, serial_number: OG000YYY, fps: 30, width: 400, height: 700}}' \
+    --robot.cameras='{tactile_left: {type: xense, serial_number: OG000XXX, fps: 30, width: 400, height: 700}, tactile_right: {type: xense, serial_number: OG000YYY, fps: 30, width: 400, height: 700}}' \
     --dataset.repo_id=<your_org>/<your_dataset> \
     --dataset.num_episodes=1 \
     --dataset.episode_time_s=10 \
     --dataset.single_task='Pick up the object'
 ```
+
+The wrist camera is **not** listed in `--robot.cameras` — it is
+auto-wired by `enable_wrist_camera=True` (default). Override the
+defaults with `--robot.wrist_camera_width=…` / `_height` / `_fps` if
+needed, or set `--robot.enable_wrist_camera=false` to skip.
 
 The `xrt.init()` call is process-singleton-guarded inside
 `Pico4TrackerReader`, so any future re-use within the same process is
