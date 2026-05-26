@@ -34,6 +34,7 @@ from typing import Any
 
 import numpy as np
 
+from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
 from lerobot.cameras.utils import make_cameras_from_configs
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import get_logger
@@ -131,6 +132,13 @@ class TaccapGripper(Robot):
         for cam_name, cam_cfg in self.config.cameras.items():
             features[cam_name] = (cam_cfg.height, cam_cfg.width, 3)
 
+        if self.config.enable_wrist_camera:
+            features["wrist_cam"] = (
+                self.config.wrist_camera_height,
+                self.config.wrist_camera_width,
+                3,
+            )
+
         return features
 
     @cached_property
@@ -180,14 +188,22 @@ class TaccapGripper(Robot):
             self._endpoints = self._discover_gripper()
             self.logger.info(
                 f"  TacCap-Gripper: side={self._endpoints.side} "
-                f"mcu={self._endpoints.mcu_serial}"
+                f"mcu={self._endpoints.mcu_serial} "
+                f"fw_sn={getattr(self._endpoints, 'firmware_sn', '?')!r}"
             )
             self.logger.info(
                 f"  Tactile serials: left={self._endpoints.tactile_left_serial!r} "
                 f"right={self._endpoints.tactile_right_serial!r}"
             )
+            self.logger.info(f"  Wrist video path: {self._endpoints.wrist_video!r}")
             self._gripper = LeaderGripper.open()
             self.logger.info("  ✅ LeaderGripper attached (read-only — motor stays disabled)")
+
+        # Auto-wire the wrist camera using the V4L2 path the SDK reports.
+        # We discover endpoints independently if the gripper itself is
+        # disabled — wrist camera is still part of the same hardware unit.
+        if self.config.enable_wrist_camera:
+            self._attach_wrist_camera()
 
         # 2. Pico4 tracker.
         if self.config.enable_tracker:
@@ -210,6 +226,40 @@ class TaccapGripper(Robot):
 
         self._is_connected = True
         self.logger.info(f"✅ {self} connected.")
+
+    def _attach_wrist_camera(self) -> None:
+        """Build an ``OpenCVCameraConfig`` pointed at ``endpoints.wrist_video``
+        and add it to ``self.cameras`` under key ``wrist_cam``.
+
+        Discovers endpoints on demand if ``enable_gripper`` was False, so
+        the wrist camera can be used standalone."""
+        if self._endpoints is None:
+            self._endpoints = self._discover_gripper()
+            self.logger.info(
+                f"  TacCap-Gripper endpoints (wrist-only): "
+                f"side={self._endpoints.side} mcu={self._endpoints.mcu_serial}"
+            )
+
+        wrist_path = self._endpoints.wrist_video
+        if not wrist_path:
+            raise RuntimeError(
+                "GripperEndpoints.wrist_video is empty — the SDK could not "
+                "resolve a V4L2 path for the wrist camera on this unit."
+            )
+
+        cfg = OpenCVCameraConfig(
+            index_or_path=wrist_path,
+            width=self.config.wrist_camera_width,
+            height=self.config.wrist_camera_height,
+            fps=self.config.wrist_camera_fps,
+        )
+        wrist_dict = make_cameras_from_configs({"wrist_cam": cfg})
+        self.cameras.update(wrist_dict)
+        self.logger.info(
+            f"  ✅ Wrist camera auto-wired at {wrist_path!r} "
+            f"({self.config.wrist_camera_width}x{self.config.wrist_camera_height} "
+            f"@ {self.config.wrist_camera_fps}fps)"
+        )
 
     def _discover_gripper(self):
         """Locate exactly one TacCap-Gripper, optionally filtered by MCU serial."""

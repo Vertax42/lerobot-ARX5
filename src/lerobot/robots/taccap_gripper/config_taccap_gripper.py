@@ -86,14 +86,24 @@ class TaccapGripperConfig(RobotConfig):
     tracker_wait_timeout: float = 10.0
     """Seconds to wait for the first valid tracker pose at connect time."""
 
-    # ---- Cameras (tactile + wrist) ---------------------------------------
+    # ---- Cameras (tactile + extras) --------------------------------------
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
-    """Camera configs keyed by feature name. For the TacCap-Gripper:
+    """Camera configs keyed by feature name. Typical entries for the
+    TacCap-Gripper:
     - tactile: ``XenseTactileCameraConfig`` with the OG serials reported by
-      ``find_one()`` (e.g. ``tactile_left_serial``, ``tactile_right_serial``).
-    - wrist: ``OpenCVCameraConfig`` pointing at the V4L2 UVC device that
-      enumerates as the wrist camera.
-    """
+      ``find_one()`` (``tactile_left_serial``, ``tactile_right_serial``).
+
+    The wrist UVC camera does NOT belong here — it is auto-wired via
+    ``enable_wrist_camera`` (below) using the V4L2 path the SDK reports."""
+
+    # ---- Wrist camera (auto-discovered via GripperEndpoints.wrist_video) -
+    enable_wrist_camera: bool = True
+    """Auto-wire the wrist UVC camera using ``GripperEndpoints.wrist_video``.
+    Surfaced as observation key ``wrist_cam``. Set False to suppress."""
+
+    wrist_camera_width: int = 640
+    wrist_camera_height: int = 480
+    wrist_camera_fps: int = 30
 
     def __post_init__(self):
         super().__post_init__()
@@ -101,4 +111,9 @@ class TaccapGripperConfig(RobotConfig):
             raise ValueError(
                 "gripper_open_rad must differ from gripper_closed_rad. "
                 "Run calibrate_gripper_range.py and copy the two endpoints."
+            )
+        if self.enable_wrist_camera and "wrist_cam" in self.cameras:
+            raise ValueError(
+                "wrist_cam is auto-wired by enable_wrist_camera=True; "
+                "remove it from `cameras` or set enable_wrist_camera=False."
             )

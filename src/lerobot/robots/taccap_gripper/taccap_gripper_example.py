@@ -12,19 +12,24 @@
 Standalone smoke test for TaccapGripper.
 
 Usage:
-    # Gripper only (minimal — verifies LeaderGripper.open() + encoder).
+    # Gripper only (encoder readings, no tracker, no cameras).
+    python -m lerobot.robots.taccap_gripper.taccap_gripper_example \\
+        --no-wrist-cam
+
+    # Default: gripper + auto-wired wrist camera (V4L2 path from SDK).
     python -m lerobot.robots.taccap_gripper.taccap_gripper_example
 
     # Add Pico4 tracker.
     python -m lerobot.robots.taccap_gripper.taccap_gripper_example --tracker
 
-    # Add cameras (tactile + wrist) — paths must be valid for your rig.
+    # Add tactile sensors too (uses SDK-reported OG serials).
     python -m lerobot.robots.taccap_gripper.taccap_gripper_example \\
-        --tracker --cameras
+        --tracker --tactile
 
-This script does NOT enable the gripper motor. It only reads the
-encoder, the optional tracker, and the optional cameras, prints 10
-observations, then disconnects.
+The wrist camera path is auto-discovered from
+``GripperEndpoints.wrist_video`` — no need to hard-code ``/dev/videoN``.
+The script prints 10 observation frames (scalar fields + image shapes)
+then disconnects.
 """
 
 from __future__ import annotations
@@ -36,35 +41,14 @@ import time
 from lerobot.robots.taccap_gripper import TaccapGripper, TaccapGripperConfig
 
 
-def _build_camera_configs() -> dict:
-    """Build a default tactile-left/right + wrist camera config trio.
-
-    Edit serials and the wrist V4L2 path to match your hardware before
-    running with ``--cameras``. We pull tactile serials from the live
-    gripper inside ``main()`` so the user doesn't have to hard-code them
-    twice."""
-    from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
-
-    return {
-        "wrist_cam": OpenCVCameraConfig(
-            index_or_path="/dev/video0",
-            width=640,
-            height=480,
-            fps=30,
-        ),
-    }
-
-
-def _augment_with_tactile(
-    cameras: dict,
-    endpoints,
-) -> dict:
-    """Add tactile camera configs using the SDK-reported OG serials."""
+def _tactile_configs(endpoints) -> dict:
+    """Build XenseTactileCameraConfig entries from the live SDK endpoints."""
     from lerobot.cameras.xense.configuration_xense import (
         XenseOutputType,
         XenseTactileCameraConfig,
     )
 
+    cameras: dict = {}
     for key, sn in (
         ("tactile_left", endpoints.tactile_left_serial),
         ("tactile_right", endpoints.tactile_right_serial),
@@ -89,8 +73,10 @@ def main() -> None:
                         help="Enable the Pico4 motion tracker.")
     parser.add_argument("--tracker-sn", default=None,
                         help="Pico4 tracker serial (None = first available).")
-    parser.add_argument("--cameras", action="store_true",
-                        help="Enable wrist + tactile cameras.")
+    parser.add_argument("--tactile", action="store_true",
+                        help="Enable tactile cameras (left + right OG sensors).")
+    parser.add_argument("--no-wrist-cam", action="store_true",
+                        help="Skip the auto-wired wrist UVC camera.")
     parser.add_argument("--imu", action="store_true",
                         help="Enable IMU readings.")
     parser.add_argument("--closed-rad", type=float, default=0.0,
@@ -101,7 +87,19 @@ def main() -> None:
                         help="How many observation frames to print.")
     args = parser.parse_args()
 
-    cameras = _build_camera_configs() if args.cameras else {}
+    cameras: dict = {}
+    if args.tactile:
+        # Tactile serials need the live SDK; do a quick discovery up front.
+        from xense.taccap import find_one, scan_grippers
+
+        if args.mcu_serial is None:
+            eps = find_one()
+        else:
+            matches = [e for e in scan_grippers() if e.mcu_serial == args.mcu_serial]
+            if not matches:
+                raise SystemExit(f"No gripper with MCU={args.mcu_serial}")
+            eps = matches[0]
+        cameras = _tactile_configs(eps)
 
     cfg = TaccapGripperConfig(
         mcu_serial=args.mcu_serial,
@@ -111,53 +109,21 @@ def main() -> None:
         gripper_open_rad=args.open_rad,
         enable_tracker=args.tracker,
         tracker_sn=args.tracker_sn,
+        enable_wrist_camera=not args.no_wrist_cam,
         cameras=cameras,
     )
 
     robot = TaccapGripper(cfg)
 
-    # If we want tactile cameras, we need the SDK-reported serials AFTER
-    # the SDK has discovered the gripper. So: connect with no tactile
-    # cams first, augment the config with the live serials, then
-    # reinstate the camera dict before continuing. Cleaner than asking
-    # the operator to type two serials by hand.
-    if args.cameras:
-        print("[setup] partial connect to discover tactile serials...")
-        # Cheat: build a temporary endpoints-only config to grab serials.
-        from xense.taccap import find_one
-
-        eps = find_one() if args.mcu_serial is None else None
-        if eps is None:
-            from xense.taccap import scan_grippers
-            matches = [e for e in scan_grippers() if e.mcu_serial == args.mcu_serial]
-            if not matches:
-                raise SystemExit(f"No gripper with MCU={args.mcu_serial}")
-            eps = matches[0]
-        cameras = _augment_with_tactile(cameras, eps)
-        # Re-build the config + robot with the augmented camera dict.
-        cfg = TaccapGripperConfig(
-            mcu_serial=args.mcu_serial,
-            enable_gripper=True,
-            enable_imu=args.imu,
-            gripper_closed_rad=args.closed_rad,
-            gripper_open_rad=args.open_rad,
-            enable_tracker=args.tracker,
-            tracker_sn=args.tracker_sn,
-            cameras=cameras,
-        )
-        robot = TaccapGripper(cfg)
-
-    print(f"[example] observation features:")
+    print("[example] observation features:")
     pprint.pprint(robot.observation_features)
-    print(f"[example] action features:")
+    print("[example] action features:")
     pprint.pprint(robot.action_features)
 
     robot.connect()
     try:
         for i in range(args.frames):
             obs = robot.get_observation()
-            # Print only the scalar fields per frame; image shapes are
-            # noisy and not very informative.
             scalars = {k: v for k, v in obs.items() if not hasattr(v, "shape")}
             shapes = {k: v.shape for k, v in obs.items() if hasattr(v, "shape")}
             print(f"[{i:02d}] {scalars}  +  {shapes}")
