@@ -26,8 +26,19 @@ Usage:
     python -m lerobot.robots.taccap_gripper.taccap_gripper_example \\
         --tracker --tactile
 
+    # Pin a specific gripper by firmware SN (use when multiple are plugged):
+    python -m lerobot.robots.taccap_gripper.taccap_gripper_example \\
+        --firmware-sn SN000003
+
 The wrist camera path is auto-discovered from
 ``GripperEndpoints.wrist_video`` — no need to hard-code ``/dev/videoN``.
+The jaw closed position is fixed at 0 rad by the SDK's
+``Encoder.set_zero()``; only the open angle (``--open-rad``, default
+1.7 for TC-GU-01) is configurable.
+
+Run the SDK's calibration once per device before using this script:
+    python /home/ubuntu/TacCap-Gripper/python/examples/calibrate.py <SN>
+
 The script prints 10 observation frames (scalar fields + image shapes)
 then disconnects.
 """
@@ -67,8 +78,8 @@ def _tactile_configs(endpoints) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mcu-serial", default=None,
-                        help="Pin to a specific TacCap-Gripper MCU serial.")
+    parser.add_argument("--firmware-sn", default=None,
+                        help="Pin to a TacCap-Gripper firmware SN (None = find_one).")
     parser.add_argument("--tracker", action="store_true",
                         help="Enable the Pico4 motion tracker.")
     parser.add_argument("--tracker-sn", default=None,
@@ -79,10 +90,8 @@ def main() -> None:
                         help="Skip the auto-wired wrist UVC camera.")
     parser.add_argument("--imu", action="store_true",
                         help="Enable IMU readings.")
-    parser.add_argument("--closed-rad", type=float, default=0.0,
-                        help="Encoder rad when jaw fully closed.")
-    parser.add_argument("--open-rad", type=float, default=1.5,
-                        help="Encoder rad when jaw fully open.")
+    parser.add_argument("--open-rad", type=float, default=1.7,
+                        help="Encoder rad when jaw fully open (TC-GU-01 ~= 1.7).")
     parser.add_argument("--frames", type=int, default=10,
                         help="How many observation frames to print.")
     args = parser.parse_args()
@@ -92,20 +101,19 @@ def main() -> None:
         # Tactile serials need the live SDK; do a quick discovery up front.
         from xense.taccap import find_one, scan_grippers
 
-        if args.mcu_serial is None:
+        if args.firmware_sn is None:
             eps = find_one()
         else:
-            matches = [e for e in scan_grippers() if e.mcu_serial == args.mcu_serial]
+            matches = [e for e in scan_grippers() if e.firmware_sn == args.firmware_sn]
             if not matches:
-                raise SystemExit(f"No gripper with MCU={args.mcu_serial}")
+                raise SystemExit(f"No gripper with firmware_sn={args.firmware_sn}")
             eps = matches[0]
         cameras = _tactile_configs(eps)
 
     cfg = TaccapGripperConfig(
-        mcu_serial=args.mcu_serial,
+        firmware_sn=args.firmware_sn,
         enable_gripper=True,
         enable_imu=args.imu,
-        gripper_closed_rad=args.closed_rad,
         gripper_open_rad=args.open_rad,
         enable_tracker=args.tracker,
         tracker_sn=args.tracker_sn,
