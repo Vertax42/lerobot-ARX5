@@ -10,7 +10,7 @@ Components:
 
 - **Gripper:** TacCap-Gripper handheld unit (motor jaw, two embedded
   visuotactile sensors, wrist UVC camera, encoder, IMU). Driven by the
-  `xense.taccap` SDK (`taccap-gripper` PyPI package).
+  `xense.taccap` SDK (`taccap-gripper` PyPI package, ≥ 0.1.0).
 - **Pose:** Pico4 Ultra **independent motion tracker** mounted on top
   of the gripper. Reached via `xensevr_pc_service_sdk` and read by
   `lerobot.teleoperators.pico4.tracker.Pico4TrackerReader`.
@@ -25,12 +25,13 @@ through demonstrations.
 
 ## Coordinate frame
 
-Recorded pose is in **raw Pico4 native** frame (X right, Y up, Z toward
-the headset operator at Unity-launch time). This is **not** any
-robot's base frame. Downstream policies must reframe explicitly.
+Recorded pose is in **raw Pico4 native** frame (per the SDK example:
+**LEFT-handed Y-up**, X right, Y up, Z forward/in — despite the docs
+claiming right-handed). The world origin is the headset position the
+moment the Unity VR Client app started.
 
-The Pico4 origin is fixed at Unity-app launch and stays put as long as
-the app keeps running. **Do not restart the Unity client between
+This is **not** any robot's base frame. Downstream policies must
+reframe explicitly. **Do not restart the Unity client between
 episodes** or all subsequent recordings will be in a different origin.
 
 ## Hardware bring-up sequence
@@ -44,23 +45,27 @@ episodes** or all subsequent recordings will be in a different origin.
 
 ## Calibration workflow (do once per device)
 
-### 1. Find the jaw encoder endpoints
+### 1. Latch the encoder zero
+
+The SDK ships a complete calibration CLI. Use it directly — it pins by
+firmware SN, latches the zero via `Encoder.set_zero()`, verifies the
+post-zero raw residual, and optionally sanity-checks the open angle:
 
 ```bash
-python -m lerobot.robots.taccap_gripper.calibrate_gripper_range
+python /home/ubuntu/TacCap-Gripper/python/examples/calibrate.py SN000003
 ```
 
-Squeeze the jaw fully closed, then fully open. When `min`/`max`
-stabilise, press Ctrl+C. Copy the two printed values into your
-`TaccapGripperConfig`:
+List available firmware SNs:
 
-```python
-gripper_closed_rad=<min>,
-gripper_open_rad=<max>,
+```bash
+python -c "from xense.taccap import scan_grippers, Side; \
+  [print(f'{\"L\" if g.side==Side.Left else \"R\"} fw={g.firmware_sn} mcu={g.mcu_serial}') for g in scan_grippers()]"
 ```
 
-If the encoder convention is reversed for your unit, swap the two
-values manually — the normalisation in the robot is sign-aware.
+After zero is latched, the SDK's `position_rad` reads 0 when closed
+and rises to ~1.7 rad (~97°) at the mechanical limit. There is **no
+`gripper_closed_rad` config** — closed is always 0. Only the
+`gripper_open_rad` config field (default 1.7) is configurable per unit.
 
 ### 2. Sanity-check the Pico4 tracker
 
@@ -81,25 +86,23 @@ Verifies the robot stack independently of `lerobot-record`:
 
 ```bash
 # Default: gripper + auto-wired wrist camera (V4L2 path from SDK).
+python -m lerobot.robots.taccap_gripper.taccap_gripper_example
+
+# Pin a specific unit by firmware SN:
 python -m lerobot.robots.taccap_gripper.taccap_gripper_example \
-    --closed-rad <closed> --open-rad <open>
+    --firmware-sn SN000003
 
 # Gripper only, skip the wrist camera:
 python -m lerobot.robots.taccap_gripper.taccap_gripper_example \
-    --no-wrist-cam --closed-rad <closed> --open-rad <open>
+    --no-wrist-cam
 
 # + Pico4 tracker:
-python -m lerobot.robots.taccap_gripper.taccap_gripper_example \
-    --tracker --closed-rad <closed> --open-rad <open>
+python -m lerobot.robots.taccap_gripper.taccap_gripper_example --tracker
 
 # + tactile sensors (left + right OG):
 python -m lerobot.robots.taccap_gripper.taccap_gripper_example \
-    --tracker --tactile --closed-rad <closed> --open-rad <open>
+    --tracker --tactile
 ```
-
-The script prints 10 observation frames (scalar fields + image
-shapes), then disconnects. Use it as the first port of call when
-something looks wrong end-to-end.
 
 ## End-to-end recording
 
@@ -112,8 +115,7 @@ action straight off `robot.get_action()` (same path as `xense_flare`).
 lerobot-record \
     --robot.type=taccap_gripper \
     --robot.id=right \
-    --robot.gripper_closed_rad=<closed> \
-    --robot.gripper_open_rad=<open> \
+    --robot.firmware_sn=SN000003 \
     --robot.cameras='{tactile_left: {type: xense, serial_number: OG000XXX, fps: 30, width: 400, height: 700}, tactile_right: {type: xense, serial_number: OG000YYY, fps: 30, width: 400, height: 700}}' \
     --dataset.repo_id=<your_org>/<your_dataset> \
     --dataset.num_episodes=1 \
@@ -126,9 +128,9 @@ auto-wired by `enable_wrist_camera=True` (default). Override the
 defaults with `--robot.wrist_camera_width=…` / `_height` / `_fps` if
 needed, or set `--robot.enable_wrist_camera=false` to skip.
 
-The `xrt.init()` call is process-singleton-guarded inside
-`Pico4TrackerReader`, so any future re-use within the same process is
-safe (e.g. for visualisation alongside recording).
+`--robot.firmware_sn=…` is only needed when more than one gripper is
+plugged in. With a single gripper, the SDK's `find_one()` picks it up
+automatically.
 
 ## What gets recorded per frame
 
@@ -152,8 +154,11 @@ second column.
   `get_action()` both surface pose + gripper + optional IMU + cameras.
 - `config_taccap_gripper.py` — `RobotConfig` dataclass.
 - `taccap_gripper_example.py` — standalone smoke test (above).
-- `calibrate_gripper_range.py` — find jaw encoder endpoints.
 - `calibrate_tracker.py` — sanity-check the Pico4 tracker.
+
+Encoder zero calibration lives in the SDK itself
+(`/home/ubuntu/TacCap-Gripper/python/examples/calibrate.py`) — we no
+longer ship a duplicate.
 
 The Pico4 tracker reader is shared with future devices and lives at
 `src/lerobot/teleoperators/pico4/tracker.py`.

@@ -39,35 +39,39 @@ from ..config import RobotConfig
 class TaccapGripperConfig(RobotConfig):
     """Configuration for the TacCap-Gripper handheld data-collection device.
 
-    Discovery is serial-based:
-    - ``mcu_serial=None`` ⇒ ``xense.taccap.find_one()`` (errors on 0 or >1).
-    - ``mcu_serial="MCU…"`` ⇒ ``scan_grippers()`` filtered to that serial.
+    Discovery uses the firmware-burned serial (stable across CH343 chip
+    swaps, which the MCU serial is not):
+    - ``firmware_sn=None`` => ``xense.taccap.find_one()`` (errors on 0 or >1).
+    - ``firmware_sn="SN000..."`` => ``scan_grippers()`` filtered to that SN.
 
     Pose is sourced from a single Pico4 Ultra motion tracker:
-    - ``tracker_sn=None`` ⇒ the first tracker the service reports.
-    - ``tracker_sn="…"`` ⇒ match by serial; fails fast with the available
+    - ``tracker_sn=None`` => the first tracker the service reports.
+    - ``tracker_sn="..."`` => match by serial; fails fast with the available
       SNs if not found.
 
-    Gripper position is normalised from radians via
-    ``(position_rad - closed_rad) / (open_rad - closed_rad)`` clipped to
-    [0, 1]. Run ``calibrate_gripper_range.py`` to find the two endpoints
-    on a fresh device.
+    Gripper position is normalised via ``clip(position_rad / open_rad, 0, 1)``.
+    ``position_rad`` is the SDK's cooked (post-zero, >=0-clamped) reading.
+    The closed endpoint is **always 0** -- the SDK's ``Encoder.set_zero()``
+    command latches the closed pose into firmware. Run the SDK's
+    ``examples/calibrate.py`` once per device to set the zero; then this
+    config only needs the mechanical-max ``gripper_open_rad`` (default
+    1.7 = TC-GU-01 hardware stop).
     """
 
     # ---- TacCap gripper ---------------------------------------------------
-    mcu_serial: str | None = None
-    """MCU serial reported by ``GripperEndpoints.mcu_serial`` (None = find_one)."""
+    firmware_sn: str | None = None
+    """Firmware SN reported by ``GripperEndpoints.firmware_sn`` (None =
+    find_one). Stable across CH343 chip swaps."""
 
     enable_gripper: bool = True
     enable_imu: bool = False
     """If True, also publish ``imu.{accel,gyro,mag}.{x,y,z}`` per observation."""
 
-    gripper_closed_rad: float = 0.0
-    """Encoder reading (rad) when the jaw is fully closed (gripper.pos = 0)."""
-
-    gripper_open_rad: float = 1.0
+    gripper_open_rad: float = 1.7
     """Encoder reading (rad) when the jaw is fully open (gripper.pos = 1).
-    Must differ from ``gripper_closed_rad``."""
+    Default 1.7 ~= TC-GU-01 mechanical limit (~97 deg). Override per unit
+    if your sample varies. Closed (gripper.pos = 0) is always 0 rad --
+    set via the SDK's Encoder.set_zero() (run calibrate.py once)."""
 
     # ---- Pico4 Ultra tracker ---------------------------------------------
     enable_tracker: bool = True
@@ -107,10 +111,11 @@ class TaccapGripperConfig(RobotConfig):
 
     def __post_init__(self):
         super().__post_init__()
-        if self.enable_gripper and self.gripper_open_rad == self.gripper_closed_rad:
+        if self.enable_gripper and self.gripper_open_rad <= 0:
             raise ValueError(
-                "gripper_open_rad must differ from gripper_closed_rad. "
-                "Run calibrate_gripper_range.py and copy the two endpoints."
+                f"gripper_open_rad must be positive, got {self.gripper_open_rad}. "
+                "Closed=0 is fixed by the SDK's Encoder.set_zero(); open_rad "
+                "is the mechanical-max angle (TC-GU-01 default 1.7)."
             )
         if self.enable_wrist_camera and "wrist_cam" in self.cameras:
             raise ValueError(

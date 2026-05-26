@@ -188,15 +188,24 @@ class TaccapGripper(Robot):
             self._endpoints = self._discover_gripper()
             self.logger.info(
                 f"  TacCap-Gripper: side={self._endpoints.side} "
-                f"mcu={self._endpoints.mcu_serial} "
-                f"fw_sn={getattr(self._endpoints, 'firmware_sn', '?')!r}"
+                f"fw_sn={self._endpoints.firmware_sn!r} "
+                f"mcu={self._endpoints.mcu_serial!r}"
             )
             self.logger.info(
                 f"  Tactile serials: left={self._endpoints.tactile_left_serial!r} "
                 f"right={self._endpoints.tactile_right_serial!r}"
             )
             self.logger.info(f"  Wrist video path: {self._endpoints.wrist_video!r}")
-            self._gripper = LeaderGripper.open()
+            # Use the explicit constructor with the discovered endpoints
+            # so multi-gripper rigs honor the firmware_sn filter — calling
+            # LeaderGripper.open() would silently fall back to find_one()
+            # and ignore our filter.
+            self._gripper = LeaderGripper(
+                self._endpoints.mcu_device,
+                self._endpoints.wrist_video,
+                self._endpoints.tactile_left_serial,
+                self._endpoints.tactile_right_serial,
+            )
             self.logger.info("  ✅ LeaderGripper attached (read-only — motor stays disabled)")
 
         # Auto-wire the wrist camera using the V4L2 path the SDK reports.
@@ -237,7 +246,7 @@ class TaccapGripper(Robot):
             self._endpoints = self._discover_gripper()
             self.logger.info(
                 f"  TacCap-Gripper endpoints (wrist-only): "
-                f"side={self._endpoints.side} mcu={self._endpoints.mcu_serial}"
+                f"side={self._endpoints.side} fw_sn={self._endpoints.firmware_sn!r}"
             )
 
         wrist_path = self._endpoints.wrist_video
@@ -262,20 +271,23 @@ class TaccapGripper(Robot):
         )
 
     def _discover_gripper(self):
-        """Locate exactly one TacCap-Gripper, optionally filtered by MCU serial."""
-        if self.config.mcu_serial is None:
+        """Locate exactly one TacCap-Gripper, optionally filtered by
+        firmware_sn (the stable identity — MCU serial is the CH343 chip
+        serial which can change on chip swap)."""
+        if self.config.firmware_sn is None:
             return find_one()
-        candidates = [eps for eps in scan_grippers() if eps.mcu_serial == self.config.mcu_serial]
+        all_eps = list(scan_grippers())
+        candidates = [eps for eps in all_eps if eps.firmware_sn == self.config.firmware_sn]
         if not candidates:
-            seen = [eps.mcu_serial for eps in scan_grippers()]
+            seen = [eps.firmware_sn for eps in all_eps]
             raise RuntimeError(
-                f"No TacCap-Gripper with mcu_serial={self.config.mcu_serial!r} found. "
-                f"Visible MCUs: {seen!r}."
+                f"No TacCap-Gripper with firmware_sn={self.config.firmware_sn!r} found. "
+                f"Visible firmware SNs: {seen!r}."
             )
         if len(candidates) > 1:
             raise RuntimeError(
-                f"Multiple TacCap-Grippers match mcu_serial={self.config.mcu_serial!r}. "
-                "Serials are supposed to be unique — check your hardware."
+                f"Multiple TacCap-Grippers match firmware_sn={self.config.firmware_sn!r}. "
+                "Firmware SNs are supposed to be unique — check your firmware burning."
             )
         return candidates[0]
 
@@ -313,9 +325,9 @@ class TaccapGripper(Robot):
         self.logger.info(f"✅ {self} disconnected.")
 
     def calibrate(self) -> None:
-        """Calibration here means measuring the jaw open/closed encoder
-        endpoints, which is an out-of-band operator workflow. See
-        ``calibrate_gripper_range.py`` in this package."""
+        """Encoder zero is set out-of-band via the SDK's
+        ``examples/calibrate.py`` (sends ``Encoder.set_zero()``). Once
+        per device; afterwards ``position_rad`` is in [0, ~1.7]."""
         pass
 
     def configure(self) -> None:
@@ -378,20 +390,18 @@ class TaccapGripper(Robot):
     # ------------------------------------------------------------------ helpers
 
     def _read_gripper_normalized(self) -> float:
-        """Read encoder position (radians) and normalise to [0, 1]."""
+        """Read cooked encoder position (rad ≥ 0 post-``set_zero``) and
+        normalise to [0, 1] via ``clip(rad / open_rad, 0, 1)``."""
         try:
             sample = self._gripper.encoder.read_once()
             rad = float(sample.position_rad)
         except Exception as e:
             self.logger.warn(f"Encoder read failed: {e}")
             return 0.0
-        closed = self.config.gripper_closed_rad
         opened = self.config.gripper_open_rad
-        denom = opened - closed
-        if denom == 0.0:  # guarded in config.__post_init__ but be defensive
+        if opened <= 0.0:  # guarded in config.__post_init__ but be defensive
             return 0.0
-        normalized = (rad - closed) / denom
-        return float(np.clip(normalized, 0.0, 1.0))
+        return float(np.clip(rad / opened, 0.0, 1.0))
 
     def get_endpoints(self):
         """Hardware discovery info populated on connect (None otherwise)."""
