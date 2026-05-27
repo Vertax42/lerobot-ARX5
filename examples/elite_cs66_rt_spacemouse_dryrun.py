@@ -5,18 +5,18 @@ Stubs out:
   * elite_cs_sdk (driver + RTSI + dashboard)
   * pyspacemouse + lerobot.teleoperators.spacemouse.peripherals.Spacemouse
 
-so the real EliteCS66 + SpacemouseTeleop + elite_cs66_spacemouse_teleop_loop
+so the real EliteCS66RT + SpacemouseTeleop + elite_cs66_rt_spacemouse_teleop_loop
 can be exercised end-to-end without hardware.
 
 Asserts:
   * connect() takes the success path (RTSI + dashboard + driver + script)
-  * action keys produced by convert_to_flexiv_action match what EliteCS66 expects
+  * action keys produced by convert_to_flexiv_action match what EliteCS66RT expects
   * send_action accepts and updates the background servo target
   * both-buttons triggers robot.reset_to_initial_position()
   * rt_moving short-circuits send_action and re-syncs teleop after reset finishes
   * disconnect() cleans up driver/dashboard/RTSI
 
-Run: python examples/elite_cs66_spacemouse_dryrun.py
+Run: python examples/elite_cs66_rt_spacemouse_dryrun.py
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ import types
 import numpy as np
 
 # ---------------------------------------------------------------------------
-# elite_cs_sdk stub: minimal surface the EliteCS66 driver exercises
+# elite_cs_sdk stub: minimal surface the EliteCS66RT driver exercises
 # ---------------------------------------------------------------------------
 
 
@@ -177,7 +177,7 @@ def install_elite_sdk_stub():
     script = pkg_dir / "external_control.script"
     if not script.exists():
         script.write_text("# fake script\n")
-    # Recipes: reuse the ones already shipped with elite_cs66 resource/.
+    # Recipes: reuse the ones already shipped with elite_cs66_rt resource/.
     mod.__file__ = str(script)  # _resolve_sdk_resource uses parent dir
 
     sys.modules["elite_cs_sdk"] = mod
@@ -240,18 +240,18 @@ def install_spacemouse_stub():
 def main():
     install_elite_sdk_stub()
 
-    from lerobot.robots.elite_cs66 import EliteCS66, EliteCS66Config
+    from lerobot.robots.elite_cs66_rt import EliteCS66RT, EliteCS66RTConfig
 
-    cfg = EliteCS66Config(
+    cfg = EliteCS66RTConfig(
         robot_ip="127.0.0.1",
         use_background_servo_loop=False,  # synchronous so the test is deterministic
         max_relative_translation=0.05,
         max_relative_rotation=0.2,
     )
-    robot = EliteCS66(cfg)
+    robot = EliteCS66RT(cfg)
     robot.connect()
-    assert robot.is_connected, "EliteCS66 failed to connect against stub SDK"
-    print("[ok] EliteCS66 stub connect path")
+    assert robot.is_connected, "EliteCS66RT failed to connect against stub SDK"
+    print("[ok] EliteCS66RT stub connect path")
 
     # send_action with explicit 6D rotation matching identity orientation
     from lerobot.utils.robot_utils import quaternion_to_rotation_6d
@@ -288,9 +288,9 @@ def main():
 
     # We can't actually call the loop's `while True` here without a duration cap.
     # The loop function supports `duration=`, so use a tiny one tied to fps:
-    from lerobot.scripts.lerobot_teleoperate import elite_cs66_spacemouse_teleop_loop
+    from lerobot.scripts.lerobot_teleoperate import elite_cs66_rt_spacemouse_teleop_loop
 
-    elite_cs66_spacemouse_teleop_loop(
+    elite_cs66_rt_spacemouse_teleop_loop(
         teleop=teleop,
         robot=robot,
         fps=50,
@@ -300,7 +300,7 @@ def main():
         debug_timing=False,
     )
     print()  # the loop's status print stays on one line
-    print("[ok] elite_cs66_spacemouse_teleop_loop ran without raising")
+    print("[ok] elite_cs66_rt_spacemouse_teleop_loop ran without raising")
 
     driver = robot._driver
     assert driver is not None and len(driver.servo_targets) > 0, "no servoj calls observed"

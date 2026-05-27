@@ -8,5 +8,5 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-from .config_elite_cs66 import EliteCS66Config, EliteCS66ControlMode  # noqa: F401
-from .elite_cs66 import EliteCS66  # noqa: F401
+from .config_elite_cs66_rt import EliteCS66RTConfig, EliteCS66RTControlMode  # noqa: F401
+from .elite_cs66_rt import EliteCS66RT  # noqa: F401

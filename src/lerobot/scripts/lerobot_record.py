@@ -120,7 +120,7 @@ from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
     bi_flexiv_rizon4_rt,
-    elite_cs66,
+    elite_cs66_rt,
     flexiv_rizon4_rt,
     make_robot_from_config,
     xense_flare as xense_flare_robot,
@@ -827,7 +827,7 @@ def flexiv_rizon4_rt_record_loop(
         timestamp = time.perf_counter() - start_episode_t
 
 
-def elite_cs66_record_loop(
+def elite_cs66_rt_record_loop(
     robot: Robot,
     events: dict,
     fps: int,
@@ -839,7 +839,7 @@ def elite_cs66_record_loop(
 ):
     """Recording loop for Elite CS66 + SpaceMouse / Pico4.
 
-    Mirrors the elite_cs66_*_teleop_loop semantics:
+    Mirrors the elite_cs66_rt_*_teleop_loop semantics:
     - Keyboard ``go_start`` or SpaceMouse both-buttons (rising edge) or Pico4
       A-button trigger ``robot.reset_to_initial_position()``.
     - While ``rt_moving`` is true the background servo trajectory owns the
@@ -854,7 +854,7 @@ def elite_cs66_record_loop(
             f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
         )
     if isinstance(teleop, list):
-        raise ValueError("Multi-teleop mode is not supported for elite_cs66.")
+        raise ValueError("Multi-teleop mode is not supported for elite_cs66_rt.")
 
     teleop_name = teleop.name if isinstance(teleop, Teleoperator) else None
 
@@ -1082,7 +1082,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             left_pose, right_pose = robot.get_current_tcp_pose_quat()
             logger.info(f"Left start pose:  {left_pose}")
             logger.info(f"Right start pose: {right_pose}")
-        elif cfg.robot.type == "elite_cs66" and teleop_type in ("spacemouse", "pico4"):
+        elif cfg.robot.type == "elite_cs66_rt" and teleop_type in ("spacemouse", "pico4"):
             robot.connect(go_to_start=True)
             start_obs = robot.get_observation()
             tcp_keys = [k for k in start_obs if k.startswith("tcp.")]
@@ -1101,10 +1101,10 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 left_pose, right_pose = robot.get_current_tcp_pose_quat()
                 teleop.connect(left_tcp_pose_quat=left_pose, right_tcp_pose_quat=right_pose)
                 logger.info("BiPico4 initialized with both robot EEF poses.")
-            elif cfg.robot.type == "elite_cs66" and teleop_type == "spacemouse":
+            elif cfg.robot.type == "elite_cs66_rt" and teleop_type == "spacemouse":
                 teleop.connect(current_tcp_pose_euler=robot.get_current_tcp_pose_euler())
                 logger.info("Elite CS66 + SpaceMouse: teleop seeded from current TCP pose")
-            elif cfg.robot.type == "elite_cs66" and teleop_type == "pico4":
+            elif cfg.robot.type == "elite_cs66_rt" and teleop_type == "pico4":
                 teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
                 logger.info("Elite CS66 + Pico4: teleop seeded from current TCP pose")
             else:
@@ -1133,8 +1133,8 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         single_task=cfg.dataset.single_task,
                         display_data=cfg.display_data,
                     )
-                elif cfg.robot.type == "elite_cs66":
-                    elite_cs66_record_loop(
+                elif cfg.robot.type == "elite_cs66_rt":
+                    elite_cs66_rt_record_loop(
                         robot=robot,
                         events=events,
                         fps=cfg.dataset.fps,

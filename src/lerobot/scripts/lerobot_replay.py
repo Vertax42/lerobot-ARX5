@@ -51,7 +51,7 @@ from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
     bi_flexiv_rizon4_rt,
-    elite_cs66,
+    elite_cs66_rt,
     flexiv_rizon4_rt,
     make_robot_from_config,
     xense_flare as xense_flare_robot,
