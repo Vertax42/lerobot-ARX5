@@ -25,6 +25,7 @@ from lerobot.robots.elite_cs66_rt.config_elite_cs66_rt import (
     EliteCS66RTConfig,
     EliteCS66RTControlMode,
 )
+from lerobot.robots.grippers.xense_gripper import XenseGripper
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import (
@@ -128,6 +129,19 @@ class EliteCS66RT(Robot):
     config_class = EliteCS66RTConfig
     name = "elite_cs66_rt"
 
+    # RTSI fields we actively read via SDK helpers. Validated against the
+    # output recipe in connect() so a recipe missing one of these raises
+    # before we seed control state from zero-filled placeholder reads —
+    # SDK getActualTCPPose() etc silently return [0]*6 on missing fields
+    # (see RtsiRecipe.hpp::getValue), which would otherwise let the robot
+    # MoveJ toward the world origin on the first reset.
+    _REQUIRED_RTSI_OUTPUT_FIELDS = (
+        "actual_TCP_pose",
+        "actual_joint_positions",
+        "actual_joint_speeds",
+        "actual_joint_torques",
+    )
+
     def __init__(self, config: EliteCS66RTConfig):
         super().__init__(config)
         self.config = config
@@ -139,7 +153,9 @@ class EliteCS66RT(Robot):
         self._driver = None
         self._rtsi = None
         self._is_connected = False
-        self._gripper_position = float(config.initial_gripper_position)
+        self._gripper: XenseGripper | None = (
+            XenseGripper(config.gripper) if config.gripper is not None else None
+        )
         self._last_tcp_command: np.ndarray | None = None
         self._target_tcp_command: np.ndarray | None = None
         self._servo_thread: threading.Thread | None = None
@@ -168,8 +184,18 @@ class EliteCS66RT(Robot):
             features.update(dict.fromkeys(JOINT_VELOCITY_KEYS, float))
             features.update(dict.fromkeys(JOINT_EFFORT_KEYS, float))
 
-        if self.config.use_gripper:
+        if self._gripper is not None:
             features["gripper.pos"] = float
+            if self._gripper._enable_sensor:
+                # Mirror flexiv: left/right tactile rectify/difference images
+                # come back as HxWx3 RGB arrays. Sensor keys default to
+                # left_tactile / right_tactile (see XenseGripperConfig).
+                for sensor_name in self.config.gripper_sensor_keys.values():
+                    features[sensor_name] = (
+                        self.config.gripper_rectify_size[1],
+                        self.config.gripper_rectify_size[0],
+                        3,
+                    )
 
         for cam_name in self.cameras:
             features[cam_name] = (self.config.cameras[cam_name].height, self.config.cameras[cam_name].width, 3)
@@ -182,7 +208,7 @@ class EliteCS66RT(Robot):
         else:
             features = dict.fromkeys(TCP_POSITION_KEYS + TCP_ROTATION_6D_KEYS, float)
 
-        if self.config.use_gripper:
+        if self._gripper is not None:
             features["gripper.pos"] = float
         return features
 
@@ -218,6 +244,24 @@ class EliteCS66RT(Robot):
         if not path.exists():
             raise FileNotFoundError(f"Elite SDK resource not found: {path}")
         return str(path)
+
+    @staticmethod
+    def _read_recipe_fields(path: str) -> list[str]:
+        """Parse a recipe file (one variable per line, blanks and # comments stripped)."""
+        lines = Path(path).read_text().splitlines()
+        return [s for s in (line.strip() for line in lines) if s and not s.startswith("#")]
+
+    def _validate_output_recipe(self, path: str) -> None:
+        fields = set(self._read_recipe_fields(path))
+        missing = [f for f in self._REQUIRED_RTSI_OUTPUT_FIELDS if f not in fields]
+        if missing:
+            raise ValueError(
+                f"RTSI output recipe at {path} is missing required field(s): {missing}. "
+                "These are read by SDK helpers (getActualTCPPose, getActualJointPositions, "
+                "getActualJointVelocity, getActualJointTorques) which silently return zero "
+                "vectors when the field is absent — leaving the robot believing it's at the "
+                "world origin and risking a MoveJ into the floor on the next reset."
+            )
 
     def _resolve_recipe(self, configured: str | Path | None, filename: str) -> str:
         if configured is not None:
@@ -273,6 +317,7 @@ class EliteCS66RT(Robot):
 
         try:
             output_recipe = self._resolve_recipe(self.config.rtsi_output_recipe, "output_recipe.txt")
+            self._validate_output_recipe(output_recipe)
             input_recipe = self._resolve_recipe(self.config.rtsi_input_recipe, "input_recipe.txt")
 
             self._rtsi = self._cs.RtsiIOInterface(output_recipe, input_recipe, self.config.rtsi_frequency)
@@ -291,9 +336,13 @@ class EliteCS66RT(Robot):
                 raise RuntimeError("Elite CS66 brakeRelease() failed.")
 
             driver_config = self._make_driver_config()
+            driver_construct_time = time.monotonic()
             self._driver = self._cs.EliteDriver(driver_config)
             # Match SDK example timing: let EliteDriver finish wiring up its
-            # reverse / trajectory / script-command sockets before we proceed.
+            # reverse / trajectory / script-command sockets, AND give the
+            # constructor's primary-port script push a chance to land before
+            # we decide it failed. Without this pre-window we'd unconditionally
+            # fire the safety-net sendExternalControlScript() on every connect.
             if self.config.external_control_settle_s > 0:
                 time.sleep(self.config.external_control_settle_s)
 
@@ -311,12 +360,21 @@ class EliteCS66RT(Robot):
 
             # SDK example sleeps another second here before the first
             # writeServoj; without it the robot-side script can RST the
-            # reverse socket.
-            if self.config.external_control_settle_s > 0:
-                time.sleep(self.config.external_control_settle_s)
+            # reverse socket. We collapse that into a "minimum total elapsed
+            # time since EliteDriver construction" check — fast handshakes
+            # don't pay the full second twice.
+            remaining = self.config.external_control_settle_s - (
+                time.monotonic() - driver_construct_time
+            )
+            if remaining > 0:
+                time.sleep(remaining)
 
             for cam in self.cameras.values():
                 cam.connect()
+
+            if self._gripper is not None:
+                self.logger.info(f"Connecting gripper ({type(self._gripper).__name__})...")
+                self._gripper.connect()
         except BaseException:
             self._cleanup_after_failed_connect()
             raise
@@ -374,6 +432,13 @@ class EliteCS66RT(Robot):
             try:
                 if cam.is_connected:
                     cam.disconnect()
+            except Exception:
+                pass
+        # And the gripper, if connect() got that far.
+        if self._gripper is not None:
+            try:
+                if getattr(self._gripper, "_is_connected", False):
+                    self._gripper.disconnect()
             except Exception:
                 pass
         self._driver = None
@@ -543,10 +608,7 @@ class EliteCS66RT(Robot):
         consecutive_failures = 0
         # SDK reverse-socket writes can fail transiently right after the script
         # comes up. Tolerate a short burst before declaring the loop dead.
-        max_consecutive_failures = max(
-            1,
-            int(self.config.external_control_settle_s / max(self.config.servoj_time, 1e-3)),
-        )
+        max_consecutive_failures = self.config.servo_failure_tolerance_ticks
         while not self._servo_stop_event.is_set():
             try:
                 now = time.monotonic()
@@ -622,26 +684,25 @@ class EliteCS66RT(Robot):
         assert self._rtsi is not None
         obs: dict[str, Any] = {}
 
-        if self.config.use_joint_observation:
+        if self.config.observe_tcp:
+            tcp_pose = np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64)
+            obs.update(self._tcp_rotvec_to_feature_values(tcp_pose))
+        if self.config.observe_joints:
             joints = self._rtsi.getActualJointPositions()
             obs.update({key: float(value) for key, value in zip(JOINT_POSITION_KEYS, joints, strict=True)})
             joint_vel = self._rtsi.getActualJointVelocity()
             obs.update({key: float(value) for key, value in zip(JOINT_VELOCITY_KEYS, joint_vel, strict=True)})
             joint_effort = self._rtsi.getActualJointTorques()
             obs.update({key: float(value) for key, value in zip(JOINT_EFFORT_KEYS, joint_effort, strict=True)})
-        else:
-            tcp_pose = np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64)
-            obs.update(self._tcp_rotvec_to_feature_values(tcp_pose))
 
-        if self.config.use_gripper:
-            obs["gripper.pos"] = self._gripper_position
+        if self._gripper is not None:
+            obs["gripper.pos"] = self._gripper.get_gripper_position()
+            if self._gripper._enable_sensor:
+                obs.update(self._gripper.get_sensor_data())
 
         for cam_name, cam in self.cameras.items():
             obs[cam_name] = cam.async_read()
         return obs
-
-    def _clip_gripper(self, value: float) -> float:
-        return min(max(value, self.config.gripper_min_position), self.config.gripper_max_position)
 
     def _cartesian_action_to_tcp_pose(self, action: dict[str, Any]) -> np.ndarray:
         with self._servo_lock:
@@ -652,9 +713,6 @@ class EliteCS66RT(Robot):
         else:
             assert self._rtsi is not None
             target = np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64)
-
-        assert self._rtsi is not None
-        current = np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64)
 
         for i, key in enumerate(TCP_POSITION_KEYS):
             if key in action:
@@ -676,24 +734,6 @@ class EliteCS66RT(Robot):
             # small joint deltas and stays inside the velocity envelope.
             target_principal = _quaternion_to_rotvec(rotation_6d_to_quaternion(r6d))
             target[3:6] = _rotvec_continuity_shift(target_principal, target[3:6])
-
-        if self.config.max_relative_translation > 0:
-            delta = target[:3] - current[:3]
-            norm = float(np.linalg.norm(delta))
-            if norm > self.config.max_relative_translation:
-                target[:3] = current[:3] + delta / norm * self.config.max_relative_translation
-
-        if self.config.max_relative_rotation > 0:
-            current_rot = Rotation.from_rotvec(current[3:6])
-            target_rot = Rotation.from_rotvec(target[3:6])
-            relative = target_rot * current_rot.inv()
-            relative_rotvec = relative.as_rotvec()
-            angle = float(np.linalg.norm(relative_rotvec))
-            if angle > self.config.max_relative_rotation:
-                clamped_rel = Rotation.from_rotvec(
-                    relative_rotvec / angle * self.config.max_relative_rotation
-                )
-                target[3:6] = (clamped_rel * current_rot).as_rotvec()
 
         return target
 
@@ -767,6 +807,34 @@ class EliteCS66RT(Robot):
         ):
             self.logger.warn(f"LARGE STEP {msg}")
 
+    def _trace_send_action_joint(
+        self, target_joints: list[float], current_joints: list[float]
+    ) -> None:
+        """Joint-mode counterpart to ``_trace_send_action``.
+
+        RTSI joint readings are clean (no SO(3) branch-cut noise), so unlike
+        the Cartesian path we trace deltas against the actual current joints
+        directly — no host-side ``_last_joint_command`` anchor needed.
+        """
+        if not self.config.trace_servoj:
+            return
+        deltas = [t - c for t, c in zip(target_joints, current_joints, strict=True)]
+        max_abs_delta = max(abs(d) for d in deltas) if deltas else 0.0
+        msg = (
+            "joint send_action "
+            f"tgt=[{','.join(f'{j:+.3f}' for j in target_joints)}] "
+            f"cur=[{','.join(f'{j:+.3f}' for j in current_joints)}] "
+            f"delta=[{','.join(f'{d:+.3f}' for d in deltas)}] "
+            f"max_abs={max_abs_delta:.3f}rad"
+        )
+        self.logger.debug(msg)
+
+        if (
+            self.config.trace_joint_threshold > 0
+            and max_abs_delta > self.config.trace_joint_threshold
+        ):
+            self.logger.warn(f"LARGE JOINT STEP {msg}")
+
     def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
@@ -780,9 +848,9 @@ class EliteCS66RT(Robot):
                 with self._servo_lock:
                     reset_moving = self._is_reset_moving_locked(time.monotonic())
                 if reset_moving:
-                    if self.config.use_gripper and "gripper.pos" in action:
-                        self._gripper_position = self._clip_gripper(float(action["gripper.pos"]))
-                        sent["gripper.pos"] = self._gripper_position
+                    if self._gripper is not None and "gripper.pos" in action:
+                        self._gripper.set_gripper_position(float(action["gripper.pos"]))
+                        sent["gripper.pos"] = float(action["gripper.pos"])
                     return sent or action
 
             target_tcp = self._cartesian_action_to_tcp_pose(action)
@@ -804,14 +872,17 @@ class EliteCS66RT(Robot):
                 missing = [key for key in JOINT_POSITION_KEYS if key not in action]
                 raise ValueError(f"Missing joint servo action keys: {missing}")
             target_joints = [float(action[key]) for key in JOINT_POSITION_KEYS]
+            assert self._rtsi is not None
+            current_joints = list(self._rtsi.getActualJointPositions())
+            self._trace_send_action_joint(target_joints, current_joints)
             ok = self._driver.writeServoj(target_joints, self.config.command_timeout_ms, False)
             if not ok:
                 raise RuntimeError("Elite writeServoj(cartesian=False) failed.")
             sent.update(dict(zip(JOINT_POSITION_KEYS, target_joints, strict=True)))
 
-        if self.config.use_gripper and "gripper.pos" in action:
-            self._gripper_position = self._clip_gripper(float(action["gripper.pos"]))
-            sent["gripper.pos"] = self._gripper_position
+        if self._gripper is not None and "gripper.pos" in action:
+            self._gripper.set_gripper_position(float(action["gripper.pos"]))
+            sent["gripper.pos"] = float(action["gripper.pos"])
 
         return sent
 
@@ -871,6 +942,13 @@ class EliteCS66RT(Robot):
             finally:
                 self._rtsi = None
 
+        if self._gripper is not None:
+            try:
+                if getattr(self._gripper, "_is_connected", False):
+                    self._gripper.disconnect()
+            except Exception as exc:
+                self.logger.warn(f"Gripper disconnect failed: {exc}")
+
         self._is_connected = False
 
     @property
@@ -888,7 +966,7 @@ class EliteCS66RT(Robot):
         assert self._rtsi is not None
         tcp_pose = np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64)
         quat = _rotvec_to_quaternion(tcp_pose[3:6])
-        gripper_pos = self._gripper_position if self.config.use_gripper else 0.0
+        gripper_pos = self._gripper.get_gripper_position() if self._gripper is not None else 0.0
         return np.array(
             [tcp_pose[0], tcp_pose[1], tcp_pose[2], quat[0], quat[1], quat[2], quat[3], gripper_pos],
             dtype=np.float64,
@@ -901,7 +979,7 @@ class EliteCS66RT(Robot):
         tcp_pose = np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64)
         quat = _rotvec_to_quaternion(tcp_pose[3:6])
         euler = quaternion_to_euler(float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3]))
-        gripper_pos = self._gripper_position if self.config.use_gripper else 0.0
+        gripper_pos = self._gripper.get_gripper_position() if self._gripper is not None else 0.0
         return np.array(
             [tcp_pose[0], tcp_pose[1], tcp_pose[2], euler[0], euler[1], euler[2], gripper_pos],
             dtype=np.float64,
@@ -925,7 +1003,7 @@ class EliteCS66RT(Robot):
         tcp_pose = np.asarray(self._last_tcp_command, dtype=np.float64)
         quat = _rotvec_to_quaternion(tcp_pose[3:6])
         euler = quaternion_to_euler(float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3]))
-        gripper_pos = self._gripper_position if self.config.use_gripper else 0.0
+        gripper_pos = self._gripper.get_gripper_position() if self._gripper is not None else 0.0
         return np.array(
             [tcp_pose[0], tcp_pose[1], tcp_pose[2], euler[0], euler[1], euler[2], gripper_pos],
             dtype=np.float64,
@@ -934,10 +1012,19 @@ class EliteCS66RT(Robot):
     def reset_to_initial_position(self) -> None:
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        if self.config.control_mode != EliteCS66RTControlMode.CARTESIAN_SERVO:
+            # Joint mode: blocking MoveJ via the trajectory port. The outer
+            # loop blocks for ~reset_duration_s, then teleop resumes against
+            # the new joint pose. No background loop / rt_moving signaling
+            # exists in joint mode, so this is intentionally synchronous.
+            self._move_j_blocking(
+                list(self.config.start_position_rad), self.config.reset_duration_s
+            )
+            return
+
         if self._start_tcp_pose is None:
             return
-        if self.config.control_mode != EliteCS66RTControlMode.CARTESIAN_SERVO:
-            raise RuntimeError("reset_to_initial_position() is only supported in Cartesian servo mode.")
 
         if self.config.use_background_servo_loop:
             assert self._rtsi is not None

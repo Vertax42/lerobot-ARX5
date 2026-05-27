@@ -245,8 +245,6 @@ def main():
     cfg = EliteCS66RTConfig(
         robot_ip="127.0.0.1",
         use_background_servo_loop=False,  # synchronous so the test is deterministic
-        max_relative_translation=0.05,
-        max_relative_rotation=0.2,
     )
     robot = EliteCS66RT(cfg)
     robot.connect()
