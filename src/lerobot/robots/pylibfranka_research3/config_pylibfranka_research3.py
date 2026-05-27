@@ -8,7 +8,7 @@ from lerobot.robots.config import RobotConfig
 from lerobot.cameras.configs import ColorMode
 
 from lerobot.robots.pylibfranka_research3.config_franka_gripper import FrankaGripperConfig
-from lerobot.robots.pylibfranka_research3.config_xense_gripper import XenseGripperConfig, SensorOutputType
+from lerobot.robots.grippers.config_xense_gripper import XenseGripperConfig, SensorOutputType
 
 class ControlMode(str, Enum):
     """Control mode for Flexiv Rizon4.

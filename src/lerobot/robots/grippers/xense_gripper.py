@@ -1,15 +1,15 @@
-from xensegripper import XenseGripper
+from xensegripper import XenseGripper as xg
 from xensesdk import Sensor, call_service
 
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
-from lerobot.robots.flexiv_rizon4_rt.config_xense_gripper import GripperConfig
+from .config_xense_gripper import XenseGripperConfig, SensorOutputType
 from lerobot.utils.robot_utils import get_logger
 
 
-class Gripper:
-    config_class = GripperConfig
-    
-    def __init__(self, config: GripperConfig):
+class XenseGripper:
+    config_class = XenseGripperConfig
+
+    def __init__(self, config: XenseGripperConfig):
         self._config = config
         self._mac_addr = config.mac_addr
         self._rectify_size = config.rectify_size
@@ -24,10 +24,18 @@ class Gripper:
         self._logger = get_logger(f"Gripper-{self._mac_addr[:6]}")
 
         self._is_connected = False
-        self._gripper: XenseGripper = None
+        self._gripper: xg = None
         self._sensors: dict[str, Sensor] = {}
-        
-        self._available_sensors: dict = {}
+        self._available_sensors: dict = {}    
+
+    def connect(self) -> None:
+        """Connect to the Gripper."""
+        if self._is_connected:
+            raise DeviceAlreadyConnectedError(f"{self} already connected")
+
+        self._logger.info(f"Connecting to Gripper server: {self._mac_addr}")
+
+        # Scan for sensors (deferred from __init__ to avoid blocking at construction time)
         if self._enable_sensor:
             self._logger.info(f"Scanning for sensors on device {self._mac_addr}...")
             try:
@@ -41,14 +49,8 @@ class Gripper:
             except Exception as e:
                 raise RuntimeError(f"Error scanning sensors: {e}") from e
         else:
-            self._logger.info("Tactile sensors disabled by config.")    
+            self._logger.info("Tactile sensors disabled by config.")
 
-    def connect(self) -> None:
-        """Connect to the Gripper."""
-        if self._is_connected:
-            raise DeviceAlreadyConnectedError(f"{self} already connected")
-        
-        self._logger.info(f"Connecting to Gripper server: {self._mac_addr}")
         if self._enable_sensor:
             try:
                 # connect sensors
@@ -69,7 +71,7 @@ class Gripper:
 
         try:
             # connect gripper
-            self._gripper = XenseGripper.create(self._mac_addr)
+            self._gripper = xg.create(self._mac_addr)
             if self._gripper is not None:
                 self._logger.info("✅ Gripper successfully connected.")
             else:
@@ -135,12 +137,20 @@ class Gripper:
                 # If not found in mapping, use SN as fallback
                 key_name = self._sensor_keys.get(sn, sn)
 
-                rectify = sensor_obj.selectSensorInfo(Sensor.OutputType.Rectify)
-                if rectify is not None:
-                    # Convert BGR to RGB
-                    if rectify.ndim == 3 and rectify.shape[2] == 3:
-                        rectify = rectify[:, :, ::-1].copy()
-                    sensor_data[key_name] = rectify
+                if self._sensor_output_type == SensorOutputType.RECTIFY:
+                    rectify = sensor_obj.selectSensorInfo(Sensor.OutputType.Rectify)
+                    if rectify is not None:
+                        # Convert BGR to RGB
+                        if rectify.ndim == 3 and rectify.shape[2] == 3:
+                            rectify = rectify[:, :, ::-1].copy()
+                        sensor_data[key_name] = rectify
+                elif self._sensor_output_type == SensorOutputType.DIFFERENCE:
+                    difference = sensor_obj.selectSensorInfo(Sensor.OutputType.Difference)
+                    if difference is not None:
+                        # Convert BGR to RGB
+                        if difference.ndim == 3 and difference.shape[2] == 3:
+                            difference = difference[:, :, ::-1].copy()
+                        sensor_data[key_name] = difference
             except Exception as e:
                 self._logger.debug(f"Failed to read sensor {sn} rectify data: {e}")
 
@@ -158,9 +168,13 @@ class Gripper:
 
         if normalized_pos < 0.0 or normalized_pos > 1.0:
             raise ValueError(f"Gripper position must be between 0 and 1, got {normalized_pos}")
-
-        target_pos = normalized_pos * self._gripper_max_pos
-        self._gripper.set_position(target_pos, vmax=self._gripper_v_max, fmax=self._gripper_f_max)
+        # Fleet semantics: normalized_pos=1.0 means fully OPEN (matches mainstream
+        # lerobot / HF dataset convention). 0.0 means closed. Inverting this would
+        # require remapping every existing dataset. See [[xense-gripper-semantics]].
+        target_width = self._gripper_min_pos + normalized_pos * (
+            self._gripper_max_pos - self._gripper_min_pos
+        )
+        self._gripper.set_position(target_width, vmax=self._gripper_v_max, fmax=self._gripper_f_max)
 
     def disconnect(self) -> None:
         """Disconnect from the Flare Gripper."""

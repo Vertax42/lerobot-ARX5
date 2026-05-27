@@ -11,14 +11,17 @@ class SensorOutputType(Enum):
 
 
 @dataclass
-class GripperConfig:
+class XenseGripperConfig:
     """Configuration for XenseGripper
     
     Attributes:
         mac_addr: Serial number of the robot (e.g., "e2b26adbb104")
         enable_sensor: Whether to enable tactile sensors
         cameras: Dictionary of camera configurations
-        sensor_keys: Mapping from sensor SN to feature key name
+        sensor_keys: Mapping from {sensor_SN -> observation key label}
+            e.g. {"OG000651": "left_tactile"}. The driver does
+            `sensor_keys.get(sn, sn)` and uses the returned VALUE as the
+            obs/features key, so keys must be the SN and values the labels.
         gripper_v_max: Maximum velocity mm/s
         gripper_f_max: Maximum force N
         gripper_min_pos: float, the minimum position of the gripper
@@ -27,7 +30,7 @@ class GripperConfig:
     """
     
     # Gripper identification
-    mac_addr: str = "bef1504b5391"  # Gripper serial number
+    mac_addr: str = "7e0b26fa1cbe"  # Gripper serial number
     
     enable_sensor: bool = True
     # Sensor settings
@@ -50,9 +53,14 @@ class GripperConfig:
         if not self.mac_addr:
             raise ValueError("mac_addr is required for XenseGripper")
 
-        # Set default sensor_keys if not provided
+        # Set default sensor_keys if not provided.
+        # IMPORTANT direction: dict is {sensor_SN: human_readable_label}. The
+        # driver does `_sensor_keys.get(sn, sn)` and uses the returned value
+        # as the observation key. Swapping the direction silently degrades
+        # all datasets to SN-keyed observations (the prior bug — fixed here
+        # as part of the fleet-wide gripper refactor).
         if not self.sensor_keys:
             self.sensor_keys = {
-                "left_tactile": "OG000619",
-                "right_tactile": "OG000628",
+                "OG000651": "left_tactile",
+                "OG000652": "right_tactile",
             }

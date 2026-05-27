@@ -25,7 +25,7 @@ from lerobot.cameras.configs import CameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.robots.config import RobotConfig
 from lerobot.robots.flexiv_rizon4_rt.config_flare_gripper import FlareGripperConfig, SensorOutputType
-from lerobot.robots.flexiv_rizon4_rt.config_xense_gripper import GripperConfig
+from lerobot.robots.grippers.config_xense_gripper import XenseGripperConfig
 
 
 @RobotConfig.register_subclass("flexiv_rizon4_rt")
@@ -143,7 +143,7 @@ class FlexivRizon4RTConfig(RobotConfig):
     gripper_init_open: bool = True
 
     # Auto-created in __post_init__ from gripper_* parameters (do not set directly)
-    gripper: Union[GripperConfig, FlareGripperConfig] | None = field(default=None, init=False)
+    gripper: Union[XenseGripperConfig, FlareGripperConfig] | None = field(default=None, init=False)
 
     def __post_init__(self):
         super().__post_init__()
@@ -201,7 +201,7 @@ class FlexivRizon4RTConfig(RobotConfig):
                 init_open=self.gripper_init_open,
             )
         elif self.use_gripper and self.gripper_type == "xense_gripper":
-            self.gripper = GripperConfig(
+            self.gripper = XenseGripperConfig(
                 mac_addr=self.gripper_mac_addr,
                 rectify_size=self.gripper_rectify_size,
                 sensor_output_type=self.gripper_sensor_output_type,
