@@ -36,9 +36,16 @@ class EliteCS66RTConfig(RobotConfig):
 
     robot_ip: str = "192.168.1.200"
     local_ip: str = ""
-    headless_mode: bool = True
     control_mode: EliteCS66RTControlMode = EliteCS66RTControlMode.CARTESIAN_SERVO
-    use_joint_observation: bool = False
+
+    # Observation schema is composable: enable TCP and joint state
+    # independently. Use both True for multi-modal datasets (e.g. VLA
+    # policies that condition on joint proprio + TCP pose).
+    #   observe_tcp=True    -> tcp.x/y/z + tcp.r1..r6 (9 floats)
+    #   observe_joints=True -> joint_*.pos/vel/effort (18 floats)
+    # Cameras / gripper are independent of both.
+    observe_tcp: bool = True
+    observe_joints: bool = False
 
     # Elite external control script. When unset, connect() resolves
     # elite_cs_sdk/external_control.script from the installed SDK package.
@@ -61,27 +68,30 @@ class EliteCS66RTConfig(RobotConfig):
     rtsi_output_recipe: str | Path | None = None
     rtsi_input_recipe: str | Path | None = None
 
-    # Startup and shutdown behavior.
-    power_on_on_connect: bool = True
-    brake_release_on_connect: bool = True
-    play_program_on_connect: bool = True
-    start_external_control_on_connect: bool = True
-    stop_control_on_disconnect: bool = True
-    enable_realtime_scheduling: bool = True
+    # Startup and shutdown behavior. The fleet hardcodes the canonical
+    # sequence (power on → brake release → script start → clean stopControl
+    # on disconnect → RT scheduling best-effort). The only knob left is the
+    # overall timeout waiting for the controller-side script to handshake.
     connect_timeout_s: float = 10.0
 
     # Home / Start poses (J1..J6 in radians). MoveJ-style trajectory used to
-    # reach these — see ``_move_j_blocking`` in EliteCS66RT. ``home`` is the safe
-    # park pose used on disconnect; ``start`` is the task-ready pose used on
-    # connect when ``go_to_start_on_connect=True``.
+    # reach these — see ``_move_j_blocking`` in EliteCS66RT.
+    #   home  = safe park position; arm is moved here in disconnect() before
+    #           reverse sockets are torn down. Service / shutdown pose.
+    #   start = task-ready position; arm is moved here in connect() before
+    #           streaming begins. Every episode starts from here.
+    # The fields are kept separate by design even though our current fleet
+    # uses identical values: most stations want the same candle pose for
+    # both, but some workflows (overhead service position vs. workspace-
+    # ready) need to differentiate. Override per station as needed.
+    # The runtime ``connect(go_to_start=False)`` flag skips the start MoveJ
+    # for crash-recovery / re-attach scenarios.
     home_position_rad: list[float] = field(
         default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
     )
     start_position_rad: list[float] = field(
         default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
     )
-    go_to_start_on_connect: bool = True
-    return_home_on_disconnect: bool = True
     start_move_duration_s: float = 4.0
     home_move_duration_s: float = 4.0
     move_j_timeout_ms: int = 200

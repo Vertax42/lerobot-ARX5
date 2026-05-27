@@ -161,12 +161,12 @@ class EliteCS66RT(Robot):
     def observation_features(self) -> dict[str, type | tuple[int, int, int]]:
         features: dict[str, type | tuple[int, int, int]] = {}
 
-        if self.config.use_joint_observation:
+        if self.config.observe_tcp:
+            features.update(dict.fromkeys(TCP_POSITION_KEYS + TCP_ROTATION_6D_KEYS, float))
+        if self.config.observe_joints:
             features.update(dict.fromkeys(JOINT_POSITION_KEYS, float))
             features.update(dict.fromkeys(JOINT_VELOCITY_KEYS, float))
             features.update(dict.fromkeys(JOINT_EFFORT_KEYS, float))
-        else:
-            features.update(dict.fromkeys(TCP_POSITION_KEYS + TCP_ROTATION_6D_KEYS, float))
 
         if self.config.use_gripper:
             features["gripper.pos"] = float
@@ -247,7 +247,11 @@ class EliteCS66RT(Robot):
         cfg.servoj_time = self.config.servoj_time
         cfg.servoj_lookahead_time = self.config.servoj_lookahead_time
         cfg.servoj_gain = self.config.servoj_gain
-        cfg.headless_mode = self.config.headless_mode
+        # Headless is the only supported deployment path for this fleet:
+        # SDK injects external_control.script via primary 30001; no teach
+        # pendant / External Control plug-in involved. See
+        # config_elite_cs66_rt.py docstring.
+        cfg.headless_mode = True
         if self.config.script_file_path is not None:
             cfg.script_file_path = str(Path(self.config.script_file_path).expanduser())
         else:
@@ -259,11 +263,13 @@ class EliteCS66RT(Robot):
             raise DeviceAlreadyConnectedError(f"{self} already connected, do not run connect() twice.")
 
         self._cs = _import_elite_sdk()
-        if self.config.enable_realtime_scheduling:
-            try:
-                self._cs.setCurrentThreadFiFoScheduling(self._cs.getThreadFiFoMaxPriority())
-            except Exception as exc:
-                self.logger.warn(f"Failed to enable FIFO scheduling for Elite CS66 control thread: {exc}")
+        # RT scheduling is best-effort: SCHED_FIFO needs CAP_SYS_NICE /
+        # rtprio in /etc/security/limits.conf; dev machines without it fall
+        # back to default scheduling silently.
+        try:
+            self._cs.setCurrentThreadFiFoScheduling(self._cs.getThreadFiFoMaxPriority())
+        except Exception as exc:
+            self.logger.warn(f"Failed to enable FIFO scheduling for Elite CS66 control thread: {exc}")
 
         try:
             output_recipe = self._resolve_recipe(self.config.rtsi_output_recipe, "output_recipe.txt")
@@ -278,10 +284,10 @@ class EliteCS66RT(Robot):
             if not self._dashboard.connect(self.config.robot_ip):
                 raise ConnectionError(f"Failed to connect Elite dashboard at {self.config.robot_ip}")
 
-            if self.config.power_on_on_connect and not self._dashboard.powerOn():
+            if not self._dashboard.powerOn():
                 raise RuntimeError("Elite CS66 powerOn() failed.")
 
-            if self.config.brake_release_on_connect and not self._dashboard.brakeRelease():
+            if not self._dashboard.brakeRelease():
                 raise RuntimeError("Elite CS66 brakeRelease() failed.")
 
             driver_config = self._make_driver_config()
@@ -291,24 +297,23 @@ class EliteCS66RT(Robot):
             if self.config.external_control_settle_s > 0:
                 time.sleep(self.config.external_control_settle_s)
 
-            if self.config.start_external_control_on_connect:
-                if driver_config.headless_mode:
-                    if not self._driver.isRobotConnected() and not self._driver.sendExternalControlScript():
-                        raise RuntimeError("Failed to send Elite external control script.")
-                elif self.config.play_program_on_connect and not self._dashboard.playProgram():
-                    raise RuntimeError("Failed to play Elite external control program.")
+            # EliteDriver's constructor already pushed external_control.script
+            # to primary 30001. Re-send only if the controller hasn't connected
+            # back to our reverse socket yet (transient write loss).
+            if not self._driver.isRobotConnected() and not self._driver.sendExternalControlScript():
+                raise RuntimeError("Failed to send Elite external control script.")
 
-                deadline = time.monotonic() + self.config.connect_timeout_s
-                while not self._driver.isRobotConnected():
-                    if time.monotonic() > deadline:
-                        raise TimeoutError("Timed out waiting for Elite external control script connection.")
-                    time.sleep(0.01)
+            deadline = time.monotonic() + self.config.connect_timeout_s
+            while not self._driver.isRobotConnected():
+                if time.monotonic() > deadline:
+                    raise TimeoutError("Timed out waiting for Elite external control script connection.")
+                time.sleep(0.01)
 
-                # SDK example sleeps another second here before the first
-                # writeServoj; without it the robot-side script can RST the
-                # reverse socket.
-                if self.config.external_control_settle_s > 0:
-                    time.sleep(self.config.external_control_settle_s)
+            # SDK example sleeps another second here before the first
+            # writeServoj; without it the robot-side script can RST the
+            # reverse socket.
+            if self.config.external_control_settle_s > 0:
+                time.sleep(self.config.external_control_settle_s)
 
             for cam in self.cameras.values():
                 cam.connect()
@@ -318,11 +323,11 @@ class EliteCS66RT(Robot):
 
         self._is_connected = True
 
-        # MoveJ to start_position before any servoj streaming. Argument override
-        # wins; otherwise the config flag drives it. MoveJ runs **before** the
+        # MoveJ to start_position before any servoj streaming. Pass
+        # go_to_start=False to skip (crash-recovery / re-attach scenarios
+        # where the arm is already mid-pose). MoveJ runs **before** the
         # servo loop starts so it can own the reverse socket exclusively.
-        should_go_to_start = go_to_start or self.config.go_to_start_on_connect
-        if should_go_to_start:
+        if go_to_start:
             try:
                 self.logger.info(
                     "Elite CS66 moving to start_position over "
@@ -527,11 +532,12 @@ class EliteCS66RT(Robot):
         assert self._driver is not None
         assert self._cs is not None
 
-        if self.config.enable_realtime_scheduling:
-            try:
-                self._cs.setCurrentThreadFiFoScheduling(self._cs.getThreadFiFoMaxPriority())
-            except Exception as exc:
-                self.logger.warn(f"Failed to enable FIFO scheduling for Elite CS66 servo loop: {exc}")
+        # Same best-effort RT scheduling as in connect(); dev machines without
+        # rtprio fall back to default scheduling.
+        try:
+            self._cs.setCurrentThreadFiFoScheduling(self._cs.getThreadFiFoMaxPriority())
+        except Exception as exc:
+            self.logger.warn(f"Failed to enable FIFO scheduling for Elite CS66 servo loop: {exc}")
 
         next_tick = time.monotonic()
         consecutive_failures = 0
@@ -823,11 +829,9 @@ class EliteCS66RT(Robot):
         self._stop_servo_loop()
 
         # Smooth return to home before tearing down the reverse socket.
-        if (
-            self._driver is not None
-            and self._rtsi is not None
-            and self.config.return_home_on_disconnect
-        ):
+        # Always attempted; on failure we log and continue with shutdown so a
+        # faulted arm can't deadlock disconnect().
+        if self._driver is not None and self._rtsi is not None:
             try:
                 self.logger.info(
                     "Elite CS66 returning to home_position over "
@@ -847,9 +851,11 @@ class EliteCS66RT(Robot):
 
         if self._driver is not None:
             try:
-                if self.config.stop_control_on_disconnect:
-                    self._driver.writeIdle(self.config.command_timeout_ms)
-                    self._driver.stopControl(1000)
+                # Clean shutdown: write idle so the controller-side script
+                # ramps joint velocity to 0, then stopControl to release
+                # reverse sockets so the next connect() can bind them.
+                self._driver.writeIdle(self.config.command_timeout_ms)
+                self._driver.stopControl(1000)
             finally:
                 self._driver = None
 
