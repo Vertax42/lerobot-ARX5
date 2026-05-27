@@ -108,7 +108,7 @@ class EliteCS66RTConfig(RobotConfig):
     start_position_rad: list[float] = field(
         default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
     )
-    start_move_duration_s: float = 4.0
+    start_move_duration_s: float = 3.0
     home_move_duration_s: float = 4.0
     move_j_timeout_ms: int = 200
 
