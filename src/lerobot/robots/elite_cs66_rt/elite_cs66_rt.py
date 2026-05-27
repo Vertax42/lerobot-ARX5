@@ -21,9 +21,9 @@ from typing import Any
 import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
-from lerobot.robots.elite_cs66.config_elite_cs66 import (
-    EliteCS66Config,
-    EliteCS66ControlMode,
+from lerobot.robots.elite_cs66_rt.config_elite_cs66_rt import (
+    EliteCS66RTConfig,
+    EliteCS66RTControlMode,
 )
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
@@ -112,7 +112,7 @@ def _slerp_quaternion_wxyz(q0: np.ndarray, q1: np.ndarray, alpha: float) -> np.n
     return scale_0 * q0 + scale_1 * q1
 
 
-class EliteCS66(Robot):
+class EliteCS66RT(Robot):
     """Single Elite CS66 arm using elite_cs_sdk external control.
 
     Cartesian mode:
@@ -125,14 +125,14 @@ class EliteCS66(Robot):
         writeServoj(..., cartesian=False).
     """
 
-    config_class = EliteCS66Config
-    name = "elite_cs66"
+    config_class = EliteCS66RTConfig
+    name = "elite_cs66_rt"
 
-    def __init__(self, config: EliteCS66Config):
+    def __init__(self, config: EliteCS66RTConfig):
         super().__init__(config)
         self.config = config
         logger_suffix = config.id if config.id is not None else hex(id(self))
-        self.logger = get_logger(f"EliteCS66.{logger_suffix}")
+        self.logger = get_logger(f"EliteCS66RT.{logger_suffix}")
 
         self._cs = None
         self._dashboard = None
@@ -177,7 +177,7 @@ class EliteCS66(Robot):
 
     @cached_property
     def action_features(self) -> dict[str, type]:
-        if self.config.control_mode == EliteCS66ControlMode.JOINT_SERVO:
+        if self.config.control_mode == EliteCS66RTControlMode.JOINT_SERVO:
             features = dict.fromkeys(JOINT_POSITION_KEYS, float)
         else:
             features = dict.fromkeys(TCP_POSITION_KEYS + TCP_ROTATION_6D_KEYS, float)
@@ -236,7 +236,7 @@ class EliteCS66(Robot):
         if module_recipe.exists():
             return str(module_recipe)
         raise FileNotFoundError(
-            f"Could not find {filename}. Set rtsi_output_recipe/rtsi_input_recipe in EliteCS66Config."
+            f"Could not find {filename}. Set rtsi_output_recipe/rtsi_input_recipe in EliteCS66RTConfig."
         )
 
     def _make_driver_config(self):
@@ -337,7 +337,7 @@ class EliteCS66(Robot):
                 self._cleanup_after_failed_connect()
                 raise
 
-        if self.config.control_mode == EliteCS66ControlMode.CARTESIAN_SERVO:
+        if self.config.control_mode == EliteCS66RTControlMode.CARTESIAN_SERVO:
             current_tcp = np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64)
             self._last_tcp_command = current_tcp.copy()
             self._target_tcp_command = current_tcp.copy()
@@ -383,7 +383,7 @@ class EliteCS66(Robot):
         self._servo_stop_event.clear()
         self._servo_thread = threading.Thread(
             target=self._servo_loop,
-            name=f"EliteCS66ServoLoop-{self.config.id or hex(id(self))}",
+            name=f"EliteCS66RTServoLoop-{self.config.id or hex(id(self))}",
             daemon=True,
         )
         self._servo_thread.start()
@@ -769,7 +769,7 @@ class EliteCS66(Robot):
 
         sent: dict[str, Any] = {}
 
-        if self.config.control_mode == EliteCS66ControlMode.CARTESIAN_SERVO:
+        if self.config.control_mode == EliteCS66RTControlMode.CARTESIAN_SERVO:
             if self.config.use_background_servo_loop:
                 with self._servo_lock:
                     reset_moving = self._is_reset_moving_locked(time.monotonic())
@@ -930,7 +930,7 @@ class EliteCS66(Robot):
             raise DeviceNotConnectedError(f"{self} is not connected.")
         if self._start_tcp_pose is None:
             return
-        if self.config.control_mode != EliteCS66ControlMode.CARTESIAN_SERVO:
+        if self.config.control_mode != EliteCS66RTControlMode.CARTESIAN_SERVO:
             raise RuntimeError("reset_to_initial_position() is only supported in Cartesian servo mode.")
 
         if self.config.use_background_servo_loop:

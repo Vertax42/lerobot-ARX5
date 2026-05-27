@@ -147,7 +147,7 @@ from lerobot.robots import (  # noqa: F401
     arx5_follower,
     bi_arx5,
     bi_flexiv_rizon4_rt,
-    elite_cs66,
+    elite_cs66_rt,
     flexiv_rizon4_rt,
     make_robot_from_config,
     pylibfranka_research3,
@@ -1016,7 +1016,7 @@ def spacemouse_teleop_loop(
             return
 
 
-def elite_cs66_spacemouse_teleop_loop(
+def elite_cs66_rt_spacemouse_teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
     fps: int,
@@ -1215,7 +1215,7 @@ def elite_cs66_spacemouse_teleop_loop(
             return
 
 
-def elite_cs66_pico4_teleop_loop(
+def elite_cs66_rt_pico4_teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
     fps: int,
@@ -2271,8 +2271,8 @@ def teleoperate(cfg: TeleoperateConfig):
             except KeyboardInterrupt:
                 logger.info("Teleoperation interrupted by user")
 
-        # --- elite_cs66 + spacemouse ---
-        elif cfg.robot.type == "elite_cs66" and cfg.teleop.type == "spacemouse":
+        # --- elite_cs66_rt + spacemouse ---
+        elif cfg.robot.type == "elite_cs66_rt" and cfg.teleop.type == "spacemouse":
             logger.info("Detected Elite CS66 + SpaceMouse")
             robot = make_robot_from_config(cfg.robot)
             robot.connect(go_to_start=True)
@@ -2284,7 +2284,7 @@ def teleoperate(cfg: TeleoperateConfig):
             teleop = make_teleoperator_from_config(cfg.teleop)
             teleop.connect(current_tcp_pose_euler=robot.get_current_tcp_pose_euler())
             try:
-                elite_cs66_spacemouse_teleop_loop(
+                elite_cs66_rt_spacemouse_teleop_loop(
                     teleop=teleop,
                     robot=robot,
                     fps=cfg.fps,
@@ -2296,8 +2296,8 @@ def teleoperate(cfg: TeleoperateConfig):
             except KeyboardInterrupt:
                 logger.info("Teleoperation interrupted by user")
 
-        # --- elite_cs66 + pico4 ---
-        elif cfg.robot.type == "elite_cs66" and cfg.teleop.type == "pico4":
+        # --- elite_cs66_rt + pico4 ---
+        elif cfg.robot.type == "elite_cs66_rt" and cfg.teleop.type == "pico4":
             logger.info("Detected Elite CS66 + Pico4")
             robot = make_robot_from_config(cfg.robot)
             robot.connect(go_to_start=True)
@@ -2309,7 +2309,7 @@ def teleoperate(cfg: TeleoperateConfig):
             teleop = make_teleoperator_from_config(cfg.teleop)
             teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
             try:
-                elite_cs66_pico4_teleop_loop(
+                elite_cs66_rt_pico4_teleop_loop(
                     teleop=teleop,
                     robot=robot,
                     fps=cfg.fps,

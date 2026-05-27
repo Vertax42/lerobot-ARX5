@@ -18,14 +18,14 @@ from lerobot.cameras.configs import CameraConfig
 from lerobot.robots.config import RobotConfig
 
 
-class EliteCS66ControlMode(str, Enum):
+class EliteCS66RTControlMode(str, Enum):
     CARTESIAN_SERVO = "cartesian_servo"
     JOINT_SERVO = "joint_servo"
 
 
-@RobotConfig.register_subclass("elite_cs66")
+@RobotConfig.register_subclass("elite_cs66_rt")
 @dataclass
-class EliteCS66Config(RobotConfig):
+class EliteCS66RTConfig(RobotConfig):
     """Configuration for a single Elite CS66 arm.
 
     The default mode follows the LeRobot Cartesian convention:
@@ -37,7 +37,7 @@ class EliteCS66Config(RobotConfig):
     robot_ip: str = "192.168.1.200"
     local_ip: str = ""
     headless_mode: bool = True
-    control_mode: EliteCS66ControlMode = EliteCS66ControlMode.CARTESIAN_SERVO
+    control_mode: EliteCS66RTControlMode = EliteCS66RTControlMode.CARTESIAN_SERVO
     use_joint_observation: bool = False
 
     # Elite external control script. When unset, connect() resolves
@@ -71,7 +71,7 @@ class EliteCS66Config(RobotConfig):
     connect_timeout_s: float = 10.0
 
     # Home / Start poses (J1..J6 in radians). MoveJ-style trajectory used to
-    # reach these — see ``_move_j_blocking`` in EliteCS66. ``home`` is the safe
+    # reach these — see ``_move_j_blocking`` in EliteCS66RT. ``home`` is the safe
     # park pose used on disconnect; ``start`` is the task-ready pose used on
     # connect when ``go_to_start_on_connect=True``.
     home_position_rad: list[float] = field(
@@ -166,7 +166,7 @@ class EliteCS66Config(RobotConfig):
             )
         if (
             self.use_background_servo_loop
-            and self.control_mode != EliteCS66ControlMode.CARTESIAN_SERVO
+            and self.control_mode != EliteCS66RTControlMode.CARTESIAN_SERVO
         ):
             raise ValueError(
                 "use_background_servo_loop=True is only supported with control_mode=CARTESIAN_SERVO. "
