@@ -41,7 +41,7 @@ from lerobot.utils.robot_utils import (
 from ..robot import Robot
 from .config_pylibfranka_research3 import ControlMode, PylibfrankaResearch3Config
 from .franka_gripper import FrankaGripper
-from .xense_gripper import XenseGripper
+from lerobot.robots.grippers.xense_gripper import XenseGripper
 from scipy.spatial.transform import Rotation as R, Slerp
 
 logger = logging.getLogger(__name__)
