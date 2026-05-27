@@ -109,7 +109,7 @@ class EliteCS66RTConfig(RobotConfig):
         default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
     )
     start_move_duration_s: float = 3.0
-    home_move_duration_s: float = 4.0
+    home_move_duration_s: float = 3.0
     move_j_timeout_ms: int = 200
 
     # Minimum total wall time between EliteDriver() construction and the
