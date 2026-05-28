@@ -415,3 +415,14 @@ If you use this codebase, please cite the original LeRobot project:
     year = {2024}
 }
 ```
+
+If you use this fork or its XenseRobotics-specific extensions, please also cite:
+
+```bibtex
+@misc{xenserobotics2026lerobotxense,
+    author = {Vertax42 and {XenseRobotics Team}},
+    title  = {LeRobot-Xense: XenseRobotics Extensions for LeRobot},
+    howpublished = "\url{https://xenserobotic.com}",
+    year   = {2026}
+}
+```
