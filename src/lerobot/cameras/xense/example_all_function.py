@@ -1,7 +1,6 @@
 import sys
 from xensesdk import ExampleView
 from xensesdk import Sensor
-from xensesdk import CameraSource
 
 
 def main():
@@ -22,9 +21,8 @@ def main():
     except ImportError:
         print("Warning: torch not available, xensesdk may fall back to CPU inference")
 
-    # Explicitly enable GPU inference
-    print(CameraSource.AV_V4L2)
-    sensor_0 = Sensor.create("OG000456", use_gpu=True, api=CameraSource.CV2_V4L2)
+    # xensesdk>=2.0 auto-selects camera backend + GPU; inference is on by default.
+    sensor_0 = Sensor.create("OG000456")
     View = ExampleView(sensor_0)
     View2d = View.create2d(
         Sensor.OutputType.Difference,

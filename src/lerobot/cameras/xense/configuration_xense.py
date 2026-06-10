@@ -98,7 +98,13 @@ class XenseTactileCameraConfig(CameraConfig):
     warmup_s: float = 0.5
     rectify_size: tuple[int, int] | None = None  # (width, height) for rectified images
     raw_size: tuple[int, int] | None = None  # (width, height) for raw sensor data
-    use_gpu: bool = True
+    # xensesdk inference controls (the SDK auto-selects GPU when available):
+    # - disable_infer=True skips loading the (GPU) inference engine entirely. Safe and
+    #   much faster to start when only image outputs (RECTIFY/DIFFERENCE) are needed,
+    #   which do not require inference. Left None -> auto-derived in __post_init__.
+    # - infer_mode picks the engine variant ("normal" | "small" | "fast"). None -> SDK default.
+    disable_infer: bool | None = None
+    infer_mode: str | None = None
 
     def __post_init__(self):
         # Set default output types if not provided
@@ -170,3 +176,11 @@ class XenseTactileCameraConfig(CameraConfig):
                     self.width = 20
                 if self.height is None:
                     self.height = 35
+
+        # Auto-derive disable_infer when not explicitly set: image-only outputs
+        # (RECTIFY/DIFFERENCE) are produced by rectification and do not need the
+        # inference engine, so we can skip its (slow, ~25s) load. Any other output
+        # type (DEPTH/FORCE*/MARKER*/MESH*) requires inference -> keep it enabled.
+        if self.disable_infer is None:
+            infer_free_outputs = {XenseOutputType.RECTIFY, XenseOutputType.DIFFERENCE}
+            self.disable_infer = all(ot in infer_free_outputs for ot in self.output_types)

@@ -7,12 +7,12 @@ _patch_ctypes_find_library_for_udev()
 
 # Now safe to import xensesdk
 from xensesdk import ExampleView
-from xensesdk import Sensor, CameraSource
+from xensesdk import Sensor
 
 
 def main():
 
-    sensor_0 = Sensor.create("OG000337", use_gpu=True   , api=CameraSource.CV2_V4L2)
+    sensor_0 = Sensor.create("OG000337")
     View = ExampleView(sensor_0)
     View2d = View.create2d(
         Sensor.OutputType.Difference,
