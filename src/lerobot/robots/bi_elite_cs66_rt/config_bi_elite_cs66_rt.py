@@ -180,9 +180,27 @@ class BiEliteCS66RTConfig(RobotConfig):
     servoj_time: float = 0.004
     servoj_lookahead_time: float = 0.1
     servoj_gain: int = 300
-    command_timeout_ms: int = 200
+    # Larger reverse-socket read timeout than the single-arm driver (200ms): the
+    # bimanual station runs 2 servo loops + 7 camera read threads + VR + the main
+    # loop, so a servo-loop thread can occasionally be GIL-starved >200ms, and the
+    # Elite controller would then drop external control ("socket timed out waiting
+    # for command on reverse_socket") -> writeServoj fails -> teleop crash. 500ms
+    # tolerance absorbs those intermittent stalls; the arm holds its last servoj
+    # target meanwhile (RT thread priority does not help — the GIL is the limiter).
+    command_timeout_ms: int = 500
     use_background_servo_loop: bool = True
-    command_stale_timeout_s: float = 0.5
+    # Host-side stale threshold; validated as command_stale_timeout_s*1000 >=
+    # command_timeout_ms so the host keeps feeding (idle) before the controller times out.
+    command_stale_timeout_s: float = 1.0
+    # SCHED_FIFO(99) on the per-arm servo threads. The bimanual driver runs TWO
+    # servo threads (vs one single-arm). Two FIFO-99 threads + the Python GIL can
+    # priority-invert: one servo thread waits on the GIL held by a normal-priority
+    # camera/VR thread that the OTHER FIFO-99 servo thread keeps preempting, so one
+    # arm stops feeding >command_timeout_ms and its controller drops external
+    # control ("socket timed out waiting for command on reverse_socket"). RT
+    # priority does not help GIL-bound Python anyway — set False to run the servo
+    # loops at normal priority (recommended for the camera-heavy bimanual station).
+    servo_fifo_scheduling: bool = True
     reset_duration_s: float = 3.0
 
     # ── Shared RTSI state stream ──
@@ -211,7 +229,15 @@ class BiEliteCS66RTConfig(RobotConfig):
     right_home_position_rad: list[float] = field(default_factory=lambda: list(_CANDLE_POSE))
     start_move_duration_s: float = 3.0
     home_move_duration_s: float = 3.0
-    move_j_timeout_ms: int = 200
+    # Controller-side reverse-socket recv budget for trajectory (MoveJ) commands.
+    # This also arms the recv timeout that must survive the MoveJ -> servo-loop
+    # HANDOFF: after the final trajectory writeIdle, the controller waits this
+    # long for the servo loop's first command (thread start + FIFO-set + first
+    # writeServoj/writeIdle). Must be >= the worst-case handoff latency, so keep
+    # it >= command_timeout_ms (was 200ms, which under FIFO contention is shorter
+    # than the handoff -> controller times out -> "socket timed out waiting for
+    # command on reverse_socket" -> RST -> writeServoj fails N ticks).
+    move_j_timeout_ms: int = 800
 
     # ── Shared servoj trace ──
     trace_servoj: bool = True

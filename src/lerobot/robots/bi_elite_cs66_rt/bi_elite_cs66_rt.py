@@ -366,11 +366,14 @@ class BiEliteCS66RT(Robot):
             raise DeviceAlreadyConnectedError(f"{self} already connected, do not run connect() twice.")
 
         self._cs = _import_elite_sdk()
-        # RT scheduling is best-effort (needs CAP_SYS_NICE / rtprio).
-        try:
-            self._cs.setCurrentThreadFiFoScheduling(self._cs.getThreadFiFoMaxPriority())
-        except Exception as exc:
-            self.logger.warn(f"Failed to enable FIFO scheduling for Bi Elite CS66 control thread: {exc}")
+        # RT scheduling is best-effort (needs CAP_SYS_NICE / rtprio). Disable via
+        # servo_fifo_scheduling=False — two FIFO-99 servo threads + the GIL can
+        # priority-invert and stall one arm's feeding (see config docstring).
+        if self.config.servo_fifo_scheduling:
+            try:
+                self._cs.setCurrentThreadFiFoScheduling(self._cs.getThreadFiFoMaxPriority())
+            except Exception as exc:
+                self.logger.warn(f"Failed to enable FIFO scheduling for Bi Elite CS66 control thread: {exc}")
 
         try:
             # --- Bring up both controllers (+ their grippers) in parallel ---
@@ -383,48 +386,52 @@ class BiEliteCS66RT(Robot):
                 for side in _SIDES:
                     futs[side].result()
 
-            # --- Connect bimanual cameras in parallel ---
+            # --- Connect bimanual cameras ---
+            # Tactile (Xense UVC) sensors race on USB when opened concurrently:
+            # xensesdk's per-sensor flash/XU rectify read then fails with EBADF
+            # ("Bad file descriptor") and falls back to default rectify. Connect
+            # the tactile sensors SEQUENTIALLY; head/wrist (RealSense/OpenCV) use
+            # other backends and are fine in parallel.
             if self.cameras:
+                from lerobot.cameras.xense import XenseTactileCamera
+
                 self.logger.info(
                     f"Connecting {len(self.cameras)} camera(s): {', '.join(self.cameras.keys())}..."
                 )
-                with ThreadPoolExecutor(max_workers=len(self.cameras)) as ex:
-                    cam_futs = [ex.submit(cam.connect) for cam in self.cameras.values()]
-                    for f in cam_futs:
-                        f.result()
+                tactile = {
+                    n: c for n, c in self.cameras.items() if isinstance(c, XenseTactileCamera)
+                }
+                parallel = {n: c for n, c in self.cameras.items() if n not in tactile}
+                if parallel:
+                    with ThreadPoolExecutor(max_workers=len(parallel)) as ex:
+                        for f in [ex.submit(c.connect) for c in parallel.values()]:
+                            f.result()
+                for name, cam in tactile.items():
+                    self.logger.info(f"  connecting tactile sensor {name} (sequential)...")
+                    cam.connect()
         except BaseException:
             self._cleanup_after_failed_connect()
             raise
 
         self._is_connected = True
 
-        # --- MoveJ both arms to their start positions in parallel ---
-        if go_to_start:
-            try:
-                self.logger.info(
-                    "Bi Elite CS66 moving both arms to start_position over "
-                    f"{self.config.start_move_duration_s:.1f}s..."
+        # --- Bring each arm to its start_position AND immediately hand off to
+        #     its servo loop, per-arm, in parallel ---
+        # The reverse socket the controller opened in _connect_arm has an
+        # effectively-infinite recv timeout UNTIL the first command; the first
+        # MoveJ command arms the move_j_timeout_ms recv budget. From then on any
+        # feeding gap > that budget drops the connection. The dangerous gap is
+        # the MoveJ -> servo-loop handoff. Doing MoveJ + seed + servo-loop start
+        # inside ONE per-arm worker keeps the faster-finishing arm from sitting
+        # idle while the slower arm finishes (the previous "wait for both, then
+        # seed/start sequentially" structure starved whichever arm finished
+        # first -> intermittent "socket timed out ... reverse_socket" RST).
+        def _bring_arm_online(side: str) -> None:
+            if go_to_start:
+                self._move_j_blocking(
+                    side, self._arm_start_pose(side), self.config.start_move_duration_s
                 )
-                with ThreadPoolExecutor(max_workers=2) as ex:
-                    move_futs = {
-                        side: ex.submit(
-                            self._move_j_blocking,
-                            side,
-                            self._arm_start_pose(side),
-                            self.config.start_move_duration_s,
-                        )
-                        for side in _SIDES
-                    }
-                    for side in _SIDES:
-                        move_futs[side].result()
-            except BaseException:
-                self._is_connected = False
-                self._cleanup_after_failed_connect()
-                raise
-
-        # --- Seed servo state + start per-arm servo loops ---
-        if self.config.control_mode == BiEliteCS66RTControlMode.CARTESIAN_SERVO:
-            for side in _SIDES:
+            if self.config.control_mode == BiEliteCS66RTControlMode.CARTESIAN_SERVO:
                 current_tcp = np.asarray(self._rtsi[side].getActualTCPPose(), dtype=np.float64)
                 self._last_tcp_command[side] = current_tcp.copy()
                 self._target_tcp_command[side] = current_tcp.copy()
@@ -432,6 +439,21 @@ class BiEliteCS66RT(Robot):
                 self._last_action_time[side] = time.monotonic()
                 if self.config.use_background_servo_loop:
                     self._start_servo_loop(side)
+
+        try:
+            if go_to_start:
+                self.logger.info(
+                    "Bi Elite CS66 moving both arms to start_position over "
+                    f"{self.config.start_move_duration_s:.1f}s..."
+                )
+            with ThreadPoolExecutor(max_workers=2) as ex:
+                online_futs = {side: ex.submit(_bring_arm_online, side) for side in _SIDES}
+                for side in _SIDES:
+                    online_futs[side].result()
+        except BaseException:
+            self._is_connected = False
+            self._cleanup_after_failed_connect()
+            raise
 
         self.logger.info("BiEliteCS66RT connected and ready.")
 
@@ -488,6 +510,12 @@ class BiEliteCS66RT(Robot):
 
     def _cleanup_after_failed_connect(self) -> None:
         for side in _SIDES:
+            # A servo loop may already be running if the other arm's bring-up
+            # failed after this one handed off; stop it before tearing down.
+            try:
+                self._stop_servo_loop(side)
+            except Exception:
+                pass
             try:
                 if self._driver[side] is not None:
                     self._driver[side].stopControl(1000)
@@ -625,10 +653,11 @@ class BiEliteCS66RT(Robot):
         assert driver is not None
         assert self._cs is not None
 
-        try:
-            self._cs.setCurrentThreadFiFoScheduling(self._cs.getThreadFiFoMaxPriority())
-        except Exception as exc:
-            self.logger.warn(f"Failed to enable FIFO scheduling for {side} servo loop: {exc}")
+        if self.config.servo_fifo_scheduling:
+            try:
+                self._cs.setCurrentThreadFiFoScheduling(self._cs.getThreadFiFoMaxPriority())
+            except Exception as exc:
+                self.logger.warn(f"Failed to enable FIFO scheduling for {side} servo loop: {exc}")
 
         lock = self._servo_lock[side]
         stop_event = self._servo_stop_event[side]
