@@ -19,8 +19,10 @@ so the single-arm logic is reused per side rather than duplicated line-by-line.
 Action / observation keys are ``left_``/``right_`` prefixed:
     left_tcp.x/y/z + left_tcp.r1..r6   (+ optional left_joint_*),  left_gripper.pos
     right_tcp.x/y/z + right_tcp.r1..r6  (+ optional right_joint_*), right_gripper.pos
-Cameras (head + per-arm wrist) live at the bimanual level; tactile images arrive
-through each arm's XenseGripper (already namespaced left_tactile_* / right_tactile_*).
+Grippers are per-arm serial (USB) devices addressed by board SN (no IP/MAC).
+Cameras (head + per-arm wrist + optional tactiles) live at the bimanual level;
+tactile images come from separate XenseTactileCamera devices (already namespaced
+left_tactile_* / right_tactile_*), not the gripper.
 """
 
 import threading
@@ -45,7 +47,7 @@ from lerobot.robots.elite_cs66_rt.elite_cs66_rt import (
     _rotvec_to_quaternion,
     _slerp_quaternion_wxyz,
 )
-from lerobot.robots.grippers.xense_gripper import XenseGripper
+from lerobot.robots.grippers import SerialGripper
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import (
@@ -99,9 +101,9 @@ class BiEliteCS66RT(Robot):
         self._dashboard: dict[str, Any] = {s: None for s in _SIDES}
         self._rtsi: dict[str, Any] = {s: None for s in _SIDES}
 
-        self._gripper: dict[str, XenseGripper | None] = {
-            "left": XenseGripper(config.left_gripper) if config.left_gripper is not None else None,
-            "right": XenseGripper(config.right_gripper) if config.right_gripper is not None else None,
+        self._gripper: dict[str, SerialGripper | None] = {
+            "left": SerialGripper(config.left_gripper) if config.left_gripper is not None else None,
+            "right": SerialGripper(config.right_gripper) if config.right_gripper is not None else None,
         }
 
         self._last_tcp_command: dict[str, np.ndarray | None] = {s: None for s in _SIDES}
@@ -145,9 +147,6 @@ class BiEliteCS66RT(Robot):
     def _arm_home_pose(self, side: str) -> list[float]:
         return list(getattr(self.config, f"{side}_home_position_rad"))
 
-    def _arm_sensor_keys(self, side: str) -> dict[str, str]:
-        return getattr(self.config, f"{side}_gripper_sensor_keys")
-
     # =========================================================================
     # Feature descriptors
     # =========================================================================
@@ -164,19 +163,11 @@ class BiEliteCS66RT(Robot):
                 features.update(dict.fromkeys(self._joint_vel_keys[side], float))
                 features.update(dict.fromkeys(self._joint_effort_keys[side], float))
 
-            gripper = self._gripper[side]
-            if gripper is not None:
+            if self._gripper[side] is not None:
                 features[self._gripper_key[side]] = float
-                if gripper._enable_sensor:
-                    # Tactile rectify/difference images come back as HxWx3 RGB.
-                    # Labels are already namespaced (left_tactile_* / right_tactile_*).
-                    for sensor_name in self._arm_sensor_keys(side).values():
-                        features[sensor_name] = (
-                            self.config.gripper_rectify_size[1],
-                            self.config.gripper_rectify_size[0],
-                            3,
-                        )
 
+        # Tactile sensors are XenseTactileCamera entries in self.cameras, so they
+        # are covered by the camera loop below (same as head / wrist cams).
         for cam_name in self.cameras:
             features[cam_name] = (
                 self.config.cameras[cam_name].height,
@@ -789,10 +780,8 @@ class BiEliteCS66RT(Robot):
             gripper = self._gripper[side]
             if gripper is not None:
                 obs[self._gripper_key[side]] = gripper.get_gripper_position()
-                if gripper._enable_sensor:
-                    # Sensor labels are already namespaced; merge as-is.
-                    obs.update(gripper.get_sensor_data())
 
+        # Tactile images come from XenseTactileCamera entries in self.cameras.
         for cam_name, cam in self.cameras.items():
             obs[cam_name] = cam.async_read()
         return obs
