@@ -50,6 +50,7 @@ from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
+    bi_elite_cs66_rt,
     bi_flexiv_rizon4_rt,
     elite_cs66_rt,
     flexiv_rizon4_rt,
