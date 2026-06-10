@@ -40,11 +40,25 @@ class BiEliteCS66RTControlMode(str, Enum):
 # (left_tactile_* / right_tactile_*) so the flat observation dict stays unique.
 #
 # NOTE: the "diagonal" preset below describes the real station — the two Elite
-# CS66 arms are mounted diagonally/opposed (45° tilt + 90° Z, see the bi-arm
-# mounting transform). It has real controller IPs and per-arm start/home joint
-# poses (measured on the station). Grippers are serial (USB, addressed by board
-# SN — no IP/MAC). Gripper SNs and tactile sensor SNs are still PLACEHOLDER —
-# replace the TODO-marked values before deployment.
+# CS66 arms are mounted diagonally/opposed (tilt about base-X + rotate about Z,
+# see the bi-arm mounting transform). It has real controller IPs and per-arm
+# start/home joint poses (measured on the station). Grippers are serial (USB,
+# addressed by board SN — no IP/MAC). Gripper SNs and tactile sensor SNs are
+# still PLACEHOLDER — replace the TODO-marked values before deployment.
+#
+# Per-arm mounting → the world←base rotation R = Rz(γ)·Rz(β)·Rx(α) that lifts
+# base-frame TCP poses into a SHARED gravity-aligned world frame (x = facing,
+# y = left, z = up), matching the Flexiv convention so data is comparable.
+#   α = tilt about base-X, β = rotate about Z  — BOTH from the teach pendant
+#       (both controllers read α=45°, β=90°). These two only fix the gravity
+#       vector in base (i.e. recover "z up"); they do NOT fix the heading.
+#   γ = extra yaw about world-Z to align each arm's heading into the ONE shared
+#       world frame. The two arms are mounted symmetrically/diagonally (point-
+#       symmetric), so they face opposite directions: right γ=0° (defines the
+#       world), left γ=180°. The teach pendant cannot show this 180° (it's the
+#       residual yaw-about-gravity; see the bi-arm mounting-transform note).
+# Right (Rz(90°)·Rx(45°)) is validated empirically (base-X 130° pose → tool +Z
+# approach axis straight down). Verify the left 180° on-station via RTSI reads.
 _CANDLE_POSE = [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
 
 # Measured station start/home joint poses (J1..J6, radians).
@@ -67,7 +81,38 @@ _PRESETS: dict[str, dict] = {
         "right_start": list(_RIGHT_START_POSE),
         "left_home": list(_LEFT_START_POSE),
         "right_home": list(_RIGHT_START_POSE),
-        "head_camera_sn": "",
+        # Per-arm mounting → R = Rz(γ)·Rz(β)·Rx(α). tilt/zrot are the teach-pendant
+        # readings (both arms 45/90, fix the gravity vector only); world_yaw γ aligns
+        # headings into one shared world frame: right 0° (reference), left 180°
+        # (arms are point-symmetric / face opposite ways). See note above.
+        "right_tilt_deg": 45.0,
+        "right_zrot_deg": 90.0,
+        "right_world_yaw_deg": 0.0,
+        "left_tilt_deg": 45.0,
+        "left_zrot_deg": 90.0,
+        "left_world_yaw_deg": 180.0,
+        # Explicit world<-base rotation (rows = world X/Y/Z axes in base). When set
+        # it OVERRIDES the tilt/zrot/world_yaw angle build for that arm. The teach-
+        # pendant 45/90 angles assumed a tilt about base-X, but the LEFT arm is
+        # actually tilted 45° about base-Y (verified: freedrive-probe measurement +
+        # the base-link geometry). This matrix == base rotated about Z by 90° then
+        # about Y by 45°  ->  world X(fwd)=base+Y, world Z(up)=[0.707,0,0.707].
+        # Right is the point-symmetric partner of the (validated) left:
+        # R_right = Rz(180)·R_left  (forward flips to base-Y, up stays [0.707,0,0.707]).
+        # This matches the user's right-arm recipe (Z clockwise instead of left's CCW,
+        # Y 45°). VERIFY on-station with the axis test before trusting; if the heading
+        # is yawed, re-measure with the freedrive probe like the left.
+        "left_world_R": [
+            [0.0, 1.0, 0.0],
+            [-0.70710678, 0.0, 0.70710678],
+            [0.70710678, 0.0, 0.70710678],
+        ],
+        "right_world_R": [
+            [0.0, -1.0, 0.0],
+            [0.70710678, 0.0, -0.70710678],
+            [0.70710678, 0.0, 0.70710678],
+        ],
+        "head_camera_sn": "346522074942",
         "left_wrist_camera_sn": "XC000045",
         "right_wrist_camera_sn": "XC000046",
         # Tactile sensor SNs (XenseTactileCamera). left = OG001349/OG001350,
@@ -102,6 +147,27 @@ class BiEliteCS66RTConfig(RobotConfig):
     right_local_ip: str = ""
     bi_mount_type: str = "diagonal"
 
+    # ── Per-arm mounting → base↔world rotation (overwritten from the preset) ──
+    # R_world←base = Rz(γ)·Rz(β)·Rx(α): α=tilt about base-X, β=rotate about Z (both
+    # from the teach pendant, fixing only the gravity vector), γ=extra world-Z yaw
+    # that aligns each arm's heading into ONE shared world frame (x=facing, y=left,
+    # z=up). The driver lifts base→world in get_observation and maps world→base in
+    # send_action. Both pendants read α=45/β=90; the arms are point-symmetric so
+    # left needs γ=180° (right γ=0° defines the world). Right is validated.
+    left_mount_tilt_deg: float = 45.0
+    left_mount_zrot_deg: float = 90.0
+    left_mount_world_yaw_deg: float = 180.0
+    right_mount_tilt_deg: float = 45.0
+    right_mount_zrot_deg: float = 90.0
+    right_mount_world_yaw_deg: float = 0.0
+
+    # Optional explicit per-arm world<-base rotation (3x3, rows = world X/Y/Z in
+    # base). When not None it OVERRIDES the angle build above for that arm — used
+    # when the mounting isn't a clean Rz·Rx (e.g. the left arm tilts about base-Y).
+    # Populated from the preset's {side}_world_R.
+    left_world_rotation: list[list[float]] | None = None
+    right_world_rotation: list[list[float]] | None = None
+
     # ── Shared control mode + observation schema ──
     control_mode: BiEliteCS66RTControlMode = BiEliteCS66RTControlMode.CARTESIAN_SERVO
     observe_tcp: bool = True
@@ -128,6 +194,15 @@ class BiEliteCS66RTConfig(RobotConfig):
     connect_timeout_s: float = 10.0
     external_control_settle_s: float = 1.0
     servo_failure_tolerance_ticks: int = 250
+
+    # ── Per-arm EliteDriver local TCP port offsets ──
+    # Each EliteDriver opens host-side reverse/trajectory/script-command TCP
+    # servers (SDK defaults 50001/50003/50004, +script_sender 50002). Two drivers
+    # on one host must NOT share these, so the right arm's block is offset. The
+    # SDK templates the offset ports into the pushed external_control.script, so
+    # the controller connects back to the matching ports. Must differ between arms.
+    left_driver_port_offset: int = 0
+    right_driver_port_offset: int = 10
 
     # ── Per-arm Home / Start poses (J1..J6 radians; overwritten from preset) ──
     left_start_position_rad: list[float] = field(default_factory=lambda: list(_CANDLE_POSE))
@@ -197,6 +272,14 @@ class BiEliteCS66RTConfig(RobotConfig):
         self.right_start_position_rad = list(preset["right_start"])
         self.left_home_position_rad = list(preset["left_home"])
         self.right_home_position_rad = list(preset["right_home"])
+        self.left_mount_tilt_deg = preset["left_tilt_deg"]
+        self.left_mount_zrot_deg = preset["left_zrot_deg"]
+        self.left_mount_world_yaw_deg = preset["left_world_yaw_deg"]
+        self.right_mount_tilt_deg = preset["right_tilt_deg"]
+        self.right_mount_zrot_deg = preset["right_zrot_deg"]
+        self.right_mount_world_yaw_deg = preset["right_world_yaw_deg"]
+        self.left_world_rotation = preset.get("left_world_R")
+        self.right_world_rotation = preset.get("right_world_R")
 
         # ── Per-arm pose validation ──
         for name, pose in (
@@ -279,6 +362,25 @@ class BiEliteCS66RTConfig(RobotConfig):
             raise ValueError(
                 f"servo_failure_tolerance_ticks must be >= 1, "
                 f"got {self.servo_failure_tolerance_ticks}"
+            )
+        # Each arm uses a 4-port block based at SDK defaults 50001..50004 plus its
+        # offset. The two blocks must not overlap (|Δoffset| >= 4) and must stay in
+        # the unprivileged TCP range.
+        for name, off in (
+            ("left_driver_port_offset", self.left_driver_port_offset),
+            ("right_driver_port_offset", self.right_driver_port_offset),
+        ):
+            if not (0 <= 50001 + off and 50004 + off <= 65535):
+                raise ValueError(
+                    f"{name}={off} pushes EliteDriver ports outside the valid TCP range "
+                    "(50001..50004 + offset must stay within 1024..65535)"
+                )
+        if abs(self.left_driver_port_offset - self.right_driver_port_offset) < 4:
+            raise ValueError(
+                "left_driver_port_offset and right_driver_port_offset must differ by >= 4 so the "
+                "two arms' EliteDriver port blocks (reverse/sender/trajectory/script_command) do "
+                f"not overlap; got left={self.left_driver_port_offset}, "
+                f"right={self.right_driver_port_offset}"
             )
         if (
             self.use_background_servo_loop
