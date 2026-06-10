@@ -129,7 +129,72 @@ class BiEliteCS66RT(Robot):
         self._joint_effort_keys = {s: tuple(f"{s}_{k}" for k in JOINT_EFFORT_KEYS) for s in _SIDES}
         self._gripper_key = {s: f"{s}_gripper.pos" for s in _SIDES}
 
+        # Per-arm world←base rotation R = Rz(γ)·Rz(β)·Rx(α): tilt α about base-X
+        # and zrot β about Z come from the teach pendant (fix the gravity vector
+        # only); world_yaw γ aligns each arm's heading into ONE shared gravity-
+        # aligned world frame (x=facing, y=left, z=up). Used at the get_observation
+        # / send_action boundaries; all internal servo state stays in base frame.
+        self._R_wb: dict[str, np.ndarray] = {
+            side: self._resolve_world_rotation(config, side) for side in _SIDES
+        }
+
         self.cameras = make_cameras_from_configs(config.cameras)
+
+    @staticmethod
+    def _resolve_world_rotation(config: BiEliteCS66RTConfig, side: str) -> np.ndarray:
+        """world<-base rotation for one arm.
+
+        Uses the explicit ``{side}_world_rotation`` matrix from config when set
+        (re-orthonormalized defensively), else builds it from the tilt/zrot/yaw
+        angles. The explicit path is needed when the mounting isn't a clean
+        Rz·Rx (e.g. the left arm tilts about base-Y, not base-X).
+        """
+        override = getattr(config, f"{side}_world_rotation")
+        if override is not None:
+            R = np.asarray(override, dtype=np.float64)
+            if R.shape != (3, 3):
+                raise ValueError(f"{side}_world_rotation must be 3x3, got {R.shape}")
+            U, _, Vt = np.linalg.svd(R)
+            R = U @ Vt
+            if np.linalg.det(R) < 0:
+                R = U @ np.diag([1.0, 1.0, -1.0]) @ Vt
+            return R
+        return BiEliteCS66RT._mount_rotation(
+            getattr(config, f"{side}_mount_tilt_deg"),
+            getattr(config, f"{side}_mount_zrot_deg"),
+            getattr(config, f"{side}_mount_world_yaw_deg"),
+        )
+
+    @staticmethod
+    def _mount_rotation(tilt_deg: float, zrot_deg: float, world_yaw_deg: float) -> np.ndarray:
+        """world←base rotation matrix for one arm: R = Rz(world_yaw)·Rz(zrot)·Rx(tilt).
+
+        Built from axis-angle rotvecs (this repo's ``Rotation`` has no
+        ``from_euler``): Rx(tilt) about base-X, Rz(zrot) about Z (teach-pendant
+        mounting), then Rz(world_yaw) about world-Z to align headings across arms.
+        """
+        rx = Rotation.from_rotvec([np.deg2rad(tilt_deg), 0.0, 0.0]).as_matrix()
+        rz = Rotation.from_rotvec([0.0, 0.0, np.deg2rad(zrot_deg)]).as_matrix()
+        ryaw = Rotation.from_rotvec([0.0, 0.0, np.deg2rad(world_yaw_deg)]).as_matrix()
+        return ryaw @ rz @ rx
+
+    def _base_pose6_to_world(self, side: str, pose6: np.ndarray) -> np.ndarray:
+        """Lift a base-frame ``[x,y,z,rx,ry,rz]`` (rotvec) pose into world frame."""
+        R_wb = self._R_wb[side]
+        pose6 = np.asarray(pose6, dtype=np.float64)
+        pos = R_wb @ pose6[:3]
+        rot = R_wb @ Rotation.from_rotvec(pose6[3:6]).as_matrix()
+        rotvec = Rotation.from_matrix(rot).as_rotvec()
+        return np.concatenate([pos, rotvec])
+
+    def _world_pose6_to_base(self, side: str, pose6: np.ndarray) -> np.ndarray:
+        """Map a world-frame ``[x,y,z,rx,ry,rz]`` (rotvec) pose back to base frame."""
+        R_bw = self._R_wb[side].T
+        pose6 = np.asarray(pose6, dtype=np.float64)
+        pos = R_bw @ pose6[:3]
+        rot = R_bw @ Rotation.from_rotvec(pose6[3:6]).as_matrix()
+        rotvec = Rotation.from_matrix(rot).as_rotvec()
+        return np.concatenate([pos, rotvec])
 
     # =========================================================================
     # Per-arm config accessors
@@ -275,6 +340,17 @@ class BiEliteCS66RT(Robot):
         cfg.servoj_lookahead_time = self.config.servoj_lookahead_time
         cfg.servoj_gain = self.config.servoj_gain
         cfg.headless_mode = True
+        # Two EliteDriver instances on one host can't share the local reverse /
+        # trajectory / script-command TCP server ports — the 2nd arm would hit
+        # "Address already in use". Offset one arm's ports; the SDK substitutes
+        # these into the pushed external_control.script (REVERSE/TRAJECTORY/
+        # SCRIPT_COMMAND port placeholders) so the controller connects back to
+        # the matching ports.
+        offset = getattr(self.config, f"{side}_driver_port_offset")
+        cfg.reverse_port += offset
+        cfg.script_sender_port += offset
+        cfg.trajectory_port += offset
+        cfg.script_command_port += offset
         if self.config.script_file_path is not None:
             cfg.script_file_path = str(Path(self.config.script_file_path).expanduser())
         else:
@@ -761,8 +837,11 @@ class BiEliteCS66RT(Robot):
             assert rtsi is not None
 
             if self.config.observe_tcp:
+                # RTSI reports the TCP pose in the (tilted) base frame; lift it
+                # into the gravity-aligned world frame before publishing.
                 tcp_pose = np.asarray(rtsi.getActualTCPPose(), dtype=np.float64)
-                obs.update(self._tcp_rotvec_to_feature_values(side, tcp_pose))
+                tcp_world = self._base_pose6_to_world(side, tcp_pose)
+                obs.update(self._tcp_rotvec_to_feature_values(side, tcp_world))
             if self.config.observe_joints:
                 joints = rtsi.getActualJointPositions()
                 obs.update(
@@ -797,16 +876,22 @@ class BiEliteCS66RT(Robot):
             )
 
         if last_tcp is not None:
-            target = last_tcp
+            last_base = last_tcp
         else:
             assert self._rtsi[side] is not None
-            target = np.asarray(self._rtsi[side].getActualTCPPose(), dtype=np.float64)
+            last_base = np.asarray(self._rtsi[side].getActualTCPPose(), dtype=np.float64)
+
+        # The incoming action is in the world frame; merge it against the last
+        # commanded pose expressed in world so partial (position-only) actions
+        # keep the same per-axis semantics as the single-arm driver, then map the
+        # merged target back into base for the servo loop / SDK IK.
+        target_world = self._base_pose6_to_world(side, last_base)
 
         pos_keys = self._tcp_pos_keys[side]
         rot_keys = self._tcp_rot_keys[side]
         for i, key in enumerate(pos_keys):
             if key in action:
-                target[i] = float(action[key])
+                target_world[i] = float(action[key])
 
         if any(key in action for key in rot_keys):
             if not all(key in action for key in rot_keys):
@@ -815,10 +900,14 @@ class BiEliteCS66RT(Robot):
                     f"{rot_keys[-1]} together."
                 )
             r6d = np.array([float(action[key]) for key in rot_keys], dtype=np.float64)
-            # Anchor against our own last-commanded rotvec (continuous by
-            # construction), NOT RTSI's reported pose. See single-arm driver.
-            target_principal = _quaternion_to_rotvec(rotation_6d_to_quaternion(r6d))
-            target[3:6] = _rotvec_continuity_shift(target_principal, target[3:6])
+            target_world[3:6] = _quaternion_to_rotvec(rotation_6d_to_quaternion(r6d))
+
+        target = self._world_pose6_to_base(side, target_world)
+        # Re-express the base-frame target rotvec on the same ±2π·axis branch as
+        # our own last-commanded base rotvec (continuous by construction, NOT
+        # RTSI's reported pose) so the SDK IK seed stays smooth. See single-arm
+        # driver for why we anchor on the commanded rotvec.
+        target[3:6] = _rotvec_continuity_shift(target[3:6], last_base[3:6])
 
         return target
 
@@ -913,7 +1002,14 @@ class BiEliteCS66RT(Robot):
                     raise RuntimeError(f"Elite writeServoj(cartesian=True) failed ({side}).")
                 self._last_tcp_command[side] = target_tcp
                 self._external_command_received[side] = True
-            sent.update(self._tcp_rotvec_to_feature_values(side, target_tcp))
+            # Report the sent pose back in the world frame so callers (display /
+            # replay) stay consistent with get_observation. The dataset action is
+            # recorded from the teleop/policy action, not this return value.
+            sent.update(
+                self._tcp_rotvec_to_feature_values(
+                    side, self._base_pose6_to_world(side, target_tcp)
+                )
+            )
         else:
             joint_keys = self._joint_pos_keys[side]
             if not all(key in action for key in joint_keys):
@@ -1026,7 +1122,11 @@ class BiEliteCS66RT(Robot):
     def _arm_tcp_pose_quat(self, side: str) -> np.ndarray:
         rtsi = self._rtsi[side]
         assert rtsi is not None
-        tcp_pose = np.asarray(rtsi.getActualTCPPose(), dtype=np.float64)
+        # Return the pose in the gravity-aligned world frame, consistent with
+        # get_observation (RTSI reports it in the tilted base frame).
+        tcp_pose = self._base_pose6_to_world(
+            side, np.asarray(rtsi.getActualTCPPose(), dtype=np.float64)
+        )
         quat = _rotvec_to_quaternion(tcp_pose[3:6])
         gripper = self._gripper[side]
         gripper_pos = gripper.get_gripper_position() if gripper is not None else 0.0
@@ -1040,6 +1140,9 @@ class BiEliteCS66RT(Robot):
             rtsi = self._rtsi[side]
             assert rtsi is not None
             tcp_pose = np.asarray(rtsi.getActualTCPPose(), dtype=np.float64)
+        # ``tcp_pose`` (whether from RTSI or a passed-in _last_tcp_command) is in
+        # the tilted base frame; lift it into world for a consistent report.
+        tcp_pose = self._base_pose6_to_world(side, np.asarray(tcp_pose, dtype=np.float64))
         quat = _rotvec_to_quaternion(tcp_pose[3:6])
         euler = quaternion_to_euler(float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3]))
         gripper = self._gripper[side]
