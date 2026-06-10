@@ -24,7 +24,6 @@ import numpy as np
 
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import get_logger
-from xensesdk import CameraSource
 
 from ..camera import Camera
 from .configuration_xense import XenseTactileCameraConfig, XenseOutputType
@@ -146,7 +145,8 @@ class XenseTactileCamera(Camera):
         self.warmup_s = config.warmup_s
         self.rectify_size = config.rectify_size
         self.raw_size = config.raw_size
-        self.use_gpu = config.use_gpu
+        self.disable_infer = config.disable_infer
+        self.infer_mode = config.infer_mode
         self.sensor = None
 
         # Threading for async read
@@ -196,14 +196,17 @@ class XenseTactileCamera(Camera):
 
         try:
             _patch_ctypes_find_library_for_udev()
-            # Use default OpenCV backend (no api parameter = CV2_V4L2)
-            self.sensor = self._Sensor.create(
-                self.serial_number,
-                api=CameraSource.CV2_V4L2,
-                rectify_size=self.rectify_size,
-                raw_size=self.raw_size,
-                use_gpu=self.use_gpu,
-            )
+            # xensesdk>=2.0: `api`/`use_gpu` were removed; the SDK auto-selects the
+            # camera backend and GPU. `disable_infer` skips the inference-engine load
+            # for image-only outputs; `infer_mode` (None=SDK default) picks the variant.
+            create_kwargs = {
+                "rectify_size": self.rectify_size,
+                "raw_size": self.raw_size,
+                "disable_infer": self.disable_infer,
+            }
+            if self.infer_mode is not None:
+                create_kwargs["infer_mode"] = self.infer_mode
+            self.sensor = self._Sensor.create(self.serial_number, **create_kwargs)
         except Exception as e:
             raise ConnectionError(
                 f"Failed to connect to {self}. Error: {e}. "
@@ -223,7 +226,9 @@ class XenseTactileCamera(Camera):
                 time.sleep(0.1)
             self._start_read_thread()
 
-        logger.info(f"{self} connected with CV2_V4L2 API (OpenCV backend)")
+        logger.info(
+            f"{self} connected (disable_infer={self.disable_infer}, infer_mode={self.infer_mode})"
+        )
 
     @staticmethod
     def find_cameras() -> list[dict[str, Any]]:
