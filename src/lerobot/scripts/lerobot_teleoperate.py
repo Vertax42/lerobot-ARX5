@@ -81,6 +81,18 @@ lerobot-teleoperate \
     --fps=60
 ```
 
+Example (Bimanual Elite CS66 RT + Bi-Pico4):
+
+```shell
+lerobot-teleoperate \
+    --robot.type=bi_elite_cs66_rt \
+    --robot.bi_mount_type=diagonal \
+    --robot.left_robot_ip=192.168.8.53 \
+    --robot.right_robot_ip=192.168.8.223 \
+    --teleop.type=bi_pico4 \
+    --fps=30
+```
+
 Example (Xense Flare gripper, data collection — no teleoperator needed):
 
 ```shell
@@ -146,6 +158,7 @@ from lerobot.robots import (  # noqa: F401
     RobotConfig,
     arx5_follower,
     bi_arx5,
+    bi_elite_cs66_rt,
     bi_flexiv_rizon4_rt,
     elite_cs66_rt,
     flexiv_rizon4_rt,
@@ -1553,7 +1566,12 @@ def bi_pico4_teleop_loop(
     debug_timing: bool = False,
 ):
     """
-    Teleop loop for BiPico4 VR controllers with BiFlexivRizon4RT bimanual robot.
+    Teleop loop for BiPico4 VR controllers with a bimanual robot
+    (BiFlexivRizon4RT or BiEliteCS66RT).
+
+    Robot-agnostic: drives the robot through the generic Robot interface plus
+    get_current_tcp_pose_quat() / reset_to_initial_position() / rt_moving, all
+    of which both bimanual backends implement.
 
     Control scheme:
     - Left grip:  Enable left arm control
@@ -2353,6 +2371,43 @@ def teleoperate(cfg: TeleoperateConfig):
 
             # Pre-initialize the VR SDK in background while the robot connects
             # (robot.connect() takes ~20-40s; VR SDK init takes ~3s → free overlap)
+            from concurrent.futures import ThreadPoolExecutor as _TPE
+
+            try:
+                with _TPE(max_workers=2) as _ex:
+                    _robot_fut = _ex.submit(robot.connect, go_to_start=True)
+                    _teleop_fut = _ex.submit(teleop.pre_init)
+                    _teleop_fut.result()  # raise immediately if VR SDK fails
+                    _robot_fut.result()  # raise immediately if robot fails
+            except KeyboardInterrupt:
+                logger.info("Startup interrupted by user")
+                raise
+
+            left_pose, right_pose = robot.get_current_tcp_pose_quat()
+            logger.info(f"Left start pose:  {left_pose}")
+            logger.info(f"Right start pose: {right_pose}")
+            teleop.connect(left_tcp_pose_quat=left_pose, right_tcp_pose_quat=right_pose)
+            try:
+                bi_pico4_teleop_loop(
+                    teleop=teleop,
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    dryrun=cfg.dryrun,
+                    debug_timing=cfg.debug_timing,
+                )
+            except KeyboardInterrupt:
+                logger.info("Teleoperation interrupted by user")
+
+        # --- bi_elite_cs66_rt + bi_pico4 ---
+        elif cfg.robot.type == "bi_elite_cs66_rt" and cfg.teleop.type == "bi_pico4":
+            logger.info("Detected BiEliteCS66RT + BiPico4")
+            robot = make_robot_from_config(cfg.robot)
+            teleop = make_teleoperator_from_config(cfg.teleop)
+
+            # Pre-initialize the VR SDK in background while the robot connects
+            # (dual-arm bring-up + go-to-start is slow; VR SDK init ~3s → free overlap)
             from concurrent.futures import ThreadPoolExecutor as _TPE
 
             try:
