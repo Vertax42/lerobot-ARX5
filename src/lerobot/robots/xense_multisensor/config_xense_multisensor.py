@@ -58,23 +58,15 @@ class XenseMultisensorConfig(RobotConfig):
 
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
-            "head": RealSenseCameraConfig(
-                serial_number_or_name="135522074323",
-                fps=30,
-                width=640,
-                height=480,
-                warmup_s=1.0,
-            ),
+            # "head": RealSenseCameraConfig(
+            #     serial_number_or_name="135522074323",
+            #     fps=30,
+            #     width=640,
+            #     height=480,
+            #     warmup_s=1.0,
+            # ),
             "left_wrist": OpenCVCameraConfig(
-                index_or_path="XC000003",
-                fourcc="MJPG",
-                width=640,
-                height=480,
-                fps=30,
-                warmup_s=1.0,
-            ),
-            "right_wrist": OpenCVCameraConfig(
-                index_or_path="XC000004",
+                index_or_path="XC000035",
                 fourcc="MJPG",
                 width=640,
                 height=480,
@@ -82,25 +74,13 @@ class XenseMultisensorConfig(RobotConfig):
                 warmup_s=1.0,
             ),
             "left_tactile_0": XenseTactileCameraConfig(
-                serial_number="OG000867",
+                serial_number="OG001322",
                 fps=30,
                 output_types=[XenseOutputType.RECTIFY],
                 warmup_s=0.05,
             ),
             "left_tactile_1": XenseTactileCameraConfig(
-                serial_number="OG000865",
-                fps=30,
-                output_types=[XenseOutputType.RECTIFY],
-                warmup_s=0.05,
-            ),
-            "right_tactile_0": XenseTactileCameraConfig(
-                serial_number="OG000142",
-                fps=30,
-                output_types=[XenseOutputType.RECTIFY],
-                warmup_s=0.05,
-            ),
-            "right_tactile_1": XenseTactileCameraConfig(
-                serial_number="OG000866",
+                serial_number="OG001323",
                 fps=30,
                 output_types=[XenseOutputType.RECTIFY],
                 warmup_s=0.05,
