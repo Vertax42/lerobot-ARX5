@@ -14,10 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Pure-serial Xense gripper driver for bi_flexiv_rizon4_rt.
+"""Pure-serial Xense gripper driver (arm-agnostic, shared across robots).
 
 Uses XenseSerialGripper (from the XGripper submodule) directly over a
-USB-serial port.  No ezros / xensesdk stack required.
+USB-serial port.  No ezros / xensesdk stack required. Identified by board SN
+(auto-scan) or explicit serial port — no IP / MAC / network.
 """
 
 import time
@@ -27,7 +28,7 @@ from glob import glob
 from xensegripper import XenseSerialGripper, read_board_sn
 
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
-from lerobot.robots.bi_flexiv_rizon4_rt.config_serial_gripper import SerialGripperConfig
+from lerobot.robots.grippers.config_serial_gripper import SerialGripperConfig
 from lerobot.utils.robot_utils import get_logger
 
 # Serialize port scans so parallel gripper connect() calls don't

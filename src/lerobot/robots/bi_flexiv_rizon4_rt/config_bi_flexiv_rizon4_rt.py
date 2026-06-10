@@ -17,7 +17,6 @@
 """Configuration for BiFlexivRizon4RT dual-arm robot (real-time via flexiv_rt)."""
 
 from dataclasses import dataclass, field
-
 import flexiv_rt
 
 from lerobot.cameras.configs import CameraConfig
@@ -25,7 +24,7 @@ from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
 from lerobot.robots.config import RobotConfig
-from lerobot.robots.bi_flexiv_rizon4_rt.config_serial_gripper import SerialGripperConfig
+from lerobot.robots.grippers import SerialGripperConfig
 
 
 @RobotConfig.register_subclass("bi_flexiv_rizon4_rt")
