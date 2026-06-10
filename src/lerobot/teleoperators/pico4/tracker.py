@@ -30,8 +30,8 @@ pybind, just different endpoint calls (``get_motion_tracker_pose`` vs.
 ``get_left/right_controller_pose``). So if you want this reader to act
 as a drop-in replacement for the controller in a teleop flow, apply
 the same coordinate transform that the controller-based teleop applies
-(e.g. ``teleop_pico4`` does a Pico→Flexiv remap at line ~447-513 of
-``teleop_pico4.py``; you'd reuse that on top of ``get_pose_raw()``).
+(e.g. ``teleop_pico4`` does a Pico→world remap in
+``_transform_pico_to_world_coordinate``; you'd reuse that on top of ``get_pose_raw()``).
 
 For pure handheld data collection (taccap_gripper) there is no arm,
 so we don't remap — we emit the raw xrt frame and leave reframing to
@@ -217,8 +217,8 @@ class Pico4TrackerReader:
                 the first valid tracker pose and computes a rigid
                 alignment transform so all subsequent
                 ``get_pose_ee()`` / ``get_action()`` outputs are in the
-                same frame as this argument (mirrors xense_flare /
-                vive_tracker's UMI behaviour). When omitted, the raw
+                same frame as this argument (mirrors vive_tracker's
+                UMI behaviour). When omitted, the raw
                 xrt-native frame is emitted (drop-in compatible with
                 pre-Phase-C callers).
 
