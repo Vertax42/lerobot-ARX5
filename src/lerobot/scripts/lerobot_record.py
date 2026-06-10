@@ -250,6 +250,7 @@ RAW_PASSTHROUGH_RECORD_PAIRS = frozenset(
     {
         ("flexiv_rizon4_rt", "pico4"),
         ("bi_flexiv_rizon4_rt", "bi_pico4"),
+        ("bi_elite_cs66_rt", "bi_pico4"),
         ("pylibfranka_research3", "pico4"),
         ("pylibfranka_research3", "btgamepad"),
     }
@@ -1067,7 +1068,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             logger.info(f"Start EEF pose: {robot.get_current_tcp_pose_quat()}")
         elif (
             teleop_type == "bi_pico4"
-            and cfg.robot.type == "bi_flexiv_rizon4_rt"
+            and cfg.robot.type in ("bi_flexiv_rizon4_rt", "bi_elite_cs66_rt")
             and teleop is not None
         ):
             try:
@@ -1098,7 +1099,10 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             if teleop_type == "pico4" and cfg.robot.type == "flexiv_rizon4_rt":
                 teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
                 logger.info("Teleop initialized with robot EEF pose.")
-            elif teleop_type == "bi_pico4" and cfg.robot.type == "bi_flexiv_rizon4_rt":
+            elif teleop_type == "bi_pico4" and cfg.robot.type in (
+                "bi_flexiv_rizon4_rt",
+                "bi_elite_cs66_rt",
+            ):
                 left_pose, right_pose = robot.get_current_tcp_pose_quat()
                 teleop.connect(left_tcp_pose_quat=left_pose, right_tcp_pose_quat=right_pose)
                 logger.info("BiPico4 initialized with both robot EEF poses.")
@@ -1145,7 +1149,11 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         single_task=cfg.dataset.single_task,
                         display_data=cfg.display_data,
                     )
-                elif cfg.robot.type in {"flexiv_rizon4_rt", "bi_flexiv_rizon4_rt"}:
+                elif cfg.robot.type in {
+                    "flexiv_rizon4_rt",
+                    "bi_flexiv_rizon4_rt",
+                    "bi_elite_cs66_rt",
+                }:
                     flexiv_rizon4_rt_record_loop(
                         robot=robot,
                         events=events,
