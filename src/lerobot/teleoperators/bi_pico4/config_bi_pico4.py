@@ -28,7 +28,7 @@ class BiPico4Config(TeleoperatorConfig):
     - Left controller  -> left arm  (left_tcp.*, left_gripper.pos)
     - Right controller -> right arm (right_tcp.*, right_gripper.pos)
 
-    Output keys match BiFlexivRizon4RT action space directly.
+    Output keys are the shared world-frame TCP schema (BiFlexivRizon4RT, BiEliteCS66RT).
 
     Attributes:
         pos_sensitivity: Position scale factor (1.0 = 1:1 mapping).

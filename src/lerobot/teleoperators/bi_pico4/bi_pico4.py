@@ -14,13 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""BiPico4: Bimanual Pico4 VR teleoperator for BiFlexivRizon4RT.
+"""BiPico4: Bimanual Pico4 VR teleoperator for any bimanual robot using the shared
+world-frame TCP schema (BiFlexivRizon4RT, BiEliteCS66RT, ...).
 
 Uses both Pico4 VR controllers simultaneously via a single xrt SDK connection.
 Delegates all per-arm tracking to two Pico4 instances (left and right), sharing
-one xrt handle initialised in connect() and closed in disconnect().
+one xrt handle initialised in connect() and closed in disconnect(). Output is in
+the world frame (x=forward, y=left, z=up), so it drives any robot that speaks it.
 
-Output action keys (matching BiFlexivRizon4RT):
+Output action keys (shared world-frame TCP schema; Flexiv & Elite):
     left_tcp.{x, y, z, r1-r6}   left_gripper.pos
     right_tcp.{x, y, z, r1-r6}  right_gripper.pos
 
@@ -45,7 +47,8 @@ from lerobot.utils.robot_utils import get_logger, normalize_quaternion
 
 
 class BiPico4(Teleoperator):
-    """Bimanual Pico4 VR teleoperator for BiFlexivRizon4RT.
+    """Bimanual Pico4 VR teleoperator for any bimanual robot on the shared
+    world-frame TCP schema (BiFlexivRizon4RT, BiEliteCS66RT, ...).
 
     Wraps two Pico4 instances (left and right) sharing a single xrt SDK
     connection.  BiPico4.connect() initialises the SDK once, injects the
@@ -53,7 +56,7 @@ class BiPico4(Teleoperator):
     BiPico4.get_action() delegates to each Pico4 and prefixes the keys with
     "left_" / "right_".
 
-    Output action keys match BiFlexivRizon4RT directly:
+    Output action keys (world-frame TCP; Flexiv & Elite use the same):
         left_tcp.{x,y,z,r1-r6}, left_gripper.pos
         right_tcp.{x,y,z,r1-r6}, right_gripper.pos
 
@@ -161,7 +164,7 @@ class BiPico4(Teleoperator):
 
     @property
     def action_features(self) -> dict[str, Any]:
-        """Action features matching BiFlexivRizon4RT action space."""
+        """Action features: bimanual world-frame TCP (Flexiv & Elite share this)."""
         return {
             "dtype": "float32",
             "shape": (20,),
@@ -313,7 +316,7 @@ class BiPico4(Teleoperator):
         """Get action from both controllers.
 
         Delegates to each Pico4 instance and prefixes the returned keys with
-        "left_" / "right_" to match BiFlexivRizon4RT's action space.
+        "left_" / "right_" to match the bimanual world-frame TCP action space.
 
         Returns:
             Flat dict with keys: left_tcp.{x,y,z,r1-r6}, left_gripper.pos,
@@ -339,8 +342,8 @@ class BiPico4(Teleoperator):
         """Reset both arm target poses (e.g. after robot moves to start position).
 
         Args:
-            left_pose_7d: [x, y, z, qw, qx, qy, qz] in Flexiv frame.
-            right_pose_7d: [x, y, z, qw, qx, qy, qz] in Flexiv frame.
+            left_pose_7d: [x, y, z, qw, qx, qy, qz] in world frame.
+            right_pose_7d: [x, y, z, qw, qx, qy, qz] in world frame.
             left_gripper_pos: Left gripper position.
             right_gripper_pos: Right gripper position.
         """

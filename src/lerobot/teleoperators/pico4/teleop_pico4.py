@@ -66,7 +66,7 @@ class Pico4(Teleoperator):
 
     Orientation control (absolute mapping with offset):
     - When grip is pressed, calculate offset to align controller with robot orientation
-    - target_quat = controller_quat_flexiv * offset
+    - target_quat = controller_quat_world * offset
     - This gives intuitive control: controller orientation directly maps to robot orientation
 
     Coordinate systems:
@@ -74,9 +74,9 @@ class Pico4(Teleoperator):
       * Origin: Set as the headset position when the Unity application starts (when Unity app launches)
       * NOT when xrt.init() is called, and NOT when clicking connect button in Unity
       * This means the coordinate system is fixed when Unity app launches, and remains constant until Unity restarts
-    - Flexiv: Right-handed, X forward (away from base), Y left, Z up
+    - World: Right-handed, X forward (away from base), Y left, Z up (Flexiv-aligned)
 
-    Output action format (Flexiv Rizon4):
+    Output action format (world-frame TCP, shared by Flexiv & Elite):
     - tcp.x, tcp.y, tcp.z: absolute EEF target position (meters)
     - tcp.r1-r6: absolute EEF target orientation (6D rotation representation)
     - gripper.pos: absolute gripper position (meters, from trigger)
@@ -95,21 +95,21 @@ class Pico4(Teleoperator):
         self._xrt = None
         self.logger = get_logger(f"Pico4Teleop/{config.id}")
 
-        # Target pose tracking (in Flexiv coordinate system)
+        # Target pose tracking (in world frame)
         self._target_pos: np.ndarray = np.zeros(3, dtype=np.float32)  # [x, y, z]
         self._target_quat: np.ndarray = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)  # [qw, qx, qy, qz]
         self._target_gripper_pos: float = 0.0
 
-        # Start pose (robot pose when grip is pressed/enabled, in Flexiv frame)
+        # Start pose (robot pose when grip is pressed/enabled, in world frame)
         self._start_pos: np.ndarray = np.zeros(3, dtype=np.float32)  # [x, y, z]
         self._start_quat: np.ndarray = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)  # [qw, qx, qy, qz]
 
-        # Reference position for relative position control (controller pos when enabled, in Flexiv frame)
-        self._ref_pos: np.ndarray | None = None  # [x, y, z] in Flexiv frame
+        # Reference position for relative position control (controller pos when enabled, in world frame)
+        self._ref_pos: np.ndarray | None = None  # [x, y, z] in world frame
 
         # Quaternion offset for absolute orientation mapping
-        # Calculated when enabled: offset = inv(pico4_quat_flexiv) * robot_start_quat
-        # Usage: target_quat = pico4_quat_flexiv * offset
+        # Calculated when enabled: offset = inv(pico4_quat_world) * robot_start_quat
+        # Usage: target_quat = pico4_quat_world * offset
         # This aligns controller orientation with robot orientation at enable moment
         self._quat_offset: np.ndarray | None = None  # [qw, qx, qy, qz]
 
@@ -160,11 +160,11 @@ class Pico4(Teleoperator):
     @property
     def action_features(self) -> dict[str, Any]:
         """
-        Return action features matching Flexiv Rizon4 format.
+        Return action features matching world-frame TCP format.
 
         Returns a dictionary with dtype, shape, and names for the action space:
-        - tcp.x, tcp.y, tcp.z: absolute TCP position (meters) in Flexiv frame
-        - tcp.r1-r6: absolute TCP orientation (6D rotation) in Flexiv frame
+        - tcp.x, tcp.y, tcp.z: absolute TCP position (meters) in world frame
+        - tcp.r1-r6: absolute TCP orientation (6D rotation) in world frame
         - gripper.pos: absolute gripper position (meters)
         """
         return {
@@ -254,7 +254,7 @@ class Pico4(Teleoperator):
                 )
 
             # Set target pose on connect
-            # Input format: [x, y, z, qw, qx, qy, qz, gripper_pos] (Flexiv wxyz format)
+            # Input format: [x, y, z, qw, qx, qy, qz, gripper_pos] (world frame, wxyz)
             self._target_pos = current_tcp_pose_quat[:3].copy()  # [x, y, z]
             self._target_quat = normalize_quaternion(current_tcp_pose_quat[3:7], input_format="wxyz")
             self._target_gripper_pos = current_tcp_pose_quat[7]
@@ -300,7 +300,7 @@ class Pico4(Teleoperator):
         Reset target pose to a specific pose (e.g., home pose).
 
         Args:
-            pose_7d: 7D EEF pose [x, y, z, qw, qx, qy, qz] in Flexiv frame (wxyz quaternion format)
+            pose_7d: 7D EEF pose [x, y, z, qw, qx, qy, qz] in world frame (wxyz quaternion format)
             gripper_pos: Gripper position in meters
         """
         self._target_pos = np.array(pose_7d[:3], dtype=np.float32).copy()
@@ -444,38 +444,44 @@ class Pico4(Teleoperator):
 
         return filtered_pos, filtered_quat
 
-    def _transform_pico_to_flexiv_coordinate(
+    def _transform_pico_to_world_coordinate(
         self, pos: np.ndarray, quat: np.ndarray
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Transform pose from Pico4 coordinate system to Flexiv coordinate system.
+        """Transform pose from the Pico4 controller frame into the WORLD frame.
 
         This is Step 2: Coordinate transformation after filtering.
 
-        Pico4: Right-handed, X right, Y up, Z in (toward user)
-        Flexiv: Right-handed, X forward (away from base), Y left, Z up
+        The "world" frame is the shared, gravity-aligned convention every robot now
+        reports in (originally the Flexiv axes): X forward (away from base), Y left,
+        Z up. Elite CS66 lifts its tilted base frame into this same convention, so
+        the same transform drives any of these robots.
 
-        If user stands in front of robot, "in" (toward user) and "forward" (away from base) are opposite.
+        Pico4:  Right-handed, X right, Y up, Z in (toward user)
+        World:  Right-handed, X forward (away from base), Y left, Z up
+
+        If the user stands in front of the robot, "in" (toward user) and "forward"
+        (away from base) are opposite.
 
         Transformation:
-        - Pico4 X (right) -> Flexiv Y (left, so negate)
-        - Pico4 Y (up) -> Flexiv Z (up, same)
-        - Pico4 Z (in, toward user) -> Flexiv X (forward, away from base, so negate if opposite)
+        - Pico4 X (right)         -> world Y (left): negate
+        - Pico4 Y (up)            -> world Z (up): same
+        - Pico4 Z (in, to user)   -> world X (forward, away from base): negate
 
         Args:
             pos: Position in Pico4 frame [x, y, z]
             quat: Quaternion in Pico4 frame [qw, qx, qy, qz] (from _filter_raw_pose)
 
         Returns:
-            Tuple of (transformed_pos, transformed_quat) in Flexiv frame [qw, qx, qy, qz]
+            Tuple of (transformed_pos, transformed_quat) in world frame [qw, qx, qy, qz]
         """
-        # Position transformation: [Pico4_x, Pico4_y, Pico4_z] -> [Flexiv_x, Flexiv_y, Flexiv_z]
-        # Pico4 X (right) -> Flexiv Y (left): negate
-        # Pico4 Y (up) -> Flexiv Z (up): same
-        # Pico4 Z (in, toward user) -> Flexiv X (forward, away from base): negate (opposite direction)
+        # Position transformation: [Pico4_x, Pico4_y, Pico4_z] -> [world_x, world_y, world_z]
+        # Pico4 X (right) -> world Y (left): negate
+        # Pico4 Y (up) -> world Z (up): same
+        # Pico4 Z (in, toward user) -> world X (forward, away from base): negate (opposite direction)
 
         # 用户站在机器人前面，面对机器人
 
-        # Pico4 (VR手柄):               Flexiv (机器人):
+        # Pico4 (VR手柄):               world (机器人朝向):
         #     Y (up)                       Z (up)   X (forward, away from base)
         #     |                               |     /
         #     |                               |   /
@@ -486,14 +492,14 @@ class Pico4(Teleoperator):
 
         transformed_pos = np.array(
             [
-                -pos[2],  # Pico4 Z (in) -> Flexiv X (forward, negated because opposite direction)
-                -pos[0],  # Pico4 X (right) -> Flexiv Y (left, negated)
-                pos[1],  # Pico4 Y (up) -> Flexiv Z (up, same)
+                -pos[2],  # Pico4 Z (in) -> world X (forward, negated because opposite direction)
+                -pos[0],  # Pico4 X (right) -> world Y (left, negated)
+                pos[1],  # Pico4 Y (up) -> world Z (up, same)
             ],
             dtype=np.float32,
         )
 
-        # Quaternion transformation: rotate coordinate frame from Pico4 to Flexiv
+        # Quaternion transformation: rotate the rotation from the Pico4 frame to the world frame
         # The transformation is a 120° rotation around axis [1, -1, -1]/√3
         # This corresponds to the position transformation matrix:
         #   [ 0  0 -1]
@@ -502,9 +508,9 @@ class Pico4(Teleoperator):
         # Quaternion: q = [cos(60°), sin(60°)*axis] = [0.5, 0.5, -0.5, -0.5]
         q_frame_transform = np.array([0.5, 0.5, -0.5, -0.5], dtype=np.float32)  # [qw, qx, qy, qz]
 
-        # Transform quaternion: q_flexiv = q_transform * q_pico * q_transform^-1
-        # q_flexiv = q_R * q_pico * q_R^(-1)
-        # This formula converts the rotation representation from Pico4 frame to Flexiv frame
+        # Transform quaternion: q_world = q_transform * q_pico * q_transform^-1
+        # q_world = q_R * q_pico * q_R^(-1)
+        # This formula converts the rotation representation from the Pico4 frame to the world frame
         q_transform_inv = self._quaternion_inverse(q_frame_transform)
         q_temp = self._quaternion_multiply(q_frame_transform, quat)
         transformed_quat = self._quaternion_multiply(q_temp, q_transform_inv)
@@ -525,14 +531,14 @@ class Pico4(Teleoperator):
         1. Get raw data: controller_pose, grip, trigger from Pico4 SDK
         2. Check enable state (grip > threshold)
         3. Apply window filter to raw pose data
-        4. Transform from Pico4 to Flexiv coordinate system
+        4. Transform from Pico4 to world frame
         5. If enabled: compute relative movement and update target pose
         6. Update gripper position from trigger value
-        7. Return in Flexiv Rizon4 format
+        7. Return in world-frame TCP format
 
-        Returns a dictionary with absolute EEF pose (matching Flexiv Rizon4 format):
-        - tcp.x, tcp.y, tcp.z: absolute TCP position (meters) in Flexiv frame
-        - tcp.r1-r6: absolute TCP orientation (6D rotation) in Flexiv frame
+        Returns a dictionary with absolute EEF pose (matching world-frame TCP format):
+        - tcp.x, tcp.y, tcp.z: absolute TCP position (meters) in world frame
+        - tcp.r1-r6: absolute TCP orientation (6D rotation) in world frame
         - gripper.pos: absolute gripper position (meters)
         """
         if not self._is_connected or self._xrt is None:
@@ -600,8 +606,8 @@ class Pico4(Teleoperator):
                 f"raw={raw_pos_pico}, filtered={filtered_pos_pico}"
             )
 
-        # Step 4: Transform from Pico4 coordinate system to Flexiv coordinate system
-        filtered_pos_flexiv, filtered_quat_flexiv = self._transform_pico_to_flexiv_coordinate(
+        # Step 4: Transform from Pico4 coordinate system to world frame
+        filtered_pos_world, filtered_quat_world = self._transform_pico_to_world_coordinate(
             filtered_pos_pico, filtered_quat_pico
         )
 
@@ -617,10 +623,10 @@ class Pico4(Teleoperator):
         if just_enabled or self._ref_pos is None:
             self.logger.debug(
                 f"[REF_RESET] {'just_enabled' if just_enabled else 'ref_pos is None'}: "
-                f"ref_pos={filtered_pos_flexiv}, start_pos={self._target_pos}, "
-                f"filtered_quat={filtered_quat_flexiv}"
+                f"ref_pos={filtered_pos_world}, start_pos={self._target_pos}, "
+                f"filtered_quat={filtered_quat_world}"
             )
-            self._ref_pos = filtered_pos_flexiv.copy()
+            self._ref_pos = filtered_pos_world.copy()
             self._start_pos = self._target_pos.copy()
 
             # Save start orientation for sensitivity scaling
@@ -630,7 +636,7 @@ class Pico4(Teleoperator):
             # offset = inv(controller_quat) * robot_quat
             # This aligns controller orientation with robot orientation at enable moment
             # Later: target_quat = controller_quat * offset
-            ref_quat_inv = self._quaternion_inverse(filtered_quat_flexiv)
+            ref_quat_inv = self._quaternion_inverse(filtered_quat_world)
             self._quat_offset = self._quaternion_multiply(ref_quat_inv, self._target_quat)
             self._quat_offset = normalize_quaternion(self._quat_offset, input_format="wxyz")
 
@@ -657,7 +663,7 @@ class Pico4(Teleoperator):
             # Log offset details for debugging
             self.logger.debug(
                 f"Orientation offset calculation: "
-                f"controller_quat={filtered_quat_flexiv}, "
+                f"controller_quat={filtered_quat_world}, "
                 f"robot_quat={self._target_quat}, "
                 f"offset_quat={self._quat_offset}, "
                 f"offset_angle={offset_angle_deg:.1f}°"
@@ -681,7 +687,7 @@ class Pico4(Teleoperator):
         # Only update target pose when enabled (grip is held)
         if self._enabled:
             # === Position: Relative accumulation (always active) ===
-            rel_pos = filtered_pos_flexiv - self._ref_pos
+            rel_pos = filtered_pos_world - self._ref_pos
             scaled_rel_pos = rel_pos * self.config.pos_sensitivity
             self._target_pos = self._start_pos + scaled_rel_pos
 
@@ -689,15 +695,15 @@ class Pico4(Teleoperator):
             if rel_pos_norm < 1e-6:
                 self.logger.debug(
                     f"[POS] rel_pos is near ZERO ({rel_pos_norm:.6f}m): "
-                    f"filtered={filtered_pos_flexiv}, ref={self._ref_pos}"
+                    f"filtered={filtered_pos_world}, ref={self._ref_pos}"
                 )
 
             # === Orientation: Absolute mapping with offset (only if offset is within threshold) ===
             if self._orientation_control_active:
-                # target_quat = controller_quat_flexiv * offset
+                # target_quat = controller_quat_world * offset
                 # The offset was calculated at enable time to align the two orientations
                 # This gives intuitive control: controller orientation directly maps to robot orientation
-                full_target_quat = self._quaternion_multiply(filtered_quat_flexiv, self._quat_offset)
+                full_target_quat = self._quaternion_multiply(filtered_quat_world, self._quat_offset)
                 full_target_quat = normalize_quaternion(full_target_quat, input_format="wxyz")
 
                 # Apply orientation sensitivity using SLERP
@@ -717,7 +723,7 @@ class Pico4(Teleoperator):
         # walks the long-way (~360°) around the unit sphere. After grip
         # release/re-engage REF_RESET, _target_quat = controller * offset can
         # land on the opposite hemisphere from _prev_target_quat even though
-        # the rotation itself barely moved. The downstream Flexiv RT thread
+        # the rotation itself barely moved. The downstream robot RT thread
         # interpolates at 1 kHz and will trip a safety fault on that ghost
         # 360° spin, killing the RT thread silently. Force continuity so
         # consecutive frames stay on the same hemisphere.
@@ -767,7 +773,7 @@ class Pico4(Teleoperator):
         # trigger=0 -> gripper closed (0), trigger=1 -> gripper open (gripper_width)
         self._target_gripper_pos = 1.0 - float(controller_trigger) * self.config.gripper_width
 
-        # Step 7: Return in Flexiv Rizon4 action format with 6D rotation
+        # Step 7: Return in world-frame TCP action format with 6D rotation
         r6d = quaternion_to_rotation_6d(
             self._target_quat[0], self._target_quat[1], self._target_quat[2], self._target_quat[3]
         )
@@ -791,10 +797,10 @@ class Pico4(Teleoperator):
 
     def get_target_pose_array(self) -> tuple[np.ndarray, float]:
         """
-        Get the current target pose as numpy array (for direct use with Flexiv SDK).
+        Get the current target pose as numpy array (for direct use with the robot SDK).
 
         Returns:
-            Tuple of (tcp_pose, gripper_pos) where tcp_pose is [x, y, z, qw, qx, qy, qz] in Flexiv frame
+            Tuple of (tcp_pose, gripper_pos) where tcp_pose is [x, y, z, qw, qx, qy, qz] in world frame
         """
         # _target_quat is in [qw, qx, qy, qz] format
         tcp_pose = np.array(
