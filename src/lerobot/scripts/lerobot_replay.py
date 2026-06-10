@@ -55,8 +55,6 @@ from lerobot.robots import (  # noqa: F401
     elite_cs66_rt,
     flexiv_rizon4_rt,
     make_robot_from_config,
-    xense_flare as xense_flare_robot,
-    xense_multisensor,
 )
 from lerobot.utils.constants import ACTION
 from lerobot.utils.import_utils import register_third_party_plugins

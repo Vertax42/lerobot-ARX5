@@ -56,21 +56,6 @@ lerobot-record \
     --dataset.encoder_threads=2
 ```
 
-Example (XenseFlare + SpaceMouse):
-
-```shell
-lerobot-record \
-    --robot.type=xense_flare \
-    --robot.id=right \
-    --teleop.type=spacemouse \
-    --teleop.id=right \
-    --dataset.repo_id=<my_username>/<my_dataset_name> \
-    --dataset.num_episodes=50 \
-    --dataset.single_task="Pick up the cube" \
-    --dataset.fps=30 \
-    --display_data=true
-```
-
 Example recording with bimanual so100:
 ```shell
 lerobot-record \
@@ -124,8 +109,6 @@ from lerobot.robots import (  # noqa: F401
     elite_cs66_rt,
     flexiv_rizon4_rt,
     make_robot_from_config,
-    xense_flare as xense_flare_robot,
-    xense_multisensor,
 )
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
@@ -136,7 +119,6 @@ from lerobot.teleoperators import (  # noqa: F401
     pico4,
     spacemouse,
     vive_tracker,
-    xense_flare,
     trlc_leader,
 )
 from lerobot.utils.constants import ACTION, OBS_STR
@@ -501,9 +483,8 @@ class RecordConfig:
     def __post_init__(self):
         # Robots that act as both observation source and action source
         # (i.e. "self-driven" data-collection devices like handheld grippers)
-        # do not require a separate teleoperator. ``xense_flare`` was the
-        # first; ``taccap_gripper`` follows the same pattern.
-        if self.teleop is None and self.robot.type not in ("xense_flare", "taccap_gripper"):
+        # do not require a separate teleoperator (e.g. ``taccap_gripper``).
+        if self.teleop is None and self.robot.type not in ("taccap_gripper",):
             raise ValueError("A teleoperator configuration is required to control the robot.")
 
 
@@ -591,91 +572,6 @@ def record_loop(
             )
 
         precise_sleep(max(sleep_time_s, 0.0))
-
-        timestamp = time.perf_counter() - start_episode_t
-
-
-@safe_stop_image_writer
-def xense_flare_record_loop(
-    robot: Robot,
-    events: dict,
-    fps: int,
-    dataset: LeRobotDataset | None = None,
-    control_time_s: int | None = None,
-    single_task: str | None = None,
-    display_data: bool = False,
-):
-    """
-    Record loop for XenseFlare data collection gripper.
-
-    XenseFlare is special because it acts as both:
-    - A robot (provides observation: camera, tactile, gripper position)
-    - A teleoperator (provides action: Vive Tracker pose + gripper position)
-
-    The action comes from robot.get_action() instead of a separate teleoperator.
-    """
-    if dataset is not None and dataset.fps != fps:
-        raise ValueError(
-            f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
-        )
-
-    timestamp = 0
-    start_episode_t = time.perf_counter()
-
-    # Variables for action shifting (only used in manual demonstration mode)
-    prev_observation = None
-    prev_observation_frame = None
-
-    while timestamp < control_time_s:
-        start_loop_t = time.perf_counter()
-        refresh_listener_events(events)
-
-        if events["exit_early"]:
-            events["exit_early"] = False
-            break
-
-        if events["rerecord_episode"]:
-            logger.info("Re-record episode requested, exiting record loop early")
-            break
-
-        # Get robot observation (camera, tactile, gripper position)
-        current_observation = robot.get_observation()
-        current_observation_frame = None
-
-        if dataset is not None:
-            current_observation_frame = build_dataset_frame(
-                dataset.features, current_observation, prefix=OBS_STR
-            )
-
-        current_action = robot.get_action()
-
-        if prev_observation is not None and dataset is not None:
-            # Manual demonstration mode with action shifting
-            # Use current frame's action as previous frame's action
-            current_action_frame = build_dataset_frame(
-                dataset.features, current_action, prefix=ACTION
-            )
-
-            frame = {
-                **prev_observation_frame,
-                **current_action_frame,
-                "task": single_task,
-            }
-            dataset.add_frame(frame)
-
-        if display_data:
-            log_rerun_data(observation=current_observation, action=current_action)
-
-        # Update for next iteration
-        prev_observation = current_observation
-        prev_observation_frame = current_observation_frame
-
-        _record_loop_sleep(
-            start_loop_t=start_loop_t,
-            fps=fps,
-            start_episode_t=start_episode_t,
-            robot=robot,
-        )
 
         timestamp = time.perf_counter() - start_episode_t
 
@@ -1128,17 +1024,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
 
                 # Dispatch the record loop by robot type
-                if cfg.robot.type in ("xense_flare", "taccap_gripper"):
-                    xense_flare_record_loop(
-                        robot=robot,
-                        events=events,
-                        fps=cfg.dataset.fps,
-                        dataset=dataset,
-                        control_time_s=cfg.dataset.episode_time_s,
-                        single_task=cfg.dataset.single_task,
-                        display_data=cfg.display_data,
-                    )
-                elif cfg.robot.type == "elite_cs66_rt":
+                if cfg.robot.type == "elite_cs66_rt":
                     elite_cs66_rt_record_loop(
                         robot=robot,
                         events=events,

@@ -96,7 +96,7 @@ class TaccapGripperConfig(RobotConfig):
     and compute a rigid transform so all subsequent recorded poses are
     in the same frame as ``init_tcp_pose`` (typically the deployment
     robot's base frame at the home configuration). Mirrors
-    ``xense_flare`` + ``vive_tracker``'s UMI behaviour. Off by default
+    ``vive_tracker``'s UMI behaviour. Off by default
     pending live verification on real Flexiv hardware."""
 
     init_tcp_pose: tuple[float, float, float, float, float, float, float] = (
@@ -104,7 +104,7 @@ class TaccapGripperConfig(RobotConfig):
     )
     """Robot TCP pose at the operator's "init" stance, as
     ``[x, y, z, qw, qx, qy, qz]``. Default is Flexiv Rizon4's home
-    pose (same value xense_flare uses). Only consumed when
+    pose. Only consumed when
     ``enable_init_pose_alignment`` is True."""
 
     # ---- Cameras (tactile + extras) --------------------------------------

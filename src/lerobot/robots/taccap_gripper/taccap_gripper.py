@@ -70,7 +70,7 @@ class TaccapGripper(Robot):
     to the gripper (motor stays disabled). It records pose + jaw state
     + tactile + wrist for downstream policy learning.
 
-    6D rotation convention (matches ``xense_flare`` and ``vive_tracker``):
+    6D rotation convention (matches ``vive_tracker``):
         r1..r3 = first column of the rotation matrix
         r4..r6 = second column of the rotation matrix
     """
@@ -145,7 +145,7 @@ class TaccapGripper(Robot):
     def action_features(self) -> dict[str, type]:
         """The 'demonstration' action this device emits when used as a teleop.
 
-        Matches ``xense_flare``: pose (tcp.x/y/z, tcp.r1-r6) + gripper.pos.
+        Pose (tcp.x/y/z, tcp.r1-r6) + gripper.pos.
         No camera data — that lives in observation only.
         """
         features: dict[str, type] = {}
