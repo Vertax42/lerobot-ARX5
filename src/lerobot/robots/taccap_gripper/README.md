@@ -3,8 +3,8 @@
 Single-arm handheld data-collection pipeline. The device is **self-driven**:
 there is no separate teleoperator — the robot itself produces both the
 observation (state being recorded) and the demonstration action.
-`lerobot-record` dispatches this case through the same path as
-`xense_flare`, so no `--teleop.*` flags are needed on the CLI.
+`lerobot-record` allows `teleop=None` for this self-driven device, so no
+`--teleop.*` flags are needed on the CLI.
 
 Components:
 
@@ -46,7 +46,7 @@ recordings will be in a different origin.
 
 ### Opt-in: UMI-style init-pose alignment (reserved for Flexiv)
 
-Mirrors the `xense_flare` / `vive_tracker` UMI flow. When enabled,
+Mirrors the `vive_tracker` UMI flow. When enabled,
 `Pico4TrackerReader.connect()` snapshots the first valid tracker pose
 and computes a rigid transform so all subsequent recorded poses are
 in the **same frame as `init_tcp_pose`** (typically the deployment
@@ -59,7 +59,7 @@ enable_init_pose_alignment: bool = False
 init_tcp_pose: tuple[float, ...] = (
     0.693307, -0.114902, 0.14589,
     0.004567, 0.003238, 0.999984, 0.001246,
-)  # Flexiv Rizon4 home pose, same default as xense_flare
+)  # Flexiv Rizon4 home pose
 ```
 
 Workflow when ready to enable:
@@ -147,9 +147,10 @@ python -m lerobot.robots.taccap_gripper.taccap_gripper_example \
 
 ## End-to-end recording
 
-`taccap_gripper` is in the self-driven-robot dispatch list inside
-`lerobot/scripts/lerobot_record.py`, so the record loop reads the demo
-action straight off `robot.get_action()` (same path as `xense_flare`).
+`taccap_gripper` runs without a teleoperator (`RecordConfig.__post_init__`
+allows `teleop=None` for it). The former shared self-driven record loop has
+been removed, so recording currently falls through to the generic
+`record_loop`; a dedicated handheld record path is not yet re-implemented.
 **No `--teleop.*` flags.**
 
 ```bash
@@ -185,7 +186,7 @@ automatically.
 | `imu.mag.{x,y,z}` (opt) | TacCap IMU | float (µT) |
 | `<camera_name>` per camera | `cameras/` framework | uint8 (H, W, 3) |
 
-The 6-D rotation convention matches `xense_flare`/`vive_tracker`:
+The 6-D rotation convention matches `vive_tracker`:
 `r1..r3` is the first column of the rotation matrix, `r4..r6` is the
 second column.
 
@@ -209,6 +210,7 @@ The integration point in the record script is
 
 - `RecordConfig.__post_init__` allows `teleop=None` when
   `robot.type == "taccap_gripper"`.
-- The dispatch in `record()` routes `taccap_gripper` to
-  `xense_flare_record_loop()` (the function is generic — it only calls
-  `robot.get_observation()` and `robot.get_action()`).
+- The dispatch in `record()` no longer has a dedicated self-driven loop
+  (the former shared loop was removed); `taccap_gripper` falls through to
+  the generic `record_loop`. A dedicated handheld record path is not yet
+  re-implemented.

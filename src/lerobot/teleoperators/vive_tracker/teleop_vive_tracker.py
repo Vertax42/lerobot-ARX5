@@ -388,7 +388,7 @@ class ViveTrackerTeleop(Teleoperator):
         Returns a dictionary with absolute EEF pose:
         - tcp.x, tcp.y, tcp.z: absolute TCP position (meters)
         - tcp.r1-r6: absolute TCP orientation (6D rotation representation)
-        - gripper.pos: gripper position (set to 0.0, handled by XenseFlareTeleop)
+        - gripper.pos: gripper position (set to 0.0; gripper handled downstream)
         """
         if not self.is_connected:
             raise RuntimeError("Vive Tracker is not connected")
