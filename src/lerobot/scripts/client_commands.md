@@ -45,9 +45,32 @@ lerobot-teleoperate \
     --display_data=true
 ```
 
+
+## Bimanual Elite CS66 RT + Bi-Pico4 teleoperate command
+
+```bash
+lerobot-teleoperate \
+    --robot.type=bi_elite_cs66_rt \
+    --robot.bi_mount_type=diagonal \
+    --robot.left_robot_ip=192.168.8.53 \
+    --robot.right_robot_ip=192.168.8.223 \
+    --teleop.type=bi_pico4 \
+    --fps=30 \
+    --display_data=true
+
+
+lerobot-teleoperate \
+    --robot.type=bi_elite_cs66_rt \
+    --robot.left_robot_ip=192.168.8.53 \
+    --robot.right_robot_ip=192.168.8.223 \
+    --teleop.type=bi_pico4 \
+    --fps=30 \
+    --dryrun=true
+```
+
 ## BiARX5 Robot lerobot-record command
 
-```python
+```bash
 lerobot-record \
     --robot.type=bi_arx5 \
     --teleop.type=mock_teleop \
@@ -65,7 +88,7 @@ lerobot-record \
 
 ## BiARX5 Robot lerobot-annotate-reward command
 
-```python
+```bash
 lerobot-annotate-reward \
     --repo-id Xense/xense_bi_arx5_tie_shoelaces \
     --new-repo-id Vertax/test_annotated \
@@ -74,7 +97,7 @@ lerobot-annotate-reward \
 
 ## Franka robot lerobot-record command
 
-```python
+```bash
 lerobot-record \
   --robot.type=pylibfranka_research3 \
   --robot.control_mode=cartesian_impedance \

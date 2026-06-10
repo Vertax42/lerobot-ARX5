@@ -904,6 +904,17 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         else cfg.display_compressed_images
     )
 
+    # Elite CS66 wrists have tighter joint-velocity limits than Flexiv; default the
+    # bi_pico4 rotation sensitivity to 0.5 so controller jitter can't drive a
+    # protective stop. An explicit --teleop.ori_sensitivity wins.
+    if (
+        cfg.robot.type == "bi_elite_cs66_rt"
+        and cfg.teleop is not None
+        and cfg.teleop.type == "bi_pico4"
+        and cfg.teleop.ori_sensitivity == 1.0
+    ):
+        cfg.teleop.ori_sensitivity = 0.5
+
     robot = make_robot_from_config(cfg.robot)
     teleop = make_teleoperator_from_config(cfg.teleop) if cfg.teleop is not None else None
 

@@ -1762,6 +1762,7 @@ def vive_tracker_teleop_loop(
             return
 
 
+@parser.wrap()
 def teleoperate(cfg: TeleoperateConfig):
     logger.info(pformat(asdict(cfg)))
     if cfg.dryrun:
@@ -1992,6 +1993,16 @@ def teleoperate(cfg: TeleoperateConfig):
         elif cfg.robot.type == "bi_elite_cs66_rt" and cfg.teleop.type == "bi_pico4":
             logger.info("Detected BiEliteCS66RT + BiPico4")
             robot = make_robot_from_config(cfg.robot)
+            # Elite CS66 wrists have tighter joint-velocity limits than Flexiv;
+            # default the VR rotation sensitivity to 0.5 so controller jitter can't
+            # drive a protective stop. An explicit --teleop.ori_sensitivity wins
+            # (only the untouched 1.0 default is replaced).
+            if cfg.teleop.ori_sensitivity == 1.0:
+                cfg.teleop.ori_sensitivity = 0.5
+                logger.info(
+                    "BiElite: defaulting teleop ori_sensitivity to 0.5 "
+                    "(pass --teleop.ori_sensitivity to override)"
+                )
             teleop = make_teleoperator_from_config(cfg.teleop)
 
             # Pre-initialize the VR SDK in background while the robot connects
