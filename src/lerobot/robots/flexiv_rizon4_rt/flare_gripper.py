@@ -16,8 +16,21 @@
 
 """Xense FlareGripper implementation for LeRobot."""
 
-from xensegripper import XenseCamera, XenseGripper
 from xensesdk import Sensor, call_service
+
+# FlareGripper wraps the legacy XGripper ``xensegripper`` package, whose camera
+# path (XenseCamera -> node.camera_client) still targets xensesdk 1.x and fails
+# to import under xensesdk 2.x. This gripper is deprecated and no longer used, so
+# defer the import failure to instantiation time: importing this module (and
+# ``lerobot.robots`` / the CLI scripts) must not break unrelated robots such as
+# bi_elite_cs66_rt.
+try:
+    from xensegripper import XenseCamera, XenseGripper
+
+    _XENSEGRIPPER_IMPORT_ERROR: Exception | None = None
+except Exception as _exc:  # noqa: BLE001 — any import-time failure should defer, not crash
+    XenseCamera = XenseGripper = None
+    _XENSEGRIPPER_IMPORT_ERROR = _exc
 
 from lerobot.robots.flexiv_rizon4_rt.config_flare_gripper import FlareGripperConfig
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
@@ -31,6 +44,11 @@ class FlareGripper:
         self,
         config: FlareGripperConfig,
     ):
+        if XenseGripper is None:
+            raise ImportError(
+                "FlareGripper requires the xensegripper package (XGripper), which is not "
+                "importable under xensesdk 2.x. FlareGripper is deprecated and unused."
+            ) from _XENSEGRIPPER_IMPORT_ERROR
         self._config = config
         self._mac_addr = config.mac_addr
         self._cam_size = config.cam_size
