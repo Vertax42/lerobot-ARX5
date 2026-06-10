@@ -140,9 +140,12 @@ class BiEliteCS66RTConfig(RobotConfig):
     images come from separate XenseTactileCamera devices, not the gripper.
     """
 
-    # ── Per-arm identity / connection (overwritten from the preset) ──
-    left_robot_ip: str = "192.168.1.200"
-    right_robot_ip: str = "192.168.1.201"
+    # ── Per-arm identity / connection ──
+    # robot IPs default to "" (unset) → filled from the bi_mount_type preset in
+    # __post_init__. An explicitly-passed --robot.{left,right}_robot_ip OVERRIDES
+    # the preset. local_ip is taken from the preset.
+    left_robot_ip: str = ""
+    right_robot_ip: str = ""
     left_local_ip: str = ""
     right_local_ip: str = ""
     bi_mount_type: str = "diagonal"
@@ -288,8 +291,9 @@ class BiEliteCS66RTConfig(RobotConfig):
                 f"Unknown bi_mount_type {self.bi_mount_type!r}, expected one of {list(_PRESETS)}"
             )
         preset = _PRESETS[self.bi_mount_type]
-        self.left_robot_ip = preset["left_ip"]
-        self.right_robot_ip = preset["right_ip"]
+        # CLI-passed IPs win; fall back to the preset when left unset ("").
+        self.left_robot_ip = self.left_robot_ip or preset["left_ip"]
+        self.right_robot_ip = self.right_robot_ip or preset["right_ip"]
         self.left_local_ip = preset["left_local_ip"]
         self.right_local_ip = preset["right_local_ip"]
         self.left_gripper_sn = preset["left_gripper_sn"]
