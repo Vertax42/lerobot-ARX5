@@ -22,7 +22,7 @@ from typing import Any
 import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
-from lerobot.robots.bi_flexiv_rizon4_rt.serial_gripper import SerialGripper
+from lerobot.robots.grippers import SerialGripper
 from lerobot.robots.xense_multisensor.config_xense_multisensor import XenseMultisensorConfig
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError

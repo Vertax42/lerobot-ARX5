@@ -21,7 +21,7 @@ from typing import Any
 import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
-from lerobot.robots.bi_flexiv_rizon4_rt.serial_gripper import SerialGripper
+from lerobot.robots.grippers import SerialGripper
 from lerobot.robots.bi_xense_flare_grippers.config_bi_xense_flare_grippers import (
     BiXenseFlareGrippersConfig,
 )

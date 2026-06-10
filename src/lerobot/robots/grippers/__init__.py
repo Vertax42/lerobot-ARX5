@@ -10,5 +10,7 @@
 
 """Arm-agnostic gripper drivers shared across robot packages."""
 
+from .config_serial_gripper import SerialGripperConfig  # noqa: F401
 from .config_xense_gripper import SensorOutputType, XenseGripperConfig  # noqa: F401
+from .serial_gripper import SerialGripper  # noqa: F401
 from .xense_gripper import XenseGripper  # noqa: F401
