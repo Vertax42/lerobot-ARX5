@@ -12,9 +12,9 @@
 
 Relationship to ``EliteCS66RTConfig`` mirrors ``BiFlexivRizon4RTConfig`` vs.
 ``FlexivRizon4RTConfig``: shared control/servo parameters keep the single-arm
-names and defaults, while station-specific values (controller IPs, gripper MACs,
-start/home poses, camera SNs) are bundled per-arm and selected by ``bi_mount_type``
-preset. Action / observation keys are ``left_``/``right_`` prefixed.
+names and defaults, while station-specific values (controller IPs, serial gripper
+SNs, start/home poses, camera SNs) are bundled per-arm and selected by
+``bi_mount_type`` preset. Action / observation keys are ``left_``/``right_`` prefixed.
 """
 
 from dataclasses import dataclass, field
@@ -24,11 +24,9 @@ from pathlib import Path
 from lerobot.cameras.configs import CameraConfig
 from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
+from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
 from lerobot.robots.config import RobotConfig
-from lerobot.robots.grippers.config_xense_gripper import (
-    SensorOutputType,
-    XenseGripperConfig,
-)
+from lerobot.robots.grippers import SerialGripperConfig
 
 
 class BiEliteCS66RTControlMode(str, Enum):
@@ -36,17 +34,17 @@ class BiEliteCS66RTControlMode(str, Enum):
     JOINT_SERVO = "joint_servo"
 
 
-# Per-station presets. Each bundles both controllers' IPs, gripper MACs, the
-# MoveJ start/home poses (J1..J6, radians), camera SNs, and the per-arm tactile
-# sensor SN -> observation-label maps. Tactile labels are pre-namespaced
-# (left_tactile_* / right_tactile_*) so the flat observation dict stays unique
-# without any extra prefixing at runtime.
+# Per-station presets. Each bundles both controllers' IPs, serial gripper board
+# SNs, the MoveJ start/home poses (J1..J6, radians), and camera SNs (head, per-arm
+# wrist, per-arm tactile). Tactile camera labels are pre-namespaced
+# (left_tactile_* / right_tactile_*) so the flat observation dict stays unique.
 #
 # NOTE: the "diagonal" preset below describes the real station — the two Elite
 # CS66 arms are mounted diagonally/opposed (45° tilt + 90° Z, see the bi-arm
 # mounting transform). It has real controller IPs and per-arm start/home joint
-# poses (measured on the station). Gripper MACs, camera SNs, and tactile sensor
-# SNs are still PLACEHOLDER — replace the TODO-marked values before deployment.
+# poses (measured on the station). Grippers are serial (USB, addressed by board
+# SN — no IP/MAC). Gripper SNs and tactile sensor SNs are still PLACEHOLDER —
+# replace the TODO-marked values before deployment.
 _CANDLE_POSE = [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
 
 # Measured station start/home joint poses (J1..J6, radians).
@@ -61,26 +59,23 @@ _PRESETS: dict[str, dict] = {
         "right_ip": "192.168.8.223",
         "left_local_ip": "",
         "right_local_ip": "",
-        # TODO: real XenseGripper MAC addresses (empty -> gripper_type must be "none").
-        "left_gripper_mac": "",
-        "right_gripper_mac": "",
+        # Serial-gripper board SNs (read over CH340; same unit numbering as the
+        # wrist cameras XC0000xx). Empty -> set *_use_gripper=False.
+        "left_gripper_sn": "000045",
+        "right_gripper_sn": "000046",
         "left_start": list(_LEFT_START_POSE),
         "right_start": list(_RIGHT_START_POSE),
         "left_home": list(_LEFT_START_POSE),
         "right_home": list(_RIGHT_START_POSE),
-        # TODO: real camera SNs.
         "head_camera_sn": "",
-        "left_wrist_camera_sn": "",
-        "right_wrist_camera_sn": "",
-        # TODO: real tactile sensor SNs (values are the namespaced obs labels).
-        "left_gripper_sensor_keys": {
-            "OG_LEFT_0": "left_tactile_0",
-            "OG_LEFT_1": "left_tactile_1",
-        },
-        "right_gripper_sensor_keys": {
-            "OG_RIGHT_0": "right_tactile_0",
-            "OG_RIGHT_1": "right_tactile_1",
-        },
+        "left_wrist_camera_sn": "XC000045",
+        "right_wrist_camera_sn": "XC000046",
+        # Tactile sensor SNs (XenseTactileCamera). left = OG001349/OG001350,
+        # right = OG001351/OG001352.
+        "left_tactile_camera_sn_0": "OG001349",
+        "left_tactile_camera_sn_1": "OG001350",
+        "right_tactile_camera_sn_0": "OG001351",
+        "right_tactile_camera_sn_1": "OG001352",
     },
 }
 
@@ -95,8 +90,9 @@ class BiEliteCS66RTConfig(RobotConfig):
     joint schema as the single-arm driver, ``left_``/``right_`` prefixed:
         left_tcp.x/y/z + left_tcp.r1..r6 (+ optional left_joint_*), left_gripper.pos
         right_tcp.x/y/z + right_tcp.r1..r6 (+ optional right_joint_*), right_gripper.pos
-    Cameras (head + per-arm wrist) live at the bimanual level; tactile images
-    arrive through each arm's XenseGripper.
+    Grippers are per-arm serial (USB) devices addressed by board SN. Cameras
+    (head + per-arm wrist + optional tactiles) live at the bimanual level; tactile
+    images come from separate XenseTactileCamera devices, not the gripper.
     """
 
     # ── Per-arm identity / connection (overwritten from the preset) ──
@@ -148,33 +144,36 @@ class BiEliteCS66RTConfig(RobotConfig):
     trace_rotation_threshold: float = 0.5
     trace_joint_threshold: float = 0.3
 
-    # ── Gripper backend (shared dispatch, per-arm device identifiers) ──
-    #   "none"          - no grippers attached; gripper.pos absent from features
-    #   "xense_gripper" - XenseGripper per arm (USB/network, independent of arms)
-    #   "dahuan_rs485"  - planned (raises NotImplementedError until driver lands)
-    gripper_type: str = "none"
+    # ── Grippers: per-arm serial (USB) Xense gripper, addressed by board SN ──
+    # No IP/MAC/network. Set {side}_use_gripper=False (or leave the preset SN
+    # empty) to run without a gripper on that arm. Tactile sensors are separate
+    # XenseTactileCamera devices (see enable_tactile_sensors), not the gripper.
+    left_use_gripper: bool = True
+    left_gripper_sn: str = ""               # board SN (overwritten from preset)
+    left_gripper_baudrate: int = 115200
+    left_gripper_serial_timeout: float = 1.0
 
-    left_gripper_mac_addr: str = ""
-    right_gripper_mac_addr: str = ""
-    # Per-arm tactile sensor SN -> observation label maps (overwritten from preset).
-    left_gripper_sensor_keys: dict[str, str] = field(default_factory=dict)
-    right_gripper_sensor_keys: dict[str, str] = field(default_factory=dict)
+    right_use_gripper: bool = True
+    right_gripper_sn: str = ""              # board SN (overwritten from preset)
+    right_gripper_baudrate: int = 115200
+    right_gripper_serial_timeout: float = 1.0
 
-    # Shared XenseGripper motion / sensor parameters (used when gripper_type=="xense_gripper").
-    gripper_enable_sensor: bool = True
-    gripper_rectify_size: tuple[int, int] = (96, 160)
-    gripper_sensor_output_type: SensorOutputType = SensorOutputType.RECTIFY
-    gripper_min_pos: float = 0.0
-    gripper_max_pos: float = 85.0
+    # Shared serial-gripper mechanical / motion parameters.
+    gripper_min_pos: float = 0.0   # mm — fully closed
+    gripper_max_pos: float = 85.0  # mm — fully open
     gripper_v_max: float = 100.0   # mm/s
     gripper_f_max: float = 30.0    # N
     gripper_init_open: bool = True
 
-    # Auto-created in __post_init__. Do not set directly. None when no gripper.
-    left_gripper: XenseGripperConfig | None = field(default=None, init=False)
-    right_gripper: XenseGripperConfig | None = field(default=None, init=False)
+    # Separate tactile sensors (XenseTactileCamera) attached at the bimanual
+    # camera level when enabled; SNs come from the preset.
+    enable_tactile_sensors: bool = True
 
-    # Bimanual cameras (head + per-arm wrist). Auto-populated from the preset.
+    # Auto-created in __post_init__. Do not set directly. None when no gripper.
+    left_gripper: SerialGripperConfig | None = field(default=None, init=False)
+    right_gripper: SerialGripperConfig | None = field(default=None, init=False)
+
+    # Bimanual cameras (head + per-arm wrist + tactiles). Auto-populated from the preset.
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
 
     def __post_init__(self):
@@ -192,14 +191,12 @@ class BiEliteCS66RTConfig(RobotConfig):
         self.right_robot_ip = preset["right_ip"]
         self.left_local_ip = preset["left_local_ip"]
         self.right_local_ip = preset["right_local_ip"]
-        self.left_gripper_mac_addr = preset["left_gripper_mac"]
-        self.right_gripper_mac_addr = preset["right_gripper_mac"]
+        self.left_gripper_sn = preset["left_gripper_sn"]
+        self.right_gripper_sn = preset["right_gripper_sn"]
         self.left_start_position_rad = list(preset["left_start"])
         self.right_start_position_rad = list(preset["right_start"])
         self.left_home_position_rad = list(preset["left_home"])
         self.right_home_position_rad = list(preset["right_home"])
-        self.left_gripper_sensor_keys = dict(preset["left_gripper_sensor_keys"])
-        self.right_gripper_sensor_keys = dict(preset["right_gripper_sensor_keys"])
 
         # ── Per-arm pose validation ──
         for name, pose in (
@@ -211,28 +208,18 @@ class BiEliteCS66RTConfig(RobotConfig):
             if len(pose) != 6:
                 raise ValueError(f"{name} must have 6 elements (J1..J6), got {len(pose)}")
 
-        # ── Gripper dispatch (per arm) ──
+        # ── Serial gripper config (per arm) ──
         self.left_gripper = self._build_gripper_config(
-            self.left_gripper_mac_addr, self.left_gripper_sensor_keys, side="left"
+            self.left_use_gripper, self.left_gripper_sn,
+            self.left_gripper_baudrate, self.left_gripper_serial_timeout, side="left",
         )
         self.right_gripper = self._build_gripper_config(
-            self.right_gripper_mac_addr, self.right_gripper_sensor_keys, side="right"
+            self.right_use_gripper, self.right_gripper_sn,
+            self.right_gripper_baudrate, self.right_gripper_serial_timeout, side="right",
         )
 
-        # ── Bimanual cameras from preset (tactiles come via grippers) ──
+        # ── Bimanual cameras from preset (head + wrists + optional tactiles) ──
         self._build_cameras(preset)
-
-        # ── Feature-key collision check across both arms ──
-        sensor_names: set[str] = set()
-        for gripper in (self.left_gripper, self.right_gripper):
-            if gripper is not None:
-                sensor_names |= set(gripper.sensor_keys.values())
-        overlap = sensor_names & set(self.cameras.keys())
-        if overlap:
-            raise ValueError(
-                f"Feature key collision between gripper sensor_keys and cameras: "
-                f"{sorted(overlap)}. Rename one side."
-            )
 
     def _validate_shared_servo_params(self) -> None:
         if not 0.002 <= self.servoj_time <= 0.01:
@@ -303,35 +290,21 @@ class BiEliteCS66RTConfig(RobotConfig):
             )
 
     def _build_gripper_config(
-        self, mac_addr: str, sensor_keys: dict[str, str], side: str
-    ) -> XenseGripperConfig | None:
-        if self.gripper_type == "none":
+        self, use_gripper: bool, sn: str, baudrate: int, serial_timeout: float, side: str
+    ) -> SerialGripperConfig | None:
+        # No gripper when disabled or when no board SN is configured yet (mirrors
+        # the camera handling: an empty preset SN simply means "not attached").
+        if not use_gripper or not sn:
             return None
-        if self.gripper_type == "dahuan_rs485":
-            raise NotImplementedError(
-                "Dahuan RS485 gripper driver (over CS66 tool RS485 via Elite SDK "
-                "ScriptCommandInterface) is planned but not yet implemented."
-            )
-        if self.gripper_type != "xense_gripper":
-            raise ValueError(
-                f"gripper_type must be one of 'none' / 'xense_gripper' / "
-                f"'dahuan_rs485', got {self.gripper_type!r}"
-            )
-        if not mac_addr:
-            raise ValueError(
-                f"gripper_type='xense_gripper' requires {side}_gripper_mac_addr to be set."
-            )
         if self.gripper_min_pos >= self.gripper_max_pos:
             raise ValueError(
                 "gripper_min_pos must be smaller than gripper_max_pos, got "
                 f"{self.gripper_min_pos} >= {self.gripper_max_pos}"
             )
-        return XenseGripperConfig(
-            mac_addr=mac_addr,
-            enable_sensor=self.gripper_enable_sensor,
-            rectify_size=self.gripper_rectify_size,
-            sensor_output_type=self.gripper_sensor_output_type,
-            sensor_keys=dict(sensor_keys),
+        return SerialGripperConfig(
+            sn=sn,
+            baudrate=baudrate,
+            serial_timeout=serial_timeout,
             gripper_min_pos=self.gripper_min_pos,
             gripper_max_pos=self.gripper_max_pos,
             gripper_v_max=self.gripper_v_max,
@@ -367,6 +340,22 @@ class BiEliteCS66RTConfig(RobotConfig):
                 fps=30,
                 warmup_s=1.0,
             )
+        # Tactile sensors are separate XenseTactileCamera devices (not the
+        # serial gripper). Namespaced left_/right_ so the flat obs dict stays unique.
+        if self.enable_tactile_sensors:
+            for label, sn_key in (
+                ("left_tactile_0", "left_tactile_camera_sn_0"),
+                ("left_tactile_1", "left_tactile_camera_sn_1"),
+                ("right_tactile_0", "right_tactile_camera_sn_0"),
+                ("right_tactile_1", "right_tactile_camera_sn_1"),
+            ):
+                if preset.get(sn_key):
+                    cameras[label] = XenseTactileCameraConfig(
+                        serial_number=preset[sn_key],
+                        fps=30,
+                        output_types=[XenseOutputType.RECTIFY],
+                        warmup_s=0.05,
+                    )
         # Only override the (empty) default when the preset actually supplies
         # camera SNs, so a user-provided cameras dict isn't silently wiped.
         if cameras:
