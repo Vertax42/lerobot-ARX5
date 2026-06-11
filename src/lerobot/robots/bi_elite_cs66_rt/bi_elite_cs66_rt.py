@@ -386,29 +386,15 @@ class BiEliteCS66RT(Robot):
                 for side in _SIDES:
                     futs[side].result()
 
-            # --- Connect bimanual cameras ---
-            # Tactile (Xense UVC) sensors race on USB when opened concurrently:
-            # xensesdk's per-sensor flash/XU rectify read then fails with EBADF
-            # ("Bad file descriptor") and falls back to default rectify. Connect
-            # the tactile sensors SEQUENTIALLY; head/wrist (RealSense/OpenCV) use
-            # other backends and are fine in parallel.
+            # --- Connect bimanual cameras in parallel ---
             if self.cameras:
-                from lerobot.cameras.xense import XenseTactileCamera
-
                 self.logger.info(
                     f"Connecting {len(self.cameras)} camera(s): {', '.join(self.cameras.keys())}..."
                 )
-                tactile = {
-                    n: c for n, c in self.cameras.items() if isinstance(c, XenseTactileCamera)
-                }
-                parallel = {n: c for n, c in self.cameras.items() if n not in tactile}
-                if parallel:
-                    with ThreadPoolExecutor(max_workers=len(parallel)) as ex:
-                        for f in [ex.submit(c.connect) for c in parallel.values()]:
-                            f.result()
-                for name, cam in tactile.items():
-                    self.logger.info(f"  connecting tactile sensor {name} (sequential)...")
-                    cam.connect()
+                with ThreadPoolExecutor(max_workers=len(self.cameras)) as ex:
+                    cam_futs = [ex.submit(cam.connect) for cam in self.cameras.values()]
+                    for f in cam_futs:
+                        f.result()
         except BaseException:
             self._cleanup_after_failed_connect()
             raise
