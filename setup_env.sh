@@ -11,8 +11,11 @@ if [[ "$OS_NAME" == "Linux" ]]; then
         . /etc/os-release
         OS_VERSION=$VERSION_ID
     fi
-    if [[ "$OS_VERSION" != "22.04" ]]; then
-        echo "Warning: This script has only been tested on Ubuntu 22.04"
+    # Tested on Ubuntu 22.04 (jammy) and 24.04 (noble). The host was upgraded
+    # 22.04 → 24.04, which bumps the system toolchain to GCC 13 — fine because
+    # the hardware SDKs build against the conda cross-compiler, not system GCC.
+    if [[ "$OS_VERSION" != "22.04" && "$OS_VERSION" != "24.04" ]]; then
+        echo "Warning: This script has only been tested on Ubuntu 22.04 and 24.04"
         echo "Your system is running Ubuntu $OS_VERSION."
         read -p "Do you want to continue anyway? (y/N): " -n 1 -r
         echo
@@ -375,9 +378,13 @@ install_xense() {
         ${CONDA_CMD:-mamba} install -c conda-forge hidapi -y
     fi
 
-    # Install xensesdk runtime deps explicitly so the shared ARX5/Robostack
-    # environment can stay on numpy 1.26.x (the xensesdk wheel metadata still
-    # asks for numpy>=2, so the wheel is installed with --no-deps below).
+    # Install xensesdk runtime deps explicitly because the wheel is installed
+    # with --no-deps below (keeps the shared ARX5/Robostack env's numpy/opencv/
+    # cryptography pins from being disturbed by the wheel's own constraints).
+    # The rebuilt 2.0.0 wheel added cypack/ormsgpack/cyclonedds-nightly as
+    # mandatory runtime deps — cypack is the FIRST import in xensesdk/__init__.py
+    # and ormsgpack/cyclonedds are needed by the ezros layer — so they must be
+    # listed here or `import xensesdk` fails with ModuleNotFoundError.
     uv pip install \
         "numpy>=1.26.4,<2.3.0" \
         "opencv-python>=4.10" \
@@ -389,6 +396,9 @@ install_xense() {
         "lz4>=4.0" \
         "psutil>=7.0" \
         "spdlog>=2.0" \
+        "cypack>=0.1.2" \
+        "ormsgpack>=1.11.0" \
+        "cyclonedds-nightly==2025.7.29" \
         "pyudev; platform_system=='Linux'"
     # Install xensesdk 2.0 from the vendored wheel under dist/. It bundles the
     # patched libxense_c.so flash reader (concurrent-connect EBADF fix), so no
@@ -698,15 +708,15 @@ elif [[ "$1" == "--install" ]]; then
             echo "[OK]    $_pkg: $_out" || \
             { echo "[ERROR] $_pkg: $_out"; _VERIFY_FAIL=1; }
     done <<'VERIFY'
-lerobot|import lerobot; print(lerobot.__version__)
-pyarx|import pyarx; print(pyarx.__file__)
-flexiv_rt|import flexiv_rt; print(flexiv_rt.__file__)
-xensevr_pc_service_sdk|import xensevr_pc_service_sdk; print(xensevr_pc_service_sdk.__file__)
-xensesdk|import xensesdk; print(xensesdk.__file__)
-xensegripper|import xensegripper; print(xensegripper.__file__)
+lerobot|import importlib.metadata as M, lerobot; print("v"+M.version("lerobot"), "->", lerobot.__file__)
+pyarx|import importlib.metadata as M, pyarx; print("v"+M.version("pyarx"), "->", pyarx.__file__)
+flexiv_rt|import importlib.metadata as M, flexiv_rt; print("v"+M.version("flexiv_rt"), "->", flexiv_rt.__file__)
+xensevr_pc_service_sdk|import importlib.metadata as M, xensevr_pc_service_sdk; print("v"+M.version("xensevr_pc_service_sdk"), "->", xensevr_pc_service_sdk.__file__)
+xensesdk|import importlib.metadata as M, xensesdk; print("v"+M.version("xensesdk"), "->", xensesdk.__file__)
+xensegripper|import importlib.metadata as M, xensegripper; print("v"+M.version("xgripper"), "->", xensegripper.__file__)
 xensesdk flash|from xensesdk.flash.linux_backend import LinuxFlashBackend; print("available" if LinuxFlashBackend().available else "NOT available")
-elite_cs_sdk|import elite_cs_sdk; print(elite_cs_sdk.__file__)
-dynamixel_sdk|import dynamixel_sdk; print(dynamixel_sdk.__file__)
+elite_cs_sdk|import importlib.metadata as M, elite_cs_sdk; print("v"+M.version("elite_cs_sdk"), "->", elite_cs_sdk.__file__)
+dynamixel_sdk|import importlib.metadata as M, dynamixel_sdk; print("v"+M.version("dynamixel_sdk"), "->", dynamixel_sdk.__file__)
 VERIFY
 
     echo ""
