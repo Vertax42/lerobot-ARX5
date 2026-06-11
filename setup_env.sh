@@ -264,24 +264,77 @@ install_flexiv() {
         return 1
     fi
 
-    # Stage 1: build ~/rdk_install (only if not already present)
-    if [[ ! -f "$RDK_INSTALL/include/flexiv/rdk/robot.hpp" ]]; then
-        echo ""
-        echo "[flexiv] ~/rdk_install not found or incomplete. Build it first:"
-        echo ""
-        echo "  cd third_party/libpyflexiv"
-        echo "  git submodule update --init flexiv_rdk"
-        echo "  cd flexiv_rdk/thirdparty"
-        echo "  bash build_and_install_dependencies.sh ~/rdk_install \$(nproc)"
-        echo "  cd ../.. && mkdir -p build && cd build"
-        echo "  cmake .. -DCMAKE_INSTALL_PREFIX=~/rdk_install -DCMAKE_PREFIX_PATH=~/rdk_install"
-        echo "  cmake --build . --target install --config Release -j\$(nproc)"
-        echo ""
-        echo "Then rerun: bash setup_env.sh --install"
+    # The vendored RDK deps (tinyxml2 8.0.0, foonathan_memory, Fast-CDR,
+    # Fast-DDS) are pinned to ancient releases whose CMakeLists declare
+    # cmake_minimum_required() < 3.5 AND explicitly cmake_policy(SET CMP0063
+    # OLD). CMake 4.x (shipped in our conda env) rejects BOTH: the min version
+    # outright, and CMP0063 because it removed that policy's OLD behavior
+    # entirely (no env-var escape hatch exists for the latter). The deps'
+    # *installed* package configs can trip cmake 4.x at find_package() time too,
+    # so the binding (Stage 2) is built with the same legacy cmake. Ubuntu's
+    # system cmake (/usr/bin/cmake, 3.28) still supports all of this.
+    local LEGACY_CMAKE=""
+    for _c in /usr/bin/cmake cmake3; do
+        _cpath="$(command -v "$_c" 2>/dev/null)" || continue
+        if "$_cpath" --version | head -1 | grep -qE 'version [123]\.'; then
+            LEGACY_CMAKE="$_cpath"
+            break
+        fi
+    done
+    if [[ -z "$LEGACY_CMAKE" ]]; then
+        echo "[flexiv] ERROR: need a CMake < 4.0 to build flexiv_rt"
+        echo "[flexiv]        (tinyxml2/Fast-DDS use CMP0063 OLD, removed in CMake 4)."
+        echo "[flexiv]        Install one, e.g.:  sudo apt-get install -y cmake"
         return 1
     fi
+    # Shim it ahead of conda's cmake 4.x on PATH. Bare `cmake` calls inside the
+    # submodule build scripts and the pip build backend then resolve to it.
+    local CMAKE_SHIM
+    CMAKE_SHIM="$(mktemp -d)"
+    ln -sf "$LEGACY_CMAKE" "$CMAKE_SHIM/cmake"
+    echo "[flexiv] Using $("$LEGACY_CMAKE" --version | head -1) ($LEGACY_CMAKE) for all flexiv builds"
 
-    # Stage 2: build Python bindings (inside conda env)
+    # Stage 1: build ~/rdk_install (RDK static lib + its C++ deps).
+    # Idempotent — skip if a previous run already populated it.
+    if [[ ! -f "$RDK_INSTALL/include/flexiv/rdk/robot.hpp" ]]; then
+        echo "[flexiv] Building RDK + C++ dependencies into $RDK_INSTALL"
+        echo "[flexiv] (one-time, ~10-30 min: eigen, spdlog, tinyxml2, foonathan_memory, Fast-CDR, Fast-DDS)"
+
+        # flexiv_rdk is a nested submodule of libpyflexiv; ensure it is present.
+        if [[ ! -f "$LIB_DIR/flexiv_rdk/thirdparty/build_and_install_dependencies.sh" ]]; then
+            echo "[flexiv] Initializing flexiv_rdk submodule..."
+            git -C "$LIB_DIR" submodule update --init flexiv_rdk || {
+                echo "[flexiv] ERROR: failed to init flexiv_rdk submodule."
+                return 1
+            }
+        fi
+
+        # Subshell so the PATH/policy overrides don't leak to other installers.
+        (
+            set -e
+            export PATH="$CMAKE_SHIM:$PATH"
+            export CMAKE_POLICY_VERSION_MINIMUM=3.5  # belt-and-braces for < 3.5 mins
+
+            cd "$LIB_DIR/flexiv_rdk/thirdparty"
+            bash build_and_install_dependencies.sh "$RDK_INSTALL" "$(nproc)"
+
+            # Install flexiv_rdk itself (headers + prebuilt static lib) into RDK_INSTALL.
+            cd "$LIB_DIR/flexiv_rdk"
+            rm -rf build && mkdir -p build && cd build
+            cmake .. \
+                -DCMAKE_INSTALL_PREFIX="$RDK_INSTALL" \
+                -DCMAKE_PREFIX_PATH="$RDK_INSTALL"
+            cmake --build . --target install --config Release -j"$(nproc)"
+        ) || {
+            echo "[flexiv] ERROR: RDK dependency build failed (see output above)."
+            return 1
+        }
+        echo "[flexiv] RDK install complete: $RDK_INSTALL"
+    else
+        echo "[flexiv] Reusing existing RDK install: $RDK_INSTALL"
+    fi
+
+    # Stage 2: build Python bindings (inside conda env, with the legacy cmake)
     # IMPORTANT: only pass ~/rdk_install as CMAKE_PREFIX_PATH.
     # Do NOT include $CONDA_PREFIX — conda contains a different spdlog version
     # that will cause header conflicts (see third_party/libpyflexiv/README.md).
@@ -289,16 +342,40 @@ install_flexiv() {
     rm -rf "$BUILD_DIR"
     mkdir -p "$BUILD_DIR"
 
-    cmake \
+    # Pin tinyxml2 to the STATIC build inside ~/rdk_install. The conda env also
+    # ships tinyxml2 (11.x, pulled in by urdfdom / ros-humble-tinyxml2-vendor)
+    # with a tinyxml2-config.cmake exposing a SHARED target. fastrtps-config.cmake
+    # does find_package(TinyXML2) — and CMake only matches that against filenames
+    # `TinyXML2Config.cmake` or `tinyxml2-config.cmake`. The RDK deps install the
+    # config as `tinyxml2Config.cmake` (lowercase + capital C), which does NOT
+    # match, so find_package(TinyXML2) silently picks up conda's shared 11.x.
+    # The binding then calls Fast-DDS (compiled against tinyxml2 8.0.0) through a
+    # different-ABI tinyxml2 at runtime → segfault in
+    # XMLProfileManager::loadDefaultXMLFile() the instant a Robot is created.
+    #
+    # Fix: drop a matching-named alias next to the static config so
+    # find_package(TinyXML2) resolves to 8.0.0, and pin TinyXML2_DIR to it
+    # (note the exact PascalCase — the hint var must match the find_package name).
+    local TX2_CMAKE_DIR="$RDK_INSTALL/lib/cmake/tinyxml2"
+    if [[ -f "$TX2_CMAKE_DIR/tinyxml2Config.cmake" ]]; then
+        ln -sf tinyxml2Config.cmake "$TX2_CMAKE_DIR/tinyxml2-config.cmake"
+        [[ -f "$TX2_CMAKE_DIR/tinyxml2ConfigVersion.cmake" ]] && \
+            ln -sf tinyxml2ConfigVersion.cmake "$TX2_CMAKE_DIR/tinyxml2-config-version.cmake"
+    fi
+
+    "$LEGACY_CMAKE" \
         -S "$LIB_DIR" \
         -B "$BUILD_DIR" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_PREFIX_PATH="$RDK_INSTALL" \
+        -DTinyXML2_DIR="$TX2_CMAKE_DIR" \
         -DPython3_EXECUTABLE="$(which python)"
 
-    cmake --build "$BUILD_DIR" -j"$(nproc)"
+    "$LEGACY_CMAKE" --build "$BUILD_DIR" -j"$(nproc)"
 
-    uv pip install -e "$LIB_DIR" --no-build-isolation
+    # The editable install re-runs the build backend, which calls bare `cmake`;
+    # the shim on PATH keeps it on the legacy cmake too.
+    PATH="$CMAKE_SHIM:$PATH" uv pip install -e "$LIB_DIR" --no-build-isolation
 
     write_sitecustomize
     echo "[flexiv] RT SDK done. Verify with: python -c 'import flexiv_rt; print(flexiv_rt)'"
@@ -407,7 +484,16 @@ install_xense() {
     # Install XGripper from local submodule (package name: xensegripper). It is
     # used by the serial / xense grippers and imports the xensesdk installed
     # above; --no-deps avoids PyPI wheels that are incomplete for Python 3.12.
-    uv pip install -e "$GRIPPER_DIR" --no-deps
+    # XGripper builds vendored libsurvive, which links -lhidapi-libusb. hidapi
+    # lives in $CONDA_PREFIX/lib (installed above), but this env's conda
+    # activation does NOT export LDFLAGS, and the conda cross-compiler does NOT
+    # search /usr/lib — so the link fails with "cannot find -lhidapi-libusb"
+    # (apt-installing hidapi does not help; the cross-compiler won't look there).
+    # Exporting LIBRARY_PATH gives gcc an extra -L that survives even uv's
+    # isolated build subprocess. --no-build-isolation additionally keeps the
+    # build on the env's cmake instead of a freshly fetched PyPI one.
+    LIBRARY_PATH="${CONDA_PREFIX}/lib${LIBRARY_PATH:+:$LIBRARY_PATH}" \
+        uv pip install -e "$GRIPPER_DIR" --no-deps --no-build-isolation
     # xensesdk requires a specific av version
     uv pip install av==15.1.0
 
