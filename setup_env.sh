@@ -421,17 +421,68 @@ install_xense() {
     fi
 
     if python - <<'PY'
-from xensesdk.utils.flashRW import xense_flash_manager
-raise SystemExit(0 if xense_flash_manager.is_available else 1)
+from xensesdk.flash.linux_backend import LinuxFlashBackend
+raise SystemExit(0 if LinuxFlashBackend().available else 1)
 PY
     then
-        echo "[xense] pyxensexu flash reader is available."
+        echo "[xense] xensesdk flash backend (libxense_c) is available."
     else
-        echo "[xense] ERROR: pyxensexu build or import verification failed."
+        echo "[xense] ERROR: xensesdk flash backend verification failed."
         return 1
     fi
 
     echo "[xense] Done. Verify with: python -c 'import xensesdk; print(xensesdk)'"
+}
+
+# ── Hardware module: Elite CS (bi_elite_cs66_rt / elite_cs66_rt) ─────────────
+
+install_elite() {
+    echo ""
+    echo "══════════════════════════════════════════"
+    echo " Elite CS SDK (C++ + Python)  →  elite_cs_sdk"
+    echo "══════════════════════════════════════════"
+
+    local CPP_DIR="$PROJECT_ROOT/third_party/elite-robots-cs-sdk"
+    local PY_DIR="$PROJECT_ROOT/third_party/elite-robots-cs-sdk-python"
+
+    if [[ ! -f "$CPP_DIR/CMakeLists.txt" ]]; then
+        echo "ERROR: $CPP_DIR not found."
+        echo "  Run: git submodule update --init third_party/elite-robots-cs-sdk"
+        return 1
+    fi
+    if [[ ! -f "$PY_DIR/CMakeLists.txt" ]]; then
+        echo "ERROR: $PY_DIR not found."
+        echo "  Run: git submodule update --init third_party/elite-robots-cs-sdk-python"
+        return 1
+    fi
+
+    # C++ build prerequisites (system packages, see Elite BuildGuide):
+    #   sudo apt install -y build-essential cmake libboost-all-dev libssh-dev \
+    #                        libeigen3-dev liborocos-kdl-dev
+    # Python build deps — the python_wheel target builds with --no-build-isolation.
+    uv pip install --upgrade pybind11 pybind11-stubgen build setuptools wheel
+
+    # Build the pybind wheel, pointing the Python SDK at our LOCAL C++ SDK
+    # submodule (ELITE_CS_SDK_REPO is required and must be a local path — the
+    # Python build add_subdirectory()s it instead of fetching over the network).
+    local BUILD_DIR="$PY_DIR/build"
+    rm -rf "$BUILD_DIR"
+    cmake -S "$PY_DIR" -B "$BUILD_DIR" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DELITE_CS_SDK_REPO="$CPP_DIR" \
+        -DELITE_COMPILE_KIN_PLUGIN=ON \
+        -DPython3_EXECUTABLE="$(which python)"
+    cmake --build "$BUILD_DIR" --target python_wheel -j"$(nproc)"
+
+    local WHEEL
+    WHEEL="$(ls -t "$PY_DIR"/dist/elite_cs_sdk-*.whl 2>/dev/null | head -1)"
+    if [[ -z "$WHEEL" ]]; then
+        echo "[elite] ERROR: build did not produce a wheel under $PY_DIR/dist/"
+        return 1
+    fi
+    uv pip install --force-reinstall "$WHEEL"
+
+    echo "[elite] Done. Verify with: python -c 'import elite_cs_sdk; print(elite_cs_sdk.__file__)'"
 }
 
 # ── Hardware module: Franka Research 3 ───────────────────────────────────────
@@ -631,6 +682,7 @@ elif [[ "$1" == "--install" ]]; then
     install_franka    || echo "[WARN] franka installation skipped or failed (see above)"
     ( install_pico4 ) || echo "[WARN] pico4 installation skipped or failed (see above)"
     install_xense     || echo "[WARN] xense installation skipped or failed (see above)"
+    install_elite     || echo "[WARN] elite installation skipped or failed (see above)"
     install_spacemouse || echo "[WARN] spacemouse installation skipped or failed (see above)"
     install_dynamixel  || echo "[WARN] dynamixel-sdk installation skipped or failed (see above)"
 
@@ -652,7 +704,8 @@ flexiv_rt|import flexiv_rt; print(flexiv_rt.__file__)
 xensevr_pc_service_sdk|import xensevr_pc_service_sdk; print(xensevr_pc_service_sdk.__file__)
 xensesdk|import xensesdk; print(xensesdk.__file__)
 xensegripper|import xensegripper; print(xensegripper.__file__)
-pyxensexu (flash)|from xensesdk.utils.flashRW import xense_flash_manager; print("available" if xense_flash_manager.is_available else "NOT available")
+xensesdk flash|from xensesdk.flash.linux_backend import LinuxFlashBackend; print("available" if LinuxFlashBackend().available else "NOT available")
+elite_cs_sdk|import elite_cs_sdk; print(elite_cs_sdk.__file__)
 dynamixel_sdk|import dynamixel_sdk; print(dynamixel_sdk.__file__)
 VERIFY
 
