@@ -147,6 +147,7 @@ class XenseTactileCamera(Camera):
         self.raw_size = config.raw_size
         self.disable_infer = config.disable_infer
         self.infer_mode = config.infer_mode
+        self.camera_properties = config.camera_properties
         self.sensor = None
 
         # Threading for async read
@@ -206,6 +207,15 @@ class XenseTactileCamera(Camera):
             }
             if self.infer_mode is not None:
                 create_kwargs["infer_mode"] = self.infer_mode
+            # Override the per-OS camera property template (exposure/brightness/
+            # white-balance...) via Sensor.create(overrides=...). The override key
+            # must be 2-level dotted ("camera.linux"/"camera.win"); the value is
+            # the full property dict (it replaces the template for that OS).
+            if self.camera_properties:
+                import platform
+
+                os_key = "win" if platform.system().lower().startswith("win") else "linux"
+                create_kwargs["overrides"] = {f"camera.{os_key}": dict(self.camera_properties)}
             self.sensor = self._Sensor.create(self.serial_number, **create_kwargs)
         except Exception as e:
             raise ConnectionError(

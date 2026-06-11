@@ -105,6 +105,17 @@ class XenseTactileCameraConfig(CameraConfig):
     # - infer_mode picks the engine variant ("normal" | "small" | "fast"). None -> SDK default.
     disable_infer: bool | None = None
     infer_mode: str | None = None
+    # Override the SDK's per-OS camera property template (camera.linux /
+    # camera.win), forwarded to xensesdk Sensor.create(overrides=...). Keys are
+    # the cv2/V4L2 property names the SDK recognizes: exposure, brightness,
+    # contrast, hue, saturation, sharpness, white_balance, white_balance_t,
+    # exposure, auto_wb, auto_exposure.
+    # NOTE: xensesdk merges this as a WHOLE dict (it replaces the template for
+    # that OS), so include every property you want active — in particular
+    # auto_exposure=1 (manual) is required for a manual `exposure` to take
+    # effect, and drop auto_wb/white_balance_t at your peril. None -> use the
+    # sensor's xpack template unchanged.
+    camera_properties: dict[str, float] | None = None
 
     def __post_init__(self):
         # Set default output types if not provided
