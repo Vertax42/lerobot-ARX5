@@ -1,18 +1,18 @@
 [submodule "third_party/ARX5_SDK"]
 	path = third_party/ARX5_SDK
-	url = git@github.com:Vertax42/ARX5_SDK.git
+	url = git@192.168.1.61:physical-ai/robot_sdk/arx5_sdk.git
 [submodule "third_party/libpyflexiv"]
 	path = third_party/libpyflexiv
-	url = git@github.com:Vertax42/libpyflexiv.git
+	url = git@192.168.1.61:physical-ai/robot_sdk/libpyflexiv.git
 [submodule "third_party/XenseVR-PC-Service"]
 	path = third_party/XenseVR-PC-Service
-	url = git@github.com:Vertax42/XenseVR-PC-Service.git
+	url = git@192.168.1.61:physical-ai/tools/XenseVR-PC-Service.git
 [submodule "third_party/XGripper"]
 	path = third_party/XGripper
-	url = git@github.com:Vertax42/XGripper.git
+	url = git@192.168.1.61:physical-ai/grippersdk/xgripper.git
 [submodule "third_party/xense_franka"]
 	path = third_party/xense_franka
-	url = git@github.com:Vertax42/xense_franka.git
+	url = git@192.168.1.61:physical-ai/robot_sdk/xense_franka.git
 [submodule "third_party/elite-robots-cs-sdk"]
 	path = third_party/elite-robots-cs-sdk
 	url = git@192.168.1.61:physical-ai/robot_sdk/elite-robots-cs-sdk.git
