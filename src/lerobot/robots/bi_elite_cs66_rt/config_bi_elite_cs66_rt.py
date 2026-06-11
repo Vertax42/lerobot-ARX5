@@ -487,6 +487,19 @@ class BiEliteCS66RTConfig(RobotConfig):
                         fps=30,
                         output_types=[XenseOutputType.RECTIFY],
                         warmup_s=0.05,
+                        # Override the OG xpack camera template: drop exposure
+                        # 450 -> 250 and add brightness 38. The other keys mirror
+                        # the probed OG template so they are NOT lost (the SDK
+                        # replaces the whole camera.<os> dict): auto_exposure=1
+                        # (manual, required for the manual exposure to apply),
+                        # auto_wb=False, white_balance_t=5550.
+                        camera_properties={
+                            "auto_exposure": 1,
+                            "auto_wb": False,
+                            "exposure": 250,
+                            "white_balance_t": 5550,
+                            "brightness": 38,
+                        },
                     )
         # Only override the (empty) default when the preset actually supplies
         # camera SNs, so a user-provided cameras dict isn't silently wiped.
