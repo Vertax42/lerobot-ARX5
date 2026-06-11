@@ -349,26 +349,19 @@ install_pico4() {
 install_xense() {
     echo ""
     echo "══════════════════════════════════════════"
-    echo " xensesdk + XGripper (submodules)"
+    echo " xensesdk (vendored wheel) + XGripper"
     echo "══════════════════════════════════════════"
 
-    local SDK_DIR="$PROJECT_ROOT/third_party/xensesdk"
+    local WHEEL="$PROJECT_ROOT/dist/xensesdk-2.0.0-cp312-cp312-linux_x86_64.whl"
     local GRIPPER_DIR="$PROJECT_ROOT/third_party/XGripper"
-    local XU_DIR="$SDK_DIR/xense_xu/cpp"
 
-    if [[ ! -d "$SDK_DIR" ]]; then
-        echo "ERROR: $SDK_DIR not found."
-        echo "  Run: git submodule update --init third_party/xensesdk"
+    if [[ ! -f "$WHEEL" ]]; then
+        echo "ERROR: vendored xensesdk wheel not found: $WHEEL"
         return 1
     fi
     if [[ ! -d "$GRIPPER_DIR" ]]; then
         echo "ERROR: $GRIPPER_DIR not found."
         echo "  Run: git submodule update --init third_party/XGripper"
-        return 1
-    fi
-    if [[ ! -d "$XU_DIR" ]]; then
-        echo "ERROR: $XU_DIR not found."
-        echo "  Run: git submodule update --init third_party/xensesdk"
         return 1
     fi
 
@@ -382,9 +375,9 @@ install_xense() {
         ${CONDA_CMD:-mamba} install -c conda-forge hidapi -y
     fi
 
-    # Install xensesdk dependencies explicitly so the shared ARX5/Robostack
-    # environment can stay on numpy 1.26.x. The vendored xensesdk metadata
-    # still asks for numpy>=2, so install the local source without re-resolving.
+    # Install xensesdk runtime deps explicitly so the shared ARX5/Robostack
+    # environment can stay on numpy 1.26.x (the xensesdk wheel metadata still
+    # asks for numpy>=2, so the wheel is installed with --no-deps below).
     uv pip install \
         "numpy>=1.26.4,<2.3.0" \
         "opencv-python>=4.10" \
@@ -397,14 +390,13 @@ install_xense() {
         "psutil>=7.0" \
         "spdlog>=2.0" \
         "pyudev; platform_system=='Linux'"
-    # Install xensesdk from local submodule (branch: feature/v1.7.0rc0).
-    uv pip install -e "$SDK_DIR"
-    echo "[xense] Building pyxensexu companion module..."
-    bash "$XU_DIR/build_python.sh"
-    # Install XGripper from local submodule (package name: xgripper).
-    # xgripper bundles pysurvive from vendored libsurvive source, and xensesdk
-    # has already been installed from the local submodule above. Avoid resolving
-    # these back to PyPI wheels, which are incomplete for Python 3.12.
+    # Install xensesdk 2.0 from the vendored wheel under dist/. It bundles the
+    # patched libxense_c.so flash reader (concurrent-connect EBADF fix), so no
+    # separate xense_xu / pyxensexu build is needed. --no-deps keeps numpy 1.26.x.
+    uv pip install --no-deps --force-reinstall "$WHEEL"
+    # Install XGripper from local submodule (package name: xensegripper). It is
+    # used by the serial / xense grippers and imports the xensesdk installed
+    # above; --no-deps avoids PyPI wheels that are incomplete for Python 3.12.
     uv pip install -e "$GRIPPER_DIR" --no-deps
     # xensesdk requires a specific av version
     uv pip install av==15.1.0
