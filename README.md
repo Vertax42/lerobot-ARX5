@@ -45,9 +45,15 @@ This repository uses `third_party/` git submodules to manage hardware SDK depend
 | `third_party/ARX5_SDK` | `pyarx` |
 | `third_party/libpyflexiv` | `flexiv_rt` |
 | `third_party/XenseVR-PC-Service` | `xensevr_pc_service_sdk` |
-| `third_party/xensesdk` | `xensesdk` |
 | `third_party/XGripper` | `xensegripper` |
 | `third_party/xense_franka` | `xense_franka` |
+| `third_party/elite-robots-cs-sdk` | Elite CS C++ SDK (builds `elite_cs_sdk`) |
+| `third_party/elite-robots-cs-sdk-python` | `elite_cs_sdk` (Elite CS Python bindings) |
+
+> `xensesdk` is **not** a submodule — it is installed from the vendored wheel
+> `dist/xensesdk-2.0.0-cp312-cp312-linux_x86_64.whl` (which bundles the patched
+> `libxense_c.so` flash reader). The Elite Python SDK is built against the local
+> `third_party/elite-robots-cs-sdk` C++ submodule (no network fetch of the C++ source).
 
 **Step 2:** 🐍 Create and activate the mamba environment:
 
@@ -71,7 +77,8 @@ This step will:
 
 - Update the conda environment from `conda_environment.yaml`
 - Install the main package from `pyproject.toml`
-- Build and install all `third_party` SDK packages: `pyarx`, `flexiv_rt`, `xensevr_pc_service_sdk`, `xensesdk`, `xensegripper`, `xense_franka`
+- Install `xensesdk` from the vendored wheel (`dist/xensesdk-2.0.0-cp312-cp312-linux_x86_64.whl`)
+- Build and install all `third_party` SDK packages: `pyarx`, `flexiv_rt`, `xensevr_pc_service_sdk`, `xensegripper`, `xense_franka`, and `elite_cs_sdk` (Elite CS — built from the C++ + Python submodules)
 - Configure SpaceMouse udev rules and HID permissions automatically
 
 > You will be prompted for `sudo` password during installation (for ARX5 real-time capability and udev rules).
@@ -84,6 +91,7 @@ python -c 'import flexiv_rt; print("flexiv_rt OK ->", flexiv_rt.__file__)'
 python -c 'import xensevr_pc_service_sdk; print("xensevr_pc_service_sdk OK ->", xensevr_pc_service_sdk.__file__)'
 python -c 'import xensesdk; print("xensesdk OK ->", xensesdk.__file__)'
 python -c 'import xensegripper; print("xensegripper OK ->", xensegripper.__file__)'
+python -c 'import elite_cs_sdk; print("elite_cs_sdk OK ->", elite_cs_sdk.__file__)'
 ```
 
 **Step 5:** 📌 **Note on FFmpeg / video:** v5.1 no longer pins `ffmpeg`
