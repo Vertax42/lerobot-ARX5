@@ -34,3 +34,4 @@ dependencies:
   - pip:
       - uv
       - pyrealsense2
+      - matplotlib
