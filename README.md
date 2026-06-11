@@ -58,8 +58,8 @@ This repository uses `third_party/` git submodules to manage hardware SDK depend
 **Step 2:** 🐍 Create and activate the mamba environment:
 
 ```bash
-bash ./setup_env.sh --mamba lerobot-xense-py312
-mamba activate lerobot-xense-py312
+bash ./setup_env.sh --mamba lerobot-xense
+mamba activate lerobot-xense
 ```
 
 > The default env name baked into `conda_environment.yaml` is
