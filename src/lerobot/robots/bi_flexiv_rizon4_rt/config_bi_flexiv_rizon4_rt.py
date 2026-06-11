@@ -17,6 +17,7 @@
 """Configuration for BiFlexivRizon4RT dual-arm robot (real-time via flexiv_rt)."""
 
 from dataclasses import dataclass, field
+
 import flexiv_rt
 
 from lerobot.cameras.configs import CameraConfig
@@ -61,6 +62,13 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         target_wrench: Default target wrench for force control
         ext_force_threshold: External TCP force threshold for collision detection [N]
         ext_torque_threshold: External joint torque threshold for collision detection [Nm]
+        commanded_actual_max_deg: Steady-state envelope (per arm) on the angle between the
+            commanded TCP orientation in send_action and the live TCP orientation read from
+            the RT shared memory. If exceeded, the commanded quaternion is slerp-projected
+            back to within this angle of actual before being written to the RT thread.
+            Default 60° keeps a 30° margin below Flexiv's 90° orientation-error safety
+            (event 301005). The returned action dict carries the clamped value, so any
+            dataset frame built from it records the safe envelope. Set to 180 to disable.
     """
 
     # Robot identification
@@ -100,6 +108,10 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     # Collision detection thresholds
     ext_force_threshold: float = 10.0  # N
     ext_torque_threshold: float = 5.0  # Nm
+
+    # Per-arm steady-state clamp on commanded vs actual TCP orientation (degrees).
+    # Below Flexiv's 90° orientation-error safety (event 301005). Set to 180 to disable.
+    commanded_actual_max_deg: float = 60.0
 
     # Start position parameters (left arm)
     left_start_position_degree: list[float] = field(
@@ -187,6 +199,23 @@ class BiFlexivRizon4RTConfig(RobotConfig):
 
         # ── Apply preset positions and device identifiers based on mounting type ──
         _PRESETS = {
+            "forward-04": {
+                "left_sn": "Rizon4-063774",
+                "right_sn": "Rizon4R-062090",
+                "left_gripper_sn": "000001",
+                "right_gripper_sn": "000002",
+                "left_start": [86.95, 68.21, 23.52, 109.68, -3.23, 89.52, 3.12],
+                "right_start": [83.07, 67.85, 24.64, 107.57, 6.39, 95.96, 15.24],
+                "left_home": [86.95, 68.21, 23.52, 109.68, -3.23, 89.52, 3.12],
+                "right_home": [83.07, 67.85, 24.64, 107.57, 6.39, 95.96, 15.24],
+                "head_camera_sn": "344522070461",
+                "left_wrist_camera_sn": "XC000001",
+                "right_wrist_camera_sn": "XC000002",
+                "left_tactile_camera_sn_0": "OG000863",
+                "left_tactile_camera_sn_1": "OG000864",
+                "right_tactile_camera_sn_0": "OG000861",
+                "right_tactile_camera_sn_1": "OG000862",
+            },
             "forward": {
                 "left_sn": "Rizon4s-063458",
                 "right_sn": "Rizon4s-063670",
@@ -203,6 +232,23 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 "left_tactile_camera_sn_1": "OG000864",
                 "right_tactile_camera_sn_0": "OG000861",
                 "right_tactile_camera_sn_1": "OG000862",
+            },
+            "forward_dewu": {
+                "left_sn": "Rizon4s-063458",
+                "right_sn": "Rizon4s-063670",
+                "left_gripper_sn": "000021",
+                "right_gripper_sn": "000012",
+                "left_start": [111.74, 68.16, -1.62, 80.45, 68.89, 3.25, -12.22],
+                "right_start": [-15.37, 65.83, 15.31, 101.71, -74.23, -6.27, 38.36],
+                "left_home": [111.74, 68.16, -1.62, 80.45, 68.89, 3.25, -12.22],
+                "right_home": [-15.37, 65.83, 15.31, 101.71, -74.23, -6.27, 38.36],
+                "head_camera_sn": "337322070722",
+                "left_wrist_camera_sn": "XC000021",
+                "right_wrist_camera_sn": "XC000012",
+                "left_tactile_camera_sn_0": "OG000950",
+                "left_tactile_camera_sn_1": "OG000949",
+                "right_tactile_camera_sn_0": "OG001310",
+                "right_tactile_camera_sn_1": "OG001311",
             },
             "side": {
                 "left_sn": "Rizon4-063423",
