@@ -187,8 +187,8 @@ class TeleoperateConfig:
     display_ip: str | None = None
     # Port of the remote Rerun server
     display_port: int | None = None
-    # Whether to display compressed images in Rerun
-    display_compressed_images: bool = False
+    # Whether to display compressed images in Rerun (JPEG) to lower memory/IPC load. Set False for lossless display.
+    display_compressed_images: bool = True
     # Print per-step timing breakdown instead of action values.
     debug_timing: bool = False
     # Dryrun mode: print actions but do not send to robot
@@ -243,7 +243,7 @@ def teleop_loop(
     fps: int,
     display_data: bool = False,
     duration: float | None = None,
-    display_compressed_images: bool = False,
+    display_compressed_images: bool = True,
     debug_timing: bool = False,
 ):
     """

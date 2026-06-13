@@ -473,8 +473,8 @@ class RecordConfig:
     display_ip: str | None = None
     # Port of the remote Rerun server
     display_port: int | None = None
-    # Whether to  display compressed images in Rerun
-    display_compressed_images: bool = False
+    # Whether to display compressed images in Rerun (JPEG) to lower memory/IPC load. Set False for lossless display.
+    display_compressed_images: bool = True
     # Use vocal synthesis to read events.
     play_sounds: bool = True
     # Resume recording on an existing dataset.
@@ -513,7 +513,7 @@ def record_loop(
     control_time_s: int | None = None,
     single_task: str | None = None,
     display_data: bool = False,
-    display_compressed_images: bool = False,
+    display_compressed_images: bool = True,
 ):
     if dataset is not None and dataset.fps != fps:
         raise ValueError(f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps}).")
