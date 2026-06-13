@@ -85,8 +85,8 @@ class TaccapGripper(Robot):
 
         if config.enable_gripper and not TACCAP_SDK_AVAILABLE:
             raise ImportError(
-                "xense.taccap SDK not available. Install the taccap-gripper "
-                "PyPI package (source at /home/ubuntu/TacCap-Gripper)."
+                "xense.taccap SDK not available. Build it from the vendored "
+                "submodule third_party/taccap-gripper (run setup_env.sh --install)."
             )
         if config.enable_tracker and not PICO4_TRACKER_AVAILABLE:
             raise ImportError(
@@ -191,22 +191,14 @@ class TaccapGripper(Robot):
                 f"fw_sn={self._endpoints.firmware_sn!r} "
                 f"mcu={self._endpoints.mcu_serial!r}"
             )
+            # MCU-only attach: cameras (wrist + tactile) are owned by the
+            # LeRobot camera framework, not the SDK (open_cameras stays False).
+            # The explicit mcu_device ctor honors the firmware_sn filter —
+            # LeaderGripper.open() would fall back to find_one() and ignore it.
+            self._gripper = LeaderGripper(self._endpoints.mcu_device)
             self.logger.info(
-                f"  Tactile serials: left={self._endpoints.tactile_left_serial!r} "
-                f"right={self._endpoints.tactile_right_serial!r}"
+                "  ✅ LeaderGripper attached (MCU-only, read-only — motor stays disabled)"
             )
-            self.logger.info(f"  Wrist video path: {self._endpoints.wrist_video!r}")
-            # Use the explicit constructor with the discovered endpoints
-            # so multi-gripper rigs honor the firmware_sn filter — calling
-            # LeaderGripper.open() would silently fall back to find_one()
-            # and ignore our filter.
-            self._gripper = LeaderGripper(
-                self._endpoints.mcu_device,
-                self._endpoints.wrist_video,
-                self._endpoints.tactile_left_serial,
-                self._endpoints.tactile_right_serial,
-            )
-            self.logger.info("  ✅ LeaderGripper attached (read-only — motor stays disabled)")
 
         # Auto-wire the wrist camera using the V4L2 path the SDK reports.
         # We discover endpoints independently if the gripper itself is
@@ -248,23 +240,17 @@ class TaccapGripper(Robot):
         self.logger.info(f"✅ {self} connected.")
 
     def _attach_wrist_camera(self) -> None:
-        """Build an ``OpenCVCameraConfig`` pointed at ``endpoints.wrist_video``
-        and add it to ``self.cameras`` under key ``wrist_cam``.
-
-        Discovers endpoints on demand if ``enable_gripper`` was False, so
-        the wrist camera can be used standalone."""
-        if self._endpoints is None:
-            self._endpoints = self._discover_gripper()
-            self.logger.info(
-                f"  TacCap-Gripper endpoints (wrist-only): "
-                f"side={self._endpoints.side} fw_sn={self._endpoints.firmware_sn!r}"
-            )
-
-        wrist_path = self._endpoints.wrist_video
+        """Build an ``OpenCVCameraConfig`` from
+        ``config.wrist_camera_index_or_path`` and add it to ``self.cameras``
+        under key ``wrist_cam``. The MCU-only SDK no longer reports the wrist
+        V4L2 path, so it comes from config (validated in ``__post_init__``).
+        Needs no gripper discovery — usable even when ``enable_gripper`` is
+        False."""
+        wrist_path = self.config.wrist_camera_index_or_path
         if not wrist_path:
             raise RuntimeError(
-                "GripperEndpoints.wrist_video is empty — the SDK could not "
-                "resolve a V4L2 path for the wrist camera on this unit."
+                "enable_wrist_camera=True but wrist_camera_index_or_path is "
+                "empty. Set the wrist UVC V4L2 path/index in the config."
             )
 
         cfg = OpenCVCameraConfig(
@@ -276,7 +262,7 @@ class TaccapGripper(Robot):
         wrist_dict = make_cameras_from_configs({"wrist_cam": cfg})
         self.cameras.update(wrist_dict)
         self.logger.info(
-            f"  ✅ Wrist camera auto-wired at {wrist_path!r} "
+            f"  ✅ Wrist camera wired at {wrist_path!r} "
             f"({self.config.wrist_camera_width}x{self.config.wrist_camera_height} "
             f"@ {self.config.wrist_camera_fps}fps)"
         )

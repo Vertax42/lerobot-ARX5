@@ -109,18 +109,25 @@ class TaccapGripperConfig(RobotConfig):
 
     # ---- Cameras (tactile + extras) --------------------------------------
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
-    """Camera configs keyed by feature name. Typical entries for the
-    TacCap-Gripper:
-    - tactile: ``XenseTactileCameraConfig`` with the OG serials reported by
-      ``find_one()`` (``tactile_left_serial``, ``tactile_right_serial``).
+    """Camera configs keyed by feature name, read asynchronously through the
+    standard LeRobot camera framework. Typical entries for the TacCap-Gripper:
+    - tactile: ``XenseTactileCameraConfig(serial_number="OG...")`` per sensor
+      (e.g. keys ``left_tactile`` / ``right_tactile``). The OG serials are
+      supplied here by the operator — the MCU-only SDK no longer reports them.
 
-    The wrist UVC camera does NOT belong here — it is auto-wired via
-    ``enable_wrist_camera`` (below) using the V4L2 path the SDK reports."""
+    The wrist UVC camera does NOT belong here — it is wired via
+    ``enable_wrist_camera`` + ``wrist_camera_index_or_path`` (below)."""
 
-    # ---- Wrist camera (auto-discovered via GripperEndpoints.wrist_video) -
+    # ---- Wrist camera (OpenCV UVC; device path supplied by config) -------
     enable_wrist_camera: bool = True
-    """Auto-wire the wrist UVC camera using ``GripperEndpoints.wrist_video``.
-    Surfaced as observation key ``wrist_cam``. Set False to suppress."""
+    """Wire the wrist UVC camera (OpenCV/V4L2) under observation key
+    ``wrist_cam``. Set False to suppress. Requires ``wrist_camera_index_or_path``
+    — the MCU-only SDK no longer reports the device path, so it is set here."""
+
+    wrist_camera_index_or_path: str = ""
+    """V4L2 device path or index for the wrist UVC camera, e.g.
+    ``/dev/v4l/by-id/usb-...-index0`` (prefer by-id for stability) or ``"4"``.
+    Required when ``enable_wrist_camera`` is True."""
 
     wrist_camera_width: int = 640
     wrist_camera_height: int = 480
@@ -136,6 +143,12 @@ class TaccapGripperConfig(RobotConfig):
             )
         if self.enable_wrist_camera and "wrist_cam" in self.cameras:
             raise ValueError(
-                "wrist_cam is auto-wired by enable_wrist_camera=True; "
+                "wrist_cam is wired by enable_wrist_camera=True; "
                 "remove it from `cameras` or set enable_wrist_camera=False."
+            )
+        if self.enable_wrist_camera and not self.wrist_camera_index_or_path:
+            raise ValueError(
+                "enable_wrist_camera=True requires wrist_camera_index_or_path "
+                "(the wrist UVC V4L2 path/index); the MCU-only SDK no longer "
+                "reports it. Set it, or disable with enable_wrist_camera=False."
             )

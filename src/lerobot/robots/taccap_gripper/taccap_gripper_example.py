@@ -13,31 +13,30 @@ Standalone smoke test for TaccapGripper.
 
 Usage:
     # Gripper only (encoder readings, no tracker, no cameras).
-    python -m lerobot.robots.taccap_gripper.taccap_gripper_example \\
-        --no-wrist-cam
-
-    # Default: gripper + auto-wired wrist camera (V4L2 path from SDK).
     python -m lerobot.robots.taccap_gripper.taccap_gripper_example
 
-    # Add Pico4 tracker.
+    # Add the wrist UVC camera (path supplied explicitly — the MCU-only SDK
+    # no longer reports it; prefer a /dev/v4l/by-id/... path for stability).
+    python -m lerobot.robots.taccap_gripper.taccap_gripper_example \\
+        --wrist-cam-path /dev/v4l/by-id/usb-XenseRobotics_TacCap_Wrist-video-index0
+
+    # Add the Pico4 tracker.
     python -m lerobot.robots.taccap_gripper.taccap_gripper_example --tracker
 
-    # Add tactile sensors too (uses SDK-reported OG serials).
+    # Add tactile sensors (OG serials supplied explicitly — the MCU-only SDK
+    # no longer reports them):
     python -m lerobot.robots.taccap_gripper.taccap_gripper_example \\
-        --tracker --tactile
+        --tactile-left-sn OG000477 --tactile-right-sn OG000478
 
     # Pin a specific gripper by firmware SN (use when multiple are plugged):
     python -m lerobot.robots.taccap_gripper.taccap_gripper_example \\
         --firmware-sn SN000003
 
-The wrist camera path is auto-discovered from
-``GripperEndpoints.wrist_video`` — no need to hard-code ``/dev/videoN``.
-The jaw closed position is fixed at 0 rad by the SDK's
-``Encoder.set_zero()``; only the open angle (``--open-rad``, default
-1.7 for TC-GU-01) is configurable.
+The jaw closed position is fixed at 0 rad by the SDK's ``Encoder.set_zero()``;
+only the open angle (``--open-rad``, default 1.7 for TC-GU-01) is configurable.
 
 Run the SDK's calibration once per device before using this script:
-    python /home/ubuntu/TacCap-Gripper/python/examples/calibrate.py <SN>
+    python third_party/taccap-gripper/python/examples/calibrate.py <SN>
 
 The script prints 10 observation frames (scalar fields + image shapes)
 then disconnects.
@@ -52,18 +51,15 @@ import time
 from lerobot.robots.taccap_gripper import TaccapGripper, TaccapGripperConfig
 
 
-def _tactile_configs(endpoints) -> dict:
-    """Build XenseTactileCameraConfig entries from the live SDK endpoints."""
+def _tactile_configs(left_sn: str | None, right_sn: str | None) -> dict:
+    """Build XenseTactileCameraConfig entries from explicit OG serials."""
     from lerobot.cameras.xense.configuration_xense import (
         XenseOutputType,
         XenseTactileCameraConfig,
     )
 
     cameras: dict = {}
-    for key, sn in (
-        ("tactile_left", endpoints.tactile_left_serial),
-        ("tactile_right", endpoints.tactile_right_serial),
-    ):
+    for key, sn in (("tactile_left", left_sn), ("tactile_right", right_sn)):
         if not sn:
             continue
         cameras[key] = XenseTactileCameraConfig(
@@ -84,10 +80,12 @@ def main() -> None:
                         help="Enable the Pico4 motion tracker.")
     parser.add_argument("--tracker-sn", default=None,
                         help="Pico4 tracker serial (None = first available).")
-    parser.add_argument("--tactile", action="store_true",
-                        help="Enable tactile cameras (left + right OG sensors).")
-    parser.add_argument("--no-wrist-cam", action="store_true",
-                        help="Skip the auto-wired wrist UVC camera.")
+    parser.add_argument("--tactile-left-sn", default=None,
+                        help="Left OG tactile sensor serial (e.g. OG000477).")
+    parser.add_argument("--tactile-right-sn", default=None,
+                        help="Right OG tactile sensor serial (e.g. OG000478).")
+    parser.add_argument("--wrist-cam-path", default=None,
+                        help="Wrist UVC V4L2 path/index; enables the wrist camera when set.")
     parser.add_argument("--imu", action="store_true",
                         help="Enable IMU readings.")
     parser.add_argument("--open-rad", type=float, default=1.7,
@@ -96,19 +94,8 @@ def main() -> None:
                         help="How many observation frames to print.")
     args = parser.parse_args()
 
-    cameras: dict = {}
-    if args.tactile:
-        # Tactile serials need the live SDK; do a quick discovery up front.
-        from xense.taccap import find_one, scan_grippers
-
-        if args.firmware_sn is None:
-            eps = find_one()
-        else:
-            matches = [e for e in scan_grippers() if e.firmware_sn == args.firmware_sn]
-            if not matches:
-                raise SystemExit(f"No gripper with firmware_sn={args.firmware_sn}")
-            eps = matches[0]
-        cameras = _tactile_configs(eps)
+    cameras = _tactile_configs(args.tactile_left_sn, args.tactile_right_sn)
+    enable_wrist = args.wrist_cam_path is not None
 
     cfg = TaccapGripperConfig(
         firmware_sn=args.firmware_sn,
@@ -117,7 +104,8 @@ def main() -> None:
         gripper_open_rad=args.open_rad,
         enable_tracker=args.tracker,
         tracker_sn=args.tracker_sn,
-        enable_wrist_camera=not args.no_wrist_cam,
+        enable_wrist_camera=enable_wrist,
+        wrist_camera_index_or_path=args.wrist_cam_path or "",
         cameras=cameras,
     )
 
