@@ -14,10 +14,11 @@ Components:
 - **Pose:** Pico4 Ultra **independent motion tracker** mounted on top
   of the gripper. Reached via `xensevr_pc_service_sdk` and read by
   `lerobot.teleoperators.pico4.tracker.Pico4TrackerReader`.
-- **Cameras:** plain LeRobot `cameras/` framework. The wrist UVC camera
-  is **auto-wired** via `GripperEndpoints.wrist_video` reported by the
-  SDK at `connect()` time — no need to hard-code `/dev/videoN`. Tactile
-  sensors come through `cameras/xense/` keyed by OG serial.
+- **Cameras:** plain LeRobot `cameras/` framework, read asynchronously.
+  The wrist UVC camera is wired from `wrist_camera_index_or_path` — the
+  MCU-only SDK no longer reports the V4L2 path, so supply it in config
+  (prefer a `/dev/v4l/by-id/...` path for stability). Tactile sensors come
+  through `cameras/xense/` keyed by OG serial (also supplied in config).
 
 The device is passive: `send_action()` is a no-op; the motor is never
 enabled. The operator drives the jaw mechanically and walks the device
@@ -93,7 +94,7 @@ firmware SN, latches the zero via `Encoder.set_zero()`, verifies the
 post-zero raw residual, and optionally sanity-checks the open angle:
 
 ```bash
-python /home/ubuntu/TacCap-Gripper/python/examples/calibrate.py SN000003
+python third_party/taccap-gripper/python/examples/calibrate.py SN000003
 ```
 
 List available firmware SNs:
@@ -126,23 +127,23 @@ the config (`tracker_to_ee_pos`, `tracker_to_ee_quat`).
 Verifies the robot stack independently of `lerobot-record`:
 
 ```bash
-# Default: gripper + auto-wired wrist camera (V4L2 path from SDK).
+# Gripper only (encoder readings; no cameras, no tracker):
 python -m lerobot.robots.taccap_gripper.taccap_gripper_example
 
 # Pin a specific unit by firmware SN:
 python -m lerobot.robots.taccap_gripper.taccap_gripper_example \
     --firmware-sn SN000003
 
-# Gripper only, skip the wrist camera:
+# + wrist camera (supply the V4L2 path explicitly):
 python -m lerobot.robots.taccap_gripper.taccap_gripper_example \
-    --no-wrist-cam
+    --wrist-cam-path /dev/v4l/by-id/usb-...-index0
 
 # + Pico4 tracker:
 python -m lerobot.robots.taccap_gripper.taccap_gripper_example --tracker
 
-# + tactile sensors (left + right OG):
+# + tactile sensors (left + right OG serials supplied explicitly):
 python -m lerobot.robots.taccap_gripper.taccap_gripper_example \
-    --tracker --tactile
+    --tactile-left-sn OG000XXX --tactile-right-sn OG000YYY
 ```
 
 ## End-to-end recording
@@ -158,6 +159,7 @@ lerobot-record \
     --robot.type=taccap_gripper \
     --robot.id=right \
     --robot.firmware_sn=SN000003 \
+    --robot.wrist_camera_index_or_path=/dev/v4l/by-id/usb-...-index0 \
     --robot.cameras='{tactile_left: {type: xense, serial_number: OG000XXX, fps: 30, width: 400, height: 700}, tactile_right: {type: xense, serial_number: OG000YYY, fps: 30, width: 400, height: 700}}' \
     --dataset.repo_id=<your_org>/<your_dataset> \
     --dataset.num_episodes=1 \
@@ -165,10 +167,11 @@ lerobot-record \
     --dataset.single_task='Pick up the object'
 ```
 
-The wrist camera is **not** listed in `--robot.cameras` — it is
-auto-wired by `enable_wrist_camera=True` (default). Override the
-defaults with `--robot.wrist_camera_width=…` / `_height` / `_fps` if
-needed, or set `--robot.enable_wrist_camera=false` to skip.
+The wrist camera is **not** listed in `--robot.cameras` — it is wired by
+`enable_wrist_camera=True` (default) from `--robot.wrist_camera_index_or_path=…`
+(required; the MCU-only SDK no longer reports the path). Tune
+`--robot.wrist_camera_width=…` / `_height` / `_fps`, or set
+`--robot.enable_wrist_camera=false` to skip.
 
 `--robot.firmware_sn=…` is only needed when more than one gripper is
 plugged in. With a single gripper, the SDK's `find_one()` picks it up
@@ -199,7 +202,7 @@ second column.
 - `calibrate_tracker.py` — sanity-check the Pico4 tracker.
 
 Encoder zero calibration lives in the SDK itself
-(`/home/ubuntu/TacCap-Gripper/python/examples/calibrate.py`) — we no
+(`third_party/taccap-gripper/python/examples/calibrate.py`) — we no
 longer ship a duplicate.
 
 The Pico4 tracker reader is shared with future devices and lives at
