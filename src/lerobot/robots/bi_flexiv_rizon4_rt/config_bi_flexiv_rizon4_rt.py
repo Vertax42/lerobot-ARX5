@@ -153,29 +153,24 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     left_rt_cpu_affinity: int = 2
     right_rt_cpu_affinity: int = 3
 
-    # ========== Left gripper settings ==========
+    # ========== Left gripper settings (per-arm: enable + serial wiring) ==========
     left_use_gripper: bool = True
     left_gripper_sn: str = "000001"
     left_gripper_baudrate: int = 115200
     left_gripper_serial_timeout: float = 1.0
-    # -- shared motion parameters --
-    left_gripper_min_pos: float = 0.0  # mm — fully closed
-    left_gripper_max_pos: float = 85.0  # mm — fully open
-    left_gripper_v_max: float = 100.0  # mm/s
-    left_gripper_f_max: float = 40.0  # N
-    left_gripper_init_open: bool = True
 
-    # ========== Right gripper settings ==========
+    # ========== Right gripper settings (per-arm: enable + serial wiring) ==========
     right_use_gripper: bool = True
     right_gripper_sn: str = "000002"
     right_gripper_baudrate: int = 115200
     right_gripper_serial_timeout: float = 1.0
-    # -- shared motion parameters --
-    right_gripper_min_pos: float = 0.0  # mm — fully closed
-    right_gripper_max_pos: float = 85.0  # mm — fully open
-    right_gripper_v_max: float = 100.0  # mm/s
-    right_gripper_f_max: float = 40.0  # N
-    right_gripper_init_open: bool = True
+
+    # ========== Shared gripper mechanical / motion params (both arms) ==========
+    gripper_min_pos: float = 0.0  # mm — fully closed
+    gripper_max_pos: float = 85.0  # mm — fully open
+    gripper_v_max: float = 100.0  # mm/s
+    gripper_f_max: float = 40.0  # N
+    gripper_init_open: bool = True
 
     # Auto-created in __post_init__ (do not set directly)
     left_gripper: SerialGripperConfig | None = field(default=None, init=False)
@@ -350,11 +345,11 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 sn=self.left_gripper_sn,
                 baudrate=self.left_gripper_baudrate,
                 serial_timeout=self.left_gripper_serial_timeout,
-                gripper_min_pos=self.left_gripper_min_pos,
-                gripper_max_pos=self.left_gripper_max_pos,
-                gripper_v_max=self.left_gripper_v_max,
-                gripper_f_max=self.left_gripper_f_max,
-                init_open=self.left_gripper_init_open,
+                gripper_min_pos=self.gripper_min_pos,
+                gripper_max_pos=self.gripper_max_pos,
+                gripper_v_max=self.gripper_v_max,
+                gripper_f_max=self.gripper_f_max,
+                init_open=self.gripper_init_open,
             )
         else:
             self.left_gripper = None
@@ -365,11 +360,11 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 sn=self.right_gripper_sn,
                 baudrate=self.right_gripper_baudrate,
                 serial_timeout=self.right_gripper_serial_timeout,
-                gripper_min_pos=self.right_gripper_min_pos,
-                gripper_max_pos=self.right_gripper_max_pos,
-                gripper_v_max=self.right_gripper_v_max,
-                gripper_f_max=self.right_gripper_f_max,
-                init_open=self.right_gripper_init_open,
+                gripper_min_pos=self.gripper_min_pos,
+                gripper_max_pos=self.gripper_max_pos,
+                gripper_v_max=self.gripper_v_max,
+                gripper_f_max=self.gripper_f_max,
+                init_open=self.gripper_init_open,
             )
         else:
             self.right_gripper = None
