@@ -665,10 +665,10 @@ class BiFlexivRizon4RT(Robot):
                 self.config.left_start_position_degree,
                 self.config.start_vel_scale,
                 self.config.left_use_gripper,
-                self.config.left_gripper_init_open,
-                self.config.left_gripper_max_pos,
-                self.config.left_gripper_v_max,
-                self.config.left_gripper_f_max,
+                self.config.gripper_init_open,
+                self.config.gripper_max_pos,
+                self.config.gripper_v_max,
+                self.config.gripper_f_max,
             )
             right_future = executor.submit(
                 self._move_arm_to_position,
@@ -678,10 +678,10 @@ class BiFlexivRizon4RT(Robot):
                 self.config.right_start_position_degree,
                 self.config.start_vel_scale,
                 self.config.right_use_gripper,
-                self.config.right_gripper_init_open,
-                self.config.right_gripper_max_pos,
-                self.config.right_gripper_v_max,
-                self.config.right_gripper_f_max,
+                self.config.gripper_init_open,
+                self.config.gripper_max_pos,
+                self.config.gripper_v_max,
+                self.config.gripper_f_max,
             )
             done, _ = wait([left_future, right_future])
 
@@ -1133,22 +1133,10 @@ class BiFlexivRizon4RT(Robot):
                     use_gripper = (
                         self.config.left_use_gripper if side == "left" else self.config.right_use_gripper
                     )
-                    init_open = (
-                        self.config.left_gripper_init_open
-                        if side == "left"
-                        else self.config.right_gripper_init_open
-                    )
-                    max_pos = (
-                        self.config.left_gripper_max_pos
-                        if side == "left"
-                        else self.config.right_gripper_max_pos
-                    )
-                    v_max = (
-                        self.config.left_gripper_v_max if side == "left" else self.config.right_gripper_v_max
-                    )
-                    f_max = (
-                        self.config.left_gripper_f_max if side == "left" else self.config.right_gripper_f_max
-                    )
+                    init_open = self.config.gripper_init_open
+                    max_pos = self.config.gripper_max_pos
+                    v_max = self.config.gripper_v_max
+                    f_max = self.config.gripper_f_max
                     self._move_arm_to_position(
                         robot, gripper, side, start_deg, self.config.start_vel_scale,
                         use_gripper, init_open, max_pos, v_max, f_max
