@@ -443,10 +443,10 @@ class DatasetRecordConfig:
     # Video codec for encoding videos. Options: 'h264', 'hevc', 'libsvtav1', 'auto',
     # or hardware-specific: 'h264_videotoolbox', 'h264_nvenc', 'h264_vaapi', 'h264_qsv'.
     # Use 'auto' to auto-detect the best available hardware encoder.
-    vcodec: str = "libsvtav1"
+    vcodec: str = "auto"
     # Enable streaming video encoding: encode frames in real-time during capture instead
     # of writing PNG images first. Makes save_episode() near-instant. More info in the documentation: https://huggingface.co/docs/lerobot/streaming_video_encoding
-    streaming_encoding: bool = False
+    streaming_encoding: bool = True
     # Maximum number of frames to buffer per camera when using streaming encoding.
     # ~1s buffer at 30fps. Provides backpressure if the encoder can't keep up.
     encoder_queue_maxsize: int = 30
