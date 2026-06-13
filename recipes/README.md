@@ -44,10 +44,17 @@ recipes/
 
 ## What goes in a recipe
 
-Every **honored per-recipe knob** is written out explicitly with its value —
-control mode, servo/timeout params, gripper motion limits, trace thresholds,
-dataset fields, teleop sensitivities, and the top-level loop flags — so an
-operator can see and change any parameter without reading the code.
+A recipe lists **only the frequently-changed knobs**; every other field falls
+back to its dataclass default, so recipes stay short. The current per-robot set
+is the minimal one operators actually tune — mount + IPs, control mode, a servo
+knob or two, gripper enable + force, the tactile toggle, plus the dataset fields
+and top-level loop flags. To touch a rarely-changed parameter, add its line to
+the recipe or pass a one-off `--flag` override; until then the dataclass default
+applies. (Removing a line only changes behavior if its default differs from the
+value you had — verify before trimming.)
+
+The `robot:` and `teleop:` blocks are **identical** between a robot's record and
+teleop recipe (same hardware, same teleop device) — keep the two in sync.
 
 **Station hardware is deliberately NOT listed**: cameras, gripper/robot SNs,
 mount geometry (`*_mount_*_deg`, `world_rotation`), `local_ip`, and home/start

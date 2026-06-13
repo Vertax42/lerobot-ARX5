@@ -1,102 +1,27 @@
 # Teleop recipe — bimanual Elite CS66 RT (diagonal mount) + Bi-Pico4.
 #   lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal.yaml
 #
-# Every per-recipe knob is written out with its value. Station hardware
-# (cameras, gripper SNs, mount geometry / world_rotation, local_ip, home/start
-# poses) is NOT listed: bi_mount_type's preset overwrites those at load, so
-# setting them here would be silently ignored. Pick the station via bi_mount_type.
+# Only the frequently-changed knobs are listed; everything else uses the dataclass
+# default. Station hardware comes from the bi_mount_type preset and is not settable
+# here. The robot:/teleop: blocks mirror the record recipe — keep them in sync.
 
 robot:
   type: bi_elite_cs66_rt
-  id: null
-  calibration_dir: null
-
-  # ── Station select (preset fills hardware; only the robot IPs are explicit-wins) ──
   bi_mount_type: diagonal
   left_robot_ip: 192.168.8.53
   right_robot_ip: 192.168.8.223
-
-  # ── Control mode + observation schema ──
-  control_mode: cartesian_servo     # cartesian_servo | joint_servo
-  observe_tcp: true
-  observe_joints: false
-
-  # ── External-control script (resolved from the SDK when null) ──
-  script_file_path: null
-
-  # ── Servo streaming ──
-  servoj_time: 0.004                # [0.002, 0.01] s
-  servoj_lookahead_time: 0.1        # [0.03, 0.2]
-  servoj_gain: 300                  # [100, 2000]
-  command_timeout_ms: 500
-  use_background_servo_loop: true
-  command_stale_timeout_s: 1.0      # *1000 must be >= command_timeout_ms
-  servo_fifo_scheduling: true
-  reset_duration_s: 3.0
-
-  # ── RTSI state stream ──
-  rtsi_frequency: 250.0
-  rtsi_output_recipe: null
-  rtsi_input_recipe: null
-
-  # ── Startup / shutdown ──
-  connect_timeout_s: 10.0
-  external_control_settle_s: 1.0
-  servo_failure_tolerance_ticks: 250
-
-  # ── Per-arm EliteDriver TCP port offsets (must differ; |Δ| >= 4) ──
-  left_driver_port_offset: 0
-  right_driver_port_offset: 10
-
-  # ── MoveJ (start / home) ──
-  start_move_duration_s: 3.0
-  home_move_duration_s: 3.0
-  move_j_timeout_ms: 800
-
-  # ── servoj trace / large-step logging ──
-  trace_servoj: true
-  trace_translation_threshold: 0.05
-  trace_rotation_threshold: 0.5
-  trace_joint_threshold: 0.3
-
-  # ── Grippers (board SN comes from the preset; the rest are honored knobs) ──
+  control_mode: cartesian_servo # cartesian_servo | joint_servo
+  servoj_gain: 300 # [100, 2000]
   left_use_gripper: true
-  left_gripper_baudrate: 115200
-  left_gripper_serial_timeout: 1.0
   right_use_gripper: true
-  right_gripper_baudrate: 115200
-  right_gripper_serial_timeout: 1.0
-  gripper_min_pos: 0.0              # mm, fully closed
-  gripper_max_pos: 85.0            # mm, fully open
-  gripper_v_max: 100.0             # mm/s
-  gripper_f_max: 30.0              # N
-  gripper_init_open: true
-
-  # ── Tactile sensors (XenseTactileCamera; SNs from preset) ──
+  gripper_f_max: 30.0 # N
   enable_tactile_sensors: true
 
 teleop:
   type: bi_pico4
-  id: bi_pico4
-  calibration_dir: null
   pos_sensitivity: 1.0
   ori_sensitivity: 1.0
-  filter_window_size: 1
-  max_pos_velocity: 1.0
-  max_rot_velocity: 6.28
-  left_gripper_width: 1.0
-  right_gripper_width: 1.0
-  grip_enable_threshold: 0.5
-  grip_disable_threshold: 0.3
-  orientation_offset_warning_deg: 180.0
-  position_jump_threshold: 0.1
 
 # ── Teleoperate loop (top level) ──
 fps: 30
-teleop_time_s: null
 display_data: true
-display_ip: null
-display_port: null
-display_compressed_images: false
-debug_timing: false
-dryrun: false
