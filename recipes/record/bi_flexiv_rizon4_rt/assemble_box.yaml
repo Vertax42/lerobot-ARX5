@@ -1,0 +1,76 @@
+# Record recipe — bimanual Flexiv Rizon4 RT (forward mount) + Bi-Pico4.
+#   lerobot-record --config_path=recipes/record/bi_flexiv_rizon4_rt/assemble_box.yaml
+#
+# Every per-recipe knob is written out with its value. Station hardware (robot &
+# gripper SNs, cameras, home/start poses) is NOT listed: bi_mount_type's preset
+# overwrites those at load — including the robot SNs (unconditionally, unlike the
+# Elite IPs), so pick the physical station purely via bi_mount_type.
+
+robot:
+  type: bi_flexiv_rizon4_rt
+
+  # ── Station select (preset fills robot/gripper SNs, cameras, home/start poses) ──
+  bi_mount_type: forward # forward | forward_dewu | side | diagonal
+
+  # ── Control / RT loop ──
+  use_force: false
+  inner_control_hz: 1000
+  interpolate_cmds: true
+  go_to_start: true
+  enable_tactile_sensors: true
+  commanded_actual_max_deg: 60.0 # orientation envelope vs live TCP
+
+  # ── MoveJ start / home velocity scales (% of max) ──
+  start_vel_scale: 50
+  home_vel_scale: 30
+
+  # ── Startup / connection ──
+  zero_ft_sensor_on_connect: true
+  log_level: INFO
+  connect_retries: 3
+  retry_interval_sec: 1.0
+
+  # ── Grippers (board SN comes from the preset; the rest are honored knobs) ──
+  left_use_gripper: true
+  left_gripper_v_max: 100.0
+  left_gripper_f_max: 40.0
+  left_gripper_init_open: true
+
+  right_use_gripper: true
+  right_gripper_v_max: 100.0
+  right_gripper_f_max: 40.0
+  right_gripper_init_open: true
+
+teleop:
+  type: bi_pico4
+
+  pos_sensitivity: 1.0
+  ori_sensitivity: 1.0
+  filter_window_size: 1
+  max_pos_velocity: 1.0
+  max_rot_velocity: 6.28
+
+  grip_enable_threshold: 0.5
+  grip_disable_threshold: 0.3
+  orientation_offset_warning_deg: 180.0
+  position_jump_threshold: 0.1
+
+dataset:
+  repo_id: Xense/assemble_box_with_phone_stand0430_merged
+  single_task: "Assemble the packaging by folding the flat box into shape, placing the metal phone stand inside, and closing the box properly"
+  fps: 30 # must equal teleop fps below
+  episode_time_s: 600
+  reset_time_s: 120
+  num_episodes: 5
+  video: true
+  push_to_hub: true
+  vcodec: auto
+  streaming_encoding: true
+
+# ── Record loop (top level) ──
+display_data: false
+display_ip: null
+display_port: null
+display_compressed_images: true
+play_sounds: true
+resume: true
