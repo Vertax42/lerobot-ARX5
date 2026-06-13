@@ -530,6 +530,64 @@ PY
     echo "[xense] Done. Verify with: python -c 'import xensesdk; print(xensesdk)'"
 }
 
+# ── Hardware module: TacCap-Gripper (taccap_gripper UMI device) ───────────────
+
+install_taccap() {
+    echo ""
+    echo "══════════════════════════════════════════"
+    echo " TacCap-Gripper SDK  →  xense.taccap"
+    echo "══════════════════════════════════════════"
+
+    local SDK_DIR="$PROJECT_ROOT/third_party/taccap-gripper"
+    if [[ ! -f "$SDK_DIR/pyproject.toml" ]]; then
+        echo "ERROR: $SDK_DIR not found (submodule not initialized)."
+        echo "  Run: git submodule update --init --recursive third_party/taccap-gripper"
+        return 1
+    fi
+    # Nested libxensesdk (lite C++ vision dep) must be present for the cmake build.
+    if [[ ! -f "$SDK_DIR/third_party/libxensesdk/CMakeLists.txt" ]]; then
+        echo "[taccap] Initializing nested libxensesdk submodule..."
+        git -C "$SDK_DIR" submodule update --init --recursive || {
+            echo "[taccap] ERROR: failed to init libxensesdk submodule."
+            return 1
+        }
+    fi
+
+    # Tactile path uses libxense/pyudev, same find_library("udev") pitfall as xensesdk.
+    fix_udev_discovery
+
+    # taccap's libxense-lite C++ build needs the OpenCV C++ headers and
+    # nlohmann_json, which the lerobot env does NOT ship (it carries only the
+    # cv2 wheel, not libopencv C++). eigen/openssl/zlib/cmake/ninja/gcc14 are
+    # already present. Install the missing C++ build deps from conda-forge
+    # (versions follow taccap's environment.yml). libopencv is the C++ runtime
+    # only — it does not disturb the pip-installed opencv-python.
+    # Note: the env carries `libzlib` (runtime) but not `zlib` (dev) — the latter
+    # provides the linkable libz.so symlink that libxensesdk's find_package(ZLIB)
+    # needs (CMakeLists.txt:321). Trigger on a missing libz.so too.
+    if [[ ! -f "${CONDA_PREFIX}/include/nlohmann/json.hpp" ]] || \
+       ! compgen -G "${CONDA_PREFIX}/include/opencv4/opencv2/opencv.hpp" > /dev/null 2>&1 || \
+       [[ ! -e "${CONDA_PREFIX}/lib/libz.so" ]]; then
+        echo "[taccap] Installing C++ build deps (libopencv, nlohmann_json, zlib, pkg-config, make)..."
+        ${CONDA_CMD:-mamba} install -c conda-forge -y \
+            "libopencv=4.12" "nlohmann_json=3.11.3" "zlib=1.3.1" pkg-config make
+    fi
+
+    # --no-build-isolation (used below to keep the build on the env's cmake/ninja
+    # instead of a freshly fetched PyPI one) requires the PEP 517 backend and
+    # pybind11 to be present in-env — pre-install them.
+    uv pip install "scikit-build-core>=0.10" "pybind11>=2.12"
+
+    # scikit-build-core + pybind11 build. LIBRARY_PATH gives the conda cross-
+    # compiler the conda libdir (same reason as XGripper). --no-deps keeps the
+    # shared env's numpy/opencv pins; --no-build-isolation uses the env's
+    # cmake/ninja instead of a freshly fetched PyPI one.
+    LIBRARY_PATH="${CONDA_PREFIX}/lib${LIBRARY_PATH:+:$LIBRARY_PATH}" \
+        uv pip install -e "$SDK_DIR" --no-deps --no-build-isolation
+
+    echo "[taccap] Done. Verify with: python -c 'import xense.taccap; print(xense.taccap.__file__)'"
+}
+
 # ── Hardware module: Elite CS (bi_elite_cs66_rt / elite_cs66_rt) ─────────────
 
 install_elite() {
@@ -778,6 +836,7 @@ elif [[ "$1" == "--install" ]]; then
     install_franka    || echo "[WARN] franka installation skipped or failed (see above)"
     ( install_pico4 ) || echo "[WARN] pico4 installation skipped or failed (see above)"
     install_xense     || echo "[WARN] xense installation skipped or failed (see above)"
+    install_taccap    || echo "[WARN] taccap installation skipped or failed (see above)"
     install_elite     || echo "[WARN] elite installation skipped or failed (see above)"
     install_spacemouse || echo "[WARN] spacemouse installation skipped or failed (see above)"
     install_dynamixel  || echo "[WARN] dynamixel-sdk installation skipped or failed (see above)"
@@ -801,6 +860,7 @@ xensevr_pc_service_sdk|import importlib.metadata as M, xensevr_pc_service_sdk; p
 xensesdk|import importlib.metadata as M, xensesdk; print("v"+M.version("xensesdk"), "->", xensesdk.__file__)
 xensegripper|import importlib.metadata as M, xensegripper; print("v"+M.version("xgripper"), "->", xensegripper.__file__)
 xensesdk flash|from xensesdk.flash.linux_backend import LinuxFlashBackend; print("available" if LinuxFlashBackend().available else "NOT available")
+taccap-gripper|import importlib.metadata as M, xense.taccap; print("v"+M.version("taccap-gripper"), "->", xense.taccap.__file__)
 elite_cs_sdk|import importlib.metadata as M, elite_cs_sdk; print("v"+M.version("elite_cs_sdk"), "->", elite_cs_sdk.__file__)
 dynamixel_sdk|import importlib.metadata as M, dynamixel_sdk; print("v"+M.version("dynamixel_sdk"), "->", dynamixel_sdk.__file__)
 VERIFY
