@@ -21,4 +21,4 @@
 	url = git@192.168.1.61:physical-ai/robot_sdk/elite-robots-cs-sdk-python.git
 [submodule "third_party/taccap-gripper"]
 	path = third_party/taccap-gripper
-	url = git@github.com:Vertax42/TacCap-Gripper.git
+	url = git@192.168.1.61:physical-ai/grippersdk/taccap-gripper.git
