@@ -49,6 +49,7 @@ This repository uses `third_party/` git submodules to manage hardware SDK depend
 | `third_party/xense_franka` | `xense_franka` |
 | `third_party/elite-robots-cs-sdk` | Elite CS C++ SDK (builds `elite_cs_sdk`) |
 | `third_party/elite-robots-cs-sdk-python` | `elite_cs_sdk` (Elite CS Python bindings) |
+| `third_party/taccap-gripper` | `xense.taccap` (TacCap UMI tactile gripper SDK) |
 
 > `xensesdk` is **not** a submodule — it is installed from the vendored wheel
 > `dist/xensesdk-2.0.0-cp312-cp312-linux_x86_64.whl` (which bundles the patched
@@ -78,7 +79,7 @@ This step will:
 - Update the conda environment from `conda_environment.yaml`
 - Install the main package from `pyproject.toml`
 - Install `xensesdk` from the vendored wheel (`dist/xensesdk-2.0.0-cp312-cp312-linux_x86_64.whl`)
-- Build and install all `third_party` SDK packages: `pyarx`, `flexiv_rt`, `xensevr_pc_service_sdk`, `xensegripper`, `xense_franka`, and `elite_cs_sdk` (Elite CS — built from the C++ + Python submodules)
+- Build and install all `third_party` SDK packages: `pyarx`, `flexiv_rt`, `xensevr_pc_service_sdk`, `xensegripper`, `xense_franka`, `elite_cs_sdk` (Elite CS — built from the C++ + Python submodules), and `xense.taccap` (TacCap UMI gripper)
 - Configure SpaceMouse udev rules and HID permissions automatically
 
 > You will be prompted for `sudo` password during installation (for ARX5 real-time capability and udev rules).
