@@ -558,10 +558,12 @@ install_taccap() {
 
     # taccap's libxense-lite C++ build needs the OpenCV C++ headers and
     # nlohmann_json, which the lerobot env does NOT ship (it carries only the
-    # cv2 wheel, not libopencv C++). eigen/openssl/zlib/cmake/ninja/gcc14 are
-    # already present. Install the missing C++ build deps from conda-forge
-    # (versions follow taccap's environment.yml). libopencv is the C++ runtime
-    # only — it does not disturb the pip-installed opencv-python.
+    # cv2 wheel, not libopencv C++). These are now declared in
+    # conda_environment.yaml so the env-create solves them together with the
+    # robostack ROS stack (one coherent solve) — this fallback normally no-ops
+    # because the guard below finds the headers already present.
+    # eigen/openssl/cmake/ninja/gcc14 are already present. libopencv is the C++
+    # runtime only — it does not disturb the pip-installed opencv-python.
     # Note: the env carries `libzlib` (runtime) but not `zlib` (dev) — the latter
     # provides the linkable libz.so symlink that libxensesdk's find_package(ZLIB)
     # needs (CMakeLists.txt:321). Trigger on a missing libz.so too.
@@ -569,8 +571,12 @@ install_taccap() {
        ! compgen -G "${CONDA_PREFIX}/include/opencv4/opencv2/opencv.hpp" > /dev/null 2>&1 || \
        [[ ! -e "${CONDA_PREFIX}/lib/libz.so" ]]; then
         echo "[taccap] Installing C++ build deps (libopencv, nlohmann_json, zlib, pkg-config, make)..."
-        ${CONDA_CMD:-mamba} install -c conda-forge -y \
-            "libopencv=4.12" "nlohmann_json=3.11.3" "zlib=1.3.1" pkg-config make
+        # Include robostack-staging and DO NOT pin libopencv=4.12: a bare
+        # conda-forge solve with that pin pulls libprotobuf 6.31 and evicts the
+        # robostack ROS stack (ros-humble-kdl-parser → breaks pyarx). 4.13 links
+        # libprotobuf 6.33.5 and coexists with ros2-distro-mutex.
+        ${CONDA_CMD:-mamba} install -c robostack-staging -c conda-forge -y \
+            "libopencv>=4.13" "nlohmann_json=3.11.3" "zlib=1.3.1" pkg-config make
     fi
 
     # --no-build-isolation (used below to keep the build on the env's cmake/ninja
