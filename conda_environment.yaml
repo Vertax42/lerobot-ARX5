@@ -21,6 +21,18 @@ dependencies:
   - conda-forge::soem=1.4.0 # ARX5 EtherCAT; omit on aarch64, build from source
   - libhidapi
   - libstdcxx-ng # newer CXXABI symbols (xensevr_pc_service_sdk)
+  # ── taccap-gripper C++ build deps (libxense-lite) ─────────────────────────
+  # Solved here WITH the robostack ROS stack so they share one coherent solve.
+  # Do NOT pin libopencv=4.12: that build links libprotobuf 6.31 and conflicts
+  # with robostack's ros2-distro-mutex (libprotobuf 6.33.5), which would evict
+  # ros-humble-kdl-parser and break pyarx. 4.13 links 6.33.5 and coexists.
+  # This is the C++ runtime only; the pip opencv-python wheel (import cv2) is
+  # self-contained and unaffected.
+  - libopencv>=4.13
+  - nlohmann_json=3.11.3
+  - zlib=1.3.1 # dev pkg: provides linkable libz.so for libxensesdk find_package(ZLIB)
+  - pkg-config
+  - make
   # ── CUDA (xensesdk / onnxruntime-gpu) ─────────────────────────────────────
   - nvidia::cuda-toolkit=12.8
   - nvidia::cudnn
