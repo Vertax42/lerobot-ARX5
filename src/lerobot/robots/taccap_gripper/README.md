@@ -149,10 +149,15 @@ python -m lerobot.robots.taccap_gripper.taccap_gripper_example \
 ## End-to-end recording
 
 `taccap_gripper` runs without a teleoperator (`RecordConfig.__post_init__`
-allows `teleop=None` for it). The former shared self-driven record loop has
-been removed, so recording currently falls through to the generic
-`record_loop`; a dedicated handheld record path is not yet re-implemented.
-**No `--teleop.*` flags.**
+allows `teleop=None` for it). Recording is handled by the dedicated
+`self_driven_record_loop` in `lerobot_record.py` (the device is routed there
+via `SELF_DRIVEN_RECORD_ROBOTS`). Each recorded row uses **shifted-frame**
+pairing: the observation from step *t-1* is paired with the pose at step *t*
+(Pico4 pose + normalised `gripper.pos`) as the action, so the action leads
+its observation by one step — a real "move-to-next" target rather than the
+degenerate same-frame pose. One frame is dropped per episode (the first
+sample has no predecessor). The between-episode reset phase is a passive
+wait: reposition the device, no teleop needed. **No `--teleop.*` flags.**
 
 ```bash
 lerobot-record \
