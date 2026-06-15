@@ -106,9 +106,11 @@ from lerobot.robots import (  # noqa: F401
     RobotConfig,
     bi_elite_cs66_rt,
     bi_flexiv_rizon4_rt,
+    bi_taccap_gripper,
     elite_cs66_rt,
     flexiv_rizon4_rt,
     make_robot_from_config,
+    taccap_gripper,
 )
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
@@ -246,7 +248,7 @@ RAW_PASSTHROUGH_RECORD_PAIRS = frozenset(
 # logs the device's own demonstrated state (the ``action_features`` subset of
 # the observation) as the action — shifted-frame, so action[t] pairs with
 # obs[t-1] — instead of a separate ``teleop.get_action()``.
-SELF_DRIVEN_RECORD_ROBOTS = frozenset({"taccap_gripper"})
+SELF_DRIVEN_RECORD_ROBOTS = frozenset({"taccap_gripper", "bi_taccap_gripper"})
 
 
 def extract_joint_positions(obs):
@@ -494,7 +496,7 @@ class RecordConfig:
         # Robots that act as both observation source and action source
         # (i.e. "self-driven" data-collection devices like handheld grippers)
         # do not require a separate teleoperator (e.g. ``taccap_gripper``).
-        if self.teleop is None and self.robot.type not in ("taccap_gripper",):
+        if self.teleop is None and self.robot.type not in SELF_DRIVEN_RECORD_ROBOTS:
             raise ValueError("A teleoperator configuration is required to control the robot.")
 
 

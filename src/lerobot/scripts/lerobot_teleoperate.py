@@ -145,6 +145,8 @@ from lerobot.robots import (  # noqa: F401
     flexiv_rizon4_rt,
     make_robot_from_config,
     pylibfranka_research3,
+    taccap_gripper,
+    bi_taccap_gripper,
     mock_robot,
 )
 from lerobot.teleoperators import (  # noqa: F401
@@ -171,6 +173,13 @@ from lerobot.utils.utils import move_cursor_up
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
 logger = get_logger("Teleoperate")
+
+
+# Self-driven, sensor-only robots: they have no teleoperator — running them through
+# lerobot-teleoperate just streams get_observation() to Rerun (data-stream + viz).
+# A placeholder teleop (e.g. --teleop.type=mock_teleop) satisfies the CLI but is
+# ignored. Mirrors v0.4.4's xense_flare / bi_xense_flare_grippers data-collection path.
+SELF_DRIVEN_TELEOP_ROBOTS = frozenset({"taccap_gripper", "bi_taccap_gripper"})
 
 
 @dataclass
@@ -331,6 +340,71 @@ def teleop_loop(
 # ---------------------------------------------------------------------------
 # Specialised teleop loops
 # ---------------------------------------------------------------------------
+def self_driven_teleop_loop(
+    robot: Robot,
+    fps: int,
+    display_data: bool = False,
+    duration: float | None = None,
+    display_compressed_images: bool = True,
+    debug_timing: bool = False,
+):
+    """Data-stream + Rerun visualisation loop for self-driven, sensor-only robots
+    (``taccap_gripper`` / ``bi_taccap_gripper``).
+
+    These robots have no teleoperator: we only read ``robot.get_observation()`` and
+    stream it to Rerun with an empty action. ``send_action`` is a no-op, so nothing
+    is ever commanded. Mirrors v0.4.4's ``bi_xense_flare_grippers_teleop_loop``.
+    """
+    display_len = max((len(key) for key in robot.observation_features), default=20)
+    start = time.perf_counter()
+
+    while True:
+        loop_start = time.perf_counter()
+
+        obs_t0 = time.perf_counter()
+        obs = robot.get_observation()
+        obs_time_ms = (time.perf_counter() - obs_t0) * 1e3
+
+        if display_data:
+            log_rerun_data(
+                observation=obs,
+                action={},
+                compress_images=display_compressed_images,
+            )
+            if not debug_timing:
+                scalar_items = [
+                    (k, v) for k, v in obs.items() if not isinstance(v, np.ndarray)
+                ]
+                print("\n" + "-" * (display_len + 12))
+                print(f"{'NAME':<{display_len}} | {'OBS':>9}")
+                for key, value in scalar_items:
+                    print(f"{key:<{display_len}} | {float(value):>9.4f}")
+                move_cursor_up(len(scalar_items) + 3)
+
+        dt_s = time.perf_counter() - loop_start
+        precise_sleep(max(1 / fps - dt_s, 0.0))
+        loop_s = time.perf_counter() - loop_start
+
+        if debug_timing:
+            cam_count = sum(1 for v in obs.values() if isinstance(v, np.ndarray))
+            print(
+                f"\r\033[K"
+                f"obs: {obs_time_ms:5.1f}ms | "
+                f"loop: {loop_s * 1e3:5.1f}ms | "
+                f"target: {1e3 / fps:.1f}ms | "
+                f"eff: {(1 / fps) / loop_s * 100:5.1f}% | "
+                f"cams: {cam_count}",
+                end="",
+                flush=True,
+            )
+        elif not display_data:
+            print(f"Self-driven loop time: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz)")
+            move_cursor_up(1)
+
+        if duration is not None and time.perf_counter() - start >= duration:
+            return
+
+
 def mock_robot_teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
@@ -2352,6 +2426,29 @@ def teleoperate(cfg: TeleoperateConfig):
                     display_data=cfg.display_data,
                     duration=cfg.teleop_time_s,
                     dryrun=cfg.dryrun,
+                    debug_timing=cfg.debug_timing,
+                )
+            except KeyboardInterrupt:
+                pass
+
+        # --- taccap_gripper / bi_taccap_gripper (self-driven, data-stream + Rerun) ---
+        elif cfg.robot.type in SELF_DRIVEN_TELEOP_ROBOTS:
+            logger.info(
+                f"Detected {cfg.robot.type} (self-driven) — streaming observations to Rerun"
+            )
+            robot = make_robot_from_config(cfg.robot)
+            robot.connect()
+            # The teleop (e.g. mock_teleop) is a CLI placeholder and is NOT used; we
+            # connect it only so _cleanup can tear it down symmetrically.
+            teleop = make_teleoperator_from_config(cfg.teleop)
+            teleop.connect()
+            try:
+                self_driven_teleop_loop(
+                    robot=robot,
+                    fps=cfg.fps,
+                    display_data=cfg.display_data,
+                    duration=cfg.teleop_time_s,
+                    display_compressed_images=display_compressed_images,
                     debug_timing=cfg.debug_timing,
                 )
             except KeyboardInterrupt:
