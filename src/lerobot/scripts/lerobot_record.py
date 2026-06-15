@@ -239,6 +239,16 @@ RAW_PASSTHROUGH_RECORD_PAIRS = frozenset(
 )
 
 
+# Robots that are their own teleoperator: ``get_observation()`` yields the
+# observation, which already contains the demonstrated pose + gripper, with no
+# separate teleop device (``teleop=None``). Handheld data-collection units like
+# the TacCap-Gripper. Recording routes to ``self_driven_record_loop``, which
+# logs the device's own demonstrated state (the ``action_features`` subset of
+# the observation) as the action — shifted-frame, so action[t] pairs with
+# obs[t-1] — instead of a separate ``teleop.get_action()``.
+SELF_DRIVEN_RECORD_ROBOTS = frozenset({"taccap_gripper"})
+
+
 def extract_joint_positions(obs):
     """提取关节位置，排除摄像头数据"""
     joint_positions = {}
@@ -572,6 +582,106 @@ def record_loop(
             )
 
         precise_sleep(max(sleep_time_s, 0.0))
+
+        timestamp = time.perf_counter() - start_episode_t
+
+
+@safe_stop_image_writer
+def self_driven_record_loop(
+    robot: Robot,
+    events: dict,
+    fps: int,
+    dataset: LeRobotDataset | None = None,
+    control_time_s: int | None = None,
+    single_task: str | None = None,
+    display_data: bool = False,
+):
+    """Record loop for self-driven handheld devices (e.g. TacCap-Gripper).
+
+    These robots have no separate teleoperator: ``robot.get_observation()``
+    yields the observation, whose ``action_features`` subset (pose + gripper)
+    is also the demonstrated action. ``send_action`` is a no-op — nothing is
+    ever commanded; we just sample at ``fps`` and log.
+
+    **Shifted-frame pairing (错帧).** Each recorded row pairs the *previous*
+    observation with the *current* pose as the action — ``(obs[t-1],
+    action=pose[t])`` — so the action leads its observation by one step and is
+    a genuine "where to move next" target. Recording ``(obs[t], pose[t])`` in
+    the same frame would make the action identical to the proprioception
+    already inside the observation (a degenerate "stay put" target). This
+    mirrors ``flexiv_rizon4_rt_record_loop``'s autonomous-reset branch. The
+    first iteration has no previous frame and is intentionally not recorded,
+    so an episode of N samples yields N-1 frames.
+
+    With ``dataset=None`` (the between-episode reset phase) the loop is a
+    passive wait: it still honours the keyboard/stop events but reads no
+    hardware and records nothing, so the operator can reposition the device.
+    """
+    if dataset is not None and dataset.fps != fps:
+        raise ValueError(
+            f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
+        )
+
+    timestamp = 0
+    start_episode_t = time.perf_counter()
+    prev_observation_frame = None  # shifted-frame: pair obs[t-1] with pose[t]
+
+    while timestamp < control_time_s:
+        start_loop_t = time.perf_counter()
+        refresh_listener_events(events)
+
+        if events["stop_recording"]:
+            logger.info("Stop recording requested, exiting record loop early")
+            break
+        if events["rerecord_episode"]:
+            logger.info("Re-record episode requested, exiting record loop early")
+            break
+        if events["exit_early"]:
+            events["exit_early"] = False
+            logger.info("Exit early requested, exiting record loop early")
+            break
+
+        # Reset phase (dataset=None) is a passive wait: skip hardware reads
+        # unless we need them for the Rerun display.
+        observation = None
+        action = None
+        if dataset is not None or display_data:
+            observation = robot.get_observation()
+            # Self-driven device: the demonstrated action is the pose + gripper
+            # subset of this same observation sample (images excluded — we
+            # iterate action_features, not the full obs). Single hardware read.
+            action = {
+                k: observation[k] for k in robot.action_features if k in observation
+            }
+
+        if dataset is not None:
+            current_observation_frame = build_dataset_frame(
+                dataset.features, observation, prefix=OBS_STR
+            )
+            # Shifted-frame (错帧): the current pose (action[t]) is paired with
+            # the PREVIOUS observation so the action leads obs by one step.
+            # The first sample has no predecessor and is skipped.
+            if prev_observation_frame is not None:
+                action_frame = build_dataset_frame(
+                    dataset.features, action, prefix=ACTION
+                )
+                frame = {
+                    **prev_observation_frame,
+                    **action_frame,
+                    "task": single_task,
+                }
+                dataset.add_frame(frame)
+            prev_observation_frame = current_observation_frame
+
+        if display_data and observation is not None:
+            log_rerun_data(observation=observation, action=action or {})
+
+        _record_loop_sleep(
+            start_loop_t=start_loop_t,
+            fps=fps,
+            start_episode_t=start_episode_t,
+            robot=robot,
+        )
 
         timestamp = time.perf_counter() - start_episode_t
 
@@ -1061,6 +1171,16 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         single_task=cfg.dataset.single_task,
                         display_data=cfg.display_data,
                     )
+                elif cfg.robot.type in SELF_DRIVEN_RECORD_ROBOTS:
+                    self_driven_record_loop(
+                        robot=robot,
+                        events=events,
+                        fps=cfg.dataset.fps,
+                        dataset=dataset,
+                        control_time_s=cfg.dataset.episode_time_s,
+                        single_task=cfg.dataset.single_task,
+                        display_data=cfg.display_data,
+                    )
                 else:
                     record_loop(
                         robot=robot,
@@ -1081,15 +1201,27 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 ):
                     log_say("Reset the environment", cfg.play_sounds)
 
-                    record_loop(
-                        robot=robot,
-                        events=events,
-                        fps=cfg.dataset.fps,
-                        teleop=teleop,
-                        control_time_s=cfg.dataset.reset_time_s,
-                        single_task=cfg.dataset.single_task,
-                        display_data=cfg.display_data,
-                    )
+                    if cfg.robot.type in SELF_DRIVEN_RECORD_ROBOTS:
+                        # Passive wait (dataset=None): no teleop, nothing to
+                        # reset on a handheld — just let the operator reposition.
+                        self_driven_record_loop(
+                            robot=robot,
+                            events=events,
+                            fps=cfg.dataset.fps,
+                            control_time_s=cfg.dataset.reset_time_s,
+                            single_task=cfg.dataset.single_task,
+                            display_data=cfg.display_data,
+                        )
+                    else:
+                        record_loop(
+                            robot=robot,
+                            events=events,
+                            fps=cfg.dataset.fps,
+                            teleop=teleop,
+                            control_time_s=cfg.dataset.reset_time_s,
+                            single_task=cfg.dataset.single_task,
+                            display_data=cfg.display_data,
+                        )
 
                 if events["rerecord_episode"]:
                     log_say("Re-record episode", cfg.play_sounds)
