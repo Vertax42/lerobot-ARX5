@@ -30,6 +30,7 @@ robot's base frame; downstream policies must reframe explicitly.
 from dataclasses import dataclass, field
 
 from lerobot.cameras.utils import CameraConfig
+from lerobot.cameras.xense.configuration_xense import XenseTactileCameraConfig
 
 from ..config import RobotConfig
 
@@ -107,27 +108,38 @@ class TaccapGripperConfig(RobotConfig):
     pose. Only consumed when
     ``enable_init_pose_alignment`` is True."""
 
-    # ---- Cameras (tactile + extras) --------------------------------------
+    # ---- Tactile sensors (Xense; opened by serial via xensesdk) ----------
+    tactile_serials: list[str] = field(default_factory=list)
+    """Xense tactile sensor serial numbers, e.g.
+    ``["GSPS01A24Z0003", "GSPS01A24Z0004"]``. Each becomes an observation key
+    ``tactile_0`` / ``tactile_1`` / … . xensesdk's ``Sensor.create(serial)``
+    resolves the V4L2 video port from the serial — no device path needed."""
+
+    tactile_fps: int = 30
+    tactile_output_types: list[str] = field(default_factory=lambda: ["rectify"])
+    """Defaults applied to every ``tactile_serials`` entry. A single output type
+    yields one (H, W, 3) image; ``rectify`` is inference-free. Width/height are
+    auto-derived from the SDK's rectify_size (do not hard-code them — the rectify
+    array is (400, 700, 3))."""
+
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
-    """Camera configs keyed by feature name, read asynchronously through the
-    standard LeRobot camera framework. Typical entries for the TacCap-Gripper:
-    - tactile: ``XenseTactileCameraConfig(serial_number="OG...")`` per sensor
-      (e.g. keys ``left_tactile`` / ``right_tactile``). The OG serials are
-      supplied here by the operator — the MCU-only SDK no longer reports them.
+    """Advanced/extra camera configs, merged after the ones built from
+    ``tactile_serials``. Normally leave empty and use ``tactile_serials``.
+    The wrist UVC camera does NOT belong here — see ``wrist_camera_serial``."""
 
-    The wrist UVC camera does NOT belong here — it is wired via
-    ``enable_wrist_camera`` + ``wrist_camera_index_or_path`` (below)."""
-
-    # ---- Wrist camera (OpenCV UVC; device path supplied by config) -------
+    # ---- Wrist camera (OpenCV UVC; opened by serial or explicit path) ----
     enable_wrist_camera: bool = True
-    """Wire the wrist UVC camera (OpenCV/V4L2) under observation key
-    ``wrist_cam``. Set False to suppress. Requires ``wrist_camera_index_or_path``
-    — the MCU-only SDK no longer reports the device path, so it is set here."""
+    """Wire the wrist UVC camera under observation key ``wrist_cam``. Requires
+    ``wrist_camera_serial`` (preferred) or ``wrist_camera_index_or_path``."""
+
+    wrist_camera_serial: str = ""
+    """Wrist UVC camera serial, e.g. ``"XCA24Z0003m"``. Resolved to its V4L2
+    device at connect via ``/dev/v4l/by-id/*<serial>*-video-index0``. Use this
+    OR ``wrist_camera_index_or_path``."""
 
     wrist_camera_index_or_path: str = ""
-    """V4L2 device path or index for the wrist UVC camera, e.g.
-    ``/dev/v4l/by-id/usb-...-index0`` (prefer by-id for stability) or ``"4"``.
-    Required when ``enable_wrist_camera`` is True."""
+    """Explicit V4L2 device path/index override (wins over ``wrist_camera_serial``),
+    e.g. ``/dev/v4l/by-id/usb-...-index0`` or ``"4"``."""
 
     wrist_camera_width: int = 640
     wrist_camera_height: int = 480
@@ -141,14 +153,29 @@ class TaccapGripperConfig(RobotConfig):
                 "Closed=0 is fixed by the SDK's Encoder.set_zero(); open_rad "
                 "is the mechanical-max angle (TC-GU-01 default 1.7)."
             )
+
+        # Build tactile camera configs from serials (xensesdk resolves the video
+        # port from the serial). Keyed tactile_0, tactile_1, … . width/height are
+        # left to the SDK config to auto-derive (correct rectify orientation).
+        for i, sn in enumerate(self.tactile_serials):
+            key = f"tactile_{i}"
+            if key not in self.cameras:
+                self.cameras[key] = XenseTactileCameraConfig(
+                    serial_number=sn,
+                    fps=self.tactile_fps,
+                    output_types=list(self.tactile_output_types),
+                )
+
         if self.enable_wrist_camera and "wrist_cam" in self.cameras:
             raise ValueError(
                 "wrist_cam is wired by enable_wrist_camera=True; "
                 "remove it from `cameras` or set enable_wrist_camera=False."
             )
-        if self.enable_wrist_camera and not self.wrist_camera_index_or_path:
+        if self.enable_wrist_camera and not (
+            self.wrist_camera_serial or self.wrist_camera_index_or_path
+        ):
             raise ValueError(
-                "enable_wrist_camera=True requires wrist_camera_index_or_path "
-                "(the wrist UVC V4L2 path/index); the MCU-only SDK no longer "
-                "reports it. Set it, or disable with enable_wrist_camera=False."
+                "enable_wrist_camera=True requires wrist_camera_serial "
+                "(e.g. 'XCA24Z0003m') or wrist_camera_index_or_path. Set one, or "
+                "disable with enable_wrist_camera=false."
             )

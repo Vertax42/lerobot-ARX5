@@ -44,11 +44,11 @@ flag lists below remain valid as a reference and for one-off runs.
 ## TacCap-Gripper lerobot-teleoperate command
 
 `taccap_gripper` / `bi_taccap_gripper` are **self-driven** (sensors only) — there is
-no taccap teleoperator. Running them through `lerobot-teleoperate` just streams
-`get_observation()` to Rerun (data-stream + viz); `--teleop.type=mock_teleop` is an
-**ignored placeholder**. Serials are not baked into the config (generic
-`left_*`/`right_*` fields) — pass them here. Prerequisite: `xense.taccap` must import
-in the env (`bash ./setup_env.sh --install`).
+no taccap teleoperator. `lerobot-teleoperate` just streams `get_observation()` to
+Rerun; `--teleop.type=mock_teleop` is an **ignored placeholder**. Everything is
+addressed **by serial** — tactile via xensesdk (`Sensor.create(serial)` resolves the
+video port), wrist via `/dev/v4l/by-id`. Prerequisite: `xense.taccap` importable
+(`bash ./setup_env.sh --install`).
 
 ### Bimanual (`bi_taccap_gripper`) — cameras + gripper only (no Pico4 trackers)
 
@@ -59,16 +59,17 @@ lerobot-teleoperate \
     --robot.right_firmware_sn=TCGU01A24Z0004m \
     --robot.left_enable_tracker=false \
     --robot.right_enable_tracker=false \
-    --robot.left_wrist_camera_index_or_path=/dev/v4l/by-id/usb-Xense_Robotics_Co._Ltd._XCA24Z0003m_01.00.00-video-index0 \
-    --robot.right_wrist_camera_index_or_path=/dev/v4l/by-id/usb-Xense_Robotics_Co._Ltd._XCA24Z0004m_01.00.00-video-index0 \
-    --robot.cameras='{left_tactile_0: {type: xense, serial_number: GSPS01A24Z0003, fps: 30, output_types: [rectify], width: 400, height: 700}, left_tactile_1: {type: xense, serial_number: GSPS01A24Z0004, fps: 30, output_types: [rectify], width: 400, height: 700}, right_tactile_0: {type: xense, serial_number: GSPS01A24Z0005, fps: 30, output_types: [rectify], width: 400, height: 700}, right_tactile_1: {type: xense, serial_number: GSPS01A24Z0006, fps: 30, output_types: [rectify], width: 400, height: 700}}' \
+    --robot.left_wrist_camera_serial=XCA24Z0003m \
+    --robot.right_wrist_camera_serial=XCA24Z0004m \
+    --robot.left_tactile_serials='[GSPS01A24Z0003, GSPS01A24Z0004]' \
+    --robot.right_tactile_serials='[GSPS01A24Z0005, GSPS01A24Z0006]' \
     --teleop.type=mock_teleop \
     --fps=30 \
     --display_data=true
 ```
 
 To add 6D pose, drop the two `*_enable_tracker=false` lines and pin both Pico4 SNs
-(trackers default ON; `tracker_sn=None` is ambiguous with two units — needs the
+(trackers default ON; with two units `tracker_sn=None` is ambiguous; needs the
 XenseVR PC service):
 
 ```bash
@@ -83,18 +84,19 @@ lerobot-teleoperate \
     --robot.type=taccap_gripper \
     --robot.firmware_sn=TCGU01A24Z0003m \
     --robot.enable_tracker=false \
-    --robot.wrist_camera_index_or_path=/dev/v4l/by-id/usb-Xense_Robotics_Co._Ltd._XCA24Z0003m_01.00.00-video-index0 \
-    --robot.cameras='{tactile_left: {type: xense, serial_number: GSPS01A24Z0003, fps: 30, output_types: [rectify], width: 400, height: 700}, tactile_right: {type: xense, serial_number: GSPS01A24Z0004, fps: 30, output_types: [rectify], width: 400, height: 700}}' \
+    --robot.wrist_camera_serial=XCA24Z0003m \
+    --robot.tactile_serials='[GSPS01A24Z0003, GSPS01A24Z0004]' \
     --teleop.type=mock_teleop \
     --fps=30 \
     --display_data=true
 ```
 
-> Notes: wrist cams use the `by-id` path (USB serial `01.00.00` is non-unique).
-> Tactile uses a **single** `output_types: [rectify]` so each sensor returns one
-> `(700,400,3)` image (`width:400 height:700`); for force/depth change `output_types`
-> and dims. Tactile L/R-finger mapping and `rectify` are unverified on hardware.
-> Recording (no teleop) uses `lerobot-record --robot.type=bi_taccap_gripper …`
+> Notes: tactile sensors open **by serial** (xensesdk resolves the video port); obs
+> keys are `tactile_0/1` (single) or `left_/right_tactile_0/1` (bi). The rectify image
+> is landscape `(400,700,3)` (transposed like v0.4.4) — width/height auto-derive, don't
+> hard-code. Wrist: pass the model serial (`XCA…`), resolved via `/dev/v4l/by-id`
+> (USB iSerial `01.00.00` is non-unique); explicit `*_wrist_camera_index_or_path` still
+> overrides. Recording (no teleop): `lerobot-record --robot.type=bi_taccap_gripper …`
 > (same robot flags, swap `--teleop.*` for `--dataset.*`).
 
 ## BiARX5 Robot lerobot-teleoperate command

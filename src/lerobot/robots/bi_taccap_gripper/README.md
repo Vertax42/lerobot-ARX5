@@ -27,19 +27,22 @@ Per side `{s}` ∈ {left, right}:
 ## Config (generic fields, serials via CLI)
 
 Flat `left_*` / `right_*` fields mirroring `TaccapGripperConfig` — no presets, no
-serials committed. Pass identities on the CLI:
-`--robot.{left,right}_firmware_sn`, `--robot.{left,right}_tracker_sn`,
-`--robot.{left,right}_wrist_camera_index_or_path`, and tactile sensors via
-`--robot.cameras='{left_tactile_0: {type: xense, serial_number: GSPS…}, …}'`
-(pre-prefixed keys). Trackers default **on** — pin both Pico4 SNs, or disable with
-`--robot.{left,right}_enable_tracker=false`.
+serials committed. Everything is addressed **by serial** on the CLI:
+- `--robot.{left,right}_firmware_sn` — gripper (firmware SN).
+- `--robot.{left,right}_tactile_serials='[GSPS…, GSPS…]'` — tactile sensors → obs
+  keys `{side}_tactile_0/1`; xensesdk resolves each serial → video port. Rectify is
+  landscape `(400,700,3)` (width/height auto-derive — don't hard-code).
+- `--robot.{left,right}_wrist_camera_serial=XCA…` — wrist UVC, resolved via
+  `/dev/v4l/by-id` (`*_wrist_camera_index_or_path` overrides).
+- `--robot.{left,right}_tracker_sn` — Pico4 (default **on**; pin both SNs, or disable
+  with `--robot.{left,right}_enable_tracker=false`).
 
 ## Usage
 
 - **Live Rerun visualization** (`lerobot-teleoperate` + `mock_teleop` placeholder)
   and **recording** (`lerobot-record`, no teleop → `self_driven_record_loop`,
-  shifted-frame) — see ready-to-run commands with this machine's serials in the
-  repo-root [`cli_commands.md`](../../../../cli_commands.md).
+  shifted-frame) — see ready-to-run commands with this station's serials in
+  [`../../scripts/client_commands.md`](../../scripts/client_commands.md).
 
 Prerequisite: `xense.taccap` must import in the `lerobot-xense` env
 (`bash ./setup_env.sh --install`).

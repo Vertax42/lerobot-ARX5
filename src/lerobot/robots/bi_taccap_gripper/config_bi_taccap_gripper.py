@@ -33,6 +33,7 @@ reports them):
 from dataclasses import dataclass, field
 
 from lerobot.cameras.utils import CameraConfig
+from lerobot.cameras.xense.configuration_xense import XenseTactileCameraConfig
 
 from ..config import RobotConfig
 
@@ -75,7 +76,14 @@ class BiTaccapGripperConfig(RobotConfig):
         _DEFAULT_INIT_TCP_POSE
     )
 
+    left_tactile_serials: list[str] = field(default_factory=list)
+    """Left-hand Xense tactile serials, e.g. ["GSPS01A24Z0003","GSPS01A24Z0004"]
+    → obs keys left_tactile_0 / left_tactile_1 (opened by serial via xensesdk)."""
+
     left_enable_wrist_camera: bool = True
+    left_wrist_camera_serial: str = ""
+    """Left wrist UVC serial, e.g. "XCA24Z0003m" (resolved via /dev/v4l/by-id).
+    Use this OR left_wrist_camera_index_or_path (the latter wins)."""
     left_wrist_camera_index_or_path: str = ""
     left_wrist_camera_width: int = 640
     left_wrist_camera_height: int = 480
@@ -96,7 +104,14 @@ class BiTaccapGripperConfig(RobotConfig):
         _DEFAULT_INIT_TCP_POSE
     )
 
+    right_tactile_serials: list[str] = field(default_factory=list)
+    """Right-hand Xense tactile serials, e.g. ["GSPS01A24Z0005","GSPS01A24Z0006"]
+    → obs keys right_tactile_0 / right_tactile_1 (opened by serial via xensesdk)."""
+
     right_enable_wrist_camera: bool = True
+    right_wrist_camera_serial: str = ""
+    """Right wrist UVC serial, e.g. "XCA24Z0004m" (resolved via /dev/v4l/by-id).
+    Use this OR right_wrist_camera_index_or_path (the latter wins)."""
     right_wrist_camera_index_or_path: str = ""
     right_wrist_camera_width: int = 640
     right_wrist_camera_height: int = 480
@@ -105,6 +120,12 @@ class BiTaccapGripperConfig(RobotConfig):
     # ---- Shared -----------------------------------------------------------
     tracker_wait_timeout: float = 10.0
     """Seconds to wait for the first valid tracker pose at connect time (both sides)."""
+
+    tactile_fps: int = 30
+    tactile_output_types: list[str] = field(default_factory=lambda: ["rectify"])
+    """Defaults applied to every tactile serial. Single output type → one
+    (H, W, 3) image (rectify is inference-free, landscape (400, 700, 3) like
+    v0.4.4). Width/height auto-derive from the SDK rectify_size — don't hard-code."""
 
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
     """Tactile camera configs keyed by *pre-prefixed* feature name, e.g.
@@ -126,6 +147,17 @@ class BiTaccapGripperConfig(RobotConfig):
                     "SDK's Encoder.set_zero(); open_rad is the mechanical-max angle "
                     "(TC-GU-01 default 1.7)."
                 )
+            # Build this side's tactile camera configs from serials. Keyed
+            # {side}_tactile_0/1; width/height auto-derive (landscape (400,700,3)).
+            for i, sn in enumerate(getattr(self, f"{side}_tactile_serials")):
+                key = f"{side}_tactile_{i}"
+                if key not in self.cameras:
+                    self.cameras[key] = XenseTactileCameraConfig(
+                        serial_number=sn,
+                        fps=self.tactile_fps,
+                        output_types=list(self.tactile_output_types),
+                    )
+
             wrist_key = f"{side}_wrist"
             if getattr(self, f"{side}_enable_wrist_camera"):
                 if wrist_key in self.cameras:
@@ -133,10 +165,12 @@ class BiTaccapGripperConfig(RobotConfig):
                         f"{wrist_key} is wired by {side}_enable_wrist_camera=True; remove it "
                         f"from `cameras` or set {side}_enable_wrist_camera=False."
                     )
-                if not getattr(self, f"{side}_wrist_camera_index_or_path"):
+                if not (
+                    getattr(self, f"{side}_wrist_camera_serial")
+                    or getattr(self, f"{side}_wrist_camera_index_or_path")
+                ):
                     raise ValueError(
-                        f"{side}_enable_wrist_camera=True requires "
-                        f"{side}_wrist_camera_index_or_path (the wrist UVC V4L2 path/index); "
-                        "the MCU-only SDK no longer reports it. Set it, or disable with "
-                        f"{side}_enable_wrist_camera=false."
+                        f"{side}_enable_wrist_camera=True requires {side}_wrist_camera_serial "
+                        f"(e.g. 'XCA24Z0003m') or {side}_wrist_camera_index_or_path. Set one, "
+                        f"or disable with {side}_enable_wrist_camera=false."
                     )
