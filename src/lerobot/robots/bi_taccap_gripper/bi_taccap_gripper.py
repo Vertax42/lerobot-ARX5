@@ -43,6 +43,7 @@ from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnected
 from lerobot.utils.robot_utils import get_logger
 
 from ..robot import Robot
+from ..taccap_gripper.taccap_gripper import resolve_wrist_camera_path
 from .config_bi_taccap_gripper import BiTaccapGripperConfig
 
 _SIDES = ("left", "right")
@@ -230,16 +231,20 @@ class BiTaccapGripper(Robot):
         self.logger.info(f"✅ {self} connected.")
 
     def _attach_wrist_camera(self, side: str) -> None:
-        """Build an ``OpenCVCameraConfig`` from ``{side}_wrist_camera_index_or_path``
-        and add it to ``self.cameras`` under key ``{side}_wrist``. The MCU-only SDK
-        no longer reports the wrist V4L2 path, so it comes from config (validated in
-        ``BiTaccapGripperConfig.__post_init__``)."""
+        """Wire the ``{side}`` wrist UVC camera into ``self.cameras`` under key
+        ``{side}_wrist``. ``{side}_wrist_camera_index_or_path`` (explicit override)
+        wins; otherwise ``{side}_wrist_camera_serial`` is resolved via
+        ``/dev/v4l/by-id``."""
         wrist_path = getattr(self.config, f"{side}_wrist_camera_index_or_path")
         if not wrist_path:
-            raise RuntimeError(
-                f"{side}_enable_wrist_camera=True but {side}_wrist_camera_index_or_path "
-                "is empty. Set the wrist UVC V4L2 path/index in the config."
-            )
+            serial = getattr(self.config, f"{side}_wrist_camera_serial")
+            if not serial:
+                raise RuntimeError(
+                    f"{side}_enable_wrist_camera=True but neither "
+                    f"{side}_wrist_camera_serial nor {side}_wrist_camera_index_or_path is set."
+                )
+            wrist_path = resolve_wrist_camera_path(serial)
+            self.logger.info(f"  [{side}] Resolved wrist serial {serial!r} -> {wrist_path}")
 
         cfg = OpenCVCameraConfig(
             index_or_path=wrist_path,

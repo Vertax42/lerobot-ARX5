@@ -159,24 +159,29 @@ degenerate same-frame pose. One frame is dropped per episode (the first
 sample has no predecessor). The between-episode reset phase is a passive
 wait: reposition the device, no teleop needed. **No `--teleop.*` flags.**
 
+Everything is addressed **by serial** — tactile via xensesdk (`Sensor.create(serial)`
+resolves the V4L2 video port), wrist via `/dev/v4l/by-id`:
+
 ```bash
 lerobot-record \
     --robot.type=taccap_gripper \
     --robot.id=right \
-    --robot.firmware_sn=SN000003 \
-    --robot.wrist_camera_index_or_path=/dev/v4l/by-id/usb-...-index0 \
-    --robot.cameras='{tactile_left: {type: xense, serial_number: OG000XXX, fps: 30, width: 400, height: 700}, tactile_right: {type: xense, serial_number: OG000YYY, fps: 30, width: 400, height: 700}}' \
+    --robot.firmware_sn=TCGU01A24Z0003m \
+    --robot.wrist_camera_serial=XCA24Z0003m \
+    --robot.tactile_serials='[GSPS01A24Z0003, GSPS01A24Z0004]' \
     --dataset.repo_id=<your_org>/<your_dataset> \
     --dataset.num_episodes=1 \
     --dataset.episode_time_s=10 \
     --dataset.single_task='Pick up the object'
 ```
 
-The wrist camera is **not** listed in `--robot.cameras` — it is wired by
-`enable_wrist_camera=True` (default) from `--robot.wrist_camera_index_or_path=…`
-(required; the MCU-only SDK no longer reports the path). Tune
-`--robot.wrist_camera_width=…` / `_height` / `_fps`, or set
-`--robot.enable_wrist_camera=false` to skip.
+- **Tactile**: `--robot.tactile_serials='[…]'` → obs keys `tactile_0` / `tactile_1`.
+  xensesdk opens each by serial; the rectify image is landscape `(400,700,3)`
+  (width/height auto-derive — don't hard-code). Defaults: `rectify`, fps 30 (tune via
+  `--robot.tactile_fps` / `--robot.tactile_output_types`).
+- **Wrist**: `--robot.wrist_camera_serial=XCA…` (resolved via `/dev/v4l/by-id`; the USB
+  iSerial `01.00.00` is non-unique). `--robot.wrist_camera_index_or_path=…` overrides;
+  `--robot.enable_wrist_camera=false` skips. Tune `--robot.wrist_camera_width/_height/_fps`.
 
 `--robot.firmware_sn=…` is only needed when more than one gripper is
 plugged in. With a single gripper, the SDK's `find_one()` picks it up

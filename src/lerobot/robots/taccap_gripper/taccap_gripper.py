@@ -29,6 +29,7 @@ Observation features:
 
 from __future__ import annotations
 
+import glob
 from functools import cached_property
 from typing import Any
 
@@ -61,6 +62,27 @@ try:
     PICO4_TRACKER_AVAILABLE = True
 except ImportError:
     PICO4_TRACKER_AVAILABLE = False
+
+
+def resolve_wrist_camera_path(serial: str) -> str:
+    """Resolve a wrist UVC camera serial (e.g. ``"XCA24Z0003m"``) to its stable
+    ``/dev/v4l/by-id`` capture path. The serial is encoded in the by-id name; we
+    match the ``index0`` (capture) node. Unlike Xense tactile sensors, the wrist
+    UVC camera is not enumerable via ``xensesdk.Sensor.scanSerialNumber`` — its
+    USB iSerial is non-unique (e.g. ``01.00.00``), so by-id (which encodes the
+    model serial) is the reliable handle."""
+    matches = sorted(glob.glob(f"/dev/v4l/by-id/*{serial}*-video-index0"))
+    if not matches:
+        raise RuntimeError(
+            f"No wrist camera matching serial {serial!r} under /dev/v4l/by-id/ "
+            "(plugged in? check `ls /dev/v4l/by-id/`)."
+        )
+    if len(matches) > 1:
+        raise RuntimeError(
+            f"Multiple wrist cameras match serial {serial!r}: {matches}. Use a more "
+            "specific serial or set wrist_camera_index_or_path."
+        )
+    return matches[0]
 
 
 class TaccapGripper(Robot):
@@ -240,18 +262,21 @@ class TaccapGripper(Robot):
         self.logger.info(f"✅ {self} connected.")
 
     def _attach_wrist_camera(self) -> None:
-        """Build an ``OpenCVCameraConfig`` from
-        ``config.wrist_camera_index_or_path`` and add it to ``self.cameras``
-        under key ``wrist_cam``. The MCU-only SDK no longer reports the wrist
-        V4L2 path, so it comes from config (validated in ``__post_init__``).
-        Needs no gripper discovery — usable even when ``enable_gripper`` is
-        False."""
+        """Build an ``OpenCVCameraConfig`` for the wrist UVC camera and add it to
+        ``self.cameras`` under key ``wrist_cam``. Path resolution:
+        ``wrist_camera_index_or_path`` (explicit override) wins; otherwise
+        ``wrist_camera_serial`` is resolved via ``/dev/v4l/by-id``. Needs no
+        gripper discovery — usable even when ``enable_gripper`` is False."""
         wrist_path = self.config.wrist_camera_index_or_path
         if not wrist_path:
-            raise RuntimeError(
-                "enable_wrist_camera=True but wrist_camera_index_or_path is "
-                "empty. Set the wrist UVC V4L2 path/index in the config."
-            )
+            serial = self.config.wrist_camera_serial
+            if not serial:
+                raise RuntimeError(
+                    "enable_wrist_camera=True but neither wrist_camera_serial nor "
+                    "wrist_camera_index_or_path is set."
+                )
+            wrist_path = resolve_wrist_camera_path(serial)
+            self.logger.info(f"  Resolved wrist serial {serial!r} -> {wrist_path}")
 
         cfg = OpenCVCameraConfig(
             index_or_path=wrist_path,
