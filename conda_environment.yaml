@@ -1,6 +1,6 @@
-name: lerobot-xense-py312
+name: lerobot-xense
 channels:
-  - robostack-staging # ros-humble-kdl-parser, ros-humble-ament-cmake for ARX5
+  - robostack-jazzy # ros-humble-kdl-parser, ros-humble-ament-cmake for ARX5
   - conda-forge
   - nvidia
   - nodefaults
@@ -16,8 +16,8 @@ dependencies:
   - orocos-kdl
   - boost
   - spdlog=1.14.1
-  - ros-humble-kdl-parser
-  - ros-humble-ament-cmake # ARX5 SDK CMake build dependency
+  - ros-jazzy-kdl-parser
+  - ros-jazzy-ament-cmake # ARX5 SDK CMake build dependency
   - conda-forge::soem=1.4.0 # ARX5 EtherCAT; omit on aarch64, build from source
   - libhidapi
   - libstdcxx-ng # newer CXXABI symbols (xensevr_pc_service_sdk)
