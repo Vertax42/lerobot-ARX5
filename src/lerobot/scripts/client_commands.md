@@ -40,7 +40,6 @@ recipes are committed, so `git log recipes/` shows exactly what produced each
 dataset. See [`recipes/README.md`](../../../recipes/README.md). The per-robot
 flag lists below remain valid as a reference and for one-off runs.
 
-
 ## TacCap-Gripper lerobot-teleoperate command
 
 `taccap_gripper` / `bi_taccap_gripper` are **self-driven** (sensors only) — there is
@@ -116,30 +115,18 @@ lerobot-teleoperate \
 ```bash
 lerobot-teleoperate \
     --robot.type=bi_flexiv_rizon4_rt \
-    --robot.bi_mount_type=forward \
+    --robot.bi_mount_type=forward-04 \
     --teleop.type=bi_pico4 \
     --fps=30 \
     --display_data=true
 ```
-
-```bash
-lerobot-teleoperate \
-    --robot.type=bi_flexiv_rizon4_rt \
-    --robot.bi_mount_type=forward_dewu \
-    --teleop.type=bi_pico4 \
-    --fps=30 \
-    --display_data=true
-```
-
 
 ## Bimanual Elite CS66 RT + Bi-Pico4 teleoperate command
 
 ```bash
 lerobot-teleoperate \
     --robot.type=bi_elite_cs66_rt \
-    --robot.bi_mount_type=diagonal \
-    --robot.left_robot_ip=192.168.8.53 \
-    --robot.right_robot_ip=192.168.8.223 \
+    --robot.bi_mount_type=diagonal-07 \
     --teleop.type=bi_pico4 \
     --fps=30 \
     --display_data=true
@@ -147,8 +134,7 @@ lerobot-teleoperate \
 
 lerobot-teleoperate \
     --robot.type=bi_elite_cs66_rt \
-    --robot.left_robot_ip=192.168.8.53 \
-    --robot.right_robot_ip=192.168.8.223 \
+    --robot.bi_mount_type=diagonal-08 \
     --teleop.type=bi_pico4 \
     --fps=30 \
     --dryrun=true
