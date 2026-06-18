@@ -64,11 +64,65 @@ _CANDLE_POSE = [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
 # Measured station start/home joint poses (J1..J6, radians).
 #   left  = [-80, -30,  90, -30,  90, 0] deg
 #   right = [-100, -150, -90, -150, -90, 0] deg
-_LEFT_START_POSE = [-1.3963, -0.5236, 1.5708, -0.5236, 1.5708, 0.0]
-_RIGHT_START_POSE = [-1.7453, -2.6180, -1.5708, -2.6180, -1.5708, 0.0]
+_LEFT_START_POSE = [-1.3963, -0.5236, 1.5708, -0.5236, 1.5708, -0.7854]
+_RIGHT_START_POSE = [-1.7453, -2.6180, -1.5708, -2.6180, -1.5708, -0.7854]
 
 _PRESETS: dict[str, dict] = {
-    "diagonal": {
+    "diagonal-07": {
+        "left_ip": "192.168.0.172",
+        "right_ip": "192.168.0.247",
+        "left_local_ip": "",
+        "right_local_ip": "",
+        # Serial-gripper board SNs (read over CH340; same unit numbering as the
+        # wrist cameras XC0000xx). Empty -> set *_use_gripper=False.
+        "left_gripper_sn": "000043",
+        "right_gripper_sn": "000044",
+        "left_start": list(_LEFT_START_POSE),
+        "right_start": list(_RIGHT_START_POSE),
+        "left_home": list(_LEFT_START_POSE),
+        "right_home": list(_RIGHT_START_POSE),
+        # Per-arm mounting → R = Rz(γ)·Rz(β)·Rx(α). tilt/zrot are the teach-pendant
+        # readings (both arms 45/90, fix the gravity vector only); world_yaw γ aligns
+        # headings into one shared world frame: right 0° (reference), left 180°
+        # (arms are point-symmetric / face opposite ways). See note above.
+        "right_tilt_deg": 45.0,
+        "right_zrot_deg": 90.0,
+        "right_world_yaw_deg": 0.0,
+        "left_tilt_deg": 45.0,
+        "left_zrot_deg": 90.0,
+        "left_world_yaw_deg": 180.0,
+        # Explicit world<-base rotation (rows = world X/Y/Z axes in base). When set
+        # it OVERRIDES the tilt/zrot/world_yaw angle build for that arm. The teach-
+        # pendant 45/90 angles assumed a tilt about base-X, but the LEFT arm is
+        # actually tilted 45° about base-Y (verified: freedrive-probe measurement +
+        # the base-link geometry). This matrix == base rotated about Z by 90° then
+        # about Y by 45°  ->  world X(fwd)=base+Y, world Z(up)=[0.707,0,0.707].
+        # Right is the point-symmetric partner of the (validated) left:
+        # R_right = Rz(180)·R_left  (forward flips to base-Y, up stays [0.707,0,0.707]).
+        # This matches the user's right-arm recipe (Z clockwise instead of left's CCW,
+        # Y 45°). VERIFY on-station with the axis test before trusting; if the heading
+        # is yawed, re-measure with the freedrive probe like the left.
+        "left_world_R": [
+            [0.0, 1.0, 0.0],
+            [-0.70710678, 0.0, 0.70710678],
+            [0.70710678, 0.0, 0.70710678],
+        ],
+        "right_world_R": [
+            [0.0, -1.0, 0.0],
+            [0.70710678, 0.0, -0.70710678],
+            [0.70710678, 0.0, 0.70710678],
+        ],
+        "head_camera_sn": "347522071393",
+        "left_wrist_camera_sn": "XC000043",
+        "right_wrist_camera_sn": "XC000044",
+        # Tactile sensor SNs (XenseTactileCamera). left = OG001349/OG001350,
+        # right = OG001351/OG001352.
+        "left_tactile_camera_sn_0": "OG001345",
+        "left_tactile_camera_sn_1": "OG001346",
+        "right_tactile_camera_sn_0": "OG001347",
+        "right_tactile_camera_sn_1": "OG001348",
+    },
+    "diagonal-08": {
         "left_ip": "192.168.8.53",
         "right_ip": "192.168.8.223",
         "left_local_ip": "",
