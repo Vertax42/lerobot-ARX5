@@ -18,6 +18,7 @@ import contextlib
 import logging
 import shutil
 import tempfile
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -1148,6 +1149,36 @@ class LeRobotDataset(torch.utils.data.Dataset):
             ep_buffer[key] = current_ep_idx if key == "episode_index" else []
         return ep_buffer
 
+    def _get_video_frame_shapes(self) -> dict[str, tuple[int, int, int]]:
+        """Declared (H, W, C) shape for each video key, used to warm up encoders."""
+        return {
+            video_key: tuple(self.features[video_key]["shape"])
+            for video_key in self.meta.video_keys
+        }
+
+    def prepare_episode_recording(self) -> None:
+        """Prepare the episode buffer and warm up streaming encoders before recording.
+
+        Calling this before the per-episode record loop starts the encoder threads
+        and opens their codec contexts up front, so the first ``add_frame`` doesn't
+        pay the encoder-initialization cost and overrun the episode's first frame.
+        """
+        if self.episode_buffer is None:
+            self.episode_buffer = self.create_episode_buffer()
+
+        if self._streaming_encoder is not None and not self._streaming_encoder._episode_active:
+            video_keys = list(self.meta.video_keys)
+            logging.info(f"[streaming_encoder] warming up {len(video_keys)} encoder(s): {video_keys}")
+            t0 = time.perf_counter()
+            self._streaming_encoder.start_episode(
+                video_keys=video_keys,
+                temp_dir=self.root,
+                frame_shapes=self._get_video_frame_shapes(),
+                wait_until_ready=True,
+            )
+            elapsed_ms = (time.perf_counter() - t0) * 1e3
+            logging.info(f"[streaming_encoder] all encoders ready in {elapsed_ms:.1f}ms")
+
     # TODO(Steven): consider move this to utils
     def _get_image_file_path(self, episode_index: int, image_key: str, frame_index: int) -> Path:
         fpath = DEFAULT_IMAGE_PATH.format(
@@ -1191,11 +1222,17 @@ class LeRobotDataset(torch.utils.data.Dataset):
         self.episode_buffer["timestamp"].append(timestamp)
         self.episode_buffer["task"].append(frame.pop("task"))  # Remove task from frame after processing
 
-        # Start streaming encoder on first frame of episode (once, before iterating keys)
-        if frame_index == 0 and self._streaming_encoder is not None:
+        # Defensive fallback: if the caller didn't pre-start the encoder via
+        # prepare_episode_recording(), start it now (incurs first-frame overrun).
+        if (
+            frame_index == 0
+            and self._streaming_encoder is not None
+            and not self._streaming_encoder._episode_active
+        ):
             self._streaming_encoder.start_episode(
                 video_keys=list(self.meta.video_keys),
                 temp_dir=self.root,
+                frame_shapes=self._get_video_frame_shapes(),
             )
 
         # Add frame features to episode_buffer

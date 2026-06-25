@@ -1144,6 +1144,11 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         with VideoEncodingManager(dataset):
             recorded_episodes = 0
             while recorded_episodes < cfg.dataset.num_episodes and not events["stop_recording"]:
+                # Warm up the streaming encoder before the loop so the first frame
+                # doesn't overrun on encoder/codec initialization.
+                if dataset is not None:
+                    dataset.prepare_episode_recording()
+
                 log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
 
                 # Dispatch the record loop by robot type
