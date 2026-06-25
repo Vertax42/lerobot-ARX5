@@ -12,6 +12,12 @@ Frames can be encoded in real-time during capture:
 
 This makes `save_episode()` near-instant (the video is already encoded by the time the episode ends) and removes the blocking wait that previously occurred between episodes, especially with multiple cameras in long episodes.
 
+### Encoder warmup
+
+Opening each camera's encoder — the PyAV container plus the codec context — is relatively expensive (tens of milliseconds). If this happened lazily on the episode's first frame, that frame would badly overrun the `fps` budget and show up as a startup spike in the recorded timestamps.
+
+To avoid this, the record loop calls `dataset.prepare_episode_recording()` once before each episode. It starts the encoder threads and opens their codec contexts **up front**, using each video key's declared `(H, W, C)` shape, and blocks until every encoder reports ready. By the time the first frame is captured the encoders are already hot, so `add_frame()` no longer pays the initialization cost on frame 0. A lazy first-frame start remains as a defensive fallback for callers that don't pre-warm.
+
 ## 2. Tuning Parameters
 
 | Parameter               | CLI Flag                          | Type          | Default       | Description                                                       |

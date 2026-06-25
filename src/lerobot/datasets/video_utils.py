@@ -21,6 +21,7 @@ import queue
 import shutil
 import tempfile
 import threading
+import time
 import warnings
 from dataclasses import dataclass, field
 from fractions import Fraction
@@ -589,6 +590,8 @@ class _CameraEncoderThread(threading.Thread):
         result_queue: queue.Queue,
         stop_event: threading.Event,
         encoder_threads: int | None = None,
+        frame_shape: tuple[int, int, int] | None = None,
+        ready_event: threading.Event | None = None,
     ):
         super().__init__(daemon=True)
         self.video_path = video_path
@@ -602,6 +605,38 @@ class _CameraEncoderThread(threading.Thread):
         self.result_queue = result_queue
         self.stop_event = stop_event
         self.encoder_threads = encoder_threads
+        # When frame_shape is known up front, the encoder (PyAV container + codec
+        # context) is opened during warmup — before the first real frame arrives —
+        # so the first feed_frame() doesn't pay the container/codec init cost and
+        # cause a big overrun on the episode's first recorded frame.
+        self.frame_shape = tuple(frame_shape) if frame_shape is not None else None
+        self.ready_event = ready_event if ready_event is not None else threading.Event()
+        self.init_error: Exception | None = None
+
+    def _open_container(self, height: int, width: int):
+        """Open the MP4 output container + codec context and signal readiness."""
+        video_options = _get_codec_options(self.vcodec, self.g, self.crf, self.preset)
+        if self.encoder_threads is not None:
+            if self.vcodec == "libsvtav1":
+                lp_param = f"lp={self.encoder_threads}"
+                if "svtav1-params" in video_options:
+                    video_options["svtav1-params"] += f":{lp_param}"
+                else:
+                    video_options["svtav1-params"] = lp_param
+            else:
+                video_options["threads"] = str(self.encoder_threads)
+        Path(self.video_path).parent.mkdir(parents=True, exist_ok=True)
+        container = av.open(str(self.video_path), "w")
+        output_stream = container.add_stream(self.vcodec, self.fps, options=video_options)
+        output_stream.pix_fmt = self.pix_fmt
+        output_stream.width = width
+        output_stream.height = height
+        output_stream.time_base = Fraction(1, self.fps)
+        # Force the codec context open now (the expensive part) so warmup actually
+        # front-loads encoder initialization rather than deferring it to encode().
+        output_stream.codec_context.open()
+        self.ready_event.set()
+        return container, output_stream
 
     def run(self) -> None:
         from lerobot.datasets.compute_stats import RunningQuantileStats, auto_downsample_height_width
@@ -613,6 +648,20 @@ class _CameraEncoderThread(threading.Thread):
 
         try:
             logging.getLogger("libav").setLevel(av.logging.WARNING)
+
+            # Warmup: open the encoder up front when the frame shape is known, so
+            # the codec context is hot before the first frame is fed.
+            if self.frame_shape is not None:
+                try:
+                    height, width = self.frame_shape[:2]
+                    container, output_stream = self._open_container(height, width)
+                except Exception as e:
+                    # Surface init failures to the waiter and abort this thread.
+                    self.init_error = e
+                    self.ready_event.set()
+                    logging.error(f"Encoder warmup error for {self.video_path}: {e}")
+                    self.result_queue.put(("error", str(e)))
+                    return
 
             while True:
                 try:
@@ -634,26 +683,11 @@ class _CameraEncoderThread(threading.Thread):
                     if frame_data.dtype != np.uint8:
                         frame_data = (frame_data * 255).astype(np.uint8)
 
-                # Open container on first frame (to get width/height)
+                # Open container on first frame (to get width/height) unless warmup
+                # already opened it.
                 if container is None:
                     height, width = frame_data.shape[:2]
-                    video_options = _get_codec_options(self.vcodec, self.g, self.crf, self.preset)
-                    if self.encoder_threads is not None:
-                        if self.vcodec == "libsvtav1":
-                            lp_param = f"lp={self.encoder_threads}"
-                            if "svtav1-params" in video_options:
-                                video_options["svtav1-params"] += f":{lp_param}"
-                            else:
-                                video_options["svtav1-params"] = lp_param
-                        else:
-                            video_options["threads"] = str(self.encoder_threads)
-                    Path(self.video_path).parent.mkdir(parents=True, exist_ok=True)
-                    container = av.open(str(self.video_path), "w")
-                    output_stream = container.add_stream(self.vcodec, self.fps, options=video_options)
-                    output_stream.pix_fmt = self.pix_fmt
-                    output_stream.width = width
-                    output_stream.height = height
-                    output_stream.time_base = Fraction(1, self.fps)
+                    container, output_stream = self._open_container(height, width)
 
                 # Encode frame with explicit timestamps
                 pil_img = Image.fromarray(frame_data)
@@ -736,19 +770,44 @@ class StreamingVideoEncoder:
         self._result_queues: dict[str, queue.Queue] = {}
         self._threads: dict[str, _CameraEncoderThread] = {}
         self._stop_events: dict[str, threading.Event] = {}
+        self._ready_events: dict[str, threading.Event] = {}
         self._video_paths: dict[str, Path] = {}
         self._dropped_frames: dict[str, int] = {}
         self._episode_active = False
 
-    def start_episode(self, video_keys: list[str], temp_dir: Path) -> None:
+    def start_episode(
+        self,
+        video_keys: list[str],
+        temp_dir: Path,
+        frame_shapes: dict[str, tuple[int, int, int]] | None = None,
+        wait_until_ready: bool = False,
+        ready_timeout_s: float = 30.0,
+    ) -> None:
         """Start encoder threads for a new episode.
 
         Args:
             video_keys: List of video feature keys (e.g. ["observation.images.laptop"])
             temp_dir: Base directory for temporary MP4 files
+            frame_shapes: Optional {video_key: (H, W, C)} map. When provided, each
+                encoder opens its container/codec during warmup so the first fed
+                frame doesn't pay initialization cost. Required when
+                ``wait_until_ready`` is True.
+            wait_until_ready: If True, block until every encoder has finished
+                opening its codec context (or raise on timeout/init error).
+            ready_timeout_s: Maximum time to wait for all encoders to warm up.
         """
         if self._episode_active:
             self.cancel_episode()
+
+        if wait_until_ready and frame_shapes is None:
+            raise ValueError("frame_shapes must be provided when wait_until_ready=True")
+
+        if frame_shapes is not None:
+            missing = [vk for vk in video_keys if vk not in frame_shapes]
+            if missing:
+                raise ValueError(
+                    "frame_shapes is missing entries for: " + ", ".join(sorted(missing))
+                )
 
         self._dropped_frames.clear()
 
@@ -756,6 +815,7 @@ class StreamingVideoEncoder:
             frame_queue: queue.Queue = queue.Queue(maxsize=self.queue_maxsize)
             result_queue: queue.Queue = queue.Queue(maxsize=1)
             stop_event = threading.Event()
+            ready_event = threading.Event()
 
             temp_video_dir = Path(tempfile.mkdtemp(dir=temp_dir))
             video_path = temp_video_dir / f"{video_key.replace('/', '_')}_streaming.mp4"
@@ -772,6 +832,8 @@ class StreamingVideoEncoder:
                 result_queue=result_queue,
                 stop_event=stop_event,
                 encoder_threads=self.encoder_threads,
+                frame_shape=(frame_shapes.get(video_key) if frame_shapes is not None else None),
+                ready_event=ready_event,
             )
             encoder_thread.start()
 
@@ -779,9 +841,26 @@ class StreamingVideoEncoder:
             self._result_queues[video_key] = result_queue
             self._threads[video_key] = encoder_thread
             self._stop_events[video_key] = stop_event
+            self._ready_events[video_key] = ready_event
             self._video_paths[video_key] = video_path
 
         self._episode_active = True
+
+        if wait_until_ready:
+            deadline = time.perf_counter() + ready_timeout_s
+            for video_key, thread in self._threads.items():
+                remaining = deadline - time.perf_counter()
+                if remaining <= 0 or not thread.ready_event.wait(timeout=remaining):
+                    self.cancel_episode()
+                    raise TimeoutError(
+                        f"StreamingVideoEncoder: timed out waiting for '{video_key}' to warm up"
+                    )
+                if thread.init_error is not None:
+                    err = thread.init_error
+                    self.cancel_episode()
+                    raise RuntimeError(
+                        f"StreamingVideoEncoder: failed to warm up '{video_key}': {err}"
+                    ) from err
 
     def feed_frame(self, video_key: str, image: np.ndarray) -> None:
         """Feed a frame to the encoder for a specific camera.
@@ -906,6 +985,7 @@ class StreamingVideoEncoder:
         self._result_queues.clear()
         self._threads.clear()
         self._stop_events.clear()
+        self._ready_events.clear()
         self._video_paths.clear()
 
 
