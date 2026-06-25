@@ -38,6 +38,19 @@ cd lerobot-xense
 > git submodule update --init --recursive --progress
 > ```
 
+> **Optional — internal network (GitLab mirror).** The default clone above uses
+> the public GitHub mirrors (`git@github.com:Vertax42/*`). Company-network
+> developers can instead point the submodules at the internal GitLab server
+> (`git@192.168.1.61:physical-ai/*`); the internal URLs live in
+> [`.gitmodules.gitlab`](.gitmodules.gitlab) and a helper repoints your
+> **local** remotes without touching the committed `.gitmodules` (every
+> submodule pin exists on both remotes):
+>
+> ```bash
+> scripts/submodule-remote.sh gitlab   # internal GitLab (use `github` to switch back)
+> git submodule update --init --recursive
+> ```
+
 This repository uses `third_party/` git submodules to manage hardware SDK dependencies:
 
 | Submodule | Installed package |
@@ -55,25 +68,6 @@ This repository uses `third_party/` git submodules to manage hardware SDK depend
 > `dist/xensesdk-2.0.0-cp312-cp312-linux_x86_64.whl` (which bundles the patched
 > `libxense_c.so` flash reader). The Elite Python SDK is built against the local
 > `third_party/elite-robots-cs-sdk` C++ submodule (no network fetch of the C++ source).
-
-> **🏢 Internal network (GitLab mirror).** The committed `.gitmodules` points
-> every submodule at its public GitHub mirror (`git@github.com:Vertax42/*`).
-> On the company network you can switch to the internal GitLab server
-> (`git@192.168.1.61:physical-ai/*`) instead. The internal URLs live in
-> [`.gitmodules.gitlab`](.gitmodules.gitlab); a helper script repoints your
-> **local** remotes without touching the committed `.gitmodules`. Every
-> submodule pin exists on **both** remotes, so either target resolves the same
-> commits.
->
-> ```bash
-> scripts/submodule-remote.sh gitlab   # use internal GitLab
-> git submodule update --init --recursive
->
-> scripts/submodule-remote.sh github   # switch back to the public default
-> ```
->
-> The change is per-clone and local-only (it edits `.git/config` and each
-> submodule's `origin`), so it never affects other developers or commits.
 
 **Step 2:** 🐍 Create and activate the mamba environment:
 
