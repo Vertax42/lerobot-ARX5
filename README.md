@@ -457,3 +457,14 @@ If you use this codebase, please cite the original LeRobot project:
     year = {2024}
 }
 ```
+
+If you use this fork (LeRobot-Xense) specifically, please also cite:
+
+```bibtex
+@misc{vertax2026lerobotxense,
+    author = {vertax42 and Xense Robotics Team},
+    title = {LeRobot-Xense: LeRobot with Xense Tactile Robotics Support},
+    howpublished = "\url{https://github.com/Vertax42/lerobot-xense}",
+    year = {2026}
+}
+```
