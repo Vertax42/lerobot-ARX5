@@ -21,6 +21,7 @@ from typing import Any
 import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
+from lerobot.cameras.xense import prewarm_tactile_config_cache
 from lerobot.robots.elite_cs66_rt.config_elite_cs66_rt import (
     EliteCS66RTConfig,
     EliteCS66RTControlMode,
@@ -450,6 +451,10 @@ class EliteCS66RT(Robot):
             if remaining > 0:
                 time.sleep(remaining)
 
+            # Pre-warm the per-serial config cache before opening any tactile camera,
+            # so the open loads config from the cache instead of a Sunplus flash read
+            # (which resets/re-enumerates the device). No-op when the cache is warm.
+            prewarm_tactile_config_cache(self.config.cameras, self.logger)
             for cam in self.cameras.values():
                 cam.connect()
 
