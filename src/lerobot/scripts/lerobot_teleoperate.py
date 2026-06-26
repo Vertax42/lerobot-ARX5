@@ -2077,6 +2077,17 @@ def teleoperate(cfg: TeleoperateConfig):
                     "BiElite: defaulting teleop ori_sensitivity to 0.5 "
                     "(pass --teleop.ori_sensitivity to override)"
                 )
+            # The Pico4 leader's rotation rate limit defaults to the Flexiv-era 6.28 rad/s
+            # (360 deg/s) — a value the 1 kHz Flexiv follower smooths away, but the 250 Hz
+            # Elite cannot near a wrist singularity (a ~270 deg/s flick dropped external
+            # control). Default it to 1.0 rad/s (~57 deg/s) for Elite; an explicit
+            # --teleop.max_rot_velocity wins (only the untouched 6.28 default is replaced).
+            if cfg.teleop.max_rot_velocity == 6.28:
+                cfg.teleop.max_rot_velocity = 1.0
+                logger.info(
+                    "BiElite: defaulting teleop max_rot_velocity to 1.0 rad/s "
+                    "(pass --teleop.max_rot_velocity to override)"
+                )
             teleop = make_teleoperator_from_config(cfg.teleop)
 
             # Pre-initialize the VR SDK in background while the robot connects
