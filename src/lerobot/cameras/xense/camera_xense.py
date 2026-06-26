@@ -17,7 +17,8 @@ Provides the XenseTactileCamera class for capturing tactile data from Xense sens
 """
 
 import time
-from threading import Event, Lock, Thread
+from pathlib import Path
+from threading import Event, Lock, RLock, Thread
 from typing import Any
 
 import numpy as np
@@ -31,6 +32,8 @@ from .configuration_xense import XenseTactileCameraConfig, XenseOutputType
 logger = get_logger("XenseCam")
 
 _CTYPES_FIND_LIBRARY_UDEV_PATCHED = False
+_XENSE_SENSOR_CREATE_LOCK = RLock()
+_XENSE_CONFIG_CACHE_DIR = Path("~/.xensesdk/config").expanduser()
 
 
 def _patch_ctypes_find_library_for_udev() -> None:
@@ -205,6 +208,10 @@ class XenseTactileCamera(Camera):
                 "raw_size": self.raw_size,
                 "disable_infer": self.disable_infer,
             }
+            cached_config_path = None
+            if _XENSE_CONFIG_CACHE_DIR.is_dir():
+                cached_config_path = _XENSE_CONFIG_CACHE_DIR
+                create_kwargs["config_path"] = _XENSE_CONFIG_CACHE_DIR
             if self.infer_mode is not None:
                 create_kwargs["infer_mode"] = self.infer_mode
             # Override the per-OS camera property template (exposure/brightness/
@@ -216,7 +223,8 @@ class XenseTactileCamera(Camera):
 
                 os_key = "win" if platform.system().lower().startswith("win") else "linux"
                 create_kwargs["overrides"] = {f"camera.{os_key}": dict(self.camera_properties)}
-            self.sensor = self._Sensor.create(self.serial_number, **create_kwargs)
+            with _XENSE_SENSOR_CREATE_LOCK:
+                self.sensor = self._Sensor.create(self.serial_number, **create_kwargs)
         except Exception as e:
             raise ConnectionError(
                 f"Failed to connect to {self}. Error: {e}. "
@@ -237,7 +245,7 @@ class XenseTactileCamera(Camera):
             self._start_read_thread()
 
         logger.info(
-            f"{self} connected (disable_infer={self.disable_infer}, infer_mode={self.infer_mode})"
+            f"{self} connected (disable_infer={self.disable_infer}, infer_mode={self.infer_mode}, config_cache={cached_config_path})"
         )
 
     @staticmethod

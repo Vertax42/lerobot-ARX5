@@ -13,6 +13,12 @@
 # limitations under the License.
 
 from .camera_xense import XenseTactileCamera
+from .config_cache import prewarm_tactile_config_cache
 from .configuration_xense import XenseTactileCameraConfig, XenseOutputType
 
-__all__ = ["XenseTactileCamera", "XenseTactileCameraConfig", "XenseOutputType"]
+__all__ = [
+    "XenseTactileCamera",
+    "XenseTactileCameraConfig",
+    "XenseOutputType",
+    "prewarm_tactile_config_cache",
+]
