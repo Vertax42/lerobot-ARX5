@@ -41,11 +41,20 @@ from lerobot.robots.bi_elite_cs66_rt.config_bi_elite_cs66_rt import (
 )
 from lerobot.robots.elite_cs66_rt import elite_cs66_rt as _elite_mod
 from lerobot.robots.elite_cs66_rt.elite_cs66_rt import (
+    _clamp_tcp_velocity,
     _import_elite_sdk,
     _quaternion_to_rotvec,
+    _reach_exceeded,
     _rotvec_continuity_shift,
     _rotvec_to_quaternion,
     _slerp_quaternion_wxyz,
+)
+from lerobot.robots.elite_cs66_rt.manipulability import (
+    damping_scale,
+    directional_scale,
+    manipulability,
+    pose_delta,
+    tool_consistency,
 )
 from lerobot.robots.grippers import SerialGripper
 from lerobot.robots.robot import Robot
@@ -120,6 +129,11 @@ class BiEliteCS66RT(Robot):
         self._reset_end_time: dict[str, float] = {s: 0.0 for s in _SIDES}
         self._reset_moving: dict[str, bool] = {s: False for s in _SIDES}
         self._external_command_received: dict[str, bool] = {s: False for s in _SIDES}
+        self._reach_warn_time: dict[str, float] = {s: 0.0 for s in _SIDES}  # workspace-guard warn throttle
+        # Singularity damping, per arm (set up at connect; disabled unless DH + self-check pass).
+        self._dh: dict[str, tuple[list[float], list[float], list[float]] | None] = {s: None for s in _SIDES}
+        self._damping_enabled: dict[str, bool] = {s: False for s in _SIDES}
+        self._w_log_time: dict[str, float] = {s: 0.0 for s in _SIDES}
 
         # Prefixed key tuples (built once).
         self._tcp_pos_keys = {s: tuple(f"{s}_{k}" for k in TCP_POSITION_KEYS) for s in _SIDES}
@@ -413,6 +427,19 @@ class BiEliteCS66RT(Robot):
         # seed/start sequentially" structure starved whichever arm finished
         # first -> intermittent "socket timed out ... reverse_socket" RST).
         def _bring_arm_online(side: str) -> None:
+            # Pre-start-move (joints, TCP) sample for the singularity-damping FK self-check.
+            premove = None
+            if (
+                self.config.singularity_w_high is not None
+                and self.config.control_mode == BiEliteCS66RTControlMode.CARTESIAN_SERVO
+            ):
+                try:
+                    premove = (
+                        np.asarray(self._rtsi[side].getActualJointPositions(), dtype=np.float64),
+                        np.asarray(self._rtsi[side].getActualTCPPose(), dtype=np.float64),
+                    )
+                except Exception:
+                    premove = None
             if go_to_start:
                 self._move_j_blocking(
                     side, self._arm_start_pose(side), self.config.start_move_duration_s
@@ -425,6 +452,8 @@ class BiEliteCS66RT(Robot):
                 self._last_action_time[side] = time.monotonic()
                 if self.config.use_background_servo_loop:
                     self._start_servo_loop(side)
+                if self.config.singularity_w_high is not None:
+                    self._setup_singularity_damping(side, premove)
 
         try:
             if go_to_start:
@@ -451,15 +480,21 @@ class BiEliteCS66RT(Robot):
         self._validate_output_recipe(output_recipe)
         input_recipe = self._resolve_recipe(self.config.rtsi_input_recipe, "input_recipe.txt")
 
+        # Store each handle on self BEFORE its connect() check so a failed
+        # connect (e.g. RTSI "IN_USE" when another client still holds the input
+        # registers) leaves it for _cleanup_after_failed_connect() to
+        # disconnect(). Assigning only on success would orphan the C++ object,
+        # whose destructor then fires at interpreter shutdown ("terminate called
+        # without an active exception" -> Aborted (core dumped)).
         rtsi = self._cs.RtsiIOInterface(output_recipe, input_recipe, self.config.rtsi_frequency)
+        self._rtsi[side] = rtsi
         if not rtsi.connect(ip):
             raise ConnectionError(f"Failed to connect Elite RTSI server ({side}) at {ip}:30004")
-        self._rtsi[side] = rtsi
 
         dashboard = self._cs.DashboardClientInterface()
+        self._dashboard[side] = dashboard
         if not dashboard.connect(ip):
             raise ConnectionError(f"Failed to connect Elite dashboard ({side}) at {ip}")
-        self._dashboard[side] = dashboard
 
         if not dashboard.powerOn():
             raise RuntimeError(f"Elite CS66 ({side}) powerOn() failed.")
@@ -714,6 +749,23 @@ class BiEliteCS66RT(Robot):
         target = (
             None if self._target_tcp_command[side] is None else self._target_tcp_command[side].copy()
         )
+        # Opt-in velocity ceiling (per arm): slew the commanded TCP toward the
+        # latest target at <= max_*_speed (per servoj_time tick), so a jumpy target
+        # ramps smoothly instead of stepping past the controller's joint-speed
+        # bound. No-op (and no cost) when both caps are None.
+        last = self._last_tcp_command[side]
+        if (
+            target is not None
+            and last is not None
+            and (self.config.max_lin_speed is not None or self.config.max_ang_speed is not None)
+        ):
+            target = _clamp_tcp_velocity(
+                last,
+                target,
+                self.config.servoj_time,
+                self.config.max_lin_speed,
+                self.config.max_ang_speed,
+            )
         return target, False
 
     def _is_reset_moving_locked(self, side: str, now: float) -> bool:
@@ -884,6 +936,123 @@ class BiEliteCS66RT(Robot):
     # Action
     # =========================================================================
 
+    # =========================================================================
+    # Singularity-aware manipulability damping (per arm)
+    # =========================================================================
+
+    def _fetch_dh(self, side: str) -> tuple[list[float], list[float], list[float]] | None:
+        """Return arm ``side``'s Modified-DH ``(alpha, a, d)`` from the config override or the
+        controller's primary package, or None if unavailable / unpopulated."""
+        if self.config.dh_params is not None:
+            alpha, a, d = self.config.dh_params
+            return (list(alpha), list(a), list(d))
+        assert self._cs is not None and self._driver[side] is not None
+        ki = self._cs.KinematicsInfo()
+        if not self._driver[side].getPrimaryPackage(ki, self.config.primary_timeout_ms):
+            return None
+        dh = (list(ki.dh_alpha_), list(ki.dh_a_), list(ki.dh_d_))
+        if any(len(v) != 6 for v in dh) or all(x == 0.0 for x in dh[0] + dh[1] + dh[2]):
+            return None
+        return dh
+
+    def _setup_singularity_damping(self, side: str, premove_sample) -> None:
+        """Acquire arm ``side``'s DH and validate it against the live robot. Fail-safe: any
+        problem leaves damping disabled for that arm only."""
+        self._dh[side] = None
+        self._damping_enabled[side] = False
+        try:
+            dh = self._fetch_dh(side)
+        except Exception as exc:
+            self.logger.warn(f"[{side}] singularity damping disabled: DH fetch error ({exc}).")
+            return
+        if dh is None:
+            self.logger.warn(
+                f"[{side}] singularity damping disabled: no DH (controller fetch returned nothing "
+                "and no dh_params override)."
+            )
+            return
+
+        q1 = np.asarray(self._rtsi[side].getActualJointPositions(), dtype=np.float64)
+        w1 = manipulability(*dh, q1)
+        if not np.isfinite(w1) or w1 < 1e-6:
+            self.logger.warn(
+                f"[{side}] singularity damping disabled: manipulability at the start pose is "
+                f"degenerate (w={w1:.3e}); the DH is likely wrong."
+            )
+            return
+
+        validated = False
+        if premove_sample is not None:
+            q0, t0 = premove_sample
+            q0 = np.asarray(q0, dtype=np.float64)
+            if int(np.sum(np.abs(q0 - q1) >= 0.3)) >= 3:  # well-separated configs
+                t1 = np.asarray(self._rtsi[side].getActualTCPPose(), dtype=np.float64)
+                ok, detail = tool_consistency(dh, q0, t0, q1, t1)
+                if not ok:
+                    self.logger.warn(
+                        f"[{side}] singularity damping disabled: FK self-check failed ({detail}); "
+                        "DH / convention mismatch."
+                    )
+                    return
+                validated = True
+
+        self._dh[side] = dh
+        self._damping_enabled[side] = True
+        if validated:
+            self.logger.info(f"[{side}] singularity damping enabled (FK validated; start w={w1:.4f}).")
+        else:
+            self.logger.info(
+                f"[{side}] singularity damping enabled (FK unvalidated by motion — relying on "
+                f"w-sanity; start w={w1:.4f})."
+            )
+
+    def _maybe_log_w(self, side: str, w: float, s: float) -> None:
+        now = time.monotonic()
+        if now - self._w_log_time[side] < 0.5:
+            return
+        self._w_log_time[side] = now
+        self.logger.info(f"[{side}] manipulability w={w:.5f} -> damping scale s={s:.3f}")
+
+    def _apply_singularity_damping(self, side: str, target: np.ndarray, held: np.ndarray) -> np.ndarray:
+        """Slow the command toward ``target`` as arm ``side``'s config nears a singularity.
+        ``w`` is computed in the base frame from the joints (det-invariant — no world conversion)."""
+        assert self._dh[side] is not None and self._rtsi[side] is not None
+        q = np.asarray(self._rtsi[side].getActualJointPositions(), dtype=np.float64)
+        if self.config.singularity_directional:
+            s, w = directional_scale(
+                *self._dh[side],
+                q,
+                pose_delta(held, target),
+                self.config.singularity_w_low,
+                self.config.singularity_w_high,
+                self.config.singularity_min_scale,
+            )
+        else:
+            w = manipulability(*self._dh[side], q)
+            s = damping_scale(
+                w,
+                self.config.singularity_w_low,
+                self.config.singularity_w_high,
+                self.config.singularity_min_scale,
+            )
+        if self.config.log_manipulability:
+            self._maybe_log_w(side, w, s)
+        if s < 1.0:
+            return self._interpolate_tcp_pose(held, target, s)
+        return target
+
+    def _warn_reach_exceeded(self, side: str, target: np.ndarray) -> None:
+        now = time.monotonic()
+        if now - self._reach_warn_time[side] < 1.0:
+            return
+        self._reach_warn_time[side] = now
+        dist = float(np.linalg.norm(target[:3]))
+        self.logger.warn(
+            f"[{side}] commanded TCP {dist * 1000:.0f}mm from base exceeds max_reach_radius "
+            f"{self.config.max_reach_radius * 1000:.0f}mm; holding last in-reach pose "
+            f"(bring the target back inside the workspace to resume)."
+        )
+
     def _cartesian_action_to_tcp_pose(self, side: str, action: dict[str, Any]) -> np.ndarray:
         with self._servo_lock[side]:
             last_tcp = (
@@ -924,6 +1093,18 @@ class BiEliteCS66RT(Robot):
         # driver for why we anchor on the commanded rotvec.
         target[3:6] = _rotvec_continuity_shift(target[3:6], last_base[3:6])
 
+        # Singularity damping pulls the target toward last_base (the in-reach held pose) when
+        # this arm's current config nears a singularity. Runs BEFORE the reach guard so the
+        # damped (closer) target preserves the reach guard's in-reach invariant.
+        if self._damping_enabled[side]:
+            target = self._apply_singularity_damping(side, target, last_base)
+
+        # Workspace guard: last_base is in-reach by construction (last commanded
+        # in-reach pose, or the physical current pose), so holding it keeps the arm
+        # at the boundary instead of chasing an unreachable target into a drop.
+        if _reach_exceeded(target, self.config.max_reach_radius) is not None:
+            self._warn_reach_exceeded(side, target)
+            return last_base.copy()
         return target
 
     def _trace_send_action(self, side: str, action: dict[str, Any], target_tcp: np.ndarray) -> None:

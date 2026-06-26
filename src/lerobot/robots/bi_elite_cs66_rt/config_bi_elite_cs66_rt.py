@@ -26,6 +26,7 @@ from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
 from lerobot.robots.config import RobotConfig
+from lerobot.robots.elite_cs66_rt.config_elite_cs66_rt import _validate_singularity_params
 from lerobot.robots.grippers import SerialGripperConfig
 
 
@@ -259,6 +260,36 @@ class BiEliteCS66RTConfig(RobotConfig):
     # loops at normal priority (recommended for the camera-heavy bimanual station).
     servo_fifo_scheduling: bool = True
     reset_duration_s: float = 3.0
+    # Opt-in Cartesian velocity ceiling for the background servo loops (per arm).
+    # Both None by default -> no PC-side clamp (controller envelope only). Set when
+    # a jumpy leader (fast wrist rotation, VR tracking spike, clutch re-engage)
+    # feeds target steps that trip a protective stop: each arm's servo loop then
+    # slews its commanded TCP toward the latest target at no more than this speed,
+    # turning the step into a smooth bounded ramp. Velocity ceiling (m/s, rad/s)
+    # applied per servoj_time tick. See config_elite_cs66_rt.py for the rationale.
+    max_lin_speed: float | None = None  # m/s; None disables the linear cap
+    max_ang_speed: float | None = None  # rad/s; None disables the angular cap
+
+    # Workspace reachability guard (per arm). Distance (m) from each arm's base
+    # origin beyond which a commanded TCP target is treated as unreachable: the
+    # driver HOLDS the last in-reach pose instead of sending it, preventing the
+    # operator from driving an arm into the boundary singularity where the
+    # controller's IK fails and external control drops (the observed
+    # "writeServoj failed 251 ticks in a row" crash). Conservative spherical guard
+    # (real reach ~0.91 m for CS66); raise toward ~0.88 if it clips legitimate
+    # reach, or set None to disable. See config_elite_cs66_rt.py for rationale.
+    max_reach_radius: float | None = 0.85  # m; None disables the guard
+
+    # Singularity-aware manipulability damping (per arm). OFF by default (w_high=None); the
+    # per-arm Modified-DH is read from each controller at connect and damping disables itself
+    # on any fetch / self-check failure. See config_elite_cs66_rt.py and manipulability.py.
+    singularity_w_high: float | None = None  # disables damping when None
+    singularity_w_low: float = 0.0  # w at/below which damping is maxed (s = s_min)
+    singularity_min_scale: float = 0.05  # s_min in (0, 1]; floor so escape is always possible
+    singularity_directional: bool = False  # don't damp moves that increase w (escape); needs live tuning
+    dh_params: tuple[list[float], list[float], list[float]] | None = None  # (alpha, a, d) override
+    log_manipulability: bool = False  # throttled debug log of w for live threshold tuning
+    primary_timeout_ms: int = 1000  # one-shot DH (KinematicsInfo) fetch timeout at connect
 
     # ── Shared RTSI state stream ──
     rtsi_frequency: float = 250.0
@@ -404,6 +435,14 @@ class BiEliteCS66RTConfig(RobotConfig):
                 "servoj_gain must be in [100, 2000] (Elite SDK requirement), "
                 f"got {self.servoj_gain}"
             )
+        for _name, _val in (
+            ("max_lin_speed", self.max_lin_speed),
+            ("max_ang_speed", self.max_ang_speed),
+            ("max_reach_radius", self.max_reach_radius),
+        ):
+            if _val is not None and _val <= 0:
+                raise ValueError(f"{_name} must be > 0 when set (None disables it), got {_val}")
+        _validate_singularity_params(self)
         if self.command_timeout_ms < 5:
             raise ValueError(
                 f"command_timeout_ms must be >= 5 (Elite SDK lower bound), got {self.command_timeout_ms}"
