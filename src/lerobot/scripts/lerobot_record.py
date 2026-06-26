@@ -1262,7 +1262,13 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
 def main():
     register_third_party_plugins()
-    record()
+    try:
+        record()
+    except KeyboardInterrupt:
+        # record()'s finally block has already finalized the dataset, disconnected
+        # devices and pushed to hub before the exception propagates here, so there
+        # is nothing left to clean up — just suppress the noisy traceback.
+        logger.info("Recording interrupted by user (Ctrl+C). Cleanup already done.")
 
 
 if __name__ == "__main__":
