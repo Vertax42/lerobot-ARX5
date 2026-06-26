@@ -31,5 +31,12 @@ This dataset was created using [LeRobot](https://github.com/huggingface/lerobot)
 **BibTeX:**
 
 ```bibtex
-{{ citation_bibtex | default("[More Information Needed]", true)}}
+@misc{vertax2026lerobotxense,
+    author = {vertax42 and Xense Robotics Team},
+    title = {LeRobot-Xense: LeRobot with Xense Tactile Robotics Support},
+    howpublished = {\url{https://github.com/Vertax42/lerobot-xense}},
+    year = {2026}
+}{% if citation_bibtex is defined and citation_bibtex %}
+
+{{ citation_bibtex }}{% endif %}
 ```
