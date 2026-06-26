@@ -38,6 +38,19 @@ cd lerobot-xense
 > git submodule update --init --recursive --progress
 > ```
 
+> **Optional — internal network (GitLab mirror).** The default clone above uses
+> the public GitHub mirrors (`git@github.com:Vertax42/*`). Company-network
+> developers can instead point the submodules at the internal GitLab server
+> (`git@192.168.1.61:physical-ai/*`); the internal URLs live in
+> [`.gitmodules.gitlab`](.gitmodules.gitlab) and a helper repoints your
+> **local** remotes without touching the committed `.gitmodules` (every
+> submodule pin exists on both remotes):
+>
+> ```bash
+> scripts/submodule-remote.sh gitlab   # internal GitLab (use `github` to switch back)
+> git submodule update --init --recursive
+> ```
+
 This repository uses `third_party/` git submodules to manage hardware SDK dependencies:
 
 | Submodule | Installed package |
