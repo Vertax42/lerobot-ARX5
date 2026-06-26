@@ -115,7 +115,7 @@ lerobot-teleoperate \
 ```bash
 lerobot-teleoperate \
     --robot.type=bi_flexiv_rizon4_rt \
-    --robot.bi_mount_type=forward-04 \
+    --robot.bi_mount_type=forward-06 \
     --teleop.type=bi_pico4 \
     --fps=30 \
     --display_data=true
@@ -204,6 +204,26 @@ lerobot-record \
     --dataset.vcodec=auto \
     --resume=true \
     --dataset.push_to_hub=true \
+    --display_data=false
+```
+
+```bash
+lerobot-record \
+    --robot.type=bi_flexiv_rizon4_rt \
+    --robot.bi_mount_type=forward-06 \
+    --robot.left_robot_sn=Rizon4s-062412 \
+    --robot.right_robot_sn=Rizon4s-062881 \
+    --teleop.type=bi_pico4 \
+    --dataset.repo_id=Xense/forward-06_test \
+    --dataset.num_episodes=5 \
+    --dataset.single_task="forward-06 test" \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=600 \
+    --dataset.reset_time_s=120 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
+    --resume=false \
+    --dataset.push_to_hub=false \
     --display_data=false
 ```
 
