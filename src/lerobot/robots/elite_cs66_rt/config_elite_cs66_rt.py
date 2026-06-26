@@ -27,6 +27,26 @@ class EliteCS66RTControlMode(str, Enum):
     JOINT_SERVO = "joint_servo"
 
 
+def _validate_singularity_params(cfg) -> None:
+    """Validate the singularity-damping fields. Shared by the single-arm and bimanual configs
+    (duck-typed on the common attribute names)."""
+    if cfg.singularity_w_high is not None:
+        if cfg.singularity_w_low < 0 or cfg.singularity_w_high <= cfg.singularity_w_low:
+            raise ValueError(
+                "require singularity_w_high > singularity_w_low >= 0, got "
+                f"w_high={cfg.singularity_w_high}, w_low={cfg.singularity_w_low}"
+            )
+    if not (0.0 < cfg.singularity_min_scale <= 1.0):
+        raise ValueError(
+            f"singularity_min_scale must be in (0, 1], got {cfg.singularity_min_scale}"
+        )
+    if cfg.dh_params is not None:
+        if len(cfg.dh_params) != 3 or any(len(v) != 6 for v in cfg.dh_params):
+            raise ValueError("dh_params must be a 3-tuple (alpha, a, d) of length-6 lists")
+    if cfg.primary_timeout_ms < 5:
+        raise ValueError(f"primary_timeout_ms must be >= 5, got {cfg.primary_timeout_ms}")
+
+
 @RobotConfig.register_subclass("elite_cs66_rt")
 @dataclass
 class EliteCS66RTConfig(RobotConfig):
@@ -141,14 +161,51 @@ class EliteCS66RTConfig(RobotConfig):
     # loop that's ~855°/s, well above normal leader-follower joint speeds.
     trace_joint_threshold: float = 0.3
 
-    # No PC-side velocity / step clamp: the controller's pendant safety
-    # configuration sets the hardware speed/torque envelope, and
-    # external_control.script's JOINT_IGNORE_SPEED=30 rad/s rejects
-    # individual servoj targets that would imply joint speed above its
-    # bound. Adding a Python-side clamp on top duplicates work and risks
-    # masking real safety incidents behind a "looks smooth" behavior. If a
-    # policy rollout ever needs an opt-in software cap, reintroduce here
-    # as a velocity-based ceiling (rad/s, m/s) — not a per-tick delta.
+    # Opt-in Cartesian velocity ceiling for the background servo loop. Both None
+    # by default -> no PC-side clamp: the controller's pendant safety config and
+    # external_control.script's JOINT_IGNORE_SPEED=30 rad/s already bound the
+    # hardware envelope, and a clamp risks masking real safety incidents behind a
+    # "looks smooth" behavior. Set these when a jumpy leader (fast wrist rotation,
+    # VR tracking spike, clutch re-engage) feeds target steps that imply joint
+    # speed above that bound and trip a protective stop: the servo loop then slews
+    # the commanded TCP toward the latest target at no more than this speed,
+    # turning the step into a smooth bounded ramp. Expressed as a velocity ceiling
+    # (m/s, rad/s) applied per servoj_time tick — NOT a per-tick delta. Only the
+    # background servo loop honors these; the direct-write path is unaffected.
+    max_lin_speed: float | None = None  # m/s; None disables the linear cap
+    max_ang_speed: float | None = None  # rad/s; None disables the angular cap
+
+    # Workspace reachability guard. Distance (m) from the base-frame origin beyond
+    # which a commanded TCP target is treated as unreachable: the driver then HOLDS
+    # the last in-reach pose instead of sending it, so the operator can't drive the
+    # arm into the boundary singularity where the controller's IK fails and drops
+    # external control. Conservative spherical guard (real reach ~0.91 m for CS66);
+    # raise toward ~0.88 if it clips legitimate forward reach, or set None to
+    # disable. Applies to both the background and direct servo paths.
+    max_reach_radius: float | None = 0.85  # m; None disables the guard
+
+    # Singularity-aware manipulability damping (model-based). Detects proximity to ANY
+    # kinematic singularity (wrist q5≈0, shoulder, elbow/boundary) from the arm's Modified-DH
+    # kinematics and smoothly slows the Cartesian command before the controller's IK spikes
+    # joint velocity past JOINT_IGNORE_SPEED and drops external control. The metric is
+    # w = |det(J)| at the current joints (tool- and frame-invariant). When w drops below
+    # singularity_w_high, the target is pulled toward the last commanded pose by a scale
+    # s = clamp((w-w_low)/(w_high-w_low), s_min, 1); s_min>0 always permits slow escape.
+    #
+    # OFF by default (w_high=None): the per-arm DH must be read from the live controller and
+    # w_low/w_high tuned from logged values, so enable only after that. Set log_manipulability
+    # to print w (throttled) while teleoperating near a singular pose to read off the band.
+    # If the DH fetch or the connect-time FK self-check fails, damping disables itself
+    # (fail-safe to the no-damping behavior). See manipulability.py for the kinematics.
+    singularity_w_high: float | None = None  # disables damping when None
+    singularity_w_low: float = 0.0  # w at/below which damping is maxed (s = s_min)
+    singularity_min_scale: float = 0.05  # s_min in (0, 1]; floor so escape is always possible
+    singularity_directional: bool = False  # don't damp moves that increase w (escape); needs live tuning
+    # Optional (alpha, a, d) Modified-DH override (each length-6) if the controller fetch is
+    # unavailable; None -> read from the controller via getPrimaryPackage at connect.
+    dh_params: tuple[list[float], list[float], list[float]] | None = None
+    log_manipulability: bool = False  # throttled debug log of w for live threshold tuning
+    primary_timeout_ms: int = 1000  # one-shot DH (KinematicsInfo) fetch timeout at connect
 
     # Gripper backend dispatch. Mirror the flexiv_rizon4_rt + pylibfranka_research3
     # pattern: a single string selects the driver, the gripper-specific config is
@@ -210,6 +267,14 @@ class EliteCS66RTConfig(RobotConfig):
                 "servoj_gain must be in [100, 2000] (Elite SDK requirement), "
                 f"got {self.servoj_gain}"
             )
+        for _name, _val in (
+            ("max_lin_speed", self.max_lin_speed),
+            ("max_ang_speed", self.max_ang_speed),
+            ("max_reach_radius", self.max_reach_radius),
+        ):
+            if _val is not None and _val <= 0:
+                raise ValueError(f"{_name} must be > 0 when set (None disables it), got {_val}")
+        _validate_singularity_params(self)
         if self.command_timeout_ms < 5:
             raise ValueError(
                 f"command_timeout_ms must be >= 5 (Elite SDK lower bound), got {self.command_timeout_ms}"

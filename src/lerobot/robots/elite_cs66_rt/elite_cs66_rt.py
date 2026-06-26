@@ -25,6 +25,13 @@ from lerobot.robots.elite_cs66_rt.config_elite_cs66_rt import (
     EliteCS66RTConfig,
     EliteCS66RTControlMode,
 )
+from lerobot.robots.elite_cs66_rt.manipulability import (
+    damping_scale,
+    directional_scale,
+    manipulability,
+    pose_delta,
+    tool_consistency,
+)
 from lerobot.robots.grippers.xense_gripper import XenseGripper
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
@@ -87,6 +94,71 @@ def _rotvec_continuity_shift(target_rotvec: np.ndarray, reference_rotvec: np.nda
     if k == 0:
         return target
     return axis * (target_angle + k * 2.0 * np.pi)
+
+
+def _clamp_tcp_velocity(
+    last: np.ndarray,
+    target: np.ndarray,
+    dt: float,
+    max_lin_speed: float | None,
+    max_ang_speed: float | None,
+) -> np.ndarray:
+    """Bound the per-tick motion of ``target`` away from ``last`` to velocity caps.
+
+    Both poses are ``[x, y, z, rx, ry, rz]`` (rotvec) in the same frame. Called
+    once per servo tick (``dt`` = ``servoj_time``) against the *last commanded*
+    pose, so a far or jumpy target (fast wrist rotation, VR tracking spike, clutch
+    re-engage) becomes a smooth bounded ramp instead of a single step that would
+    imply a joint speed above the controller's ``JOINT_IGNORE_SPEED`` bound and
+    trip a protective stop.
+
+    - Translation is scaled so its step never exceeds ``max_lin_speed * dt``.
+    - Rotation takes a geodesic (constant-axis) step toward ``target`` no larger
+      than ``max_ang_speed * dt``, then is re-expressed on ``last``'s ±2π branch
+      so the servoj stream stays continuous.
+
+    A cap of ``None`` (or <= 0) disables that axis; both ``None`` returns ``target``
+    untouched, so the default config preserves the historical no-clamp behaviour.
+    """
+    out = target.copy()
+
+    if max_lin_speed is not None and max_lin_speed > 0.0:
+        max_lin_step = max_lin_speed * dt
+        delta = target[:3] - last[:3]
+        dist = float(np.linalg.norm(delta))
+        if dist > max_lin_step:
+            out[:3] = last[:3] + delta * (max_lin_step / dist)
+
+    if max_ang_speed is not None and max_ang_speed > 0.0:
+        max_ang_step = max_ang_speed * dt
+        last_rot = Rotation.from_rotvec(last[3:6])
+        rel = (Rotation.from_rotvec(target[3:6]) * last_rot.inv()).as_rotvec()
+        ang = float(np.linalg.norm(rel))
+        if ang > max_ang_step:
+            stepped = (Rotation.from_rotvec(rel * (max_ang_step / ang)) * last_rot).as_rotvec()
+            out[3:6] = _rotvec_continuity_shift(stepped, last[3:6])
+
+    return out
+
+
+def _reach_exceeded(pose_base: np.ndarray, max_reach_radius: float | None) -> float | None:
+    """Return the base-origin distance (m) of ``pose_base`` if it exceeds the
+    reach radius, else ``None``.
+
+    Distance is measured from the robot base-frame origin — the frame RTSI reports
+    TCP poses in. A target beyond the arm's reachable radius drives the controller
+    IK into a boundary singularity where ``servoj`` is rejected and external
+    control drops (writeServoj fails for ~1 s, then the servo loop raises). Callers
+    hold the last in-reach pose instead. ``None`` radius disables the guard.
+
+    This is a conservative *spherical* guard from the base origin, not an exact
+    reachability test — the true workspace is offset to the shoulder and excludes
+    a column near the base — so keep a margin below the measured failure radius.
+    """
+    if max_reach_radius is None:
+        return None
+    dist = float(np.linalg.norm(np.asarray(pose_base, dtype=np.float64)[:3]))
+    return dist if dist > max_reach_radius else None
 
 
 def _slerp_quaternion_wxyz(q0: np.ndarray, q1: np.ndarray, alpha: float) -> np.ndarray:
@@ -158,6 +230,11 @@ class EliteCS66RT(Robot):
         )
         self._last_tcp_command: np.ndarray | None = None
         self._target_tcp_command: np.ndarray | None = None
+        self._reach_warn_time: float = 0.0  # throttle for the workspace-guard warning
+        # Singularity damping (set up at connect; stays disabled unless DH + self-check pass).
+        self._dh: tuple[list[float], list[float], list[float]] | None = None
+        self._damping_enabled: bool = False
+        self._w_log_time: float = 0.0
         self._servo_thread: threading.Thread | None = None
         self._servo_stop_event = threading.Event()
         self._servo_lock = threading.Lock()
@@ -321,8 +398,12 @@ class EliteCS66RT(Robot):
             input_recipe = self._resolve_recipe(self.config.rtsi_input_recipe, "input_recipe.txt")
 
             self._rtsi = self._cs.RtsiIOInterface(output_recipe, input_recipe, self.config.rtsi_frequency)
+            # Keep the handle on self even if connect() fails (e.g. RTSI "IN_USE"
+            # when another client still holds the input registers) so
+            # _cleanup_after_failed_connect() can disconnect() it. Dropping the
+            # reference here would orphan the C++ object, whose destructor then
+            # fires at interpreter shutdown ("terminate called ..." -> Aborted).
             if not self._rtsi.connect(self.config.robot_ip):
-                self._rtsi = None
                 raise ConnectionError(f"Failed to connect Elite RTSI server at {self.config.robot_ip}:30004")
 
             self._dashboard = self._cs.DashboardClientInterface()
@@ -381,6 +462,22 @@ class EliteCS66RT(Robot):
 
         self._is_connected = True
 
+        # Capture a pre-start-move (joints, TCP) sample for the singularity-damping FK
+        # self-check: the start-move below gives a well-separated second config, so the
+        # inferred flange->TCP tool transform can be cross-checked for consistency.
+        premove_sample = None
+        if (
+            self.config.singularity_w_high is not None
+            and self.config.control_mode == EliteCS66RTControlMode.CARTESIAN_SERVO
+        ):
+            try:
+                premove_sample = (
+                    np.asarray(self._rtsi.getActualJointPositions(), dtype=np.float64),
+                    np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64),
+                )
+            except Exception:
+                premove_sample = None
+
         # MoveJ to start_position before any servoj streaming. Pass
         # go_to_start=False to skip (crash-recovery / re-attach scenarios
         # where the arm is already mid-pose). MoveJ runs **before** the
@@ -408,6 +505,8 @@ class EliteCS66RT(Robot):
             self._last_action_time = time.monotonic()
             if self.config.use_background_servo_loop:
                 self._start_servo_loop()
+            if self.config.singularity_w_high is not None:
+                self._setup_singularity_damping(premove_sample)
 
     def _cleanup_after_failed_connect(self) -> None:
         # Drop the driver / dashboard / RTSI handles first.
@@ -591,6 +690,22 @@ class EliteCS66RT(Robot):
                 return target, True
 
         target = None if self._target_tcp_command is None else self._target_tcp_command.copy()
+        # Opt-in velocity ceiling: slew the commanded TCP toward the latest target
+        # at <= max_*_speed (per servoj_time tick), so a jumpy target ramps smoothly
+        # instead of stepping past the controller's joint-speed bound. No-op (and no
+        # cost) when both caps are None.
+        if (
+            target is not None
+            and self._last_tcp_command is not None
+            and (self.config.max_lin_speed is not None or self.config.max_ang_speed is not None)
+        ):
+            target = _clamp_tcp_velocity(
+                self._last_tcp_command,
+                target,
+                self.config.servoj_time,
+                self.config.max_lin_speed,
+                self.config.max_ang_speed,
+            )
         return target, False
 
     def _servo_loop(self) -> None:
@@ -704,6 +819,122 @@ class EliteCS66RT(Robot):
             obs[cam_name] = cam.async_read()
         return obs
 
+    # =========================================================================
+    # Singularity-aware manipulability damping
+    # =========================================================================
+
+    def _fetch_dh(self) -> tuple[list[float], list[float], list[float]] | None:
+        """Return the arm's Modified-DH ``(alpha, a, d)`` from the config override or the
+        controller's primary package, or None if unavailable / unpopulated."""
+        if self.config.dh_params is not None:
+            alpha, a, d = self.config.dh_params
+            return (list(alpha), list(a), list(d))
+        assert self._cs is not None and self._driver is not None
+        ki = self._cs.KinematicsInfo()
+        if not self._driver.getPrimaryPackage(ki, self.config.primary_timeout_ms):
+            return None
+        dh = (list(ki.dh_alpha_), list(ki.dh_a_), list(ki.dh_d_))
+        if any(len(v) != 6 for v in dh) or all(x == 0.0 for x in dh[0] + dh[1] + dh[2]):
+            return None  # empty / unpopulated package
+        return dh
+
+    def _setup_singularity_damping(self, premove_sample) -> None:
+        """Acquire DH and validate it against the live robot. Fail-safe: any problem leaves
+        damping disabled (identical to the no-damping behavior)."""
+        self._dh = None
+        self._damping_enabled = False
+        try:
+            dh = self._fetch_dh()
+        except Exception as exc:
+            self.logger.warn(f"Singularity damping disabled: DH fetch error ({exc}).")
+            return
+        if dh is None:
+            self.logger.warn(
+                "Singularity damping disabled: no DH (controller fetch returned nothing and no "
+                "dh_params override)."
+            )
+            return
+
+        q1 = np.asarray(self._rtsi.getActualJointPositions(), dtype=np.float64)
+        w1 = manipulability(*dh, q1)
+        if not np.isfinite(w1) or w1 < 1e-6:
+            self.logger.warn(
+                f"Singularity damping disabled: manipulability at the start pose is degenerate "
+                f"(w={w1:.3e}); the DH is likely wrong."
+            )
+            return
+
+        validated = False
+        if premove_sample is not None:
+            q0, t0 = premove_sample
+            q0 = np.asarray(q0, dtype=np.float64)
+            if int(np.sum(np.abs(q0 - q1) >= 0.3)) >= 3:  # well-separated configs
+                t1 = np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64)
+                ok, detail = tool_consistency(dh, q0, t0, q1, t1)
+                if not ok:
+                    self.logger.warn(
+                        f"Singularity damping disabled: FK self-check failed ({detail}); DH / "
+                        "convention mismatch."
+                    )
+                    return
+                validated = True
+
+        self._dh = dh
+        self._damping_enabled = True
+        if validated:
+            self.logger.info(f"Singularity damping enabled (FK validated; start w={w1:.4f}).")
+        else:
+            self.logger.info(
+                f"Singularity damping enabled (FK unvalidated by motion — relying on w-sanity; "
+                f"start w={w1:.4f}). Connect with go_to_start=True for the full self-check."
+            )
+
+    def _maybe_log_w(self, w: float, s: float) -> None:
+        now = time.monotonic()
+        if now - self._w_log_time < 0.5:
+            return
+        self._w_log_time = now
+        self.logger.info(f"manipulability w={w:.5f} -> damping scale s={s:.3f}")
+
+    def _apply_singularity_damping(self, target: np.ndarray, held: np.ndarray) -> np.ndarray:
+        """Slow the command toward ``target`` as the current config nears a singularity."""
+        assert self._dh is not None and self._rtsi is not None
+        q = np.asarray(self._rtsi.getActualJointPositions(), dtype=np.float64)
+        if self.config.singularity_directional:
+            s, w = directional_scale(
+                *self._dh,
+                q,
+                pose_delta(held, target),
+                self.config.singularity_w_low,
+                self.config.singularity_w_high,
+                self.config.singularity_min_scale,
+            )
+        else:
+            w = manipulability(*self._dh, q)
+            s = damping_scale(
+                w,
+                self.config.singularity_w_low,
+                self.config.singularity_w_high,
+                self.config.singularity_min_scale,
+            )
+        if self.config.log_manipulability:
+            self._maybe_log_w(w, s)
+        if s < 1.0:
+            return self._interpolate_tcp_pose(held, target, s)
+        return target
+
+    def _warn_reach_exceeded(self, target: np.ndarray) -> None:
+        now = time.monotonic()
+        if now - self._reach_warn_time < 1.0:
+            return
+        self._reach_warn_time = now
+        dist = float(np.linalg.norm(target[:3]))
+        self.logger.warn(
+            f"Commanded TCP {dist * 1000:.0f}mm from base exceeds max_reach_radius "
+            f"{self.config.max_reach_radius * 1000:.0f}mm; holding last in-reach pose "
+            f"(bring the target back inside the workspace to resume)."
+        )
+
     def _cartesian_action_to_tcp_pose(self, action: dict[str, Any]) -> np.ndarray:
         with self._servo_lock:
             last_tcp = None if self._last_tcp_command is None else self._last_tcp_command.copy()
@@ -713,6 +944,10 @@ class EliteCS66RT(Robot):
         else:
             assert self._rtsi is not None
             target = np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64)
+
+        # Last in-reach pose (before this action is applied); held if the merged
+        # target leaves the workspace, so the arm never chases an unreachable target.
+        held = target.copy()
 
         for i, key in enumerate(TCP_POSITION_KEYS):
             if key in action:
@@ -735,6 +970,15 @@ class EliteCS66RT(Robot):
             target_principal = _quaternion_to_rotvec(rotation_6d_to_quaternion(r6d))
             target[3:6] = _rotvec_continuity_shift(target_principal, target[3:6])
 
+        # Singularity damping pulls the target toward `held` (last commanded) when the current
+        # config nears a singularity. Runs BEFORE the reach guard: the damped target is closer
+        # to `held`, so it can only be more in-reach, preserving the reach guard's invariant.
+        if self._damping_enabled:
+            target = self._apply_singularity_damping(target, held)
+
+        if _reach_exceeded(target, self.config.max_reach_radius) is not None:
+            self._warn_reach_exceeded(target)
+            return held
         return target
 
     def _trace_send_action(self, action: dict[str, Any], target_tcp: np.ndarray) -> None:
