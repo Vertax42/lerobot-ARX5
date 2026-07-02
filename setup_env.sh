@@ -457,8 +457,11 @@ install_xense() {
         echo "ERROR: vendored xensesdk wheel not found: $WHEEL"
         return 1
     fi
-    if [[ ! -d "$GRIPPER_DIR" ]]; then
-        echo "ERROR: $GRIPPER_DIR not found."
+    # Check for pyproject.toml, not just the directory: a registered-but-not-
+    # checked-out submodule leaves an empty dir, which passes -d but makes the
+    # editable install below fail with "does not appear to be a Python project".
+    if [[ ! -f "$GRIPPER_DIR/pyproject.toml" ]]; then
+        echo "ERROR: $GRIPPER_DIR is missing or not initialized (no pyproject.toml)."
         echo "  Run: git submodule update --init third_party/XGripper"
         return 1
     fi
