@@ -447,16 +447,12 @@ install_pico4() {
 install_xense() {
     echo ""
     echo "══════════════════════════════════════════"
-    echo " xensesdk (vendored wheel) + XGripper"
+    echo " xensesdk (PyPI) + XGripper"
     echo "══════════════════════════════════════════"
 
-    local WHEEL="$PROJECT_ROOT/dist/xensesdk-2.0.0-cp312-cp312-linux_x86_64.whl"
+    local XENSESDK_VERSION="2.0.1"
     local GRIPPER_DIR="$PROJECT_ROOT/third_party/XGripper"
 
-    if [[ ! -f "$WHEEL" ]]; then
-        echo "ERROR: vendored xensesdk wheel not found: $WHEEL"
-        return 1
-    fi
     # Check for pyproject.toml, not just the directory: a registered-but-not-
     # checked-out submodule leaves an empty dir, which passes -d but makes the
     # editable install below fail with "does not appear to be a Python project".
@@ -476,12 +472,13 @@ install_xense() {
         ${CONDA_CMD:-mamba} install -c conda-forge hidapi -y
     fi
 
-    # Install xensesdk runtime deps explicitly because the wheel is installed
+    # Install xensesdk runtime deps explicitly because xensesdk is installed
     # with --no-deps below (keeps the shared ARX5/Robostack env's numpy/opencv/
-    # cryptography pins from being disturbed by the wheel's own constraints).
-    # The rebuilt 2.0.0 wheel added cypack/ormsgpack/cyclonedds-nightly as
-    # mandatory runtime deps — cypack is the FIRST import in xensesdk/__init__.py
-    # and ormsgpack/cyclonedds are needed by the ezros layer — so they must be
+    # cryptography pins from being disturbed by the wheel's own constraints —
+    # notably xensesdk pins cryptography==43.0.3, which would DOWNGRADE the env's
+    # 49.x otherwise). cypack/ormsgpack/cyclonedds-nightly are mandatory runtime
+    # deps — cypack is the FIRST import in xensesdk/__init__.py and
+    # ormsgpack/cyclonedds are needed by the ezros layer — so they must be
     # listed here or `import xensesdk` fails with ModuleNotFoundError.
     uv pip install \
         "numpy>=1.26.4,<2.3.0" \
@@ -498,10 +495,13 @@ install_xense() {
         "ormsgpack>=1.11.0" \
         "cyclonedds-nightly==2025.7.29" \
         "pyudev; platform_system=='Linux'"
-    # Install xensesdk 2.0 from the vendored wheel under dist/. It bundles the
-    # patched libxense_c.so flash reader (concurrent-connect EBADF fix), so no
-    # separate xense_xu / pyxensexu build is needed. --no-deps keeps numpy 1.26.x.
-    uv pip install --no-deps --force-reinstall "$WHEEL"
+    # Install xensesdk from PyPI (pinned). The published cp312 manylinux wheel
+    # carries the same patched libxense_c flash reader (concurrent-connect EBADF
+    # fix) that was previously vendored under dist/: 2.0.1 ships a byte-identical
+    # libxense_c.so.20 and a newer libxense_c.so.1.0.0 (the file the backend now
+    # loads), so no separate xense_xu / pyxensexu build is needed. --no-deps keeps
+    # the env's numpy/cryptography pins (see block above).
+    uv pip install --no-deps --upgrade "xensesdk==${XENSESDK_VERSION}"
     # Install XGripper from local submodule (package name: xensegripper). It is
     # used by the serial / xense grippers and imports the xensesdk installed
     # above; --no-deps avoids PyPI wheels that are incomplete for Python 3.12.
