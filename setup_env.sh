@@ -268,11 +268,12 @@ install_flexiv() {
     # Fast-DDS) are pinned to ancient releases whose CMakeLists declare
     # cmake_minimum_required() < 3.5 AND explicitly cmake_policy(SET CMP0063
     # OLD). CMake 4.x (shipped in our conda env) rejects BOTH: the min version
-    # outright, and CMP0063 because it removed that policy's OLD behavior
-    # entirely (no env-var escape hatch exists for the latter). The deps'
+    # (recoverable via CMAKE_POLICY_VERSION_MINIMUM=3.5) AND — fatally —
+    # cmake_policy(SET CMP0063 OLD), which errors with "Policy CMP0063 may not
+    # be set to OLD behavior because this version of CMake no longer supports
+    # it" and has NO override. So a real CMake < 4.0 is mandatory. The deps'
     # *installed* package configs can trip cmake 4.x at find_package() time too,
-    # so the binding (Stage 2) is built with the same legacy cmake. Ubuntu's
-    # system cmake (/usr/bin/cmake, 3.28) still supports all of this.
+    # so the binding (Stage 2) is built with the same legacy cmake.
     local LEGACY_CMAKE=""
     for _c in /usr/bin/cmake cmake3; do
         _cpath="$(command -v "$_c" 2>/dev/null)" || continue
@@ -282,10 +283,28 @@ install_flexiv() {
         fi
     done
     if [[ -z "$LEGACY_CMAKE" ]]; then
-        echo "[flexiv] ERROR: need a CMake < 4.0 to build flexiv_rt"
-        echo "[flexiv]        (tinyxml2/Fast-DDS use CMP0063 OLD, removed in CMake 4)."
-        echo "[flexiv]        Install one, e.g.:  sudo apt-get install -y cmake"
-        return 1
+        # No system CMake < 4.0. Kitware's apt repo now ships only 4.x, so
+        # `apt-get install cmake` can't help. Provision cmake<4 (3.31.x) from
+        # PyPI into an isolated uv venv — a self-contained binary, no sudo, and
+        # it does NOT disturb the conda env's cmake 4.x. Cached across runs.
+        # NB: use the wheel's bundled data/bin/cmake directly; the venv bin/cmake
+        # console-script wrapper misresolves outside an activated venv.
+        local CMAKE3_VENV="${XDG_CACHE_HOME:-$HOME/.cache}/lerobot-xense/cmake3-venv"
+        LEGACY_CMAKE="$(compgen -G "$CMAKE3_VENV/lib/python*/site-packages/cmake/data/bin/cmake" 2>/dev/null | head -1 || true)"
+        if [[ -z "$LEGACY_CMAKE" || ! -x "$LEGACY_CMAKE" ]]; then
+            echo "[flexiv] No system CMake < 4.0 found — provisioning cmake<4 from PyPI"
+            echo "[flexiv]   into $CMAKE3_VENV (one-time; tinyxml2/Fast-DDS need CMP0063 OLD)"
+            uv venv --python 3.12 "$CMAKE3_VENV" >/dev/null \
+                && uv pip install --quiet --python "$CMAKE3_VENV/bin/python" "cmake<4"
+            LEGACY_CMAKE="$(compgen -G "$CMAKE3_VENV/lib/python*/site-packages/cmake/data/bin/cmake" 2>/dev/null | head -1 || true)"
+        fi
+        if [[ -z "$LEGACY_CMAKE" || ! -x "$LEGACY_CMAKE" ]] \
+           || ! "$LEGACY_CMAKE" --version | head -1 | grep -qE 'version 3\.'; then
+            echo "[flexiv] ERROR: could not provision a CMake < 4.0 to build flexiv_rt"
+            echo "[flexiv]        (tinyxml2/Fast-DDS use CMP0063 OLD, removed in CMake 4)."
+            echo "[flexiv]        Install one manually, e.g.:  uv tool install 'cmake<4'"
+            return 1
+        fi
     fi
     # Shim it ahead of conda's cmake 4.x on PATH. Bare `cmake` calls inside the
     # submodule build scripts and the pip build backend then resolve to it.
