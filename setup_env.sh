@@ -116,6 +116,29 @@ if prefix:
 PYEOF
 }
 
+# Flexiv RDK (and the ARX5 SDK) spawn SCHED_FIFO real-time control threads. Raising
+# a thread to real-time priority requires CAP_SYS_NICE; a normal user lacks it, so
+# the RDK Scheduler logs "Failed to set thread priority: root privilege is required"
+# and silently downgrades the 1 kHz control loop to normal scheduling (jittery, unsafe
+# on real hardware). Grant the capability to the *resolved* interpreter binary (setcap
+# follows the conda bin/python symlink and writes the real file). Idempotent; harmless
+# for non-robot scripts since cap_sys_nice only permits raising scheduling priority.
+grant_rt_scheduling() {
+    local PY_REAL
+    PY_REAL="$(readlink -f "${CONDA_PREFIX}/bin/python")"
+    if ! command -v setcap >/dev/null 2>&1; then
+        echo "[rt-sched] WARN: 'setcap' not found — install it with 'sudo apt install libcap2-bin'."
+        echo "[rt-sched]       Real-time thread priority will be unavailable until then."
+        return 0
+    fi
+    echo "[rt-sched] Granting cap_sys_nice to $PY_REAL (needs sudo)..."
+    if sudo setcap cap_sys_nice=ep "$PY_REAL"; then
+        echo "[rt-sched] Done. Verify with: getcap $PY_REAL"
+    else
+        echo "[rt-sched] WARN: setcap failed — RT control threads will run at normal priority."
+    fi
+}
+
 # conda installs a udev/ directory that confuses ctypes.util.find_library("udev"),
 # causing pyudev/xensesdk to crash with "OSError: .../lib/udev: Is a directory".
 fix_udev_discovery() {
@@ -415,6 +438,7 @@ install_flexiv() {
     PATH="$CMAKE_SHIM:$PATH" uv pip install -e "$LIB_DIR" --no-build-isolation
 
     write_sitecustomize
+    grant_rt_scheduling
     echo "[flexiv] RT SDK done. Verify with: python -c 'import flexiv_rt; print(flexiv_rt)'"
 
     # Install Flexiv NRT Python SDK from PyPI
