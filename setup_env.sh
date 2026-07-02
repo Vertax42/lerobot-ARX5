@@ -315,6 +315,24 @@ install_flexiv() {
             export PATH="$CMAKE_SHIM:$PATH"
             export CMAKE_POLICY_VERSION_MINIMUM=3.5  # belt-and-braces for < 3.5 mins
 
+            # Force Fast-DDS to use its OWN vendored asio, not the system one.
+            # install_Fast-DDS.sh hardcodes -DTHIRDPARTY_Asio=ON, which means
+            # "use the bundle only if asio isn't found elsewhere". If the host has
+            # apt `libasio-dev` (present on some 22.04 boxes, absent on the 24.04
+            # box this was first tested on), CMake's find_path resolves asio to
+            # /usr/include and — because that's a system prefix — emits NO -I flag.
+            # The conda cross-compiler only searches its own sysroot, never the
+            # host /usr/include, so the fastrtps build then dies with
+            # "fatal error: asio.hpp: No such file or directory".
+            # find_path searches CMAKE_PREFIX_PATH (this env var included) BEFORE
+            # the system dirs, so prepending Fast-DDS's bundled asio prefix makes
+            # configure resolve there — a non-system path CMake passes with -I —
+            # regardless of whether libasio-dev is installed. The path need not
+            # exist yet: it is created by the submodule init inside the build
+            # script and only read at Fast-DDS configure time. We can't fix this
+            # in install_Fast-DDS.sh itself since thirdparty/ is vendored.
+            export CMAKE_PREFIX_PATH="$LIB_DIR/flexiv_rdk/thirdparty/cloned/Fast-DDS/thirdparty/asio/asio${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
+
             cd "$LIB_DIR/flexiv_rdk/thirdparty"
             bash build_and_install_dependencies.sh "$RDK_INSTALL" "$(nproc)"
 
