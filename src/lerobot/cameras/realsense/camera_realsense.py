@@ -528,30 +528,43 @@ class RealSenseCamera(Camera):
             self.latest_timestamp = None
             self.new_frame_event.clear()
 
-    # NOTE(Steven): Missing implementation for depth for now
     @check_if_not_connected
-    def async_read(self, timeout_ms: float = 200) -> NDArray[Any]:
+    def async_read(
+        self, timeout_ms: float = 200, return_depth: bool = True
+    ) -> NDArray[Any] | tuple[NDArray[Any], NDArray[Any]]:
         """
-        Reads the latest available frame data (color) asynchronously.
+        Reads the latest available frame data asynchronously.
 
-        This method retrieves the most recent color frame captured by the background
-        read thread. It does not block waiting for the camera hardware directly,
-        but may wait up to timeout_ms for the background thread to provide a frame.
-        It is “best effort” under high FPS.
+        This method retrieves the most recent color frame (and, optionally, the
+        time-aligned depth frame) captured by the background read thread. It does not
+        block waiting for the camera hardware directly, but may wait up to timeout_ms
+        for the background thread to provide a frame. It is “best effort” under high FPS.
 
         Args:
             timeout_ms (float): Maximum time in milliseconds to wait for a frame
                 to become available. Defaults to 200ms (0.2 seconds).
+            return_depth (bool): If True, returns a ``(color, depth)`` tuple where both
+                frames come from the same coherent frameset. Requires the camera to be
+                configured with ``use_depth=True``. Defaults to False.
 
         Returns:
-            np.ndarray:
-            The latest captured frame data (color image), processed according to configuration.
+            np.ndarray | tuple[np.ndarray, np.ndarray]:
+            The latest captured color frame, processed according to configuration. If
+            ``return_depth`` is True, a ``(color, depth)`` tuple is returned instead,
+            where ``depth`` is the raw depth map (``np.uint16``, millimeters).
 
         Raises:
             DeviceNotConnectedError: If the camera is not connected.
+            RuntimeError: If ``return_depth`` is True but the depth stream is not enabled,
+                if the background thread died unexpectedly, or another error occurs.
             TimeoutError: If no frame data becomes available within the specified timeout.
-            RuntimeError: If the background thread died unexpectedly or another error occurs.
         """
+
+        if return_depth and not self.use_depth:
+            raise RuntimeError(
+                f"Cannot return depth from '.async_read(return_depth=True)'. "
+                f"Depth stream is not enabled for {self}."
+            )
 
         if self.thread is None or not self.thread.is_alive():
             raise RuntimeError(f"{self} read thread is not running.")
@@ -564,10 +577,16 @@ class RealSenseCamera(Camera):
 
         with self.frame_lock:
             frame = self.latest_color_frame
+            depth_frame = self.latest_depth_frame
             self.new_frame_event.clear()
 
         if frame is None:
             raise RuntimeError(f"Internal error: Event set but no frame available for {self}.")
+
+        if return_depth:
+            if depth_frame is None:
+                raise RuntimeError(f"Internal error: Event set but no depth frame available for {self}.")
+            return frame, depth_frame
 
         return frame
 
