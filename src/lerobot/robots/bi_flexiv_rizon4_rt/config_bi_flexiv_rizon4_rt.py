@@ -178,10 +178,14 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     gripper_f_max: float = 40.0  # N
     gripper_init_open: bool = True
 
-    # ========== TacCap follower control params (used when *_gripper_type == "taccap_follower") ==========
+    # ========== TacCap follower control params (used when gripper_type == "taccap_follower") ==========
     taccap_kp: float = 8.0          # MIT impedance stiffness (Nm/rad)
     taccap_kd: float = 1.0          # MIT impedance damping (Nm·s/rad)
     taccap_control_hz: int = 200    # ControlLoop resubmit rate
+    # When gripper_type == "taccap_follower", auto-sniff the per-side wrist camera
+    # and GSPS tactile sensor SNs (via TacCap + USB topology) at robot connect time
+    # instead of using the preset's XC*/OG* SNs. See taccap_discovery.py.
+    taccap_auto_discover_cameras: bool = True
 
     # Auto-created in __post_init__ (do not set directly)
     left_gripper: SerialGripperConfig | TaccapFollowerGripperConfig | None = field(
@@ -190,6 +194,8 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     right_gripper: SerialGripperConfig | TaccapFollowerGripperConfig | None = field(
         default=None, init=False
     )
+    # Set in __post_init__: robot resolves wrist/tactile cameras at connect time.
+    _taccap_autodiscover: bool = field(default=False, init=False)
 
     def __post_init__(self):
         super().__post_init__()
@@ -357,23 +363,39 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 warmup_s=1.0 if self.enable_tactile_sensors else 0.05,
                 use_depth=True,
             ),
-            "left_wrist": OpenCVCameraConfig(
-                index_or_path=preset["left_wrist_camera_sn"],
-                fourcc="MJPG",
-                width=640,
-                height=480,
-                fps=30,
-                warmup_s=1.0,
-            ),
-            "right_wrist": OpenCVCameraConfig(
-                index_or_path=preset["right_wrist_camera_sn"],
-                fourcc="MJPG",
-                width=640,
-                height=480,
-                fps=30,
-                warmup_s=1.0,
-            ),
         }
+
+        # In taccap_follower + auto-discover mode, the wrist camera and GSPS tactile
+        # SNs are hardware that changes with the gripper, so they are sniffed at
+        # robot connect time (see taccap_discovery.py) rather than taken from the
+        # preset. Leave only `head` here; the robot injects the rest before building
+        # cameras. Any other mode keeps the preset-driven wiring below.
+        self._taccap_autodiscover = (
+            self.gripper_type == "taccap_follower" and self.taccap_auto_discover_cameras
+        )
+        if self._taccap_autodiscover:
+            return
+
+        self.cameras.update(
+            {
+                "left_wrist": OpenCVCameraConfig(
+                    index_or_path=preset["left_wrist_camera_sn"],
+                    fourcc="MJPG",
+                    width=640,
+                    height=480,
+                    fps=30,
+                    warmup_s=1.0,
+                ),
+                "right_wrist": OpenCVCameraConfig(
+                    index_or_path=preset["right_wrist_camera_sn"],
+                    fourcc="MJPG",
+                    width=640,
+                    height=480,
+                    fps=30,
+                    warmup_s=1.0,
+                ),
+            }
+        )
         if self.enable_tactile_sensors:
             self.cameras.update(
                 {
