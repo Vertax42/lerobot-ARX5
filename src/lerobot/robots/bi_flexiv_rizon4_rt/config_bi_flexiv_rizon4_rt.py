@@ -360,6 +360,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 width=640,
                 height=480,
                 warmup_s=1.0 if self.enable_tactile_sensors else 0.05,
+                use_depth=True,
             ),
             "left_wrist": OpenCVCameraConfig(
                 index_or_path=preset["left_wrist_camera_sn"],
