@@ -24,6 +24,16 @@ from .constants import ACTION, ACTION_PREFIX, OBS_PREFIX, OBS_STR
 RobotAction = dict[str, Any]
 RobotObservation = dict[str, Any]
 
+# Depth-map visualization (2D uint16 frames, e.g. RealSense, values in millimeters).
+# Overridable via env vars. A *fixed* colormap range is what stops the per-frame
+# flicker: without it, Rerun re-derives the range from each frame's min/max, and
+# invalid 0-holes / far-noise make that range jump every frame → the image pulses.
+DEPTH_METER = float(os.getenv("LEROBOT_RERUN_DEPTH_METER", "1000.0"))  # units per meter (mm → 1000)
+DEPTH_RANGE_MM = (
+    float(os.getenv("LEROBOT_RERUN_DEPTH_MIN_MM", "0")),
+    float(os.getenv("LEROBOT_RERUN_DEPTH_MAX_MM", "4000")),
+)
+
 
 def init_rerun(
     session_name: str = "lerobot_control_loop", ip: str | None = None, port: int | None = None
@@ -93,6 +103,13 @@ def log_rerun_data(
                 if arr.ndim == 1:
                     for i, vi in enumerate(arr):
                         rr.log(f"{key}_{i}", rr.Scalars(float(vi)))
+                elif arr.ndim == 2:
+                    # 2D array → depth map (e.g. RealSense uint16, millimeters).
+                    # JPEG compression only supports uint8, so log it uncompressed
+                    # as a DepthImage regardless of compress_images. A fixed
+                    # depth_range pins the colormap so it doesn't rescale (flicker)
+                    # every frame; meter maps raw units to physical meters.
+                    rr.log(key, rr.DepthImage(arr, meter=DEPTH_METER, depth_range=DEPTH_RANGE_MM))
                 else:
                     img_entity = rr.Image(arr).compress() if compress_images else rr.Image(arr)
                     rr.log(key, entity=img_entity)
