@@ -228,7 +228,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 "right_tactile_camera_sn_0": "OG001325",
                 "right_tactile_camera_sn_1": "OG001326",
             },
-            "forward_dewu": {
+            "forward-dewu": {
                 "left_sn": "Rizon4s-063458",
                 "right_sn": "Rizon4s-063670",
                 "left_gripper_sn": "000021",
