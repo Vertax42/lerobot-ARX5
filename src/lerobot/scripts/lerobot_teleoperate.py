@@ -124,6 +124,17 @@ lerobot-teleoperate \
 
 """
 
+# ── TacCap SDK / OpenCV glib load-order shim ─────────────────────────────────
+# opencv-python (pip) links the system libglib-2.0 (2.72), which lacks symbols
+# the TacCap SDK's conda libgobject (2.86) needs. Whichever glib is loaded first
+# claims the process-wide "libglib-2.0.so.0" slot, so we import xense.taccap
+# BEFORE OpenCV gets pulled in (via the camera/robot imports further down),
+# making the newer conda glib win. Guarded: a no-op when the SDK isn't present.
+try:  # noqa: SIM105
+    import xense.taccap  # noqa: F401
+except Exception:
+    pass
+
 import time
 import traceback
 from dataclasses import asdict, dataclass
