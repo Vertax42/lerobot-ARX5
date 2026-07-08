@@ -47,7 +47,12 @@ import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
 from lerobot.robots.bi_flexiv_rizon4_rt.config_bi_flexiv_rizon4_rt import BiFlexivRizon4RTConfig
-from lerobot.robots.grippers import SerialGripper
+from lerobot.robots.grippers import (
+    SerialGripper,
+    SerialGripperConfig,
+    TaccapFollowerGripper,
+    TaccapFollowerGripperConfig,
+)
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import (
@@ -60,6 +65,23 @@ from lerobot.utils.robot_utils import (
 JOINT_DOF = 7  # Flexiv Rizon4 robot joint DOF
 POSE_SIZE_QUAT = 7  # [x, y, z, qw, qx, qy, qz]
 POSE_SIZE_6D = 9  # [x, y, z, r1..r6]
+
+
+def _make_gripper(cfg):
+    """Instantiate the gripper driver matching the nested config type.
+
+    Returns None when no gripper is configured for that side. Both drivers expose
+    the same duck-typed contract (connect/disconnect/get_gripper_position/
+    set_gripper_position/initialize_gripper_position), so the rest of the arm's
+    gripper wiring is driver-agnostic.
+    """
+    if cfg is None:
+        return None
+    if isinstance(cfg, SerialGripperConfig):
+        return SerialGripper(cfg)
+    if isinstance(cfg, TaccapFollowerGripperConfig):
+        return TaccapFollowerGripper(cfg)
+    raise TypeError(f"Unsupported gripper config type: {type(cfg).__name__}")
 
 
 class BiFlexivRizon4RT(Robot):
@@ -120,17 +142,14 @@ class BiFlexivRizon4RT(Robot):
         self._right_cc: frt.CartesianMotionForceControl | None = None
         self._is_connected = False
 
-        # Grippers
-        self._left_gripper: SerialGripper | None = None
-        if config.left_use_gripper:
-            self._left_gripper = SerialGripper(config.left_gripper)
-        else:
+        # Grippers — driver is selected by the nested config type (serial vs taccap
+        # follower). Both implement the same duck-typed contract the arm relies on.
+        self._left_gripper = _make_gripper(config.left_gripper)
+        if self._left_gripper is None:
             self.logger.info("Left arm: no gripper configured.")
 
-        self._right_gripper: SerialGripper | None = None
-        if config.right_use_gripper:
-            self._right_gripper = SerialGripper(config.right_gripper)
-        else:
+        self._right_gripper = _make_gripper(config.right_gripper)
+        if self._right_gripper is None:
             self.logger.info("Right arm: no gripper configured.")
 
         # Cached start TCP poses for RT-mode reset
