@@ -45,7 +45,9 @@ from typing import Any
 import flexiv_rt as frt
 import numpy as np
 
+from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.utils import make_cameras_from_configs
+from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
 from lerobot.robots.bi_flexiv_rizon4_rt.config_bi_flexiv_rizon4_rt import BiFlexivRizon4RTConfig
 from lerobot.robots.grippers import (
     SerialGripper,
@@ -53,6 +55,7 @@ from lerobot.robots.grippers import (
     TaccapFollowerGripper,
     TaccapFollowerGripperConfig,
 )
+from lerobot.robots.grippers.taccap_discovery import discover_taccap_sides
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import (
@@ -159,9 +162,48 @@ class BiFlexivRizon4RT(Robot):
         # Initialize key tuples
         self._init_keys()
 
-        # External cameras
+        # External cameras — in taccap_follower auto-discover mode, resolve the
+        # per-side wrist camera + GSPS tactile SNs from hardware and inject them
+        # into config.cameras before building. observation_features is a
+        # cached_property accessed later, so it sees the completed cameras dict.
+        if getattr(config, "_taccap_autodiscover", False):
+            self._inject_taccap_cameras()
         self.cameras = make_cameras_from_configs(config.cameras)
         np.set_printoptions(precision=6, suppress=True)
+
+    def _inject_taccap_cameras(self) -> None:
+        """Auto-discover per-side wrist + GSPS tactile devices and add them to
+        config.cameras (keys match the preset-driven wiring so datasets stay
+        compatible). Called only in taccap_follower auto-discover mode."""
+        sides = discover_taccap_sides()
+        for side in ("left", "right"):
+            dev = sides.get(side)
+            if dev is None:
+                raise DeviceNotConnectedError(
+                    f"taccap auto-discover: no {side} gripper/wrist camera found."
+                )
+            self.config.cameras[f"{side}_wrist"] = OpenCVCameraConfig(
+                index_or_path=dev.wrist_camera_name,
+                fourcc="MJPG",
+                width=640,
+                height=480,
+                fps=30,
+                warmup_s=1.0,
+            )
+            if self.config.enable_tactile_sensors:
+                if len(dev.tactile_sns) < 2:
+                    raise DeviceNotConnectedError(
+                        f"taccap auto-discover: expected 2 GSPS tactile sensors for "
+                        f"{side}, found {dev.tactile_sns}."
+                    )
+                for i, sn in enumerate(dev.tactile_sns):
+                    self.config.cameras[f"{side}_tactile_{i}"] = XenseTactileCameraConfig(
+                        serial_number=sn,
+                        fps=30,
+                        output_types=[XenseOutputType.RECTIFY],
+                        warmup_s=0.05,
+                    )
+        self.logger.info(f"taccap auto-discovered cameras: {sorted(self.config.cameras)}")
 
     # =========================================================================
     # Key initialization
