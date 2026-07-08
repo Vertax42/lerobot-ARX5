@@ -25,7 +25,7 @@ from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
 from lerobot.robots.config import RobotConfig
-from lerobot.robots.grippers import SerialGripperConfig
+from lerobot.robots.grippers import SerialGripperConfig, TaccapFollowerGripperConfig
 
 
 @RobotConfig.register_subclass("bi_flexiv_rizon4_rt")
@@ -153,6 +153,12 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     left_rt_cpu_affinity: int = 2
     right_rt_cpu_affinity: int = 3
 
+    # Which gripper driver drives BOTH arms: "serial" (XenseSerialGripper) or
+    # "taccap_follower" (xense.taccap FollowerGripper, left/right auto-resolved by
+    # firmware SN). Grippers are always swapped as a matched pair, so this is a
+    # single switch rather than per-side.
+    gripper_type: str = "serial"
+
     # ========== Left gripper settings (per-arm: enable + serial wiring) ==========
     left_use_gripper: bool = True
     left_gripper_sn: str = "000001"
@@ -172,9 +178,18 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     gripper_f_max: float = 40.0  # N
     gripper_init_open: bool = True
 
+    # ========== TacCap follower control params (used when *_gripper_type == "taccap_follower") ==========
+    taccap_kp: float = 8.0          # MIT impedance stiffness (Nm/rad)
+    taccap_kd: float = 1.0          # MIT impedance damping (Nm·s/rad)
+    taccap_control_hz: int = 200    # ControlLoop resubmit rate
+
     # Auto-created in __post_init__ (do not set directly)
-    left_gripper: SerialGripperConfig | None = field(default=None, init=False)
-    right_gripper: SerialGripperConfig | None = field(default=None, init=False)
+    left_gripper: SerialGripperConfig | TaccapFollowerGripperConfig | None = field(
+        default=None, init=False
+    )
+    right_gripper: SerialGripperConfig | TaccapFollowerGripperConfig | None = field(
+        default=None, init=False
+    )
 
     def __post_init__(self):
         super().__post_init__()
@@ -322,35 +337,15 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 f"home_vel_scale must be between 1 and 100, got {self.home_vel_scale}"
             )
 
-        # Create left gripper config
-        if self.left_use_gripper:
-            self.left_gripper = SerialGripperConfig(
-                sn=self.left_gripper_sn,
-                baudrate=self.left_gripper_baudrate,
-                serial_timeout=self.left_gripper_serial_timeout,
-                gripper_min_pos=self.gripper_min_pos,
-                gripper_max_pos=self.gripper_max_pos,
-                gripper_v_max=self.gripper_v_max,
-                gripper_f_max=self.gripper_f_max,
-                init_open=self.gripper_init_open,
-            )
-        else:
-            self.left_gripper = None
-
-        # Create right gripper config
-        if self.right_use_gripper:
-            self.right_gripper = SerialGripperConfig(
-                sn=self.right_gripper_sn,
-                baudrate=self.right_gripper_baudrate,
-                serial_timeout=self.right_gripper_serial_timeout,
-                gripper_min_pos=self.gripper_min_pos,
-                gripper_max_pos=self.gripper_max_pos,
-                gripper_v_max=self.gripper_v_max,
-                gripper_f_max=self.gripper_f_max,
-                init_open=self.gripper_init_open,
-            )
-        else:
-            self.right_gripper = None
+        # Build per-side gripper configs; both sides use the same gripper_type.
+        self.left_gripper = self._make_gripper_config(
+            self.left_use_gripper, self.left_gripper_sn,
+            self.left_gripper_baudrate, self.left_gripper_serial_timeout, "left",
+        )
+        self.right_gripper = self._make_gripper_config(
+            self.right_use_gripper, self.right_gripper_sn,
+            self.right_gripper_baudrate, self.right_gripper_serial_timeout, "right",
+        )
 
         # Camera configuration based on tactile sensors setting
         self.cameras = {
@@ -409,3 +404,43 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 }
             )
         pass
+
+    def _make_gripper_config(
+        self,
+        use_gripper: bool,
+        sn: str,
+        baudrate: int,
+        serial_timeout: float,
+        side: str,
+    ) -> "SerialGripperConfig | TaccapFollowerGripperConfig | None":
+        """Build the per-side nested gripper config selected by ``self.gripper_type``.
+
+        "serial"          → SerialGripperConfig (XenseSerialGripper over USB-serial).
+        "taccap_follower" → TaccapFollowerGripperConfig (xense.taccap FollowerGripper,
+                            left/right auto-resolved from the firmware-burned SN).
+        """
+        if not use_gripper:
+            return None
+        gripper_type = self.gripper_type
+        if gripper_type == "serial":
+            return SerialGripperConfig(
+                sn=sn,
+                baudrate=baudrate,
+                serial_timeout=serial_timeout,
+                gripper_min_pos=self.gripper_min_pos,
+                gripper_max_pos=self.gripper_max_pos,
+                gripper_v_max=self.gripper_v_max,
+                gripper_f_max=self.gripper_f_max,
+                init_open=self.gripper_init_open,
+            )
+        if gripper_type == "taccap_follower":
+            return TaccapFollowerGripperConfig(
+                side=side,
+                kp=self.taccap_kp,
+                kd=self.taccap_kd,
+                control_hz=self.taccap_control_hz,
+                init_open=self.gripper_init_open,
+            )
+        raise ValueError(
+            f"gripper_type must be 'serial' or 'taccap_follower', got {gripper_type!r}."
+        )
