@@ -115,10 +115,11 @@ lerobot-teleoperate \
 ```bash
 lerobot-teleoperate \
     --robot.type=bi_flexiv_rizon4_rt \
-    --robot.bi_mount_type=forward-06 \
+    --robot.bi_mount_type=forward-dewu \
     --teleop.type=bi_pico4 \
     --fps=30 \
-    --display_data=true
+    --display_data=true \
+    --dryrun=true
 ```
 
 ## Bimanual Elite CS66 RT + Bi-Pico4 teleoperate command
