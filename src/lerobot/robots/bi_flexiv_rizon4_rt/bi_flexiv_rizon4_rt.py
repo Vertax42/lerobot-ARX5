@@ -841,7 +841,15 @@ class BiFlexivRizon4RT(Robot):
         cam_timings: dict[str, float] = {}
         for cam_key, cam in self.cameras.items():
             tc0 = _t()
-            obs_dict[cam_key] = cam.async_read()
+            # Depth-enabled cameras (e.g. the head RealSense) return a time-aligned
+            # (color, depth) pair; expose depth under a "<cam>_depth" key. Other
+            # cameras keep returning color only.
+            if getattr(self.config.cameras[cam_key], "use_depth", False):
+                color, depth = cam.async_read(return_depth=True)
+                obs_dict[cam_key] = color
+                obs_dict[f"{cam_key}_depth"] = depth
+            else:
+                obs_dict[cam_key] = cam.async_read()
             cam_timings[cam_key] = (_t() - tc0) * 1e3
 
         t5 = _t()
