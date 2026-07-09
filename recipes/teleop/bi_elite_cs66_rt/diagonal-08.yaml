@@ -40,10 +40,11 @@ robot:
   # trace (normal ~0.08, refuse ~0.02): raise singularity_w_low toward 0.035 if it still trips; lower
   # singularity_w_high toward 0.04 if it damps legit reach too early. Watch "manipulability w=.. -> s=..".
   singularity_directional: true
-  singularity_w_high: 0.065   # begin damping when w drops below this
-  singularity_w_low: 0.05     # TRUE hold at/below this — ABOVE the highest observed refusal (w=0.047,
-                              # J4-wrapped far reach). Per-tick log confirmed the ramp works; hold was
-                              # just 0.002 too low last time (refused at 0.047 while w_low was 0.045).
+  singularity_w_high: 0.055   # begin damping only just above the hold — narrowed from 0.065 because the
+                              # RIGHT arm's normal table work sits at w~0.045-0.06 and was being damped
+                              # 95% of the time ("not tracking the hand"). At 0.055 its w>0.055 moves run
+                              # free; only w in 0.05-0.055 ramps, w<=0.05 holds.
+  singularity_w_low: 0.05     # TRUE hold at/below this — ABOVE the highest observed refusal (w=0.047).
   singularity_min_scale: 0.0  # 0 = full hold into the singularity (no creep-through); OK because
                               # directional=true still lets any escape / retraction (rising w) run free.
                               # NOTE: refusal-w varies 0.015-0.043 across configs and overlaps normal
