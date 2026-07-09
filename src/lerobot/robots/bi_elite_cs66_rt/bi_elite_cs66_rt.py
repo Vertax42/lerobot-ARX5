@@ -51,8 +51,11 @@ from lerobot.robots.elite_cs66_rt.elite_cs66_rt import (
     _slerp_quaternion_wxyz,
 )
 from lerobot.robots.elite_cs66_rt.manipulability import (
+    SELFCHECK_POS_TOL_M,
+    SELFCHECK_ROT_WARN_DEG,
     damping_scale,
     directional_scale,
+    geometric_jacobian,
     joint_velocity_scale,
     manipulability,
     pose_delta,
@@ -136,6 +139,8 @@ class BiEliteCS66RT(Robot):
         self._dh: dict[str, tuple[list[float], list[float], list[float]] | None] = {s: None for s in _SIDES}
         self._damping_enabled: dict[str, bool] = {s: False for s in _SIDES}
         self._w_log_time: dict[str, float] = {s: 0.0 for s in _SIDES}
+        self._jv_log_time: dict[str, float] = {s: 0.0 for s in _SIDES}  # joint-vel guard log throttle
+        self._servoj_fail_log_time: dict[str, float] = {s: 0.0 for s in _SIDES}  # trip-diag throttle
 
         # Prefixed key tuples (built once).
         self._tcp_pos_keys = {s: tuple(f"{s}_{k}" for k in TCP_POSITION_KEYS) for s in _SIDES}
@@ -715,6 +720,8 @@ class BiEliteCS66RT(Robot):
                         ok = driver.writeServoj(target.tolist(), self.config.command_timeout_ms, True)
                         if not ok:
                             consecutive_failures += 1
+                            if consecutive_failures == 1:
+                                self._log_servoj_failure(side, target)
                             if consecutive_failures > max_consecutive_failures:
                                 raise RuntimeError(
                                     f"Elite writeServoj(cartesian=True) failed "
@@ -999,13 +1006,23 @@ class BiEliteCS66RT(Robot):
             q0 = np.asarray(q0, dtype=np.float64)
             if int(np.sum(np.abs(q0 - q1) >= 0.3)) >= 3:  # well-separated configs
                 t1 = np.asarray(self._rtsi[side].getActualTCPPose(), dtype=np.float64)
-                ok, detail = tool_consistency(dh, q0, t0, q1, t1)
-                if not ok:
+                pos_drift_m, rot_drift_deg = tool_consistency(dh, q0, t0, q1, t1)
+                # Gate on POSITION drift only (validates the DH for the Jacobian); a large ROTATION
+                # drift is a benign about-flange-Z TCP-convention artifact not in det(J) — log, don't
+                # disable. See manipulability.tool_consistency.
+                if pos_drift_m > SELFCHECK_POS_TOL_M:
                     self.logger.warn(
-                        f"[{side}] singularity damping disabled: FK self-check failed ({detail}); "
-                        "DH / convention mismatch."
+                        f"[{side}] singularity damping disabled: FK self-check position drift "
+                        f"{pos_drift_m * 1000:.1f}mm > {SELFCHECK_POS_TOL_M * 1000:.1f}mm "
+                        f"(DH / convention mismatch)."
                     )
                     return
+                if rot_drift_deg > SELFCHECK_ROT_WARN_DEG:
+                    self.logger.info(
+                        f"[{side}] FK self-check: tool-orientation drift {rot_drift_deg:.1f}deg "
+                        f"(about-flange-Z TCP convention; does NOT affect det(J)) — guard enabled on "
+                        f"the position-validated DH (pos drift {pos_drift_m * 1000:.1f}mm)."
+                    )
                 validated = True
 
         self._dh[side] = dh
@@ -1027,11 +1044,94 @@ class BiEliteCS66RT(Robot):
             )
 
     def _maybe_log_w(self, side: str, w: float, s: float) -> None:
+        # Log EVERY tick while damping is active (s < 1) so the fast approach into a singularity is
+        # visible; throttle to 0.5s only when there's nothing happening (s == 1). Otherwise the coarse
+        # throttle hides exactly the 0.2-0.3s window where the guard has to catch the arm.
         now = time.monotonic()
-        if now - self._w_log_time[side] < 0.5:
+        if s >= 1.0 and now - self._w_log_time[side] < 0.5:
             return
         self._w_log_time[side] = now
         self.logger.info(f"[{side}] manipulability w={w:.5f} -> damping scale s={s:.3f}")
+
+    def _maybe_log_jv(self, side: str, q: np.ndarray, s_jv: float, dq: np.ndarray) -> None:
+        """Throttled diagnostic of the predicted joint-velocity guard (log_manipulability only).
+        ``dq`` is the DLS-predicted joint step for the UNSCALED commanded step; peak_qdot is what the
+        controller's IK is expected to demand before scaling, so peak_qdot*s_jv should sit at budget."""
+        now = time.monotonic()
+        if now - self._jv_log_time[side] < 0.5:
+            return
+        self._jv_log_time[side] = now
+        jac = geometric_jacobian(*self._dh[side], q)
+        sigma_min = float(np.linalg.svd(jac, compute_uv=False)[-1])
+        peak_qdot = float(np.max(np.abs(dq))) / max(self.config.joint_vel_horizon_s, 1e-9)
+        self.logger.info(
+            f"[{side}] joint-vel guard: w={abs(float(np.linalg.det(jac))):.5f} sigma_min={sigma_min:.4f} "
+            f"s_jv={s_jv:.3f} peak_pred_qdot={peak_qdot:.1f} rad/s "
+            f"(argmax J{int(np.argmax(np.abs(dq))) + 1})"
+        )
+
+    def _log_servoj_failure(self, side: str, target: np.ndarray) -> None:
+        """One-shot (throttled) diagnostic at the onset of a writeServoj-failure burst, AND a full
+        data point appended to ``~/elite_trip_configs.jsonl`` for offline modelling of the
+        controller's IK-refusal boundary (scalar w does not separate it cleanly — 0.015-0.043 across
+        configs, overlapping normal work). Each record captures the config, the FULL singular
+        spectrum, the weakest Cartesian direction ``u_min``, and the commanded step's alignment with
+        it, so a better predictor than |det(J)| can be fit. qdot_tgt≈0 = IK no-solution/singular
+        rejection; qdot_tgt→30 = the JOINT_IGNORE_SPEED overspeed."""
+        now = time.monotonic()
+        if now - self._servoj_fail_log_time[side] < 1.0:
+            return
+        self._servoj_fail_log_time[side] = now
+        try:
+            rtsi = self._rtsi[side]
+            q = np.asarray(rtsi.getActualJointPositions(), dtype=np.float64)
+            qd_act = np.asarray(rtsi.getActualJointVelocity(), dtype=np.float64)
+            qd_tgt = np.asarray(rtsi.getTargetJointVelocity(), dtype=np.float64)
+        except Exception as exc:
+            self.logger.warn(f"[{side}] writeServoj FAILED (diag read error: {exc}).")
+            return
+
+        rec: dict[str, Any] = {
+            "t": time.time(),
+            "side": side,
+            "target": np.round(target, 5).tolist(),
+            "target_pos_norm": float(np.linalg.norm(target[:3])),
+            "q_rad": np.round(q, 6).tolist(),
+            "q_deg": np.round(np.degrees(q), 2).tolist(),
+            "qdot_act": np.round(qd_act, 3).tolist(),
+            "qdot_tgt": np.round(qd_tgt, 3).tolist(),
+        }
+        if self._dh[side] is not None:
+            jac = geometric_jacobian(*self._dh[side], q)
+            u_mat, sv, _ = np.linalg.svd(jac)
+            u_min = u_mat[:, -1]
+            held = self._last_tcp_command[side]
+            dx = pose_delta(held, target) if held is not None else np.zeros(6)
+            dx_norm = float(np.linalg.norm(dx))
+            rec.update(
+                {
+                    "w": float(abs(np.linalg.det(jac))),
+                    "sigmas": np.round(sv, 6).tolist(),
+                    "sigma_min": float(sv[-1]),
+                    "u_min": np.round(u_min, 4).tolist(),
+                    "dx": np.round(dx, 5).tolist(),
+                    "dx_align_umin": float(abs(u_min @ dx) / (dx_norm + 1e-12)),
+                }
+            )
+        self.logger.warn(
+            f"[{side}] writeServoj FAILED (trip onset): |pos|={rec['target_pos_norm']:.3f}m "
+            f"w={rec.get('w', float('nan')):.5f} sigma_min={rec.get('sigma_min', float('nan')):.4f} "
+            f"dx_align_umin={rec.get('dx_align_umin', float('nan')):.2f} "
+            f"q(deg)={rec['q_deg']} qdot_tgt={rec['qdot_tgt']}"
+        )
+        try:
+            import json
+            import os
+
+            with open(os.path.expanduser("~/elite_trip_configs.jsonl"), "a") as fh:
+                fh.write(json.dumps(rec) + "\n")
+        except Exception as exc:
+            self.logger.warn(f"[{side}] could not append trip record: {exc}")
 
     def _apply_kinematic_scaling(self, side: str, target: np.ndarray, held: np.ndarray) -> np.ndarray:
         """Slow arm ``side``'s command toward ``target`` as its config nears a singularity or as the
@@ -1069,7 +1169,7 @@ class BiEliteCS66RT(Robot):
                 np.asarray(self.config.joint_vel_limits_rad_s, dtype=np.float64)
                 * self.config.joint_vel_limit_margin
             )
-            s_jv, _ = joint_velocity_scale(
+            s_jv, dq_jv = joint_velocity_scale(
                 *self._dh[side],
                 q,
                 pose_delta(held, target),
@@ -1077,6 +1177,8 @@ class BiEliteCS66RT(Robot):
                 qdot_limit,
                 self.config.joint_vel_dls_lambda,
             )
+            if self.config.log_manipulability:
+                self._maybe_log_jv(side, q, s_jv, dq_jv)
             s = min(s, s_jv)
 
         if s < 1.0:

@@ -36,9 +36,19 @@ def _validate_singularity_params(cfg) -> None:
                 "require singularity_w_high > singularity_w_low >= 0, got "
                 f"w_high={cfg.singularity_w_high}, w_low={cfg.singularity_w_low}"
             )
-    if not (0.0 < cfg.singularity_min_scale <= 1.0):
+    # min_scale is the damping floor. A NON-directional guard must keep it > 0 so the operator can
+    # always creep out of a singularity. A directional guard handles escape separately (it returns
+    # s=1 for any move that raises w), so it may use min_scale == 0 for a TRUE hold — the fix for the
+    # observed creep-through, where a 0.05 floor let the arm crawl past the IK-refusal boundary.
+    if cfg.singularity_directional:
+        if not (0.0 <= cfg.singularity_min_scale <= 1.0):
+            raise ValueError(
+                f"singularity_min_scale must be in [0, 1], got {cfg.singularity_min_scale}"
+            )
+    elif not (0.0 < cfg.singularity_min_scale <= 1.0):
         raise ValueError(
-            f"singularity_min_scale must be in (0, 1], got {cfg.singularity_min_scale}"
+            "singularity_min_scale must be in (0, 1] for a non-directional guard (0 would trap the "
+            f"arm; set singularity_directional=true to allow a full hold), got {cfg.singularity_min_scale}"
         )
     if cfg.dh_params is not None:
         if len(cfg.dh_params) != 3 or any(len(v) != 6 for v in cfg.dh_params):
@@ -244,7 +254,11 @@ class EliteCS66RTConfig(RobotConfig):
     joint_vel_limits_rad_s: list[float] | None = None  # per-joint [J1..J6] rad/s; None disables
     joint_vel_limit_margin: float = 0.8  # enforce at this fraction of the limits (headroom, (0, 1])
     joint_vel_horizon_s: float = 0.033  # command horizon for the velocity check (~ 1/teleop fps)
-    joint_vel_dls_lambda: float = 1e-2  # DLS damping of the prediction pseudo-inverse
+    # DLS damping of the PREDICTION pseudo-inverse. Must stay a couple orders below the operating
+    # sigma_min (~4e-3 entering the trip) so the predicted dq tracks the controller's near-exact IK
+    # (~1/sigma_min) instead of capping the spike at 1/(2*lambda); a lambda ~ sigma_min under-predicts
+    # and lets the trip through. 1e-4 verified vs the datasheet limits; do NOT raise toward 1e-2.
+    joint_vel_dls_lambda: float = 1e-4
 
     # Gripper backend dispatch. Mirror the flexiv_rizon4_rt + pylibfranka_research3
     # pattern: a single string selects the driver, the gripper-specific config is

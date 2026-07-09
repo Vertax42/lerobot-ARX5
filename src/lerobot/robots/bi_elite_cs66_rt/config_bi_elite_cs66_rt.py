@@ -306,7 +306,11 @@ class BiEliteCS66RTConfig(RobotConfig):
     joint_vel_limits_rad_s: list[float] | None = None  # per-joint [J1..J6] rad/s; None disables
     joint_vel_limit_margin: float = 0.8  # enforce at this fraction of the limits (headroom, (0, 1])
     joint_vel_horizon_s: float = 0.033  # command horizon for the velocity check (~ 1/teleop fps)
-    joint_vel_dls_lambda: float = 1e-2  # DLS damping of the prediction pseudo-inverse
+    # DLS damping of the PREDICTION pseudo-inverse; keep well below the operating sigma_min so the
+    # predicted dq tracks the controller's near-exact IK spike (~1/sigma_min) instead of capping it.
+    # 1e-2 silently under-predicts near a wrist singularity and lets the trip through — do NOT raise.
+    # See config_elite_cs66_rt.py and manipulability.py.joint_velocity_scale.
+    joint_vel_dls_lambda: float = 1e-4
 
     # ── Shared RTSI state stream ──
     rtsi_frequency: float = 250.0

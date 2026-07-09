@@ -57,6 +57,8 @@ __all__ = [
     "damping_scale",
     "directional_scale",
     "joint_velocity_scale",
+    "SELFCHECK_POS_TOL_M",
+    "SELFCHECK_ROT_WARN_DEG",
 ]
 
 
@@ -136,19 +138,44 @@ def pose_delta(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return np.concatenate([b[:3] - a[:3], rel])
 
 
-def tool_consistency(
-    dh, q0, t0, q1, t1, pos_tol: float = 0.002, rot_tol_deg: float = 1.0
-) -> tuple[bool, str]:
-    """Tool-agnostic FK validation: the flange→TCP transform inferred from FK and the measured
-    TCP must be the SAME rigid transform at two (well-separated) configs. Catches a wrong DH
-    table or builder convention against the live robot. ``dh`` is ``(alpha, a, d)``.
+# FK self-check gate thresholds (shared by both drivers). The POSITION tolerance is the real gate:
+# it validates the DH for the geometric Jacobian, which is all the guard's math depends on. The
+# ROTATION value is only a logging threshold — a large tool-orientation drift is a benign
+# about-flange-Z TCP-convention artifact that does NOT affect det(J) (see tool_consistency).
+SELFCHECK_POS_TOL_M = 0.002  # max inferred-tool position drift across configs to trust the DH (m)
+SELFCHECK_ROT_WARN_DEG = 2.0  # above this, log the (benign) tool-orientation convention drift
+
+
+def tool_consistency(dh, q0, t0, q1, t1) -> tuple[float, float]:
+    """Return ``(position_drift_m, rotation_drift_deg)`` of the inferred flange→TCP tool transform
+    between two well-separated configs. ``dh`` is ``(alpha, a, d)``.
+
+    The tool is one rigid body, so ``inv(flange_FK(q)) @ measured_TCP(q)`` must be the SAME
+    transform at both configs. The two drift components validate DIFFERENT things, and the caller
+    must treat them differently:
+
+    * **Position drift** validates the DH itself — a wrong link length / ``alpha`` / joint sign makes
+      the inferred tool ORIGIN inconsistent across configs. This is the part the singularity guard
+      depends on: the geometric Jacobian (hence ``w = |det(J)|`` and the joint-velocity prediction)
+      is a pure function of the DH's link positions and joint axes, so a position-consistent DH is a
+      valid DH for the guard's math.
+    * **Rotation drift** additionally folds in the TCP-orientation *convention*. On the live CS66 the
+      controller's ``actual_TCP_pose`` carries a config-dependent twist about the flange Z axis
+      (tool-mount / rotvec convention) that leaves the tool ORIGIN exactly consistent (a Z-aligned
+      tool is invariant to Z rotation) yet shows up as a large rotation drift (18–42° observed
+      2026-07-09). A rotation about the flange Z axis changes neither any joint axis ``z_i`` nor the
+      end origin, so it does NOT enter ``det(J)``.
+
+    Therefore the caller gates the guard on ``position_drift_m`` (``SELFCHECK_POS_TOL_M``) and treats
+    ``rotation_drift_deg`` as a logged diagnostic, NOT a disable. See
+    ``EliteCS66RT._setup_singularity_damping``.
     """
     tool0 = np.linalg.inv(flange_se3(*dh, q0)) @ pose6_to_se3(t0)
     tool1 = np.linalg.inv(flange_se3(*dh, q1)) @ pose6_to_se3(t1)
-    dpos = float(np.linalg.norm(tool0[:3, 3] - tool1[:3, 3]))
+    pos_drift_m = float(np.linalg.norm(tool0[:3, 3] - tool1[:3, 3]))
     d_rot = tool0[:3, :3].T @ tool1[:3, :3]
-    ang = float(np.degrees(np.linalg.norm(Rotation.from_matrix(d_rot).as_rotvec())))
-    return (dpos <= pos_tol and ang <= rot_tol_deg), f"tool drift pos={dpos * 1000:.1f}mm rot={ang:.2f}deg"
+    rot_drift_deg = float(np.degrees(np.linalg.norm(Rotation.from_matrix(d_rot).as_rotvec())))
+    return pos_drift_m, rot_drift_deg
 
 
 def geometric_jacobian(dh_alpha, dh_a, dh_d, q) -> np.ndarray:
@@ -240,7 +267,7 @@ def joint_velocity_scale(
     dx: np.ndarray,
     dt: float,
     qdot_limit: np.ndarray,
-    lam: float = 1e-2,
+    lam: float = 1e-4,
 ) -> tuple[float, np.ndarray]:
     """Uniform Cartesian-step scale keeping the *predicted* joint step under per-joint velocity limits.
 
@@ -267,9 +294,20 @@ def joint_velocity_scale(
     limit-exceeding command through; a fully-held offending direction is the correct, safe outcome
     and escape stays possible because escape directions are not scaled.
 
-    ``lam`` damps the pseudo-inverse so it stays finite at the singularity. ``qdot_limit`` is the
-    per-joint velocity ceiling (rad/s, length-6) already scaled by any headroom margin. A zero
-    ``dx`` (no motion) yields ``dq = 0`` and ``s = 1``.
+    ``lam`` is a **predictor-fidelity** knob, NOT a robustness smoother, and this distinction is
+    load-bearing. This ``dq`` must model what the *controller's* internal IK will actually command
+    (which is near-exact / lightly-damped and spikes as ``1/sigma_min`` near a singularity), so that
+    we hold BEFORE the controller trips. The DLS gain on a singular direction is
+    ``sigma / (sigma^2 + lam^2)``, which tracks the exact ``1/sigma`` only while ``lam << sigma`` and
+    otherwise CAPS the predicted velocity at ``1/(2 lam)`` — i.e. a ``lam`` on the order of the
+    operating ``sigma_min`` (~1e-2) silently *under*-predicts the very spike we must catch (verified:
+    with ``lam=1e-2`` the guard-approved step still drove the true joint velocity to >7x its budget at
+    a wrist singularity). Keep ``lam`` a couple orders of magnitude below the smallest ``sigma`` you
+    care to protect (default 1e-4 vs the ~4e-3 ``sigma_min`` seen entering the trip); it only needs to
+    stay large enough to keep the solve finite. At the *exact* singularity the DLS gain of that
+    direction is 0, so ``dq -> 0`` and ``s = 1`` — harmless, since the unreachable direction also
+    carries no motion. ``qdot_limit`` is the per-joint velocity ceiling (rad/s, length-6) already
+    scaled by any headroom margin. A zero ``dx`` (no motion) yields ``dq = 0`` and ``s = 1``.
     """
     jac = geometric_jacobian(dh_alpha, dh_a, dh_d, q)
     dx = np.asarray(dx, dtype=np.float64)

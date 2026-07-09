@@ -27,6 +27,8 @@ from lerobot.robots.elite_cs66_rt.config_elite_cs66_rt import (
     EliteCS66RTControlMode,
 )
 from lerobot.robots.elite_cs66_rt.manipulability import (
+    SELFCHECK_POS_TOL_M,
+    SELFCHECK_ROT_WARN_DEG,
     damping_scale,
     directional_scale,
     joint_velocity_scale,
@@ -882,13 +884,24 @@ class EliteCS66RT(Robot):
             q0 = np.asarray(q0, dtype=np.float64)
             if int(np.sum(np.abs(q0 - q1) >= 0.3)) >= 3:  # well-separated configs
                 t1 = np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64)
-                ok, detail = tool_consistency(dh, q0, t0, q1, t1)
-                if not ok:
+                pos_drift_m, rot_drift_deg = tool_consistency(dh, q0, t0, q1, t1)
+                # Gate on POSITION drift only: it validates the DH for the geometric Jacobian, which
+                # is all w / the joint-velocity prediction depend on. A large ROTATION drift is a
+                # benign about-flange-Z TCP-convention artifact that does not enter det(J) — log it,
+                # don't disable. See manipulability.tool_consistency.
+                if pos_drift_m > SELFCHECK_POS_TOL_M:
                     self.logger.warn(
-                        f"Singularity damping disabled: FK self-check failed ({detail}); DH / "
-                        "convention mismatch."
+                        f"Singularity damping disabled: FK self-check position drift "
+                        f"{pos_drift_m * 1000:.1f}mm > {SELFCHECK_POS_TOL_M * 1000:.1f}mm "
+                        f"(DH / convention mismatch)."
                     )
                     return
+                if rot_drift_deg > SELFCHECK_ROT_WARN_DEG:
+                    self.logger.info(
+                        f"FK self-check: tool-orientation drift {rot_drift_deg:.1f}deg (about-flange-Z "
+                        f"TCP convention; does NOT affect det(J)) — guard enabled on the "
+                        f"position-validated DH (pos drift {pos_drift_m * 1000:.1f}mm)."
+                    )
                 validated = True
 
         self._dh = dh
