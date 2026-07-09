@@ -56,6 +56,7 @@ __all__ = [
     "manipulability",
     "damping_scale",
     "directional_scale",
+    "joint_velocity_scale",
 ]
 
 
@@ -229,3 +230,56 @@ def directional_scale(
         if w2 >= w:
             return 1.0, w
     return s, w
+
+
+def joint_velocity_scale(
+    dh_alpha,
+    dh_a,
+    dh_d,
+    q,
+    dx: np.ndarray,
+    dt: float,
+    qdot_limit: np.ndarray,
+    lam: float = 1e-2,
+) -> tuple[float, np.ndarray]:
+    """Uniform Cartesian-step scale keeping the *predicted* joint step under per-joint velocity limits.
+
+    Predicts the joint step for the desired Cartesian step ``dx`` (6-vec: linear + angular, in the
+    arm base frame) via the damped-least-squares pseudo-inverse of the geometric Jacobian::
+
+        dq = J^T (J J^T + lam^2 I)^-1 dx
+
+    and returns ``(s, dq)`` with ``s`` in ``(0, 1]`` such that scaling ``dx`` by ``s`` keeps every
+    joint under its per-tick budget::
+
+        ratio = max_i |dq_i| / (qdot_limit_i * dt)
+        s     = 1 / ratio   if ratio > 1   else   1.0
+
+    Scaling the whole Cartesian step by one scalar preserves the *direction* of end-effector motion
+    (the MoveIt Servo joint-limit principle) rather than distorting it by clamping joints
+    independently. This is the host-side analogue of the Elite controller's per-joint
+    ``JOINT_IGNORE_SPEED`` check: it slows/holds a command *before* the controller's internal IK
+    spikes joint velocity past that bound and drops external control.
+
+    The guard is **naturally directional**: near a singularity a step that drives *into* the
+    singular set demands a huge ``dq`` -> small ``s`` (held), while an escaping step demands a
+    moderate ``dq`` -> ``s ≈ 1`` (allowed). No ``s_min`` floor is applied — a floor would let a
+    limit-exceeding command through; a fully-held offending direction is the correct, safe outcome
+    and escape stays possible because escape directions are not scaled.
+
+    ``lam`` damps the pseudo-inverse so it stays finite at the singularity. ``qdot_limit`` is the
+    per-joint velocity ceiling (rad/s, length-6) already scaled by any headroom margin. A zero
+    ``dx`` (no motion) yields ``dq = 0`` and ``s = 1``.
+    """
+    jac = geometric_jacobian(dh_alpha, dh_a, dh_d, q)
+    dx = np.asarray(dx, dtype=np.float64)
+    jjt = jac @ jac.T
+    dq = jac.T @ np.linalg.solve(jjt + (lam * lam) * np.eye(6), dx)
+    qdot_limit = np.asarray(qdot_limit, dtype=np.float64)
+    budget = qdot_limit * dt
+    # Guard against a non-positive budget (bad config) — treat as no scaling rather than div-by-zero.
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratios = np.where(budget > 0.0, np.abs(dq) / budget, 0.0)
+    ratio = float(np.max(ratios)) if ratios.size else 0.0
+    s = 1.0 / ratio if ratio > 1.0 else 1.0
+    return s, dq

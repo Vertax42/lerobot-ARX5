@@ -29,6 +29,7 @@ from lerobot.robots.elite_cs66_rt.manipulability import (
     damping_scale,
     directional_scale,
     geometric_jacobian,
+    joint_velocity_scale,
     manipulability,
 )
 
@@ -155,3 +156,69 @@ def test_directional_scale_does_not_damp_escape():
     dx_into = -dx_escape
     s2, _ = directional_scale(UR5_ALPHA, UR5_A, UR5_D, q, dx_into, w_low=0.0, w_high=0.05, s_min=0.05)
     assert s2 < 1.0
+
+
+# Official CS66 datasheet per-joint velocity ceiling (rad/s): J1/J2 150°/s, J3 180°/s, J4-6 230°/s,
+# pre-scaled by an 0.8 headroom margin (as the driver does before calling joint_velocity_scale).
+QDOT_LIMIT = np.array([2.618, 2.618, 3.142, 4.014, 4.014, 4.014]) * 0.8
+DT = 0.033  # ~ 1/teleop_fps command horizon
+
+
+def test_joint_velocity_scale_no_scaling_when_within_limits():
+    # A tiny Cartesian step at a well-conditioned pose stays under the per-joint budget -> s == 1.
+    dx = np.array([0.001, 0.0, 0.0, 0.001, 0.0, 0.0])
+    s, dq = joint_velocity_scale(UR5_ALPHA, UR5_A, UR5_D, GENERIC_Q, dx, DT, QDOT_LIMIT)
+    assert s == 1.0
+    assert np.max(np.abs(dq) / (QDOT_LIMIT * DT)) < 1.0
+
+
+def test_joint_velocity_scale_zero_step():
+    # No commanded motion -> no joint motion, no scaling.
+    s, dq = joint_velocity_scale(UR5_ALPHA, UR5_A, UR5_D, GENERIC_Q, np.zeros(6), DT, QDOT_LIMIT)
+    assert s == 1.0
+    assert np.allclose(dq, 0.0)
+
+
+def test_joint_velocity_scale_enforces_limit_near_wrist_singularity():
+    # Near the wrist singularity, a twist along the least-controllable direction demands a huge
+    # joint step; the guard must scale it down so no joint exceeds its per-tick budget.
+    q = GENERIC_Q.copy()
+    q[4] = 0.01
+    jac = geometric_jacobian(UR5_ALPHA, UR5_A, UR5_D, q)
+    u, _, _ = np.linalg.svd(jac)
+    dx = u[:, -1] * 0.05  # least-controllable Cartesian direction
+    s, dq = joint_velocity_scale(UR5_ALPHA, UR5_A, UR5_D, q, dx, DT, QDOT_LIMIT)
+    assert 0.0 < s < 1.0
+    # After uniform scaling the worst joint sits exactly at its budget (s = 1/ratio).
+    scaled_ratio = np.max(np.abs(dq * s) / (QDOT_LIMIT * DT))
+    assert scaled_ratio == pytest.approx(1.0)
+
+
+def test_joint_velocity_scale_uniform_scaling_preserves_direction():
+    # Scaling is a single scalar on the Cartesian step, so re-running on the scaled step yields the
+    # same joint-space direction with magnitude * s (linearity), and that scaled step is in-budget.
+    q = GENERIC_Q.copy()
+    q[4] = 0.01
+    jac = geometric_jacobian(UR5_ALPHA, UR5_A, UR5_D, q)
+    u, _, _ = np.linalg.svd(jac)
+    dx = u[:, -1] * 0.05
+    s, dq = joint_velocity_scale(UR5_ALPHA, UR5_A, UR5_D, q, dx, DT, QDOT_LIMIT)
+    assert 0.0 < s < 1.0
+    s2, dq_scaled = joint_velocity_scale(UR5_ALPHA, UR5_A, UR5_D, q, dx * s, DT, QDOT_LIMIT)
+    assert s2 == pytest.approx(1.0)  # the scaled step is exactly within budget
+    assert np.allclose(dq_scaled, dq * s, atol=1e-9)  # direction preserved
+
+
+def test_joint_velocity_scale_is_directional_near_singularity():
+    # For equal Cartesian magnitude, a step into the least-controllable direction is scaled far more
+    # than one along the most-controllable direction (which stays unrestricted). This is what lets
+    # the operator escape a singularity while the tripping direction is held.
+    q = GENERIC_Q.copy()
+    q[4] = 0.01
+    jac = geometric_jacobian(UR5_ALPHA, UR5_A, UR5_D, q)
+    u, _, _ = np.linalg.svd(jac)
+    mag = 0.02
+    s_into, _ = joint_velocity_scale(UR5_ALPHA, UR5_A, UR5_D, q, u[:, -1] * mag, DT, QDOT_LIMIT)
+    s_easy, _ = joint_velocity_scale(UR5_ALPHA, UR5_A, UR5_D, q, u[:, 0] * mag, DT, QDOT_LIMIT)
+    assert s_into < s_easy
+    assert s_easy == pytest.approx(1.0)

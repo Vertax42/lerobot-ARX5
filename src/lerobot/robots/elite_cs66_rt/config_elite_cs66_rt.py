@@ -45,6 +45,20 @@ def _validate_singularity_params(cfg) -> None:
             raise ValueError("dh_params must be a 3-tuple (alpha, a, d) of length-6 lists")
     if cfg.primary_timeout_ms < 5:
         raise ValueError(f"primary_timeout_ms must be >= 5, got {cfg.primary_timeout_ms}")
+    if cfg.joint_vel_limits_rad_s is not None:
+        if len(cfg.joint_vel_limits_rad_s) != 6 or any(v <= 0 for v in cfg.joint_vel_limits_rad_s):
+            raise ValueError(
+                "joint_vel_limits_rad_s must be a length-6 list of positive per-joint velocity "
+                f"limits (rad/s), got {cfg.joint_vel_limits_rad_s}"
+            )
+    if not (0.0 < cfg.joint_vel_limit_margin <= 1.0):
+        raise ValueError(
+            f"joint_vel_limit_margin must be in (0, 1], got {cfg.joint_vel_limit_margin}"
+        )
+    if cfg.joint_vel_horizon_s <= 0:
+        raise ValueError(f"joint_vel_horizon_s must be > 0, got {cfg.joint_vel_horizon_s}")
+    if cfg.joint_vel_dls_lambda <= 0:
+        raise ValueError(f"joint_vel_dls_lambda must be > 0, got {cfg.joint_vel_dls_lambda}")
 
 
 @RobotConfig.register_subclass("elite_cs66_rt")
@@ -179,10 +193,17 @@ class EliteCS66RTConfig(RobotConfig):
     # which a commanded TCP target is treated as unreachable: the driver then HOLDS
     # the last in-reach pose instead of sending it, so the operator can't drive the
     # arm into the boundary singularity where the controller's IK fails and drops
-    # external control. Conservative spherical guard (real reach ~0.91 m for CS66);
-    # raise toward ~0.88 if it clips legitimate forward reach, or set None to
-    # disable. Applies to both the background and direct servo paths.
-    max_reach_radius: float | None = 0.85  # m; None disables the guard
+    # external control. Conservative spherical guard from the base ORIGIN (not an
+    # exact reachability test — the true workspace is offset to the shoulder, so it
+    # can read too tight in some directions). Real reach ~0.91 m for CS66.
+    #
+    # DISABLED by default (None) per operator request 2026-07-03: 0.85 m was clipping
+    # legitimate reach and holding the arm mid-teleop. Trade-off to be aware of: with
+    # the guard off, over-reaching no longer HOLDS gracefully — the command is sent,
+    # the controller hits the boundary singularity, and external control DROPS. Set a
+    # value (e.g. 0.88-0.90, below the ~0.91 physical reach) to re-enable if that
+    # dropout becomes a problem. Applies to both the background and direct servo paths.
+    max_reach_radius: float | None = None  # m; None disables the guard
 
     # Singularity-aware manipulability damping (model-based). Detects proximity to ANY
     # kinematic singularity (wrist q5≈0, shoulder, elbow/boundary) from the arm's Modified-DH
@@ -206,6 +227,24 @@ class EliteCS66RTConfig(RobotConfig):
     dh_params: tuple[list[float], list[float], list[float]] | None = None
     log_manipulability: bool = False  # throttled debug log of w for live threshold tuning
     primary_timeout_ms: int = 1000  # one-shot DH (KinematicsInfo) fetch timeout at connect
+
+    # Predicted joint-velocity limit scaling (model-based, MoveIt-Servo style). Complements the
+    # w-band damping above and shares the same DH (fetched at connect; the guard self-disables on
+    # any DH fetch / self-check failure, exactly like the damping). Before a Cartesian target is
+    # sent, the DLS pseudo-inverse of the geometric Jacobian predicts the joint step dq for the
+    # commanded step; if any |dq_i| would exceed joint_vel_limits_rad_s[i] * joint_vel_limit_margin
+    # over joint_vel_horizon_s, the whole Cartesian step is scaled down uniformly (preserving EE
+    # direction). This bounds joint velocity BEFORE the controller's internal IK spikes it past
+    # JOINT_IGNORE_SPEED (30 rad/s) and drops external control — the fix for wrist-singularity
+    # rotation trips, where a small TCP rotation maps to a huge joint velocity. It is naturally
+    # directional (holds moves into a singularity, allows escape) and needs only DH + datasheet
+    # joint limits — no live w-band tuning. OFF by default (limits None). Official CS66 datasheet
+    # rates (Elite CS-Series): J1/J2 150°/s, J3 180°/s, J4-6 230°/s
+    # -> [2.618, 2.618, 3.142, 4.014, 4.014, 4.014] rad/s.
+    joint_vel_limits_rad_s: list[float] | None = None  # per-joint [J1..J6] rad/s; None disables
+    joint_vel_limit_margin: float = 0.8  # enforce at this fraction of the limits (headroom, (0, 1])
+    joint_vel_horizon_s: float = 0.033  # command horizon for the velocity check (~ 1/teleop fps)
+    joint_vel_dls_lambda: float = 1e-2  # DLS damping of the prediction pseudo-inverse
 
     # Gripper backend dispatch. Mirror the flexiv_rizon4_rt + pylibfranka_research3
     # pattern: a single string selects the driver, the gripper-specific config is
