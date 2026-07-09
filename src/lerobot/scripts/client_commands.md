@@ -22,7 +22,7 @@ copy-pasting a long command from this file. Both `lerobot-teleoperate` and
 
 ```bash
 # Teleoperate from a saved recipe
-lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal.yaml
+lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-08.yaml
 
 # Record from a saved recipe
 lerobot-record --config_path=recipes/record/bi_elite_cs66_rt/test.yaml

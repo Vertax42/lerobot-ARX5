@@ -1,5 +1,6 @@
-# Teleop recipe — bimanual Elite CS66 RT (diagonal mount) + Bi-Pico4.
-#   lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal.yaml
+# Teleop recipe — bimanual Elite CS66 RT (diagonal mount, station 08) + Bi-Pico4.
+# One recipe per physical station; this one targets the diagonal-08 station (.8.53/.223).
+#   lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-08.yaml
 #
 # Only the frequently-changed knobs are listed; everything else uses the dataclass
 # default. Station hardware comes from the bi_mount_type preset and is not settable
