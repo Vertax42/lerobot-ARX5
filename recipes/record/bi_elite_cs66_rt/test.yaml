@@ -33,6 +33,13 @@ robot:
   max_lin_speed: 0.25 # m/s
   max_ang_speed: 1.0  # rad/s (matches the Bi-Pico4 max_rot_velocity default)
 
+  # NOTE: max_reach_radius intentionally left OFF (config default None). The 2026-07-09
+  # trip was NOT a reach-boundary problem — the flange was at 0.82 m (well inside the
+  # ~0.91 m reach) in a near-singular direction (w=0.051), and a base-origin sphere is
+  # the wrong model anyway (the ~194mm tool makes TCP-distance a poor reach proxy). The
+  # real fix is the model-based joint-vel guard, which is now enabled once the FK
+  # self-check passes on position (see the singularity_* / joint_vel_* handling).
+
 teleop:
   type: bi_pico4
   pos_sensitivity: 1.0
