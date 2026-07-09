@@ -6,7 +6,7 @@ path — both CLIs accept `--config_path` (they share the same draccus parser).
 
 ```bash
 # Teleoperate
-lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal.yaml
+lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-08.yaml
 
 # Record
 lerobot-record --config_path=recipes/record/bi_elite_cs66_rt/test.yaml
@@ -19,7 +19,7 @@ one-off tweaks:
 lerobot-record --config_path=recipes/record/bi_elite_cs66_rt/test.yaml \
     --dataset.num_episodes=1 --resume=true
 
-lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal.yaml --dryrun=true
+lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-08.yaml --dryrun=true
 ```
 
 ## Layout
@@ -35,7 +35,7 @@ recipes/
 ```
 recipes/
   teleop/
-    bi_elite_cs66_rt/diagonal.yaml
+    bi_elite_cs66_rt/diagonal-08.yaml   # one recipe per physical station
     bi_flexiv_rizon4_rt/forward.yaml
   record/
     bi_elite_cs66_rt/test.yaml
@@ -78,8 +78,9 @@ that selects the robot / teleop class. Enums use their string value
 
 ## Naming convention
 
-- `teleop/<robot_type>/<variant>.yaml` — variant = mount/station, e.g.
-  `diagonal.yaml`, `forward.yaml`.
+- `teleop/<robot_type>/<variant>.yaml` — one recipe **per physical station**;
+  variant = mount + station number, matching the `bi_mount_type` preset, e.g.
+  `diagonal-08.yaml`, `forward-05.yaml`.
 - `record/<robot_type>/<task>.yaml` — one per dataset/campaign, e.g.
   `assemble_box.yaml`. Keep a `test.yaml` smoke-test per robot (2 short
   episodes, `push_to_hub: false`).
