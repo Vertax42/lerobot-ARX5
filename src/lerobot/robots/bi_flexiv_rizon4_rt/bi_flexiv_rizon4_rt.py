@@ -906,7 +906,7 @@ class BiFlexivRizon4RT(Robot):
             # (color, depth) pair; expose depth under a "<cam>_depth" key. Other
             # cameras keep returning color only.
             if getattr(self.config.cameras[cam_key], "use_depth", False):
-                color, depth = cam.async_read()
+                color, depth = cam.async_read(return_depth=True)
                 obs_dict[cam_key] = color
                 obs_dict[f"{cam_key}_depth"] = depth
             else:
