@@ -276,9 +276,14 @@ class BiEliteCS66RTConfig(RobotConfig):
     # operator from driving an arm into the boundary singularity where the
     # controller's IK fails and external control drops (the observed
     # "writeServoj failed 251 ticks in a row" crash). Conservative spherical guard
-    # (real reach ~0.91 m for CS66); raise toward ~0.88 if it clips legitimate
-    # reach, or set None to disable. See config_elite_cs66_rt.py for rationale.
-    max_reach_radius: float | None = 0.85  # m; None disables the guard
+    # from the base ORIGIN (real reach ~0.91 m for CS66); can read too tight in
+    # some directions since the true workspace is offset to the shoulder.
+    #
+    # DISABLED by default (None) per operator request 2026-07-03: 0.85 m clipped
+    # legitimate reach and held the (right) arm mid-teleop. Trade-off: with it off,
+    # over-reaching DROPS external control at the boundary instead of holding. Set
+    # 0.88-0.90 to re-enable. See config_elite_cs66_rt.py for rationale.
+    max_reach_radius: float | None = None  # m; None disables the guard
 
     # Singularity-aware manipulability damping (per arm). OFF by default (w_high=None); the
     # per-arm Modified-DH is read from each controller at connect and damping disables itself
@@ -290,6 +295,18 @@ class BiEliteCS66RTConfig(RobotConfig):
     dh_params: tuple[list[float], list[float], list[float]] | None = None  # (alpha, a, d) override
     log_manipulability: bool = False  # throttled debug log of w for live threshold tuning
     primary_timeout_ms: int = 1000  # one-shot DH (KinematicsInfo) fetch timeout at connect
+
+    # Predicted joint-velocity limit scaling (per arm; single shared value). Bounds the predicted
+    # joint step BEFORE the controller's internal IK spikes joint velocity past JOINT_IGNORE_SPEED
+    # (30 rad/s) and drops external control — the fix for wrist-singularity rotation trips. Naturally
+    # directional; needs only DH (fetched at connect) + datasheet joint limits, no live w-tuning.
+    # OFF by default. See config_elite_cs66_rt.py and manipulability.py.joint_velocity_scale.
+    # Official CS66 datasheet rates (J1/J2 150°/s, J3 180°/s, J4-6 230°/s)
+    # -> [2.618, 2.618, 3.142, 4.014, 4.014, 4.014] rad/s.
+    joint_vel_limits_rad_s: list[float] | None = None  # per-joint [J1..J6] rad/s; None disables
+    joint_vel_limit_margin: float = 0.8  # enforce at this fraction of the limits (headroom, (0, 1])
+    joint_vel_horizon_s: float = 0.033  # command horizon for the velocity check (~ 1/teleop fps)
+    joint_vel_dls_lambda: float = 1e-2  # DLS damping of the prediction pseudo-inverse
 
     # ── Shared RTSI state stream ──
     rtsi_frequency: float = 250.0

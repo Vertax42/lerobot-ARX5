@@ -29,6 +29,7 @@ from lerobot.robots.elite_cs66_rt.config_elite_cs66_rt import (
 from lerobot.robots.elite_cs66_rt.manipulability import (
     damping_scale,
     directional_scale,
+    joint_velocity_scale,
     manipulability,
     pose_delta,
     tool_consistency,
@@ -472,7 +473,10 @@ class EliteCS66RT(Robot):
         # inferred flange->TCP tool transform can be cross-checked for consistency.
         premove_sample = None
         if (
-            self.config.singularity_w_high is not None
+            (
+                self.config.singularity_w_high is not None
+                or self.config.joint_vel_limits_rad_s is not None
+            )
             and self.config.control_mode == EliteCS66RTControlMode.CARTESIAN_SERVO
         ):
             try:
@@ -510,7 +514,10 @@ class EliteCS66RT(Robot):
             self._last_action_time = time.monotonic()
             if self.config.use_background_servo_loop:
                 self._start_servo_loop()
-            if self.config.singularity_w_high is not None:
+            if (
+                self.config.singularity_w_high is not None
+                or self.config.joint_vel_limits_rad_s is not None
+            ):
                 self._setup_singularity_damping(premove_sample)
 
     def _cleanup_after_failed_connect(self) -> None:
@@ -886,12 +893,20 @@ class EliteCS66RT(Robot):
 
         self._dh = dh
         self._damping_enabled = True
+        guards = []
+        if self.config.singularity_w_high is not None:
+            guards.append("w-damping")
+        if self.config.joint_vel_limits_rad_s is not None:
+            guards.append("joint-vel-limit")
+        guard_str = "+".join(guards)
         if validated:
-            self.logger.info(f"Singularity damping enabled (FK validated; start w={w1:.4f}).")
+            self.logger.info(
+                f"Kinematic scaling enabled [{guard_str}] (FK validated; start w={w1:.4f})."
+            )
         else:
             self.logger.info(
-                f"Singularity damping enabled (FK unvalidated by motion — relying on w-sanity; "
-                f"start w={w1:.4f}). Connect with go_to_start=True for the full self-check."
+                f"Kinematic scaling enabled [{guard_str}] (FK unvalidated by motion — relying on "
+                f"w-sanity; start w={w1:.4f}). Connect with go_to_start=True for the full self-check."
             )
 
     def _maybe_log_w(self, w: float, s: float) -> None:
@@ -901,29 +916,55 @@ class EliteCS66RT(Robot):
         self._w_log_time = now
         self.logger.info(f"manipulability w={w:.5f} -> damping scale s={s:.3f}")
 
-    def _apply_singularity_damping(self, target: np.ndarray, held: np.ndarray) -> np.ndarray:
-        """Slow the command toward ``target`` as the current config nears a singularity."""
+    def _apply_kinematic_scaling(self, target: np.ndarray, held: np.ndarray) -> np.ndarray:
+        """Slow the command toward ``target`` as the current config nears a singularity or as the
+        predicted joint step approaches the per-joint velocity limits.
+
+        Combines two independent, opt-in model-based guards (each gated on its own config, both
+        sharing the validated DH). The final scale is the min of whichever are active, applied via
+        the same ``held -> target`` interpolation, so it composes with the reach guard downstream (a
+        smaller step is only ever more in-reach)."""
         assert self._dh is not None and self._rtsi is not None
         q = np.asarray(self._rtsi.getActualJointPositions(), dtype=np.float64)
-        if self.config.singularity_directional:
-            s, w = directional_scale(
+        s = 1.0
+
+        if self.config.singularity_w_high is not None:
+            if self.config.singularity_directional:
+                s_sing, w = directional_scale(
+                    *self._dh,
+                    q,
+                    pose_delta(held, target),
+                    self.config.singularity_w_low,
+                    self.config.singularity_w_high,
+                    self.config.singularity_min_scale,
+                )
+            else:
+                w = manipulability(*self._dh, q)
+                s_sing = damping_scale(
+                    w,
+                    self.config.singularity_w_low,
+                    self.config.singularity_w_high,
+                    self.config.singularity_min_scale,
+                )
+            if self.config.log_manipulability:
+                self._maybe_log_w(w, s_sing)
+            s = min(s, s_sing)
+
+        if self.config.joint_vel_limits_rad_s is not None:
+            qdot_limit = (
+                np.asarray(self.config.joint_vel_limits_rad_s, dtype=np.float64)
+                * self.config.joint_vel_limit_margin
+            )
+            s_jv, _ = joint_velocity_scale(
                 *self._dh,
                 q,
                 pose_delta(held, target),
-                self.config.singularity_w_low,
-                self.config.singularity_w_high,
-                self.config.singularity_min_scale,
+                self.config.joint_vel_horizon_s,
+                qdot_limit,
+                self.config.joint_vel_dls_lambda,
             )
-        else:
-            w = manipulability(*self._dh, q)
-            s = damping_scale(
-                w,
-                self.config.singularity_w_low,
-                self.config.singularity_w_high,
-                self.config.singularity_min_scale,
-            )
-        if self.config.log_manipulability:
-            self._maybe_log_w(w, s)
+            s = min(s, s_jv)
+
         if s < 1.0:
             return self._interpolate_tcp_pose(held, target, s)
         return target
@@ -975,11 +1016,12 @@ class EliteCS66RT(Robot):
             target_principal = _quaternion_to_rotvec(rotation_6d_to_quaternion(r6d))
             target[3:6] = _rotvec_continuity_shift(target_principal, target[3:6])
 
-        # Singularity damping pulls the target toward `held` (last commanded) when the current
-        # config nears a singularity. Runs BEFORE the reach guard: the damped target is closer
-        # to `held`, so it can only be more in-reach, preserving the reach guard's invariant.
+        # Kinematic scaling (singularity damping and/or predicted joint-velocity limit) pulls the
+        # target toward `held` (last commanded) as the current config nears a singularity or the
+        # predicted joint step nears the velocity limits. Runs BEFORE the reach guard: the scaled
+        # target is closer to `held`, so it can only be more in-reach, preserving the invariant.
         if self._damping_enabled:
-            target = self._apply_singularity_damping(target, held)
+            target = self._apply_kinematic_scaling(target, held)
 
         if _reach_exceeded(target, self.config.max_reach_radius) is not None:
             self._warn_reach_exceeded(target)
