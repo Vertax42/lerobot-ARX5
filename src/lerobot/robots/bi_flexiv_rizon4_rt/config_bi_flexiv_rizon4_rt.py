@@ -88,6 +88,9 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     # Camera configurations (external cameras)
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
     enable_tactile_sensors: bool = True
+    # Head RealSense depth stream. Reserved but OFF by default: get_observation only
+    # pulls (color, depth) when this is True; otherwise the head camera is color-only.
+    head_camera_use_depth: bool = False
 
     # Cartesian impedance (shared for both arms)
     stiffness_ratio: float = 0.2
@@ -378,7 +381,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 width=640,
                 height=480,
                 warmup_s=1.0 if self.enable_tactile_sensors else 0.05,
-                use_depth=True,
+                use_depth=self.head_camera_use_depth,
             ),
         }
 
