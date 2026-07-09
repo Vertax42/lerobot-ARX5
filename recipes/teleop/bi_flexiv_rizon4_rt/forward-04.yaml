@@ -1,0 +1,35 @@
+# Teleop recipe — bimanual Flexiv Rizon4 RT (forward mount, station 04) + Bi-Pico4,
+# with TacCap follower grippers (bi_taccap).
+#   lerobot-teleoperate --config_path=recipes/teleop/bi_flexiv_rizon4_rt/forward-04.yaml
+#
+# One recipe per physical station; this one targets the forward-04 station. Only the
+# frequently-changed knobs are listed; everything else uses the dataclass default.
+# Station hardware (arm/gripper SNs, cameras, home/start poses) comes from the
+# bi_mount_type=forward-04 preset and is not settable here.
+
+robot:
+  type: bi_flexiv_rizon4_rt
+  bi_mount_type: forward-04
+  # Both grippers -> xense.taccap FollowerGripper (matched pair, single switch). Wrist +
+  # GSPS tactile SNs are auto-discovered at connect (taccap_discovery), so the preset's
+  # XC*/OG* SNs are ignored in this mode.
+  gripper_type: taccap_follower
+  use_force: false
+  log_level: INFO
+  left_use_gripper: true
+  right_use_gripper: true
+  enable_tactile_sensors: true
+  # TacCap follower control (defaults; tune if the grip is too soft/stiff):
+  taccap_kp: 8.0          # MIT impedance stiffness (Nm/rad)
+  taccap_kd: 1.0          # MIT impedance damping (Nm·s/rad)
+  taccap_control_hz: 200  # ControlLoop resubmit rate
+  taccap_auto_discover_cameras: true
+
+teleop:
+  type: bi_pico4
+  pos_sensitivity: 1.0
+  ori_sensitivity: 1.0
+
+# ── Teleoperate loop (top level) ──
+fps: 30
+display_data: true
