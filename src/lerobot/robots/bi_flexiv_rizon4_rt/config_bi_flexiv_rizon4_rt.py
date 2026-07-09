@@ -189,6 +189,10 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     # and GSPS tactile sensor SNs (via TacCap + USB topology) at robot connect time
     # instead of using the preset's XC*/OG* SNs. See taccap_discovery.py.
     taccap_auto_discover_cameras: bool = True
+    # Refuse to connect a taccap_follower gripper that reports an uncalibrated GripperConfig.
+    # Set False ONLY for bring-up/debug — normalized [0, 1] gripper control is then uncalibrated
+    # (positions won't map to real open/close). Prefer calibrating (examples/calibrate.py).
+    taccap_require_calibrated: bool = True
 
     # Auto-created in __post_init__ (do not set directly)
     left_gripper: SerialGripperConfig | TaccapFollowerGripperConfig | None = field(
@@ -482,6 +486,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 kd=self.taccap_kd,
                 control_hz=self.taccap_control_hz,
                 init_open=self.gripper_init_open,
+                require_calibrated=self.taccap_require_calibrated,
             )
         raise ValueError(
             f"gripper_type must be 'serial' or 'taccap_follower', got {gripper_type!r}."
