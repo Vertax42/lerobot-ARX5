@@ -28,10 +28,13 @@ import pytest
 from lerobot.robots.elite_cs66_rt.manipulability import (
     damping_scale,
     directional_scale,
+    flange_se3,
     geometric_jacobian,
     joint_velocity_scale,
     manipulability,
+    tool_consistency,
 )
+from lerobot.utils.rotation import Rotation
 
 # Canonical Modified-DH (Craig) UR5 table (alpha_i, a_i, d_i indexed per joint i).
 UR5_ALPHA = [0.0, np.pi / 2, 0.0, 0.0, np.pi / 2, -np.pi / 2]
@@ -158,6 +161,22 @@ def test_directional_scale_does_not_damp_escape():
     assert s2 < 1.0
 
 
+def test_directional_scale_zero_floor_is_a_true_hold():
+    # With s_min=0 a directional guard FULLY holds a move into the singularity (s=0, no creep-through)
+    # while still freeing any escape. This is why the config permits min_scale=0 only when directional:
+    # the 0.05 floor let the arm crawl 5%/tick past the IK-refusal boundary and trip; 0 stops it dead.
+    q = GENERIC_Q.copy()
+    q[4] = 0.02  # near the wrist singularity, w below w_low
+    jac = geometric_jacobian(UR5_ALPHA, UR5_A, UR5_D, q)
+    dq_escape = np.zeros(6)
+    dq_escape[4] = 0.2
+    dx_escape = jac @ dq_escape
+    s_escape, _ = directional_scale(UR5_ALPHA, UR5_A, UR5_D, q, dx_escape, w_low=0.05, w_high=0.1, s_min=0.0)
+    assert s_escape == 1.0  # escape / retraction stays free
+    s_into, _ = directional_scale(UR5_ALPHA, UR5_A, UR5_D, q, -dx_escape, w_low=0.05, w_high=0.1, s_min=0.0)
+    assert s_into == 0.0  # into-singularity is held dead, not floored at a creeping 0.05
+
+
 # Official CS66 datasheet per-joint velocity ceiling (rad/s): J1/J2 150°/s, J3 180°/s, J4-6 230°/s,
 # pre-scaled by an 0.8 headroom margin (as the driver does before calling joint_velocity_scale).
 QDOT_LIMIT = np.array([2.618, 2.618, 3.142, 4.014, 4.014, 4.014]) * 0.8
@@ -222,3 +241,126 @@ def test_joint_velocity_scale_is_directional_near_singularity():
     s_easy, _ = joint_velocity_scale(UR5_ALPHA, UR5_A, UR5_D, q, u[:, 0] * mag, DT, QDOT_LIMIT)
     assert s_into < s_easy
     assert s_easy == pytest.approx(1.0)
+
+
+def _near_exact_ik_dq(jac, dx, lam=1e-6):
+    """Joint step the *controller's* near-exact IK would command for ``dx`` (~1/sigma_min spike)."""
+    return jac.T @ np.linalg.solve(jac @ jac.T + lam * lam * np.eye(6), np.asarray(dx, float))
+
+
+def test_joint_velocity_scale_holds_against_controller_ik_near_singularity():
+    # THE regression that matters: the guard's own dq is self-consistently scaled to budget at ANY
+    # lambda, but the *controller* runs a near-exact IK (~1/sigma_min). The guard must be predicted
+    # with a lambda small enough that the guard-APPROVED step (dx * s) keeps that near-exact IK dq
+    # within budget too. With the shipped default (1e-4) it does; with a lambda on the order of the
+    # operating sigma_min (1e-2) it silently under-predicts and the true joint velocity blows past
+    # budget — which reproduced as the live wrist-singularity over-speed trip.
+    q = GENERIC_Q.copy()
+    q[4] = 0.01  # deep wrist singularity (sigma_min ~ 4e-3)
+    jac = geometric_jacobian(UR5_ALPHA, UR5_A, UR5_D, q)
+    u, _, _ = np.linalg.svd(jac)
+    dx = u[:, -1] * 0.02  # a modest fast twist along the least-controllable direction
+
+    # Default lambda: guard-approved step keeps the controller's near-exact IK within its budget.
+    s_good, _ = joint_velocity_scale(UR5_ALPHA, UR5_A, UR5_D, q, dx, DT, QDOT_LIMIT)
+    true_ratio_good = np.max(np.abs(_near_exact_ik_dq(jac, dx * s_good)) / (QDOT_LIMIT * DT))
+    assert true_ratio_good <= 1.1
+
+    # Regression guard: the old lambda=1e-2 would leave the true joint velocity far over budget.
+    s_bad, _ = joint_velocity_scale(UR5_ALPHA, UR5_A, UR5_D, q, dx, DT, QDOT_LIMIT, lam=1e-2)
+    true_ratio_bad = np.max(np.abs(_near_exact_ik_dq(jac, dx * s_bad)) / (QDOT_LIMIT * DT))
+    assert true_ratio_bad > 2.0
+
+
+# =============================================================================
+# FK self-check gate: position validates the DH (→ Jacobian/w); tool-ORIENTATION
+# drift is a benign TCP-convention / about-flange-Z artifact that must NOT disable
+# the guard. These tests are written FIRST (TDD) and drive the refactor of
+# `tool_consistency` to return (position_drift_m, rotation_drift_deg) so the driver
+# can gate on position and demote rotation to a warning.
+#
+# Live evidence (left arm, 2026-07-09): DH is the textbook CS66 MDH; inferred tool
+# translation [6.82,-6.29,194.13]mm matches the independently-measured value to
+# 0.01mm; self-check reported pos drift 0.0mm but rot drift 18.68deg. From pos=0
+# it follows the FK orientation error is a rotation ABOUT the tool axis (≈flange Z),
+# which leaves every joint axis z_i and origin — hence det(J) and the joint-velocity
+# prediction — unchanged. So the guard's math is correct; only the self-check's
+# rotation clause wrongly disabled it.
+
+# Two well-separated configs (every joint differs by >= 0.3 rad, as the driver requires).
+_Q_A = GENERIC_Q.copy()
+_Q_B = GENERIC_Q + np.array([0.5, -0.4, 0.6, 0.35, -0.5, 0.45])
+_UR5_DH = (UR5_ALPHA, UR5_A, UR5_D)
+
+
+def _se3_to_pose6(t):
+    return np.concatenate([t[:3, 3], Rotation.from_matrix(t[:3, :3]).as_rotvec()])
+
+
+def _rot_z_se3(theta_rad):
+    c, s = np.cos(theta_rad), np.sin(theta_rad)
+    t = np.eye(4)
+    t[0, 0], t[0, 1], t[1, 0], t[1, 1] = c, -s, s, c
+    return t
+
+
+def _tool_se3(z_m=0.194, rot=None):
+    t = np.eye(4)
+    t[2, 3] = z_m
+    if rot is not None:
+        t[:3, :3] = rot
+    return t
+
+
+def _measured_tcp(dh, q, tool_se3):
+    """Simulate the controller's actual_TCP_pose = true flange FK @ rigid tool."""
+    return _se3_to_pose6(flange_se3(*dh, q) @ tool_se3)
+
+
+def test_tool_consistency_constant_tool_is_zero_drift():
+    # A genuinely rigid tool + correct DH -> the inferred flange->TCP transform is identical
+    # at both configs: zero position AND zero rotation drift.
+    tool = _tool_se3(rot=Rotation.from_rotvec([0.2, -0.3, 0.5]).as_matrix())
+    m0, m1 = _measured_tcp(_UR5_DH, _Q_A, tool), _measured_tcp(_UR5_DH, _Q_B, tool)
+    pos_drift_m, rot_drift_deg = tool_consistency(_UR5_DH, _Q_A, m0, _Q_B, m1)
+    assert pos_drift_m < 1e-9
+    assert rot_drift_deg < 1e-6
+
+
+def test_tool_consistency_about_flange_z_is_position_clean():
+    # THE justification for the gate change: a config-dependent twist ABOUT the flange Z axis
+    # (the observed 18deg convention artifact) leaves the inferred tool POSITION exactly
+    # consistent (a Z-aligned tool is invariant to Z rotation) while the ROTATION drift is large.
+    # => a position-only gate accepts this DH (correctly), the rotation clause would reject it.
+    tool = _tool_se3()  # purely along +Z
+    m0 = _se3_to_pose6(flange_se3(*_UR5_DH, _Q_A) @ _rot_z_se3(np.radians(0.0)) @ tool)
+    m1 = _se3_to_pose6(flange_se3(*_UR5_DH, _Q_B) @ _rot_z_se3(np.radians(18.0)) @ tool)
+    pos_drift_m, rot_drift_deg = tool_consistency(_UR5_DH, _Q_A, m0, _Q_B, m1)
+    assert pos_drift_m < 2e-3       # position gate PASSES — DH is valid for the Jacobian
+    assert rot_drift_deg > 10.0     # rotation "drift" is large but benign (about-Z; not in det(J))
+
+
+def test_tool_consistency_wrong_dh_still_caught_on_position():
+    # A genuinely wrong DH (a link length off by 3 cm) makes the inferred tool POSITION
+    # inconsistent across configs — the position gate alone still catches it, so relaxing the
+    # rotation clause does not weaken detection of an actually-bad DH.
+    tool = _tool_se3()
+    m0, m1 = _measured_tcp(_UR5_DH, _Q_A, tool), _measured_tcp(_UR5_DH, _Q_B, tool)
+    wrong_a = list(UR5_A)
+    wrong_a[2] += 0.03
+    pos_drift_m, _ = tool_consistency((UR5_ALPHA, wrong_a, UR5_D), _Q_A, m0, _Q_B, m1)
+    assert pos_drift_m > 5e-3
+
+
+def test_manipulability_is_independent_of_tcp_convention():
+    # Safety backstop: the guard's runtime math (w and the joint-velocity prediction) is a pure
+    # function of (DH, q) — it never reads the TCP — so no TCP-orientation convention can change
+    # it. Locking this makes explicit why the rotation-drift clause is orthogonal to the guard.
+    w = manipulability(*_UR5_DH, _Q_A)
+    s, _ = joint_velocity_scale(*_UR5_DH, _Q_A, np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.01]), 0.033,
+                                np.array([2.618, 2.618, 3.142, 4.014, 4.014, 4.014]) * 0.8)
+    # Recompute after an arbitrary about-Z change to the (irrelevant) measured TCP — identical.
+    assert manipulability(*_UR5_DH, _Q_A) == w
+    s2, _ = joint_velocity_scale(*_UR5_DH, _Q_A, np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.01]), 0.033,
+                                 np.array([2.618, 2.618, 3.142, 4.014, 4.014, 4.014]) * 0.8)
+    assert s2 == s
