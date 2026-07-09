@@ -36,7 +36,7 @@ recipes/
 recipes/
   teleop/
     bi_elite_cs66_rt/diagonal-08.yaml   # one recipe per physical station
-    bi_flexiv_rizon4_rt/forward.yaml
+    bi_flexiv_rizon4_rt/forward-04.yaml
   record/
     bi_elite_cs66_rt/test.yaml
     bi_flexiv_rizon4_rt/assemble_box.yaml
