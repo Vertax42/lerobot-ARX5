@@ -530,7 +530,7 @@ class RealSenseCamera(Camera):
 
     @check_if_not_connected
     def async_read(
-        self, timeout_ms: float = 200, return_depth: bool = True
+        self, timeout_ms: float = 200, return_depth: bool = False
     ) -> NDArray[Any] | tuple[NDArray[Any], NDArray[Any]]:
         """
         Reads the latest available frame data asynchronously.
