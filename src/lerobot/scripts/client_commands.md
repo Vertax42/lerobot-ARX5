@@ -138,7 +138,7 @@ lerobot-teleoperate \
     --robot.bi_mount_type=diagonal-08 \
     --teleop.type=bi_pico4 \
     --fps=30 \
-    --dryrun=true
+    --dryrun=false
 ```
 
 ## BiARX5 Robot lerobot-record command

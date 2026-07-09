@@ -2079,13 +2079,17 @@ def teleoperate(cfg: TeleoperateConfig):
             logger.info("Detected BiEliteCS66RT + BiPico4")
             robot = make_robot_from_config(cfg.robot)
             # Elite CS66 wrists have tighter joint-velocity limits than Flexiv;
-            # default the VR rotation sensitivity to 0.5 so controller jitter can't
-            # drive a protective stop. An explicit --teleop.ori_sensitivity wins
-            # (only the untouched 1.0 default is replaced).
+            # default the VR rotation sensitivity down so controller jitter / fast
+            # hand rotation can't drive a wrist-singularity over-speed trip. Lowered
+            # 0.5 -> 0.3 on 2026-07-03: at 0.5 a fast wrist flick still spiked joint
+            # velocity past the controller's 30 rad/s limit and dropped external
+            # control ("writeServoj failed 251 ticks"). 0.3 = the arm rotates 30% of
+            # the hand rotation, keeping the mapped joint velocity well under the trip.
+            # An explicit --teleop.ori_sensitivity wins (only the 1.0 default is replaced).
             if cfg.teleop.ori_sensitivity == 1.0:
-                cfg.teleop.ori_sensitivity = 0.5
+                cfg.teleop.ori_sensitivity = 0.3
                 logger.info(
-                    "BiElite: defaulting teleop ori_sensitivity to 0.5 "
+                    "BiElite: defaulting teleop ori_sensitivity to 0.3 "
                     "(pass --teleop.ori_sensitivity to override)"
                 )
             # The Pico4 leader's rotation rate limit defaults to the Flexiv-era 6.28 rad/s
