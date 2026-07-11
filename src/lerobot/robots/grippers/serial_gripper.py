@@ -22,18 +22,17 @@ USB-serial port.  No ezros / xensesdk stack required. Identified by board SN
 """
 
 import time
-from threading import Thread, Lock
-from glob import glob
+from threading import Thread
 
-from xensegripper import XenseSerialGripper, read_board_sn
+from xensegripper import XenseSerialGripper
 
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.robots.grippers.config_serial_gripper import SerialGripperConfig
+# find_port_by_sn is re-exported here for backward compatibility; both it and the
+# parity-based find_port_by_side share serial_discovery's scan lock so exact-SN
+# lookups and side discovery never interleave on the RS-485 bus.
+from lerobot.robots.grippers.serial_discovery import find_port_by_side, find_port_by_sn
 from lerobot.utils.robot_utils import get_logger
-
-# Serialize port scans so parallel gripper connect() calls don't
-# interfere with each other's serial read_board_sn() queries.
-_scan_lock = Lock()
 
 # Log an error only after repeated real communication-health failures.
 # Mere status-query timeouts are expected while the MCU is idle and are not errors.
@@ -47,35 +46,6 @@ _POLL_FAIL_SLEEP_S = 0.05
 _INIT_POSITION_TOLERANCE = 0.02
 _INIT_STATUS_TIMEOUT_S = 0.2
 _INIT_SYNC_TIMEOUT_S = 3.0
-
-
-def find_port_by_sn(sn: str, baudrate: int = 115200, device_id: int = 1) -> str:
-    """Scan all ttyUSB/ttyACM ports and return the one whose board SN matches.
-
-    Args:
-        sn:        Target board serial number string (e.g. ``"000001"``).
-        baudrate:  Baud rate to use when querying each port.
-        device_id: Device ID to use when querying each port.
-
-    Returns:
-        Matched port path (e.g. ``"/dev/ttyUSB3"``).
-
-    Raises:
-        RuntimeError: If no port with the given SN is found.
-    """
-    with _scan_lock:
-        candidates = sorted(glob("/dev/ttyUSB*") + glob("/dev/ttyACM*"))
-        for port in candidates:
-            try:
-                found = read_board_sn(port, baudrate=baudrate, device_id=device_id)
-                if found and found.strip() == sn.strip():
-                    return port
-            except Exception:
-                pass
-    raise RuntimeError(
-        f"SerialGripper: could not find a port with SN={sn!r}. "
-        f"Scanned: {candidates}"
-    )
 
 
 class SerialGripper:
@@ -108,10 +78,10 @@ class SerialGripper:
         self._gripper_f_max = config.gripper_f_max
         self._init_open = config.init_open
 
-        # Resolved at connect() time (SN lookup or explicit port)
+        # Resolved at connect() time (explicit port, SN lookup, or side discovery)
         self._port: str = config.port
 
-        label = config.sn or config.port.split("/")[-1]
+        label = config.side or config.sn or config.port.split("/")[-1]
         self._logger = get_logger(f"SerialGripper-{label}")
         self._is_connected: bool = False
         self._gripper: XenseSerialGripper | None = None
@@ -131,8 +101,10 @@ class SerialGripper:
         if self._is_connected:
             raise DeviceAlreadyConnectedError(f"{self} is already connected.")
 
-        # Resolve port from SN if not explicitly set
-        if self._config.sn:
+        # Resolve the serial port: explicit port > exact SN scan > parity discovery.
+        if self._config.port:
+            self._port = self._config.port
+        elif self._config.sn:
             self._logger.info(
                 f"Scanning serial ports for gripper SN={self._config.sn!r}..."
             )
@@ -142,6 +114,17 @@ class SerialGripper:
                 device_id=self._config.device_id,
             )
             self._logger.info(f"Found SN={self._config.sn!r} on {self._port}.")
+        else:
+            self._logger.info(
+                f"Auto-discovering {self._config.side} gripper by board-SN parity "
+                "(odd → left, even → right)..."
+            )
+            self._port = find_port_by_side(
+                self._config.side,
+                baudrate=self._config.baudrate,
+                device_id=self._config.device_id,
+            )
+            self._logger.info(f"Discovered {self._config.side} gripper on {self._port}.")
 
         self._logger.info(
             f"Connecting serial gripper on {self._port} "

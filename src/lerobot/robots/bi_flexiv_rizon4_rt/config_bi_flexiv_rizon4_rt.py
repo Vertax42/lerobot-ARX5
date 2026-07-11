@@ -44,8 +44,9 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     Attributes:
         left_robot_sn: Serial number of the left arm robot
         right_robot_sn: Serial number of the right arm robot
-        bi_mount_type: Preset layout for robot/gripper/camera SNs and home/start poses
-            ("forward", "side", or "diagonal")
+        bi_mount_type: Preset layout for robot/camera SNs and home/start poses
+            ("forward", "side", or "diagonal"). Serial grippers self-sort left/right
+            by board-SN parity at connect, so no gripper SN is pinned here.
         use_force: Enable force control axes (both arms)
         inner_control_hz: How often each 1 kHz RT thread consumes a new Python command (1-1000 Hz)
         interpolate_cmds: Enable linear interpolation between consumed commands
@@ -157,21 +158,19 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     right_rt_cpu_affinity: int = 3
 
     # Which gripper driver drives BOTH arms: "serial" (XenseSerialGripper) or
-    # "taccap_follower" (xense.taccap FollowerGripper, left/right auto-resolved by
-    # firmware SN). Grippers are always swapped as a matched pair, so this is a
-    # single switch rather than per-side.
+    # "taccap_follower" (xense.taccap FollowerGripper). Either way left/right is
+    # auto-resolved at connect: serial by board-SN parity (odd SN → left, even SN
+    # → right; see serial_discovery.find_port_by_side), taccap by firmware SN.
+    # Grippers are always swapped as a matched pair, so this is a single switch
+    # rather than per-side.
     gripper_type: str = "serial"
 
     # ========== Left gripper settings (per-arm: enable + serial wiring) ==========
     left_use_gripper: bool = True
-    left_gripper_sn: str = "000001"
-    left_gripper_baudrate: int = 115200
     left_gripper_serial_timeout: float = 1.0
 
     # ========== Right gripper settings (per-arm: enable + serial wiring) ==========
     right_use_gripper: bool = True
-    right_gripper_sn: str = "000002"
-    right_gripper_baudrate: int = 115200
     right_gripper_serial_timeout: float = 1.0
 
     # ========== Shared gripper mechanical / motion params (both arms) ==========
@@ -226,8 +225,6 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             "forward-04": {
                 "left_sn": "Rizon4-063774",
                 "right_sn": "Rizon4R-062090",
-                "left_gripper_sn": "000031",
-                "right_gripper_sn": "000032",
                 "left_start": [86.90, 68.22, 23.55, 109.63, -3.01, 89.52, 2.96],
                 "right_start": [83.07, 67.85, 24.64, 107.57, 6.39, 95.96, 15.24],
                 "left_home": [86.90, 68.22, 23.55, 109.63, -3.01, 89.52, 2.96],
@@ -243,8 +240,6 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             "forward-05": {
                 "left_sn": "Rizon4s-063786",
                 "right_sn": "Rizon4s-062096",
-                "left_gripper_sn": "000047",
-                "right_gripper_sn": "000048",
                 "left_start": [96.59, 65.45, -6.65, 78.76, 85.09, -5.48, -103.47],
                 "right_start": [96.93, 65.40, -7.06, 78.87, 85.03, -5.68, -103.20],
                 "left_home": [96.59, 65.45, -6.65, 78.76, 85.09, -5.48, -103.47],
@@ -260,8 +255,6 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             "forward-06": {
                 "left_sn": "Rizon4s-062412",
                 "right_sn": "Rizon4s-062881",
-                "left_gripper_sn": "000035",
-                "right_gripper_sn": "000036",
                 "left_start": [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24],
                 "right_start": [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.60],
                 "left_home": [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24],
@@ -277,8 +270,6 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             "forward-dewu": {
                 "left_sn": "Rizon4s-063458",
                 "right_sn": "Rizon4s-063670",
-                "left_gripper_sn": "000021",
-                "right_gripper_sn": "000012",
                 "left_start": [105.16, 66.69, -6.37, 77.95, 76.30, -2.83, -102.67],
                 "right_start": [-22.97, 65.41, 12.12, 98.98, -68.95, 0.55, 125.45],
                 "left_home": [105.16, 66.69, -6.37, 77.95, 76.30, -2.83, -102.67],
@@ -294,8 +285,6 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             "diagonal-02": {
                 "left_sn": "Rizon4-063423",
                 "right_sn": "Rizon4-062855",
-                "left_gripper_sn": "000003",
-                "right_gripper_sn": "000004",
                 "left_start": [16.18, -26.29, -3.84, 114.00, 10.66, 84.24, 27.56],
                 "right_start": [31.91, -26.72, -27.42, 122.58, -13.93, 89.42, -1.31],
                 "left_home": [16.18, -26.29, -3.84, 114.00, 10.66, 84.24, 27.56],
@@ -317,8 +306,6 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         preset = _PRESETS[self.bi_mount_type]
         self.left_robot_sn = preset["left_sn"]
         self.right_robot_sn = preset["right_sn"]
-        self.left_gripper_sn = preset["left_gripper_sn"]
-        self.right_gripper_sn = preset["right_gripper_sn"]
         self.left_start_position_degree = preset["left_start"]
         self.right_start_position_degree = preset["right_start"]
         self.left_home_position_degree = preset["left_home"]
@@ -370,12 +357,10 @@ class BiFlexivRizon4RTConfig(RobotConfig):
 
         # Build per-side gripper configs; both sides use the same gripper_type.
         self.left_gripper = self._make_gripper_config(
-            self.left_use_gripper, self.left_gripper_sn,
-            self.left_gripper_baudrate, self.left_gripper_serial_timeout, "left",
+            self.left_use_gripper, self.left_gripper_serial_timeout, "left",
         )
         self.right_gripper = self._make_gripper_config(
-            self.right_use_gripper, self.right_gripper_sn,
-            self.right_gripper_baudrate, self.right_gripper_serial_timeout, "right",
+            self.right_use_gripper, self.right_gripper_serial_timeout, "right",
         )
 
         # Camera configuration based on tactile sensors setting
@@ -455,24 +440,21 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     def _make_gripper_config(
         self,
         use_gripper: bool,
-        sn: str,
-        baudrate: int,
         serial_timeout: float,
         side: str,
     ) -> "SerialGripperConfig | TaccapFollowerGripperConfig | None":
         """Build the per-side nested gripper config selected by ``self.gripper_type``.
 
-        "serial"          → SerialGripperConfig (XenseSerialGripper over USB-serial).
-        "taccap_follower" → TaccapFollowerGripperConfig (xense.taccap FollowerGripper,
-                            left/right auto-resolved from the firmware-burned SN).
+        Both drivers auto-resolve left/right at connect: "serial" by board-SN parity
+        (odd → left, even → right), "taccap_follower" by the firmware-burned SN.
+        Baudrate uses the SerialGripperConfig default (115200).
         """
         if not use_gripper:
             return None
         gripper_type = self.gripper_type
         if gripper_type == "serial":
             return SerialGripperConfig(
-                sn=sn,
-                baudrate=baudrate,
+                side=side,
                 serial_timeout=serial_timeout,
                 gripper_min_pos=self.gripper_min_pos,
                 gripper_max_pos=self.gripper_max_pos,

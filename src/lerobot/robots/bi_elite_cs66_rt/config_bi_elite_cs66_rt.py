@@ -12,9 +12,10 @@
 
 Relationship to ``EliteCS66RTConfig`` mirrors ``BiFlexivRizon4RTConfig`` vs.
 ``FlexivRizon4RTConfig``: shared control/servo parameters keep the single-arm
-names and defaults, while station-specific values (controller IPs, serial gripper
-SNs, start/home poses, camera SNs) are bundled per-arm and selected by
-``bi_mount_type`` preset. Action / observation keys are ``left_``/``right_`` prefixed.
+names and defaults, while station-specific values (controller IPs, start/home
+poses, camera SNs) are bundled per-arm and selected by ``bi_mount_type`` preset.
+Serial grippers self-sort left/right by board-SN parity at connect, so no gripper
+SN is pinned per station. Action / observation keys are ``left_``/``right_`` prefixed.
 """
 
 from dataclasses import dataclass, field
@@ -38,17 +39,18 @@ class BiEliteCS66RTControlMode(str, Enum):
     JOINT_SERVO = "joint_servo"
 
 
-# Per-station presets. Each bundles both controllers' IPs, serial gripper board
-# SNs, the MoveJ start/home poses (J1..J6, radians), and camera SNs (head, per-arm
-# wrist, per-arm tactile). Tactile camera labels are pre-namespaced
+# Per-station presets. Each bundles both controllers' IPs, the MoveJ start/home
+# poses (J1..J6, radians), and camera SNs (head, per-arm wrist, per-arm tactile).
+# Serial grippers self-sort left/right by board-SN parity at connect, so no gripper
+# SN is bundled here. Tactile camera labels are pre-namespaced
 # (left_tactile_* / right_tactile_*) so the flat observation dict stays unique.
 #
 # NOTE: the "diagonal" preset below describes the real station — the two Elite
 # CS66 arms are mounted diagonally/opposed (tilt about base-X + rotate about Z,
 # see the bi-arm mounting transform). It has real controller IPs and per-arm
 # start/home joint poses (measured on the station). Grippers are serial (USB,
-# addressed by board SN — no IP/MAC). Gripper SNs and tactile sensor SNs are
-# still PLACEHOLDER — replace the TODO-marked values before deployment.
+# left/right self-sorted by board-SN parity — no IP/MAC, no pinned SN). Tactile
+# sensor SNs are still PLACEHOLDER — replace the TODO-marked values before deployment.
 #
 # Per-arm mounting → the world←base rotation R = Rz(γ)·Rz(β)·Rx(α) that lifts
 # base-frame TCP poses into a SHARED gravity-aligned world frame (x = facing,
@@ -77,10 +79,6 @@ _PRESETS: dict[str, dict] = {
         "right_ip": "192.168.0.247",
         "left_local_ip": "",
         "right_local_ip": "",
-        # Serial-gripper board SNs (read over CH340; same unit numbering as the
-        # wrist cameras XC0000xx). Empty -> set *_use_gripper=False.
-        "left_gripper_sn": "000043",
-        "right_gripper_sn": "000044",
         "left_start": list(_LEFT_START_POSE),
         "right_start": list(_RIGHT_START_POSE),
         "left_home": list(_LEFT_START_POSE),
@@ -131,10 +129,6 @@ _PRESETS: dict[str, dict] = {
         "right_ip": "192.168.8.223",
         "left_local_ip": "",
         "right_local_ip": "",
-        # Serial-gripper board SNs (read over CH340; same unit numbering as the
-        # wrist cameras XC0000xx). Empty -> set *_use_gripper=False.
-        "left_gripper_sn": "000045",
-        "right_gripper_sn": "000046",
         "left_start": list(_LEFT_START_POSE),
         "right_start": list(_RIGHT_START_POSE),
         "left_home": list(_LEFT_START_POSE),
@@ -193,9 +187,10 @@ class BiEliteCS66RTConfig(RobotConfig):
     joint schema as the single-arm driver, ``left_``/``right_`` prefixed:
         left_tcp.x/y/z + left_tcp.r1..r6 (+ optional left_joint_*), left_gripper.pos
         right_tcp.x/y/z + right_tcp.r1..r6 (+ optional right_joint_*), right_gripper.pos
-    Grippers are per-arm serial (USB) devices addressed by board SN. Cameras
-    (head + per-arm wrist + optional tactiles) live at the bimanual level; tactile
-    images come from separate XenseTactileCamera devices, not the gripper.
+    Grippers are per-arm serial (USB) devices that self-sort left/right by board-SN
+    parity at connect. Cameras (head + per-arm wrist + optional tactiles) live at the
+    bimanual level; tactile images come from separate XenseTactileCamera devices, not
+    the gripper.
     """
 
     # ── Per-arm identity / connection ──
@@ -357,18 +352,15 @@ class BiEliteCS66RTConfig(RobotConfig):
     trace_rotation_threshold: float = 0.5
     trace_joint_threshold: float = 0.3
 
-    # ── Grippers: per-arm serial (USB) Xense gripper, addressed by board SN ──
-    # No IP/MAC/network. Set {side}_use_gripper=False (or leave the preset SN
-    # empty) to run without a gripper on that arm. Tactile sensors are separate
-    # XenseTactileCamera devices (see enable_tactile_sensors), not the gripper.
+    # ── Grippers: per-arm serial (USB) Xense gripper; left/right auto-resolved at
+    # connect by board-SN parity (odd SN → left, even SN → right). No IP/MAC/network.
+    # Set {side}_use_gripper=False to run without a gripper on that arm. Tactile
+    # sensors are separate XenseTactileCamera devices (see enable_tactile_sensors),
+    # not the gripper.
     left_use_gripper: bool = True
-    left_gripper_sn: str = ""               # board SN (overwritten from preset)
-    left_gripper_baudrate: int = 115200
     left_gripper_serial_timeout: float = 1.0
 
     right_use_gripper: bool = True
-    right_gripper_sn: str = ""              # board SN (overwritten from preset)
-    right_gripper_baudrate: int = 115200
     right_gripper_serial_timeout: float = 1.0
 
     # Shared serial-gripper mechanical / motion parameters.
@@ -379,10 +371,10 @@ class BiEliteCS66RTConfig(RobotConfig):
     gripper_init_open: bool = True
 
     # ── Gripper backend ── "serial" (default; per-arm XenseSerialGripper over USB,
-    # addressed by the preset board SN) or "taccap_follower" (xense.taccap FollowerGripper,
-    # MIT impedance; left/right auto-resolved from the firmware-burned SN, and the wrist +
-    # GSPS tactile cameras auto-discovered at connect). The serial fields above are ignored
-    # in taccap_follower mode.
+    # left/right auto-resolved by board-SN parity) or "taccap_follower" (xense.taccap
+    # FollowerGripper, MIT impedance; left/right auto-resolved from the firmware-burned
+    # SN, and the wrist + GSPS tactile cameras auto-discovered at connect). The serial
+    # fields above are ignored in taccap_follower mode.
     gripper_type: str = "serial"
     # TacCap follower control params (used when gripper_type == "taccap_follower").
     taccap_kp: float = 8.0          # MIT impedance stiffness (Nm/rad)
@@ -431,8 +423,6 @@ class BiEliteCS66RTConfig(RobotConfig):
         self.right_robot_ip = self.right_robot_ip or preset["right_ip"]
         self.left_local_ip = preset["left_local_ip"]
         self.right_local_ip = preset["right_local_ip"]
-        self.left_gripper_sn = preset["left_gripper_sn"]
-        self.right_gripper_sn = preset["right_gripper_sn"]
         self.left_start_position_rad = list(preset["left_start"])
         self.right_start_position_rad = list(preset["right_start"])
         self.left_home_position_rad = list(preset["left_home"])
@@ -458,12 +448,10 @@ class BiEliteCS66RTConfig(RobotConfig):
 
         # ── Serial gripper config (per arm) ──
         self.left_gripper = self._build_gripper_config(
-            self.left_use_gripper, self.left_gripper_sn,
-            self.left_gripper_baudrate, self.left_gripper_serial_timeout, side="left",
+            self.left_use_gripper, self.left_gripper_serial_timeout, side="left",
         )
         self.right_gripper = self._build_gripper_config(
-            self.right_use_gripper, self.right_gripper_sn,
-            self.right_gripper_baudrate, self.right_gripper_serial_timeout, side="right",
+            self.right_use_gripper, self.right_gripper_serial_timeout, side="right",
         )
 
         # ── Bimanual cameras ── In taccap_follower + auto-discover mode the wrist + GSPS
@@ -576,13 +564,14 @@ class BiEliteCS66RTConfig(RobotConfig):
             )
 
     def _build_gripper_config(
-        self, use_gripper: bool, sn: str, baudrate: int, serial_timeout: float, side: str
+        self, use_gripper: bool, serial_timeout: float, side: str
     ) -> "SerialGripperConfig | TaccapFollowerGripperConfig | None":
+        # Presence is per-arm: set {side}_use_gripper=False to run without a gripper.
         if not use_gripper:
             return None
         if self.gripper_type == "taccap_follower":
-            # left/right resolved from the firmware-burned SN (not the preset board SN);
-            # wrist + GSPS tactile cameras auto-discovered by the robot at connect.
+            # left/right resolved from the firmware-burned SN; wrist + GSPS tactile
+            # cameras auto-discovered by the robot at connect.
             return TaccapFollowerGripperConfig(
                 side=side,
                 kp=self.taccap_kp,
@@ -596,18 +585,15 @@ class BiEliteCS66RTConfig(RobotConfig):
             raise ValueError(
                 f"gripper_type must be 'serial' or 'taccap_follower', got {self.gripper_type!r}"
             )
-        # serial (default): no gripper when no board SN is configured yet (an empty preset
-        # SN simply means "not attached", mirroring the camera handling).
-        if not sn:
-            return None
         if self.gripper_min_pos >= self.gripper_max_pos:
             raise ValueError(
                 "gripper_min_pos must be smaller than gripper_max_pos, got "
                 f"{self.gripper_min_pos} >= {self.gripper_max_pos}"
             )
+        # serial (default): left/right self-sorts by board-SN parity (odd → left,
+        # even → right); baudrate uses the SerialGripperConfig default (115200).
         return SerialGripperConfig(
-            sn=sn,
-            baudrate=baudrate,
+            side=side,
             serial_timeout=serial_timeout,
             gripper_min_pos=self.gripper_min_pos,
             gripper_max_pos=self.gripper_max_pos,

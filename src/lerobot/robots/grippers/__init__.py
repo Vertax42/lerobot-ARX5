@@ -13,6 +13,13 @@
 from .config_serial_gripper import SerialGripperConfig  # noqa: F401
 from .config_taccap_follower_gripper import TaccapFollowerGripperConfig  # noqa: F401
 from .config_xense_gripper import SensorOutputType, XenseGripperConfig  # noqa: F401
+from .serial_discovery import (  # noqa: F401
+    SerialGripperSideDevice,
+    discover_serial_gripper_sides,
+    find_port_by_side,
+    find_port_by_sn,
+    sn_side,
+)
 from .serial_gripper import SerialGripper  # noqa: F401
 from .taccap_follower_gripper import TaccapFollowerGripper  # noqa: F401
 from .xense_gripper import XenseGripper  # noqa: F401

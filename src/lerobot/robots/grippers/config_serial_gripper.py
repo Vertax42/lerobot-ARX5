@@ -26,13 +26,18 @@ class SerialGripperConfig:
     This gripper communicates directly over a USB-serial port and does not
     require the ezros / xensesdk stack.
 
-    Identification (provide one):
+    Identification (provide one; resolved at connect() in this priority):
+        port:            Explicit serial port path (e.g. ``"/dev/ttyUSB0"``).
+                         Highest priority — bypasses all scanning.
         sn:              Board serial number (e.g. ``"000001"``).  When set,
                          the driver scans available serial ports at connect()
                          time and picks the one whose READ_BOARD_SN response
-                         matches.  Takes priority over ``port``.
-        port:            Fallback explicit serial port path (e.g.
-                         ``"/dev/ttyUSB0"``).  Used when ``sn`` is None.
+                         matches.
+        side:            ``"left"`` / ``"right"`` — auto-discover the port by
+                         board-SN parity (odd SN → left, even SN → right; see
+                         ``serial_discovery.find_port_by_side``). Lets a
+                         correctly-numbered gripper self-sort without pinning an
+                         exact ``sn``. Used only when ``port`` and ``sn`` are unset.
 
     Attributes:
         baudrate:        Serial baud rate (default: 115200).
@@ -47,8 +52,9 @@ class SerialGripperConfig:
     """
 
     # ── Identification ─────────────────────────────────────────────────────────
-    sn: str | None = None          # board SN — preferred over port
-    port: str = ""                 # fallback explicit port path
+    port: str = ""                 # explicit port path — highest priority
+    sn: str | None = None          # board SN — scanned/matched when port unset
+    side: str | None = None        # "left"/"right" — parity auto-discover when port+sn unset
 
     # ── Serial connection ──────────────────────────────────────────────────────
     baudrate: int = 115200
@@ -67,8 +73,12 @@ class SerialGripperConfig:
     init_open: bool = True
 
     def __post_init__(self):
-        if not self.sn and not self.port:
-            raise ValueError("SerialGripperConfig: provide either 'sn' or 'port'.")
+        if not self.port and not self.sn and not self.side:
+            raise ValueError("SerialGripperConfig: provide one of 'port', 'sn', or 'side'.")
+        if self.side is not None and self.side not in ("left", "right"):
+            raise ValueError(
+                f"SerialGripperConfig: side must be 'left' or 'right', got {self.side!r}."
+            )
         if not 0 < self.baudrate:
             raise ValueError(f"SerialGripperConfig: baudrate must be positive, got {self.baudrate}.")
         if not 0.0 <= self.gripper_min_pos < self.gripper_max_pos:
