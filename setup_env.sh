@@ -772,6 +772,19 @@ install_dynamixel() {
     echo "[dynamixel] Done. Verify with: python -c 'import dynamixel_sdk; print(dynamixel_sdk.__file__)'"
 }
 
+# Top-level usage. Hardware selectors are documented by `--install --help`.
+print_general_usage() {
+    cat <<'USAGE'
+Usage: ./setup_env.sh <command> [options]
+  --conda [env_name]     Create a conda environment (requires Miniconda/Anaconda)
+  --mamba [env_name]     Create a mamba environment (requires Miniforge)
+  --install [hardware]   Install base package + hardware SDK bindings.
+                         No hardware selector => install ALL (backward compatible).
+                         Run `./setup_env.sh --install --help` for the selector list.
+  --help, -h             Show this message
+USAGE
+}
+
 # ── Argument parsing ──────────────────────────────────────────────────────────
 
 # Check if an environment name is provided
@@ -815,6 +828,69 @@ elif [[ "$1" == "--mamba" ]]; then
 
 # Check if the --install parameter is passed
 elif [[ "$1" == "--install" ]]; then
+    # ── Hardware selector parsing ─────────────────────────────────────────────
+    # Per-hardware-family flags after --install restrict which SDK bindings get
+    # built. No flags => install everything (backward compatible). Arm selectors
+    # auto-include the xense gripper stack (the arms drive xense grippers).
+    #   ./setup_env.sh --install                     # core + ALL hardware SDKs
+    #   ./setup_env.sh --install --flexiv --taccap   # core + those (+ auto xense)
+    #   ./setup_env.sh --install --core              # core only, no hardware SDK
+    SELECTED=""
+    add_key() { case " $SELECTED " in *" $1 "*) ;; *) SELECTED="$SELECTED $1" ;; esac; }
+    is_sel()  { case " $SELECTED " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+    select_all_hw() { local k; for k in arx5 flexiv franka pico4 xense taccap elite spacemouse dynamixel; do add_key "$k"; done; }
+    print_install_usage() {
+        cat <<'USAGE'
+Usage: ./setup_env.sh --install [hardware selectors]
+  (no selector)         core + ALL hardware SDKs (default, backward compatible)
+  --all                 core + ALL hardware SDKs (explicit)
+  --core, --none        core only (no hardware SDK bindings)
+Per-hardware-family selectors (arms auto-include the xense gripper stack):
+  --flexiv,  --bi_flexiv     Flexiv Rizon4 RT    (+ xense)
+  --elite,   --bi_elite      Elite CS66 RT       (+ xense)
+  --franka                   Franka Research3    (+ xense)
+  --taccap,  --bi_taccap     TacCap gripper      (+ xense)
+  --xense                    Xense tactile sensors + XGripper serial gripper
+  --arx5,    --bi_arx5       ARX5 arm
+  --pico4,   --bi_pico4      Pico4 VR teleop
+  --spacemouse               3D SpaceMouse teleop
+  --dynamixel, --trlc        Dynamixel / TRLC leader teleop
+  --vive,    --vive_tracker  Vive tracker teleop (via xense/XGripper libsurvive)
+Examples:
+  ./setup_env.sh --install --flexiv --taccap
+  ./setup_env.sh --install --core
+USAGE
+    }
+    _hw_args=("${@:2}")
+    if [[ ${#_hw_args[@]} -eq 0 ]]; then
+        select_all_hw
+    else
+        for _a in "${_hw_args[@]}"; do
+            case "$_a" in
+                --all)                    select_all_hw ;;
+                --core|--none)            : ;;  # no-op: core is always installed
+                --flexiv|--bi_flexiv)     add_key flexiv; add_key xense ;;
+                --elite|--bi_elite)       add_key elite;  add_key xense ;;
+                --franka)                 add_key franka; add_key xense ;;
+                --taccap|--bi_taccap)     add_key taccap; add_key xense ;;
+                --xense)                  add_key xense ;;
+                --arx5|--bi_arx5)         add_key arx5 ;;
+                --pico4|--bi_pico4)       add_key pico4 ;;
+                --spacemouse)             add_key spacemouse ;;
+                --dynamixel|--trlc)       add_key dynamixel ;;
+                --vive|--vive_tracker)    add_key xense ;;
+                --help|-h)                print_install_usage; exit 0 ;;
+                *) echo "[ERROR] Unknown --install selector: $_a"; echo; print_install_usage; exit 1 ;;
+            esac
+        done
+    fi
+    SELECTED="$(echo "$SELECTED" | tr -s ' ' | sed 's/^ //; s/ $//')"
+    if [[ -n "$SELECTED" ]]; then
+        echo "[INFO] Selected hardware SDKs: $SELECTED"
+    else
+        echo "[INFO] Selected hardware SDKs: (core only — no hardware bindings)"
+    fi
+
     # Get the currently activated conda environment name
     if [[ -z "${CONDA_DEFAULT_ENV}" ]]; then
         echo "Error: No conda/mamba environment is currently activated."
@@ -901,15 +977,15 @@ elif [[ "$1" == "--install" ]]; then
     echo "[INFO] Installing hardware SDK bindings..."
     echo ""
 
-    install_arx5      || echo "[WARN] arx5 installation skipped or failed (see above)"
-    install_flexiv    || echo "[WARN] flexiv installation skipped or failed (see above)"
-    install_franka    || echo "[WARN] franka installation skipped or failed (see above)"
-    ( install_pico4 ) || echo "[WARN] pico4 installation skipped or failed (see above)"
-    install_xense     || echo "[WARN] xense installation skipped or failed (see above)"
-    install_taccap    || echo "[WARN] taccap installation skipped or failed (see above)"
-    install_elite     || echo "[WARN] elite installation skipped or failed (see above)"
-    install_spacemouse || echo "[WARN] spacemouse installation skipped or failed (see above)"
-    install_dynamixel  || echo "[WARN] dynamixel-sdk installation skipped or failed (see above)"
+    if is_sel arx5;       then install_arx5      || echo "[WARN] arx5 installation skipped or failed (see above)"; fi
+    if is_sel flexiv;     then install_flexiv    || echo "[WARN] flexiv installation skipped or failed (see above)"; fi
+    if is_sel franka;     then install_franka    || echo "[WARN] franka installation skipped or failed (see above)"; fi
+    if is_sel pico4;      then ( install_pico4 ) || echo "[WARN] pico4 installation skipped or failed (see above)"; fi
+    if is_sel xense;      then install_xense     || echo "[WARN] xense installation skipped or failed (see above)"; fi
+    if is_sel taccap;     then install_taccap    || echo "[WARN] taccap installation skipped or failed (see above)"; fi
+    if is_sel elite;      then install_elite     || echo "[WARN] elite installation skipped or failed (see above)"; fi
+    if is_sel spacemouse; then install_spacemouse || echo "[WARN] spacemouse installation skipped or failed (see above)"; fi
+    if is_sel dynamixel;  then install_dynamixel  || echo "[WARN] dynamixel-sdk installation skipped or failed (see above)"; fi
 
 
     # ── Post-install verification ────────────────────────────────────────────
@@ -917,23 +993,26 @@ elif [[ "$1" == "--install" ]]; then
     echo "══════════════════════════════════════════"
     echo " Post-install verification"
     echo "══════════════════════════════════════════"
+    # Verify only the SDKs that were selected for install (lerobot core always).
+    # franka + spacemouse have no verify probe today — kept that way.
+    _VERIFY_LINES='lerobot|import importlib.metadata as M, lerobot; print("v"+M.version("lerobot"), "->", lerobot.__file__)'
+    if is_sel arx5;      then _VERIFY_LINES+=$'\n''pyarx|import importlib.metadata as M, pyarx; print("v"+M.version("pyarx"), "->", pyarx.__file__)'; fi
+    if is_sel flexiv;    then _VERIFY_LINES+=$'\n''flexiv_rt|import importlib.metadata as M, flexiv_rt; print("v"+M.version("flexiv_rt"), "->", flexiv_rt.__file__)'; fi
+    if is_sel pico4;     then _VERIFY_LINES+=$'\n''xensevr_pc_service_sdk|import importlib.metadata as M, xensevr_pc_service_sdk; print("v"+M.version("xensevr_pc_service_sdk"), "->", xensevr_pc_service_sdk.__file__)'; fi
+    if is_sel xense;     then _VERIFY_LINES+=$'\n''xensesdk|import importlib.metadata as M, xensesdk; print("v"+M.version("xensesdk"), "->", xensesdk.__file__)'; fi
+    if is_sel xense;     then _VERIFY_LINES+=$'\n''xensegripper|import importlib.metadata as M, xensegripper; print("v"+M.version("xgripper"), "->", xensegripper.__file__)'; fi
+    if is_sel xense;     then _VERIFY_LINES+=$'\n''xensesdk flash|from xensesdk.flash.linux_backend import LinuxFlashBackend; print("available" if LinuxFlashBackend().available else "NOT available")'; fi
+    if is_sel taccap;    then _VERIFY_LINES+=$'\n''taccap-gripper|import importlib.metadata as M, xense.taccap; print("v"+M.version("taccap-gripper"), "->", xense.taccap.__file__)'; fi
+    if is_sel elite;     then _VERIFY_LINES+=$'\n''elite_cs_sdk|import importlib.metadata as M, elite_cs_sdk; print("v"+M.version("elite_cs_sdk"), "->", elite_cs_sdk.__file__)'; fi
+    if is_sel dynamixel; then _VERIFY_LINES+=$'\n''dynamixel_sdk|import importlib.metadata as M, dynamixel_sdk; print("v"+M.version("dynamixel_sdk"), "->", dynamixel_sdk.__file__)'; fi
+
     _VERIFY_FAIL=0
     while IFS='|' read -r _pkg _import; do
+        [[ -z "$_pkg" ]] && continue
         _out="$(python -c "$_import" 2>&1)" && \
             echo "[OK]    $_pkg: $_out" || \
             { echo "[ERROR] $_pkg: $_out"; _VERIFY_FAIL=1; }
-    done <<'VERIFY'
-lerobot|import importlib.metadata as M, lerobot; print("v"+M.version("lerobot"), "->", lerobot.__file__)
-pyarx|import importlib.metadata as M, pyarx; print("v"+M.version("pyarx"), "->", pyarx.__file__)
-flexiv_rt|import importlib.metadata as M, flexiv_rt; print("v"+M.version("flexiv_rt"), "->", flexiv_rt.__file__)
-xensevr_pc_service_sdk|import importlib.metadata as M, xensevr_pc_service_sdk; print("v"+M.version("xensevr_pc_service_sdk"), "->", xensevr_pc_service_sdk.__file__)
-xensesdk|import importlib.metadata as M, xensesdk; print("v"+M.version("xensesdk"), "->", xensesdk.__file__)
-xensegripper|import importlib.metadata as M, xensegripper; print("v"+M.version("xgripper"), "->", xensegripper.__file__)
-xensesdk flash|from xensesdk.flash.linux_backend import LinuxFlashBackend; print("available" if LinuxFlashBackend().available else "NOT available")
-taccap-gripper|import importlib.metadata as M, xense.taccap; print("v"+M.version("taccap-gripper"), "->", xense.taccap.__file__)
-elite_cs_sdk|import importlib.metadata as M, elite_cs_sdk; print("v"+M.version("elite_cs_sdk"), "->", elite_cs_sdk.__file__)
-dynamixel_sdk|import importlib.metadata as M, dynamixel_sdk; print("v"+M.version("dynamixel_sdk"), "->", dynamixel_sdk.__file__)
-VERIFY
+    done <<< "$_VERIFY_LINES"
 
     echo ""
     if [[ $_VERIFY_FAIL -eq 0 ]]; then
@@ -945,10 +1024,12 @@ VERIFY
     echo ""
     echo "[INFO] Lerobot-Xense installation complete."
     exit $_VERIFY_FAIL
+elif [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    print_general_usage
+    exit 0
+
 else
-    echo "Invalid argument. Usage:"
-    echo "  --conda [env_name]   Create a conda environment (requires Miniconda/Anaconda)"
-    echo "  --mamba [env_name]   Create a mamba environment (requires Miniforge)"
-    echo "  --install            Install base package + all hardware SDK bindings"
+    echo "Invalid argument."
+    print_general_usage
     exit 1
 fi
