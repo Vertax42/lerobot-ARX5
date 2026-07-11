@@ -25,6 +25,13 @@ per-unit SN/port needs configuring in the common case.
 
 from dataclasses import dataclass
 
+# Hard bound on the constant feed-forward torque, to catch sign/scale typos before
+# they reach the motor. The MIT impedance path applies feed-forward with NO firmware
+# max_torque clamp (only position/velocity modes clamp), and ~3.5 Nm is the top of the
+# motor's usable envelope (cf. the max_torque values in the codec tests). This is a
+# safety rail, not a recommendation — the gentle-grasp example aborts at 0.30 Nm.
+MAX_FEEDFORWARD_TORQUE_NM = 3.5
+
 
 @dataclass
 class TaccapFollowerGripperConfig:
@@ -43,6 +50,15 @@ class TaccapFollowerGripperConfig:
     Control (MIT impedance):
         kp:          Position-tracking stiffness gain (Nm/rad).
         kd:          Velocity damping gain (Nm·s/rad).
+        feedforward_torque: Constant torque bias (Nm) added to every MIT frame,
+                     on top of the kp/kd position term. SIGN: negative = closing
+                     (clamps harder), positive = opening. Default 0.0. This is a
+                     *constant* bias — it acts even with an empty jaw (holds the
+                     mechanical stop and biases the open pose), unlike kp which
+                     only produces force when there is a position error. Bounded
+                     to |ff| <= MAX_FEEDFORWARD_TORQUE_NM to catch sign/scale
+                     typos; the SDK's own gentle-grasp example treats 0.30 Nm as
+                     an abort threshold, so values past ~1 Nm are a hard crush.
         control_hz:  Rate of the background ControlLoop that resubmits the latest
                      normalized target to the firmware.
 
@@ -60,6 +76,7 @@ class TaccapFollowerGripperConfig:
     # ── Control (MIT impedance) ────────────────────────────────────────────────
     kp: float = 8.0                    # Nm/rad
     kd: float = 1.0                    # Nm·s/rad
+    feedforward_torque: float = 0.0    # Nm; NEGATIVE = closing/clamp, POSITIVE = opening
     control_hz: int = 200              # ControlLoop resubmit rate
 
     # ── Behavior ───────────────────────────────────────────────────────────────
@@ -75,6 +92,13 @@ class TaccapFollowerGripperConfig:
             raise ValueError(f"TaccapFollowerGripperConfig: kp must be positive, got {self.kp}.")
         if not self.kd >= 0.0:
             raise ValueError(f"TaccapFollowerGripperConfig: kd must be non-negative, got {self.kd}.")
+        if abs(self.feedforward_torque) > MAX_FEEDFORWARD_TORQUE_NM:
+            raise ValueError(
+                f"TaccapFollowerGripperConfig: |feedforward_torque| must be <= "
+                f"{MAX_FEEDFORWARD_TORQUE_NM} Nm, got {self.feedforward_torque}. "
+                "Sign: negative = closing/clamp, positive = opening. Values past "
+                "~1 Nm are a hard crush (the SDK's gentle-grasp example aborts at 0.30 Nm)."
+            )
         if not 0 < self.control_hz <= 500:
             raise ValueError(
                 f"TaccapFollowerGripperConfig: control_hz must be in (0, 500], got {self.control_hz}."

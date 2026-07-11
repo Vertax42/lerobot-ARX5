@@ -83,6 +83,7 @@ class TaccapFollowerGripper:
         self._mcu_device = config.mcu_device
         self._kp = config.kp
         self._kd = config.kd
+        self._feedforward_torque = config.feedforward_torque
         self._control_hz = config.control_hz
         self._init_open = config.init_open
         self._require_calibrated = config.require_calibrated
@@ -155,7 +156,21 @@ class TaccapFollowerGripper:
 
         # Background control loop: resubmits latest target at control_hz, keeps a
         # fresh thread-safe observation. start() seeds target = current pos (no jump).
-        self._loop = taccap.ControlLoop(self._gripper, hz=self._control_hz, kp=self._kp, kd=self._kd)
+        # feedforward_torque is a CONSTANT bias added to every MIT frame (negative =
+        # closing/clamp); with a non-zero clamp bias the jaw settles ~ff/kp rad short
+        # of any commanded open, and init_open below will warn on the timeout — expected.
+        self._loop = taccap.ControlLoop(
+            self._gripper,
+            hz=self._control_hz,
+            kp=self._kp,
+            kd=self._kd,
+            feedforward_torque=self._feedforward_torque,
+        )
+        if self._feedforward_torque != 0.0:
+            self._logger.info(
+                f"MIT feed-forward torque bias = {self._feedforward_torque:+.2f} Nm "
+                f"({'closing/clamp' if self._feedforward_torque < 0 else 'opening'})."
+            )
         self._loop.start()
 
         self._is_connected = True

@@ -184,6 +184,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     # ========== TacCap follower control params (used when gripper_type == "taccap_follower") ==========
     taccap_kp: float = 8.0          # MIT impedance stiffness (Nm/rad)
     taccap_kd: float = 1.0          # MIT impedance damping (Nm·s/rad)
+    taccap_grip_ff: float = 0.0     # constant MIT feed-forward torque (Nm); NEGATIVE = clamp harder, POSITIVE = open. |ff|<=3.5
     taccap_control_hz: int = 200    # ControlLoop resubmit rate
     # When gripper_type == "taccap_follower", auto-sniff the per-side wrist camera
     # and GSPS tactile sensor SNs (via TacCap + USB topology) at robot connect time
@@ -484,6 +485,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 side=side,
                 kp=self.taccap_kp,
                 kd=self.taccap_kd,
+                feedforward_torque=self.taccap_grip_ff,
                 control_hz=self.taccap_control_hz,
                 init_open=self.gripper_init_open,
                 require_calibrated=self.taccap_require_calibrated,
