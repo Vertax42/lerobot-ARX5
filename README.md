@@ -97,6 +97,53 @@ This step will:
 
 > You will be prompted for `sudo` password during installation (for ARX5 real-time capability and udev rules).
 
+#### 🎛️ Selective hardware install (build only the SDKs you need)
+
+By default `--install` builds **every** hardware SDK. On a station that only uses one
+or two devices, pass per-hardware-family selectors after `--install` to build
+**core + only those** SDKs — faster, and it skips SDKs you can't (or don't want to)
+build on that host:
+
+```bash
+# core + Flexiv + TacCap only (arms auto-include the xense gripper stack)
+bash ./setup_env.sh --install --flexiv --taccap
+
+# core + Elite only
+bash ./setup_env.sh --install --elite
+
+# core only — no hardware SDK bindings
+bash ./setup_env.sh --install --core
+
+# list every selector
+bash ./setup_env.sh --install --help
+```
+
+| Selector | Builds | Robots / teleoperators enabled |
+|---|---|---|
+| `--flexiv`, `--bi_flexiv` | `flexiv_rt` (+ `xense`) | `flexiv_rizon4_rt`, `bi_flexiv_rizon4_rt` |
+| `--elite`, `--bi_elite` | `elite_cs_sdk` (+ `xense`) | `elite_cs66_rt`, `bi_elite_cs66_rt` |
+| `--franka` | `pylibfranka` + `xense_franka` (+ `xense`) | `pylibfranka_research3` |
+| `--taccap`, `--bi_taccap` | `xense.taccap` (+ `xense`) | `taccap_gripper`, `bi_taccap_gripper` |
+| `--xense` | `xensesdk` + `xensegripper` (XGripper) | serial / xense grippers + tactile sensors |
+| `--arx5`, `--bi_arx5` | `pyarx` | `arx5_follower`, `bi_arx5` |
+| `--pico4`, `--bi_pico4` | `xensevr_pc_service_sdk` | `pico4`, `bi_pico4` teleop |
+| `--spacemouse` | `pyspacemouse` | `spacemouse` teleop |
+| `--dynamixel`, `--trlc` | `dynamixel-sdk` | `trlc_leader`, `bi_trlc` teleop |
+| `--vive`, `--vive_tracker` | `xense` (libsurvive via XGripper) | `vive_tracker` teleop |
+| `--all` | everything (explicit) | — |
+| `--core`, `--none` | nothing (core only) | — |
+| *(no selector)* | everything (default, backward compatible) | — |
+
+Notes:
+
+- **No selector = install all** — the existing `bash ./setup_env.sh --install` behavior is unchanged.
+- **Arms auto-include `xense`** — `--flexiv` / `--elite` / `--franka` / `--taccap` also build the xense gripper stack, because those arms drive xense grippers.
+- **Post-install verification** only checks the SDKs you selected.
+- **Code stays compatible with a partial install.** `import lerobot` and the CLIs
+  (`lerobot-teleoperate`, `lerobot-record`, …) start fine even when an SDK is absent —
+  a device whose SDK isn't installed simply won't appear as a `--robot.type` /
+  `--teleop.type` choice (and only errors, with a rebuild hint, if you try to construct it).
+
 **Step 4:** ✅ Verify the installation:
 
 ```bash
