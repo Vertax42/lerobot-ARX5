@@ -14,11 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import flexiv_rt
+# Guarded so `import lerobot.scripts.*` (which eagerly imports every robot
+# sub-package to register its --robot.type) does not crash when the Flexiv RT SDK
+# is not installed on this host. The config itself imports flexiv_rt, so the whole
+# body is wrapped (mirrors bi_flexiv_rizon4_rt/__init__.py). Absent SDK ->
+# flexiv_rizon4_rt is simply not a registered --robot.type choice.
+try:
+    import flexiv_rt
 
-from .config_flexiv_rizon4_rt import FlexivRizon4RTConfig  # noqa: F401
-from .flexiv_rizon4_rt import FlexivRizon4RT  # noqa: F401
+    from .config_flexiv_rizon4_rt import FlexivRizon4RTConfig  # noqa: F401
+    from .flexiv_rizon4_rt import FlexivRizon4RT  # noqa: F401
 
-# Export flexiv_rt types for direct access
-Mode = flexiv_rt.Mode  # noqa: F401
-CoordType = flexiv_rt.CoordType  # noqa: F401
+    # Export flexiv_rt types for direct access
+    Mode = flexiv_rt.Mode  # noqa: F401
+    CoordType = flexiv_rt.CoordType  # noqa: F401
+except ImportError:
+    pass

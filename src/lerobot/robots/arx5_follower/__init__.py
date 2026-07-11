@@ -14,5 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .arx5_follower import ARX5Follower  # noqa: F401
 from .config_arx5_follower import ARX5FollowerConfig  # noqa: F401
+
+# Guarded: the driver imports pyarx (re-raising ImportError when absent), so importing
+# the CLI on a host without the ARX5 SDK must not crash. The SDK-free config above stays
+# registered as an --robot.type choice regardless.
+try:
+    from .arx5_follower import ARX5Follower  # noqa: F401
+except ImportError:
+    pass

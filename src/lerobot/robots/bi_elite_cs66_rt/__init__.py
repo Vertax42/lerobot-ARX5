@@ -9,4 +9,11 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 
 from .config_bi_elite_cs66_rt import BiEliteCS66RTConfig, BiEliteCS66RTControlMode  # noqa: F401
-from .bi_elite_cs66_rt import BiEliteCS66RT  # noqa: F401
+
+# Guarded: the driver pulls in the xense gripper stack (xensegripper/xensesdk) and
+# elite_cs_sdk, so importing the CLI on a host without those must not crash. The
+# SDK-free config above stays registered as an --robot.type choice regardless.
+try:
+    from .bi_elite_cs66_rt import BiEliteCS66RT  # noqa: F401
+except ImportError:
+    pass
