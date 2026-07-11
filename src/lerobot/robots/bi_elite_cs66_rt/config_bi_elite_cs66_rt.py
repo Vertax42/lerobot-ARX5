@@ -27,7 +27,10 @@ from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
 from lerobot.robots.config import RobotConfig
 from lerobot.robots.elite_cs66_rt.config_elite_cs66_rt import _validate_singularity_params
-from lerobot.robots.grippers import SerialGripperConfig
+from lerobot.robots.grippers import (
+    SerialGripperConfig,
+    TaccapFollowerGripperConfig,
+)
 
 
 class BiEliteCS66RTControlMode(str, Enum):
@@ -375,13 +378,39 @@ class BiEliteCS66RTConfig(RobotConfig):
     gripper_f_max: float = 30.0    # N
     gripper_init_open: bool = True
 
+    # ── Gripper backend ── "serial" (default; per-arm XenseSerialGripper over USB,
+    # addressed by the preset board SN) or "taccap_follower" (xense.taccap FollowerGripper,
+    # MIT impedance; left/right auto-resolved from the firmware-burned SN, and the wrist +
+    # GSPS tactile cameras auto-discovered at connect). The serial fields above are ignored
+    # in taccap_follower mode.
+    gripper_type: str = "serial"
+    # TacCap follower control params (used when gripper_type == "taccap_follower").
+    taccap_kp: float = 8.0          # MIT impedance stiffness (Nm/rad)
+    taccap_kd: float = 1.0          # MIT impedance damping (Nm·s/rad)
+    taccap_grip_ff: float = 0.0     # constant MIT feed-forward torque (Nm); NEGATIVE = clamp harder, POSITIVE = open. |ff|<=3.5
+    taccap_control_hz: int = 200    # ControlLoop resubmit rate
+    taccap_auto_discover_cameras: bool = True  # sniff wrist + GSPS tactile SNs at connect
+    taccap_require_calibrated: bool = True     # False only for bring-up (uncalibrated control)
+
     # Separate tactile sensors (XenseTactileCamera) attached at the bimanual
     # camera level when enabled; SNs come from the preset.
     enable_tactile_sensors: bool = True
 
+    # ── Robot payload (tool + gripper) ── Declared to each controller via setPayload at
+    # connect. The CS66 has NO F/T sensor: collision detection is model/current-based, so an
+    # UNDECLARED payload makes the controller read the tool's own weight & inertia as external
+    # force and protective-stop on light contact (e.g. wiping a board). None = leave the
+    # controller's existing payload (previous behavior). mass in kg; cog in m relative to the
+    # flange frame. Verified fleet value: 0.7 kg @ [0, 0, 0.19].
+    payload_mass: float | None = None
+    payload_cog: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.19])
+
     # Auto-created in __post_init__. Do not set directly. None when no gripper.
-    left_gripper: SerialGripperConfig | None = field(default=None, init=False)
-    right_gripper: SerialGripperConfig | None = field(default=None, init=False)
+    left_gripper: SerialGripperConfig | TaccapFollowerGripperConfig | None = field(default=None, init=False)
+    right_gripper: SerialGripperConfig | TaccapFollowerGripperConfig | None = field(default=None, init=False)
+    # Set in __post_init__: in taccap_follower + auto-discover mode the wrist/tactile
+    # cameras are sniffed by the robot at connect rather than taken from the preset.
+    _taccap_autodiscover: bool = field(default=False, init=False)
 
     # Bimanual cameras (head + per-arm wrist + tactiles). Auto-populated from the preset.
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
@@ -437,10 +466,21 @@ class BiEliteCS66RTConfig(RobotConfig):
             self.right_gripper_baudrate, self.right_gripper_serial_timeout, side="right",
         )
 
-        # ── Bimanual cameras from preset (head + wrists + optional tactiles) ──
+        # ── Bimanual cameras ── In taccap_follower + auto-discover mode the wrist + GSPS
+        # tactile cameras change with the gripper, so the robot sniffs them at connect
+        # (see _inject_taccap_cameras) instead of taking them from the preset; _build_cameras
+        # then wires only the head. Any other mode stays preset-driven.
+        self._taccap_autodiscover = (
+            self.gripper_type == "taccap_follower" and self.taccap_auto_discover_cameras
+        )
         self._build_cameras(preset)
 
     def _validate_shared_servo_params(self) -> None:
+        if self.payload_mass is not None:
+            if self.payload_mass < 0 or self.payload_mass > 10.0:
+                raise ValueError(f"payload_mass must be in [0, 10] kg when set, got {self.payload_mass}")
+            if len(self.payload_cog) != 3:
+                raise ValueError(f"payload_cog must have 3 elements [x, y, z] (m), got {self.payload_cog}")
         if not 0.002 <= self.servoj_time <= 0.01:
             raise ValueError(
                 "servoj_time must be in [0.002, 0.01] s (CS-series RT envelope), "
@@ -537,10 +577,28 @@ class BiEliteCS66RTConfig(RobotConfig):
 
     def _build_gripper_config(
         self, use_gripper: bool, sn: str, baudrate: int, serial_timeout: float, side: str
-    ) -> SerialGripperConfig | None:
-        # No gripper when disabled or when no board SN is configured yet (mirrors
-        # the camera handling: an empty preset SN simply means "not attached").
-        if not use_gripper or not sn:
+    ) -> "SerialGripperConfig | TaccapFollowerGripperConfig | None":
+        if not use_gripper:
+            return None
+        if self.gripper_type == "taccap_follower":
+            # left/right resolved from the firmware-burned SN (not the preset board SN);
+            # wrist + GSPS tactile cameras auto-discovered by the robot at connect.
+            return TaccapFollowerGripperConfig(
+                side=side,
+                kp=self.taccap_kp,
+                kd=self.taccap_kd,
+                feedforward_torque=self.taccap_grip_ff,
+                control_hz=self.taccap_control_hz,
+                init_open=self.gripper_init_open,
+                require_calibrated=self.taccap_require_calibrated,
+            )
+        if self.gripper_type != "serial":
+            raise ValueError(
+                f"gripper_type must be 'serial' or 'taccap_follower', got {self.gripper_type!r}"
+            )
+        # serial (default): no gripper when no board SN is configured yet (an empty preset
+        # SN simply means "not attached", mirroring the camera handling).
+        if not sn:
             return None
         if self.gripper_min_pos >= self.gripper_max_pos:
             raise ValueError(
@@ -568,6 +626,12 @@ class BiEliteCS66RTConfig(RobotConfig):
                 height=480,
                 warmup_s=1.0,
             )
+        # taccap_follower + auto-discover: wrist + GSPS tactile are sniffed by the robot at
+        # connect (see the driver's _inject_taccap_cameras), so wire only the head here.
+        if self._taccap_autodiscover:
+            if cameras:
+                self.cameras = cameras
+            return
         if preset.get("left_wrist_camera_sn"):
             cameras["left_wrist"] = OpenCVCameraConfig(
                 index_or_path=preset["left_wrist_camera_sn"],

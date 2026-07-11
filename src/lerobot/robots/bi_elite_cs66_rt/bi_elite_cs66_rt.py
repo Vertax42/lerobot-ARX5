@@ -34,8 +34,13 @@ from typing import Any
 
 import numpy as np
 
+from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.utils import make_cameras_from_configs
-from lerobot.cameras.xense import prewarm_tactile_config_cache
+from lerobot.cameras.xense import (
+    XenseOutputType,
+    XenseTactileCameraConfig,
+    prewarm_tactile_config_cache,
+)
 from lerobot.robots.bi_elite_cs66_rt.config_bi_elite_cs66_rt import (
     BiEliteCS66RTConfig,
     BiEliteCS66RTControlMode,
@@ -61,7 +66,13 @@ from lerobot.robots.elite_cs66_rt.manipulability import (
     pose_delta,
     tool_consistency,
 )
-from lerobot.robots.grippers import SerialGripper
+from lerobot.robots.grippers import (
+    SerialGripper,
+    SerialGripperConfig,
+    TaccapFollowerGripper,
+    TaccapFollowerGripperConfig,
+)
+from lerobot.robots.grippers.taccap_discovery import discover_taccap_sides
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import (
@@ -84,6 +95,20 @@ _SIDES = ("left", "right")
 # Single-arm RTSI/recipe resource directory, reused as the on-disk fallback when
 # the SDK package doesn't ship the recipes. No need to duplicate recipe files.
 _ELITE_RESOURCE_DIR = Path(_elite_mod.__file__).resolve().parent / "resource"
+
+
+def _make_gripper(cfg):
+    """Instantiate the gripper driver matching the nested config type (None when no
+    gripper). Both drivers expose the same duck-typed contract (connect/disconnect/
+    get_gripper_position/set_gripper_position/initialize_gripper_position), so the rest
+    of the arm's gripper wiring stays driver-agnostic."""
+    if cfg is None:
+        return None
+    if isinstance(cfg, SerialGripperConfig):
+        return SerialGripper(cfg)
+    if isinstance(cfg, TaccapFollowerGripperConfig):
+        return TaccapFollowerGripper(cfg)
+    raise TypeError(f"Unsupported gripper config type: {type(cfg).__name__}")
 
 
 class BiEliteCS66RT(Robot):
@@ -115,9 +140,9 @@ class BiEliteCS66RT(Robot):
         self._dashboard: dict[str, Any] = {s: None for s in _SIDES}
         self._rtsi: dict[str, Any] = {s: None for s in _SIDES}
 
-        self._gripper: dict[str, SerialGripper | None] = {
-            "left": SerialGripper(config.left_gripper) if config.left_gripper is not None else None,
-            "right": SerialGripper(config.right_gripper) if config.right_gripper is not None else None,
+        self._gripper: dict[str, SerialGripper | TaccapFollowerGripper | None] = {
+            "left": _make_gripper(config.left_gripper),
+            "right": _make_gripper(config.right_gripper),
         }
 
         self._last_tcp_command: dict[str, np.ndarray | None] = {s: None for s in _SIDES}
@@ -159,7 +184,47 @@ class BiEliteCS66RT(Robot):
             side: self._resolve_world_rotation(config, side) for side in _SIDES
         }
 
+        # In taccap_follower + auto-discover mode the wrist + GSPS tactile cameras belong
+        # to the gripper hardware, so sniff them now and add to config.cameras before the
+        # camera drivers are built (config._build_cameras wired only the head).
+        if getattr(config, "_taccap_autodiscover", False):
+            self._inject_taccap_cameras()
+
         self.cameras = make_cameras_from_configs(config.cameras)
+
+    def _inject_taccap_cameras(self) -> None:
+        """Auto-discover per-side wrist + GSPS tactile devices and add them to
+        config.cameras (keys match the preset-driven wiring so datasets stay compatible).
+        Called only in taccap_follower auto-discover mode."""
+        sides = discover_taccap_sides()
+        for side in _SIDES:
+            dev = sides.get(side)
+            if dev is None:
+                raise DeviceNotConnectedError(
+                    f"taccap auto-discover: no {side} gripper/wrist camera found."
+                )
+            self.config.cameras[f"{side}_wrist"] = OpenCVCameraConfig(
+                index_or_path=dev.wrist_camera_name,
+                fourcc="MJPG",
+                width=640,
+                height=480,
+                fps=30,
+                warmup_s=1.0,
+            )
+            if self.config.enable_tactile_sensors:
+                if len(dev.tactile_sns) < 2:
+                    raise DeviceNotConnectedError(
+                        f"taccap auto-discover: expected 2 GSPS tactile sensors for "
+                        f"{side}, found {dev.tactile_sns}."
+                    )
+                for i, sn in enumerate(dev.tactile_sns):
+                    self.config.cameras[f"{side}_tactile_{i}"] = XenseTactileCameraConfig(
+                        serial_number=sn,
+                        fps=30,
+                        output_types=[XenseOutputType.RECTIFY],
+                        warmup_s=0.05,
+                    )
+        self.logger.info(f"taccap auto-discovered cameras: {sorted(self.config.cameras)}")
 
     @staticmethod
     def _resolve_world_rotation(config: BiEliteCS66RTConfig, side: str) -> np.ndarray:
@@ -540,6 +605,16 @@ class BiEliteCS66RT(Robot):
         remaining = self.config.external_control_settle_s - (time.monotonic() - driver_construct_time)
         if remaining > 0:
             time.sleep(remaining)
+
+        # Declare the tool+gripper payload so the controller's (F/T-less, model-based)
+        # collision detection doesn't read the tool's own weight/inertia as external force
+        # and protective-stop on light contact. Done before go_to_start / any servoj.
+        if self.config.payload_mass is not None:
+            ok = driver.setPayload(self.config.payload_mass, list(self.config.payload_cog))
+            self.logger.info(
+                f"{side} arm: setPayload(mass={self.config.payload_mass} kg, "
+                f"cog={self.config.payload_cog}) -> {'ok' if ok else 'FAILED'}"
+            )
 
         gripper = self._gripper[side]
         if gripper is not None:
