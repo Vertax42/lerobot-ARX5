@@ -238,7 +238,7 @@ JSON data description
 **1. Get Controller and Headset Poses**
 
 ```python
-import xrobotoolkit_sdk as xrt
+import xensevr_pc_service_sdk as xrt
 
 xrt.init()
 
@@ -256,7 +256,7 @@ xrt.close()
 **2. Get Controller Inputs (Triggers, Grips, Buttons, Axes)**
 
 ```python
-import xrobotoolkit_sdk as xrt
+import xensevr_pc_service_sdk as xrt
 
 xrt.init()
 
@@ -284,7 +284,7 @@ xrt.close()
 
 **3. Get hand tracking state**
 ```python
-import xrobotoolkit_sdk as xrt
+import xensevr_pc_service_sdk as xrt
 
 xrt.init()
 
@@ -309,7 +309,7 @@ xrt.close()
 
 **4. Get whole body motion tracking**
 ```python
-import xrobotoolkit_sdk as xrt
+import xensevr_pc_service_sdk as xrt
 
 xrt.init()
 

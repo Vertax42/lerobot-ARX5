@@ -22,7 +22,6 @@ from ..config import TeleoperatorConfig
 @TeleoperatorConfig.register_subclass("pico4")
 @dataclass
 class Pico4Config(TeleoperatorConfig):
-    id: str = "pico4"  # Default id for Pico4 teleoperator
     """Configuration for Pico4 VR teleoperator.
 
     This teleoperator provides 6-DoF absolute pose control using VR controllers,
@@ -37,12 +36,15 @@ class Pico4Config(TeleoperatorConfig):
         ori_sensitivity: Sensitivity multiplier for orientation control.
                          1.0 = full tracking, 0.5 = half speed rotation.
         filter_window_size: Moving average filter window size for smoothing pose changes.
-        gripper_width: Maximum gripper position in meters (for clamping).
-        grip_threshold: Threshold value (0-1) for grip to be considered pressed (enable control).
+        gripper_width: Maximum gripper travel in control space [0, 1] (for clamping).
+        grip_enable_threshold: Grip value (0-1) that must be exceeded to enable control.
+        grip_disable_threshold: Grip value (0-1) that control must drop below to disable.
         orientation_offset_warning_deg: Warning threshold in degrees for orientation offset at enable.
                                         If controller-robot orientation difference exceeds this,
                                         a warning is logged and orientation control is disabled.
     """
+
+    id: str = "pico4"  # Default id for Pico4 teleoperator
 
     use_left_controller: bool = False
     use_right_controller: bool = True

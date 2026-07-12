@@ -109,7 +109,7 @@ class TRLCLeader(Teleoperator):
     def calibrate(self) -> None:
         """
         Prompt the user to move the arm to `start_joints`, then compute
-        per-joint assembly offsets (snapped to the nearest π/2 multiple):
+        per-joint assembly offsets:
 
             offset = raw_rad - sign * target_angle
         """
@@ -117,7 +117,7 @@ class TRLCLeader(Teleoperator):
         signs = self.config.joint_signs
 
         target_str = "  ".join(f"joint_{i + 1}: {math.degrees(v):+.1f}°" for i, v in enumerate(target))
-        print(f"\n[TRLC Calibration] calibrate arm in start pose with joints:")
+        print("\n[TRLC Calibration] calibrate arm in start pose with joints:")
         print(f"  {target_str}")
         time.sleep(2)
 

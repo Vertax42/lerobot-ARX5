@@ -17,7 +17,7 @@
 """
 Configuration for TRLC Leader Teleoperator.
 
-The TRLC Leader arm uses Dynamixel xl330-m077 motors for:
+The TRLC Leader arm uses Dynamixel xl330-m077 motors (joint_2 is xl330-m288) for:
 - 6 joint motors for arm control
 - 1 gripper motor with current-position mode
 """
@@ -32,7 +32,7 @@ from ..config import TeleoperatorConfig
 class TRLCLeaderConfig(TeleoperatorConfig):
     """Configuration for the TRLC Leader arm teleoperator.
 
-    The TRLC Leader uses Dynamixel xl330-m077 motors in a 7-DOF configuration
+    The TRLC Leader uses Dynamixel xl330-m077 motors (joint_2 is xl330-m288) in a 7-DOF configuration
     (6 arm joints + 1 gripper). The gripper uses current-position control mode
     and its raw encoder value is normalized to [0, 1].
 
@@ -47,8 +47,7 @@ class TRLCLeaderConfig(TeleoperatorConfig):
             for calibration.  Default is all-zeros.
 
     Attributes:
-        port: Serial port for Dynamixel motor bus (e.g. "/dev/ttyUSB0")
-        baudrate: Baud rate for the Dynamixel bus
+        port: Serial port for Dynamixel motor bus (e.g. "/dev/ttyACM0")
         joint_signs: Direction signs (±1) for joints 1-6
         start_joints: Known reference pose in radians used for calibration
         gripper_open_pos: Raw encoder value when gripper is fully open

@@ -23,7 +23,7 @@ directly sent to a Cartesian controller.
 
 Control scheme:
 - Grip button: Enable control (must be held to move robot)
-- Trigger: Directly controls gripper position (0=closed, 1=open)
+- Trigger: Directly controls gripper position (trigger 0 → open, 1 → closed)
 - Controller pose: Controls robot TCP pose (when grip is held)
 
 The output format matches ARX5 SDK's spacemouse_teleop.py example:
@@ -57,7 +57,7 @@ class Pico4(Teleoperator):
 
     Control scheme:
     - Grip button: Enable control (must be held to move robot, with hysteresis thresholds)
-    - Trigger: Directly controls gripper position (0=closed, 1=open)
+    - Trigger: Directly controls gripper position (trigger 0 → open, 1 → closed)
     - Controller pose: Controls robot TCP pose (only when grip is held)
 
     Position control (relative accumulation):
@@ -524,7 +524,7 @@ class Pico4(Teleoperator):
 
         Control scheme:
         - Grip: Enable control (must be held to move robot, with hysteresis thresholds)
-        - Trigger: Directly controls gripper position (0=closed, gripper_width=open)
+        - Trigger: Directly controls gripper position (trigger 0 → open, 1 → closed)
         - Controller pose: Controls robot TCP pose (only when grip is held)
 
         Data processing pipeline:
@@ -769,8 +769,9 @@ class Pico4(Teleoperator):
         self._last_action_time = now
 
         # Step 6: Update gripper position from trigger value
-        # Trigger value [0, 1] maps directly to gripper position [0, gripper_width]
-        # trigger=0 -> gripper closed (0), trigger=1 -> gripper open (gripper_width)
+        # Trigger [0, 1] maps to gripper position in [1 - gripper_width, 1].
+        # Gripper convention: 1.0 = open, 0.0 = closed. So trigger=0 -> open (1.0),
+        # trigger=1 -> closed (1 - gripper_width).
         self._target_gripper_pos = 1.0 - float(controller_trigger) * self.config.gripper_width
 
         # Step 7: Return in world-frame TCP action format with 6D rotation
