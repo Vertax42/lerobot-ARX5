@@ -8,7 +8,7 @@
 
 robot:
   type: bi_flexiv_rizon4_rt
-  bi_mount_type: forward # forward | forward_dewu | side | diagonal
+  bi_mount_type: forward-06 # forward-04 | forward-05 | forward-06 | forward-dewu | diagonal-02
   use_force: false
   log_level: INFO
   left_use_gripper: true

@@ -45,8 +45,9 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         left_robot_sn: Serial number of the left arm robot
         right_robot_sn: Serial number of the right arm robot
         bi_mount_type: Preset layout for robot/camera SNs and home/start poses
-            ("forward", "side", or "diagonal"). Serial grippers self-sort left/right
-            by board-SN parity at connect, so no gripper SN is pinned here.
+            (one per station: "forward-04"/"forward-05"/"forward-06", "forward-dewu",
+            or "diagonal-02"). Serial grippers self-sort left/right by board-SN parity
+            at connect, so no gripper SN is pinned here.
         use_force: Enable force control axes (both arms)
         inner_control_hz: How often each 1 kHz RT thread consumes a new Python command (1-1000 Hz)
         interpolate_cmds: Enable linear interpolation between consumed commands
@@ -72,10 +73,10 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             dataset frame built from it records the safe envelope. Set to 180 to disable.
     """
 
-    # Robot identification
-    left_robot_sn: str = "Rizon4s-063458"
-    right_robot_sn: str = "Rizon4s-063670"
-    bi_mount_type: str = "forward"
+    # Robot identification (overwritten from the bi_mount_type preset)
+    left_robot_sn: str = ""
+    right_robot_sn: str = ""
+    bi_mount_type: str = "forward-06"
     # Force control
     use_force: bool = False
 
@@ -435,7 +436,6 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                     ),
                 }
             )
-        pass
 
     def _make_gripper_config(
         self,

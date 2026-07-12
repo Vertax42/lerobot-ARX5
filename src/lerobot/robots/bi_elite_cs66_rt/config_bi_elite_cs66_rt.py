@@ -45,12 +45,11 @@ class BiEliteCS66RTControlMode(str, Enum):
 # SN is bundled here. Tactile camera labels are pre-namespaced
 # (left_tactile_* / right_tactile_*) so the flat observation dict stays unique.
 #
-# NOTE: the "diagonal" preset below describes the real station — the two Elite
-# CS66 arms are mounted diagonally/opposed (tilt about base-X + rotate about Z,
-# see the bi-arm mounting transform). It has real controller IPs and per-arm
+# NOTE: the "diagonal-07"/"diagonal-08" presets below describe real stations — the
+# two Elite CS66 arms are mounted diagonally/opposed (tilt about base-X + rotate about
+# Z, see the bi-arm mounting transform). Each has real controller IPs and per-arm
 # start/home joint poses (measured on the station). Grippers are serial (USB,
-# left/right self-sorted by board-SN parity — no IP/MAC, no pinned SN). Tactile
-# sensor SNs are still PLACEHOLDER — replace the TODO-marked values before deployment.
+# left/right self-sorted by board-SN parity — no IP/MAC, no pinned SN).
 #
 # Per-arm mounting → the world←base rotation R = Rz(γ)·Rz(β)·Rx(α) that lifts
 # base-frame TCP poses into a SHARED gravity-aligned world frame (x = facing,
@@ -75,8 +74,8 @@ _RIGHT_START_POSE = [-1.7453, -2.6180, -1.5708, -2.6180, -1.5708, -0.7854]
 
 _PRESETS: dict[str, dict] = {
     "diagonal-07": {
-        "left_ip": "192.168.0.172",
-        "right_ip": "192.168.0.247",
+        "left_ip": "192.168.207.129",
+        "right_ip": "192.168.207.108",
         "left_local_ip": "",
         "right_local_ip": "",
         "left_start": list(_LEFT_START_POSE),
@@ -117,8 +116,8 @@ _PRESETS: dict[str, dict] = {
         "head_camera_sn": "347522071393",
         "left_wrist_camera_sn": "XC000043",
         "right_wrist_camera_sn": "XC000044",
-        # Tactile sensor SNs (XenseTactileCamera). left = OG001349/OG001350,
-        # right = OG001351/OG001352.
+        # Tactile sensor SNs (XenseTactileCamera). left = OG001345/OG001346,
+        # right = OG001347/OG001348.
         "left_tactile_camera_sn_0": "OG001345",
         "left_tactile_camera_sn_1": "OG001346",
         "right_tactile_camera_sn_0": "OG001347",
@@ -201,7 +200,7 @@ class BiEliteCS66RTConfig(RobotConfig):
     right_robot_ip: str = ""
     left_local_ip: str = ""
     right_local_ip: str = ""
-    bi_mount_type: str = "diagonal"
+    bi_mount_type: str = "diagonal-08"
 
     # ── Per-arm mounting → base↔world rotation (overwritten from the preset) ──
     # R_world←base = Rz(γ)·Rz(β)·Rx(α): α=tilt about base-X, β=rotate about Z (both
