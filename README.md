@@ -3,14 +3,16 @@
 🤗 This repository is a fork of [`lerobot`](https://github.com/huggingface/lerobot)
 by XenseRobotics, used for Xense's multimodal tactile data acquisition system.
 This branch tracks **upstream lerobot v5.1**, with Xense-specific robots
-(BiARX5, BiFlexiv Rizon4 RT, Xense Flare), teleoperators (Pico4, dual
-SpaceMouse) and tactile cameras layered on top. For generic lerobot
-usage (datasets, policies, training scripts) refer to the
+(Flexiv Rizon4 RT, Elite CS66 RT, and ARX5 — each single-arm and bimanual;
+Franka Research3; plus TacCap tactile grippers), teleoperators (Pico4 VR,
+dual SpaceMouse, Vive tracker, TRLC leader, gamepad) and tactile cameras
+layered on top. For generic lerobot usage (datasets, policies, training
+scripts) refer to the
 [upstream README](https://github.com/huggingface/lerobot#readme).
 
 ## 🔧 Installation
 
-Tested on Ubuntu 22.04, NVIDIA driver ≥ 570.144. Use
+Tested on Ubuntu 22.04 and 24.04, NVIDIA driver ≥ 570.144. Use
 [`Mamba`](https://github.com/conda-forge/miniforge?tab=readme-ov-file#install)
 (strongly recommended over plain conda — it's much faster on the
 robostack-staging channel that ships ROS Humble + SOEM). v5.1 pins
@@ -144,7 +146,9 @@ Notes:
   a device whose SDK isn't installed simply won't appear as a `--robot.type` /
   `--teleop.type` choice (and only errors, with a rebuild hint, if you try to construct it).
 
-**Step 4:** ✅ Verify the installation:
+**Step 4:** ✅ Verify the installation. These checks assume a **full** `--install`; on a
+selective install (e.g. `--flexiv --taccap`) only the SDKs you selected are built, so
+verify just those — the installer already prints a per-SDK verification summary at the end.
 
 ```bash
 python -c 'import pyarx; print("pyarx OK ->", pyarx.__file__)'
@@ -153,6 +157,8 @@ python -c 'import xensevr_pc_service_sdk; print("xensevr_pc_service_sdk OK ->", 
 python -c 'import xensesdk; print("xensesdk OK ->", xensesdk.__file__)'
 python -c 'import xensegripper; print("xensegripper OK ->", xensegripper.__file__)'
 python -c 'import elite_cs_sdk; print("elite_cs_sdk OK ->", elite_cs_sdk.__file__)'
+python -c 'import xense.taccap; print("xense.taccap OK ->", xense.taccap.__file__)'
+python -c 'import xense_franka; print("xense_franka OK ->", xense_franka.__file__)'
 ```
 
 **Step 5:** 📌 **Note on FFmpeg / video:** v5.1 no longer pins `ffmpeg`
@@ -177,6 +183,37 @@ sudo setcap cap_sys_nice+ep "$PY_EXE"
 getcap "$PY_EXE"  # should show: cap_sys_nice+ep
 ```
 
+## 🚀 Running teleop & record (recipes + station presets)
+
+Teleoperation and recording are driven by **recipe** YAML files under
+[`recipes/`](recipes/) (see [`recipes/README.md`](recipes/README.md) for the full
+guide). Pass one with `--config_path`:
+
+```bash
+lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-07.yaml
+lerobot-record     --config_path=recipes/record/bi_flexiv_rizon4_rt/assemble_box.yaml
+```
+
+**Station presets (`bi_mount_type`).** For the bimanual robots, all station-specific
+hardware — controller IPs/SNs, camera SNs, and per-arm home/start poses — is bundled
+into a named preset selected by `bi_mount_type`; a recipe just picks the preset. One
+preset = one physical station:
+
+| Robot | `bi_mount_type` presets |
+|---|---|
+| `bi_flexiv_rizon4_rt` | `forward-04`, `forward-05`, `forward-06`, `forward-dewu`, `diagonal-02` |
+| `bi_elite_cs66_rt` | `diagonal-07`, `diagonal-08` |
+
+**Gripper backend (`gripper_type`).** The bimanual arms drive one gripper type for
+both sides:
+
+- `serial` (default) — `XenseSerialGripper` over USB. Left/right are **auto-discovered
+  by board-SN parity** (odd SN → left, even SN → right) at connect, so no per-station
+  gripper SN is configured.
+- `taccap_follower` — `xense.taccap` FollowerGripper (MIT-impedance actuated TacCap
+  gripper); left/right resolved from the firmware-burned SN, and its wrist + GSPS
+  tactile cameras are auto-discovered at connect.
+
 ## 🐭 SpaceMouse Teleoperation System
 
 This project includes advanced SpaceMouse support with both single and dual-device modes for precise robotic control.
@@ -185,7 +222,7 @@ This project includes advanced SpaceMouse support with both single and dual-devi
 
 **System Requirements:**
 
-- Ubuntu 22.04 (tested) or other Linux distributions
+- Ubuntu 22.04 / 24.04 (tested) or other Linux distributions
 - Python 3.12+
 - libhidapi (installed via apt)
 
@@ -199,7 +236,7 @@ All Python dependencies are automatically installed by `setup_env.sh --install`.
 
 ### Permissions Setup
 
-SpaceMouse requires proper udev rules to allow non-root access. See **Step 2** in the Installation section above for complete setup instructions.
+SpaceMouse requires proper udev rules to allow non-root access. This is configured automatically by `setup_env.sh --install` (see **Step 3** in the Installation section above).
 
 ### Testing Your SpaceMouse
 
@@ -207,10 +244,10 @@ After installation and permissions setup, test your SpaceMouse:
 
 ```bash
 # Basic functionality test (prints real-time 6-DoF values)
-python test_pyspacemouse_basic.py
+python src/lerobot/teleoperators/spacemouse/examples/01_basic.py
 
-# Test with lerobot integration
-python test_spacemouse.py
+# Device discovery (lists connected SpaceMice by path/serial)
+python src/lerobot/teleoperators/spacemouse/examples/05_discovery.py
 ```
 
 The test script will display real-time position (x, y, z) and orientation (roll, pitch, yaw) values as you move the SpaceMouse.
@@ -271,7 +308,7 @@ teleop = SpacemouseTeleop(config)
 
 ### Example Configurations
 
-See [examples/spacemouse_dual_config_example.py](examples/spacemouse_dual_config_example.py) for complete configuration examples including:
+See [`examples/09_custom_config.py`](src/lerobot/teleoperators/spacemouse/examples/09_custom_config.py) and [`examples/03_multi_device.py`](src/lerobot/teleoperators/spacemouse/examples/03_multi_device.py) (under `src/lerobot/teleoperators/spacemouse/`) for complete configuration examples including:
 - Position/Orientation split control
 - Dual-arm robot control  
 - Fine/Coarse movement control
