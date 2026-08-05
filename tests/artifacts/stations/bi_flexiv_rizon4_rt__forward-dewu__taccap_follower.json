@@ -1,0 +1,63 @@
+{
+  "cameras": {
+    "head": {
+      "__class__": "RealSenseCameraConfig",
+      "color_mode": "rgb",
+      "fps": 30,
+      "height": 480,
+      "rotation": 0,
+      "serial_number_or_name": "337322070722",
+      "use_depth": false,
+      "warmup_s": 1.0,
+      "width": 640
+    }
+  },
+  "config": {
+    "_taccap_autodiscover": true,
+    "bi_mount_type": "forward-dewu",
+    "enable_tactile_sensors": true,
+    "gripper_type": "taccap_follower",
+    "head_camera_use_depth": false,
+    "left_home_position_degree": [
+      105.16,
+      66.69,
+      -6.37,
+      77.95,
+      76.3,
+      -2.83,
+      -102.67
+    ],
+    "left_robot_sn": "Rizon4s-063458",
+    "left_start_position_degree": [
+      105.16,
+      66.69,
+      -6.37,
+      77.95,
+      76.3,
+      -2.83,
+      -102.67
+    ],
+    "right_home_position_degree": [
+      -22.97,
+      65.41,
+      12.12,
+      98.98,
+      -68.95,
+      0.55,
+      125.45
+    ],
+    "right_robot_sn": "Rizon4s-063670",
+    "right_start_position_degree": [
+      -22.97,
+      65.41,
+      12.12,
+      98.98,
+      -68.95,
+      0.55,
+      125.45
+    ]
+  },
+  "gripper_type": "taccap_follower",
+  "robot_type": "bi_flexiv_rizon4_rt",
+  "station": "forward-dewu"
+}

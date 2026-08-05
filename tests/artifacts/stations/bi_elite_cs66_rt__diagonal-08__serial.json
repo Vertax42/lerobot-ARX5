@@ -1,0 +1,236 @@
+{
+  "cameras": {
+    "head": {
+      "__class__": "RealSenseCameraConfig",
+      "color_mode": "rgb",
+      "fps": 30,
+      "height": 480,
+      "rotation": 0,
+      "serial_number_or_name": "346522074942",
+      "use_depth": false,
+      "warmup_s": 1.0,
+      "width": 640
+    },
+    "left_tactile_0": {
+      "__class__": "XenseTactileCameraConfig",
+      "camera_properties": {
+        "auto_exposure": 1,
+        "auto_wb": false,
+        "brightness": 38,
+        "exposure": 250,
+        "white_balance_t": 5550
+      },
+      "disable_infer": true,
+      "fps": 30,
+      "height": 400,
+      "infer_mode": null,
+      "output_types": [
+        "rectify"
+      ],
+      "raw_size": [
+        640,
+        480
+      ],
+      "rectify_size": [
+        400,
+        700
+      ],
+      "serial_number": "OG001349",
+      "warmup_s": 0.05,
+      "width": 700
+    },
+    "left_tactile_1": {
+      "__class__": "XenseTactileCameraConfig",
+      "camera_properties": {
+        "auto_exposure": 1,
+        "auto_wb": false,
+        "brightness": 38,
+        "exposure": 250,
+        "white_balance_t": 5550
+      },
+      "disable_infer": true,
+      "fps": 30,
+      "height": 400,
+      "infer_mode": null,
+      "output_types": [
+        "rectify"
+      ],
+      "raw_size": [
+        640,
+        480
+      ],
+      "rectify_size": [
+        400,
+        700
+      ],
+      "serial_number": "OG001350",
+      "warmup_s": 0.05,
+      "width": 700
+    },
+    "left_wrist": {
+      "__class__": "OpenCVCameraConfig",
+      "backend": 200,
+      "color_mode": "rgb",
+      "fourcc": "MJPG",
+      "fps": 30,
+      "height": 480,
+      "index_or_path": "XC000045",
+      "rotation": 0,
+      "warmup_s": 1.0,
+      "width": 640
+    },
+    "right_tactile_0": {
+      "__class__": "XenseTactileCameraConfig",
+      "camera_properties": {
+        "auto_exposure": 1,
+        "auto_wb": false,
+        "brightness": 38,
+        "exposure": 250,
+        "white_balance_t": 5550
+      },
+      "disable_infer": true,
+      "fps": 30,
+      "height": 400,
+      "infer_mode": null,
+      "output_types": [
+        "rectify"
+      ],
+      "raw_size": [
+        640,
+        480
+      ],
+      "rectify_size": [
+        400,
+        700
+      ],
+      "serial_number": "OG001351",
+      "warmup_s": 0.05,
+      "width": 700
+    },
+    "right_tactile_1": {
+      "__class__": "XenseTactileCameraConfig",
+      "camera_properties": {
+        "auto_exposure": 1,
+        "auto_wb": false,
+        "brightness": 38,
+        "exposure": 250,
+        "white_balance_t": 5550
+      },
+      "disable_infer": true,
+      "fps": 30,
+      "height": 400,
+      "infer_mode": null,
+      "output_types": [
+        "rectify"
+      ],
+      "raw_size": [
+        640,
+        480
+      ],
+      "rectify_size": [
+        400,
+        700
+      ],
+      "serial_number": "OG001352",
+      "warmup_s": 0.05,
+      "width": 700
+    },
+    "right_wrist": {
+      "__class__": "OpenCVCameraConfig",
+      "backend": 200,
+      "color_mode": "rgb",
+      "fourcc": "MJPG",
+      "fps": 30,
+      "height": 480,
+      "index_or_path": "XC000046",
+      "rotation": 0,
+      "warmup_s": 1.0,
+      "width": 640
+    }
+  },
+  "config": {
+    "_taccap_autodiscover": false,
+    "bi_mount_type": "diagonal-08",
+    "enable_tactile_sensors": true,
+    "gripper_type": "serial",
+    "left_home_position_rad": [
+      -1.3963,
+      -0.5236,
+      1.5708,
+      -0.5236,
+      1.5708,
+      -0.7854
+    ],
+    "left_local_ip": "",
+    "left_mount_tilt_deg": 45.0,
+    "left_mount_world_yaw_deg": 180.0,
+    "left_mount_zrot_deg": 90.0,
+    "left_robot_ip": "192.168.8.53",
+    "left_start_position_rad": [
+      -1.3963,
+      -0.5236,
+      1.5708,
+      -0.5236,
+      1.5708,
+      -0.7854
+    ],
+    "left_world_rotation": [
+      [
+        0.0,
+        1.0,
+        0.0
+      ],
+      [
+        -0.70710678,
+        0.0,
+        0.70710678
+      ],
+      [
+        0.70710678,
+        0.0,
+        0.70710678
+      ]
+    ],
+    "right_home_position_rad": [
+      -1.7453,
+      -2.618,
+      -1.5708,
+      -2.618,
+      -1.5708,
+      -0.7854
+    ],
+    "right_local_ip": "",
+    "right_mount_tilt_deg": 45.0,
+    "right_mount_world_yaw_deg": 0.0,
+    "right_mount_zrot_deg": 90.0,
+    "right_robot_ip": "192.168.8.223",
+    "right_start_position_rad": [
+      -1.7453,
+      -2.618,
+      -1.5708,
+      -2.618,
+      -1.5708,
+      -0.7854
+    ],
+    "right_world_rotation": [
+      [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      [
+        0.70710678,
+        0.0,
+        -0.70710678
+      ],
+      [
+        0.70710678,
+        0.0,
+        0.70710678
+      ]
+    ]
+  },
+  "gripper_type": "serial",
+  "robot_type": "bi_elite_cs66_rt",
+  "station": "diagonal-08"
+}
