@@ -53,7 +53,10 @@ class OpenCVCameraConfig(CameraConfig):
         rotation: Image rotation setting (0°, 90°, 180°, or 270°). Defaults to no rotation.
         warmup_s: Time reading frames before returning from connect (in seconds)
         fourcc: FOURCC code for video format (e.g., "MJPG", "YUYV", "I420"). Defaults to None (auto-detect).
-        backend: OpenCV backend identifier (https://docs.opencv.org/3.4/d4/d15/group__videoio__flags__base.html). Defaults to ANY.
+        backend: OpenCV backend identifier (https://docs.opencv.org/3.4/d4/d15/group__videoio__flags__base.html).
+            Defaults to V4L2 on Linux and ANY elsewhere. Note V4L2 opens devices
+            only, never a file by name — set ANY explicitly to read from a video
+            or image file.
 
     Note:
         - Only 3-channel color output (RGB/BGR) is currently supported.

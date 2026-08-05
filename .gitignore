@@ -84,6 +84,11 @@ coverage.xml
 *.cover
 *.py,cover
 !tests/artifacts
+# Camera stand-in images, generated on demand by tests/cameras/conftest.py. Kept
+# out of git deliberately: .gitattributes routes tests/artifacts/cameras/*.png to
+# LFS, and there is no reason to carry LFS objects for something reproducible in
+# a millisecond. Delete the directory any time; the next test run recreates it.
+tests/artifacts/cameras/
 
 ### Logs & Temporary Files ###
 logs/

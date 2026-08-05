@@ -43,6 +43,16 @@ class MockLoopingVideoCapture:
 
     def __init__(self, *args, **kwargs):
         args_clean = [str(a) if isinstance(a, Path) else a for a in args]
+        # Force the ANY backend when the source is a file. OpenCVCameraConfig
+        # defaults to V4L2 on Linux, and V4L2 cannot open anything by name —
+        # OpenCV says so itself ("backend is generally available but can't be
+        # used to capture by name"). A still image standing in for a camera is
+        # obviously not a V4L2 device, so the default is simply wrong here; every
+        # test in this module failed with a ConnectionError once that default
+        # landed. Only the backend argument is overridden, so the code path under
+        # test is otherwise untouched.
+        if args_clean and isinstance(args_clean[0], str) and Path(args_clean[0]).exists():
+            args_clean = [args_clean[0], cv2.CAP_ANY, *args_clean[2:]]
         self._real_vc = RealVideoCapture(*args_clean, **kwargs)
         self._cached_frame = None
 

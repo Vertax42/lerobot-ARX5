@@ -47,8 +47,21 @@ def color_jitters():
     ]
 
 
+def _skip_if_missing(path):
+    """Skip when the regression baseline is absent.
+
+    These .safetensors were never committed to this fork. They cannot simply be
+    regenerated: save_image_transforms_to_safetensors.py builds them from the
+    current code, so a fresh copy would make these tests compare the current
+    behaviour against itself and pass unconditionally.
+    """
+    if not path.exists():
+        pytest.skip(f"missing regression baseline: {path}")
+
+
 @pytest.fixture
 def single_transforms():
+    _skip_if_missing(ARTIFACT_DIR / "single_transforms.safetensors")
     return load_file(ARTIFACT_DIR / "single_transforms.safetensors")
 
 
@@ -59,6 +72,7 @@ def img_tensor(single_transforms):
 
 @pytest.fixture
 def default_transforms():
+    _skip_if_missing(ARTIFACT_DIR / "default_transforms.safetensors")
     return load_file(ARTIFACT_DIR / "default_transforms.safetensors")
 
 

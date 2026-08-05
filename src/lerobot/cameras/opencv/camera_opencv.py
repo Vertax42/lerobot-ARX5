@@ -173,12 +173,19 @@ class OpenCVCamera(Camera):
     def _resolve_index_or_path(self) -> int | str:
         """Return the actual device path/index to pass to cv2.VideoCapture.
 
-        If `index_or_path` is a plain string that does not look like a filesystem path
-        (i.e., does not start with '/' or '.'), treat it as a V4L2 device name and
-        resolve it dynamically via `v4l2-ctl --list-devices`.
+        If `index_or_path` is a plain string that does not look like a filesystem path,
+        treat it as a V4L2 device name and resolve it dynamically via
+        `v4l2-ctl --list-devices`.
+
+        "Looks like a path" means it starts with '/' or '.', or contains a path
+        separator anywhere. The separator case matters for relative paths like
+        "some/dir/cam.png", which the first-character test alone classified as a
+        device name and then failed to resolve with a confusing "device name not
+        found". Device names never contain a separator — they are the label
+        v4l2-ctl prints, e.g. "XC000047".
         """
         val = self.index_or_path
-        if isinstance(val, str) and not val.startswith("/") and not val.startswith("."):
+        if isinstance(val, str) and not val.startswith((("/", ".", os.sep))) and os.sep not in val:
             resolved = _resolve_v4l2_device_name(val)
             logger.info(f"{self} resolved device name '{val}' → '{resolved}'")
             return resolved

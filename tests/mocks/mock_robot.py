@@ -29,7 +29,13 @@ RobotAction = dict[str, Any]
 RobotObservation = dict[str, Any]
 
 
-@RobotConfig.register_subclass("mock_robot")
+# Registered as "mock_robot_test", not "mock_robot": lerobot.robots.mock_robot is a
+# shipped robot that claims that name, and two classes cannot register the same one
+# — importing both raised "Cannot register ... as mock_robot" and took down every
+# test in the process. The two are NOT interchangeable (this one has
+# random_values / static_values / n_motors=3; the shipped one has control_mode and
+# a gripper), so this stays a separate, test-only robot under its own name.
+@RobotConfig.register_subclass("mock_robot_test")
 @dataclass
 class MockRobotConfig(RobotConfig):
     n_motors: int = 3
@@ -56,7 +62,7 @@ class MockRobot(Robot):
     """Mock Robot to be used for testing."""
 
     config_class = MockRobotConfig
-    name = "mock_robot"
+    name = "mock_robot_test"
 
     def __init__(self, config: MockRobotConfig):
         super().__init__(config)

@@ -47,6 +47,13 @@ def mock_rerun(monkeypatch):
         def __init__(self, arr):
             self.arr = arr
 
+        def compress(self, **kwargs):
+            # log_rerun_data calls rr.Image(arr).compress() when compress_images is
+            # set (visualization_utils.py). Returning self keeps the assertions on
+            # .arr working, and records that compression was requested.
+            self.compressed = True
+            return self
+
     def dummy_log(key, obj=None, **kwargs):
         # Accept either positional `obj` or keyword `entity` and record remaining kwargs.
         if obj is None and "entity" in kwargs:
@@ -119,7 +126,7 @@ def test_log_rerun_data_envtransition_scalars_and_image(mock_rerun):
 
     # We expect:
     # - observation.state.temperature -> Scalars
-    # - observation.camera -> Image (HWC) with static=True
+    # - observation.camera -> Image (HWC), logged non-static
     # - action.throttle -> Scalars
     # - action.vector_0, action.vector_1 -> Scalars
     expected_keys = {
@@ -151,7 +158,10 @@ def test_log_rerun_data_envtransition_scalars_and_image(mock_rerun):
     img_obj = _obj_for(calls, "observation.camera")
     assert type(img_obj).__name__ == "DummyImage"
     assert img_obj.arr.shape == (10, 20, 3)  # transposed
-    assert _kwargs_for(calls, "observation.camera").get("static", False) is True  # static=True for images
+    # NOT static: 326e3fda ("fix(rerun): remove static=True on image logging to
+    # stop memory leak") removed it deliberately. Asserting it again would
+    # re-introduce the leak the next time someone "fixed" the test.
+    assert "static" not in _kwargs_for(calls, "observation.camera")
 
 
 def test_log_rerun_data_plain_list_ordering_and_prefixes(mock_rerun):
@@ -199,7 +209,7 @@ def test_log_rerun_data_plain_list_ordering_and_prefixes(mock_rerun):
     img = _obj_for(calls, "observation.img")
     assert type(img).__name__ == "DummyImage"
     assert img.arr.shape == (5, 6, 3)
-    assert _kwargs_for(calls, "observation.img").get("static", False) is True
+    assert "static" not in _kwargs_for(calls, "observation.img")  # see 326e3fda
 
     # Vectors
     for i, val in enumerate([9, 8, 7]):
@@ -228,7 +238,7 @@ def test_log_rerun_data_kwargs_only(mock_rerun):
     img = _obj_for(calls, "observation.gray")
     assert type(img).__name__ == "DummyImage"
     assert img.arr.shape == (8, 8, 1)  # remains HWC
-    assert _kwargs_for(calls, "observation.gray").get("static", False) is True
+    assert "static" not in _kwargs_for(calls, "observation.gray")  # see 326e3fda
 
     a = _obj_for(calls, "action.a")
     assert type(a).__name__ == "DummyScalar"

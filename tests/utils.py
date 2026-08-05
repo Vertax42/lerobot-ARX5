@@ -199,3 +199,32 @@ def require_package(package_name, import_name=None):
         return wrapper
 
     return decorator
+
+
+def require_artifact(path):
+    """Skip the test when a test artifact is not present.
+
+    Several test artifacts declared in .gitattributes (LFS) were never committed
+    to this fork: the RealSense capture at tests/artifacts/cameras/test_rs.bag and
+    the .safetensors baselines under tests/artifacts/{datasets,image_transforms}.
+    Without them the tests failed with errors that read like a broken video stack
+    rather than a missing fixture, which is worse than not running at all.
+
+    Regenerating them locally is NOT a fix for the .safetensors ones: their whole
+    purpose is to predate the current code, so a fresh copy would make the test
+    compare current behaviour against itself. Restore the real artifacts (or fetch
+    them from upstream) to re-enable these.
+    """
+    from functools import wraps
+    from pathlib import Path
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if not Path(path).exists():
+                pytest.skip(f"missing test artifact: {path}")
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator

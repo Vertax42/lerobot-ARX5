@@ -31,6 +31,7 @@ from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnected
 pytest.importorskip("pyrealsense2")
 
 from lerobot.cameras.realsense import RealSenseCamera, RealSenseCameraConfig
+from tests.utils import require_artifact
 
 TEST_ARTIFACTS_DIR = Path(__file__).parent.parent / "artifacts" / "cameras"
 BAG_FILE_PATH = TEST_ARTIFACTS_DIR / "test_rs.bag"
@@ -61,6 +62,7 @@ def test_abc_implementation():
     _ = RealSenseCamera(config)
 
 
+@require_artifact(BAG_FILE_PATH)
 def test_connect():
     config = RealSenseCameraConfig(serial_number_or_name="042", warmup_s=0)
 
@@ -68,6 +70,7 @@ def test_connect():
         assert camera.is_connected
 
 
+@require_artifact(BAG_FILE_PATH)
 def test_connect_already_connected():
     config = RealSenseCameraConfig(serial_number_or_name="042", warmup_s=0)
     with RealSenseCamera(config) as camera, pytest.raises(DeviceAlreadyConnectedError):
@@ -91,6 +94,7 @@ def test_invalid_width_connect():
         camera.connect(warmup=False)
 
 
+@require_artifact(BAG_FILE_PATH)
 def test_read():
     config = RealSenseCameraConfig(serial_number_or_name="042", width=640, height=480, fps=30, warmup_s=0)
     with RealSenseCamera(config) as camera:
@@ -117,6 +121,7 @@ def test_read_before_connect():
         _ = camera.read()
 
 
+@require_artifact(BAG_FILE_PATH)
 def test_disconnect():
     config = RealSenseCameraConfig(serial_number_or_name="042")
     camera = RealSenseCamera(config)
@@ -135,6 +140,7 @@ def test_disconnect_before_connect():
         camera.disconnect()
 
 
+@require_artifact(BAG_FILE_PATH)
 def test_async_read():
     config = RealSenseCameraConfig(serial_number_or_name="042", width=640, height=480, fps=30, warmup_s=0)
 
@@ -146,6 +152,7 @@ def test_async_read():
         assert isinstance(img, np.ndarray)
 
 
+@require_artifact(BAG_FILE_PATH)
 def test_async_read_timeout():
     config = RealSenseCameraConfig(serial_number_or_name="042", width=640, height=480, fps=30, warmup_s=0)
     with RealSenseCamera(config) as camera, pytest.raises(TimeoutError):
@@ -161,6 +168,7 @@ def test_async_read_before_connect():
         _ = camera.async_read()
 
 
+@require_artifact(BAG_FILE_PATH)
 def test_read_latest():
     config = RealSenseCameraConfig(serial_number_or_name="042", width=640, height=480, fps=30, warmup_s=0)
     with RealSenseCamera(config) as camera:
@@ -171,6 +179,7 @@ def test_read_latest():
         assert latest.shape == img.shape
 
 
+@require_artifact(BAG_FILE_PATH)
 def test_read_latest_high_frequency():
     config = RealSenseCameraConfig(serial_number_or_name="042", width=640, height=480, fps=30, warmup_s=0)
     with RealSenseCamera(config) as camera:
@@ -191,6 +200,7 @@ def test_read_latest_before_connect():
         _ = camera.read_latest()
 
 
+@require_artifact(BAG_FILE_PATH)
 def test_read_latest_too_old():
     config = RealSenseCameraConfig(serial_number_or_name="042")
 
@@ -212,6 +222,7 @@ def test_read_latest_too_old():
     ],
     ids=["no_rot", "rot90", "rot180", "rot270"],
 )
+@require_artifact(BAG_FILE_PATH)
 def test_rotation(rotation):
     config = RealSenseCameraConfig(serial_number_or_name="042", rotation=rotation, warmup_s=0)
     with RealSenseCamera(config) as camera:
