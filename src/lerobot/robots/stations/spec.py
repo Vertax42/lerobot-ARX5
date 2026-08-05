@@ -25,7 +25,7 @@ robot config dataclass and are set per-run from a recipe.
 """
 
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import Any, ClassVar
 
 # CameraSpec.type -> the camera config class the robot builds. The robot owns the
 # defaults (resolution, fps, warmup) because they differ per robot; the station
@@ -63,7 +63,12 @@ class CameraSpec:
     # XenseTactileCamera only: overrides the OG xpack camera template. The SDK
     # replaces the whole camera.<os> dict, so a partial dict here DROPS the keys
     # it omits — always write the full set.
-    camera_properties: dict[str, object] | None = None
+    #
+    # Typed dict[str, Any] rather than a narrower union on purpose: draccus has no
+    # decoder for `object`, and a `int | float | bool | str` union coerces bools to
+    # ints (auto_wb: false would reach the SDK as 0). Any passes values through
+    # untouched, which is what an opaque SDK property bag needs.
+    camera_properties: dict[str, Any] | None = None
 
     def validate(self, where: str) -> None:
         if self.type not in CAMERA_TYPES:
@@ -83,7 +88,7 @@ class CameraSpec:
             )
 
     @property
-    def overrides(self) -> dict[str, object]:
+    def overrides(self) -> dict[str, Any]:
         """The explicitly-set override fields, ready to splat into a camera config."""
         return {
             name: value
