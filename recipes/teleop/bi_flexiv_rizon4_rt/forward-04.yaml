@@ -4,14 +4,15 @@
 #
 # One recipe per physical station; this one targets the forward-04 station. Only the
 # frequently-changed knobs are listed; everything else uses the dataclass default.
-# Station hardware (arm/gripper SNs, cameras, home/start poses) comes from the
-# bi_mount_type=forward-04 preset and is not settable here.
+# Station hardware (arm SNs, cameras, home/start poses) comes from
+# stations/bi_flexiv_rizon4_rt/forward-04.yaml; don't restate it here (a recipe
+# value would override the bench).
 
 robot:
   type: bi_flexiv_rizon4_rt
   bi_mount_type: forward-04
   # Both grippers -> xense.taccap FollowerGripper (matched pair, single switch). Wrist +
-  # GSPS tactile SNs are auto-discovered at connect (taccap_discovery), so the preset's
+  # GSPS tactile SNs are auto-discovered at connect (taccap_discovery), so the station's
   # XC*/OG* SNs are ignored in this mode.
   gripper_type: taccap_follower
   use_force: false

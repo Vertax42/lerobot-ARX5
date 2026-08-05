@@ -34,11 +34,14 @@ lerobot-record --config_path=recipes/record/bi_elite_cs66_rt/test.yaml \
 
 Recipes are split by CLI then by robot type (`recipes/{teleop,record}/<robot_type>/<name>.yaml`)
 and spell out every honored knob with its value; station hardware (cameras, SNs,
-mount geometry, poses) stays in the `bi_mount_type` preset. One file per station
-(teleop) / dataset (record) means a single source of truth plus provenance —
-recipes are committed, so `git log recipes/` shows exactly what produced each
-dataset. See [`recipes/README.md`](../../../recipes/README.md). The per-robot
-flag lists below remain valid as a reference and for one-off runs.
+mount geometry, poses) lives in `stations/<robot_type>/<bi_mount_type>.yaml`,
+which a recipe selects by name. One file per station (teleop) / dataset (record)
+means a single source of truth plus provenance — recipes are committed, so
+`git log recipes/` shows exactly what produced each dataset. See
+[`recipes/README.md`](../../../recipes/README.md) and
+[`stations/README.md`](../../../stations/README.md). Precedence is
+`dataclass default < station < recipe < CLI`, so any flag below overrides both.
+The per-robot flag lists below remain valid as a reference and for one-off runs.
 
 ## TacCap-Gripper lerobot-teleoperate command
 

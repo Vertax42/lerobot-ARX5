@@ -194,7 +194,7 @@ class BiEliteCS66RT(Robot):
 
     def _inject_taccap_cameras(self) -> None:
         """Auto-discover per-side wrist + GSPS tactile devices and add them to
-        config.cameras (keys match the preset-driven wiring so datasets stay compatible).
+        config.cameras (keys match the station-driven wiring so datasets stay compatible).
         Called only in taccap_follower auto-discover mode."""
         sides = discover_taccap_sides()
         for side in _SIDES:

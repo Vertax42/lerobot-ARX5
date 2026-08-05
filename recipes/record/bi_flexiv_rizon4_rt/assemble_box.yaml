@@ -2,9 +2,10 @@
 #   lerobot-record --config_path=recipes/record/bi_flexiv_rizon4_rt/assemble_box.yaml
 #
 # Only the frequently-changed knobs are listed; everything else uses the dataclass
-# default. Station hardware (robot & gripper SNs, cameras, home/start poses) comes
-# from the bi_mount_type preset and is not settable here. The robot:/teleop: blocks
-# mirror the teleop recipe — keep them in sync.
+# default. Station hardware (robot SNs, cameras, home/start poses) comes from
+# stations/bi_flexiv_rizon4_rt/forward-06.yaml; don't restate it here (a recipe
+# value would override the bench). The robot:/teleop: blocks mirror the teleop
+# recipe — keep them in sync.
 
 robot:
   type: bi_flexiv_rizon4_rt

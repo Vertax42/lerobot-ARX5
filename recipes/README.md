@@ -56,18 +56,31 @@ value you had — verify before trimming.)
 The `robot:` and `teleop:` blocks are **identical** between a robot's record and
 teleop recipe (same hardware, same teleop device) — keep the two in sync.
 
-**Station hardware is deliberately NOT listed**: cameras, gripper/robot SNs,
+**Station hardware belongs in `stations/`, not here**: cameras, robot SNs/IPs,
 mount geometry (`*_mount_*_deg`, `world_rotation`), `local_ip`, and home/start
-poses. Those come from the `bi_mount_type` preset, which **overwrites them at
-load** (`__post_init__`) — writing them into a recipe would be silently ignored.
-Choose the physical station via `bi_mount_type`.
+poses all live in `stations/<robot_type>/<bi_mount_type>.yaml`. A recipe picks
+the bench with `bi_mount_type` and otherwise leaves that hardware alone. See
+[`../stations/README.md`](../stations/README.md).
 
-- Elite: `left_robot_ip` / `right_robot_ip` are explicit-wins, so they *are* in
-  the recipe; everything else hardware-ish comes from the preset.
-- Flexiv: robot SNs are overwritten unconditionally by the preset, so they are
-  **not** in the recipe — switch stations with `bi_mount_type` only.
-- Flexiv `force_control_frame` is a C++ enum with no YAML decoder, so it is set
-  in code (defaults to `WORLD`) and omitted from the recipe.
+Precedence is lowest to highest:
+
+```
+dataclass default  <  station YAML  <  recipe YAML  <  CLI --robot.xxx=
+```
+
+So a hardware value written into a recipe **does** take effect and overrides the
+station. That makes a one-off swap easy (a spare arm, a controller on a
+temporary address) and a stale copy dangerous — don't restate station hardware
+in a recipe just to document it. The Elite recipes list `left_robot_ip` /
+`right_robot_ip` for exactly this reason: they are operationally useful to see
+next to the station name, and they match their station.
+
+> This changed with the `stations/` migration. Previously the preset overwrote
+> these unconditionally and a hardware value in a recipe was silently discarded.
+> If you carry an old recipe with a stale SN or IP in it, it will start winning.
+
+Flexiv `force_control_frame` is a C++ enum with no YAML decoder, so it is set in
+code (defaults to `WORLD`) and omitted from the recipe.
 
 ## YAML format
 
@@ -79,7 +92,7 @@ that selects the robot / teleop class. Enums use their string value
 ## Naming convention
 
 - `teleop/<robot_type>/<variant>.yaml` — one recipe **per physical station**;
-  variant = mount + station number, matching the `bi_mount_type` preset, e.g.
+  variant = mount + station number, matching the station file it selects, e.g.
   `diagonal-08.yaml`, `forward-05.yaml`.
 - `record/<robot_type>/<task>.yaml` — one per dataset/campaign, e.g.
   `assemble_box.yaml`. Keep a `test.yaml` smoke-test per robot (2 short

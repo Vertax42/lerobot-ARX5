@@ -3,12 +3,13 @@
 #   lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-08.yaml
 #
 # Only the frequently-changed knobs are listed; everything else uses the dataclass
-# default. Station hardware comes from the bi_mount_type preset and is not settable
-# here. The robot:/teleop: blocks mirror the record recipe — keep them in sync.
+# default. Station hardware comes from stations/bi_elite_cs66_rt/<bi_mount_type>.yaml;
+# don't restate it here (a recipe value would override the bench). The
+# robot:/teleop: blocks mirror the record recipe — keep them in sync.
 
 robot:
   type: bi_elite_cs66_rt
-  bi_mount_type: diagonal-08 # IPs below match the diagonal-08 station preset
+  bi_mount_type: diagonal-08 # IPs below match the diagonal-08 station file
   left_robot_ip: 192.168.8.53
   right_robot_ip: 192.168.8.223
   control_mode: cartesian_servo # cartesian_servo | joint_servo

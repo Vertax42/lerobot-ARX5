@@ -25,7 +25,7 @@ This module scans every ``/dev/ttyUSB*`` / ``/dev/ttyACM*`` port, reads each
 board SN via ``read_board_sn`` (the same query ``find_port_by_sn`` already uses),
 and maps ports to sides by that parity — so any correctly-numbered gripper
 self-sorts regardless of which USB port it lands on, with no per-station SN
-pinned in the ``bi_mount_type`` preset.
+pinned in the bench's ``stations/`` file.
 
 It also owns the shared serial-scan lock and the low-level port-scan primitive so
 that side discovery and exact-SN lookup (``find_port_by_sn``) serialize against

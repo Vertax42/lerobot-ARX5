@@ -137,7 +137,7 @@ def _pose_err(req_pos, req_rot6, ach_pos, ach_rot6):
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--arm", choices=("left", "right"), default="left")
-    ap.add_argument("--mount-type", default="diagonal-08", help="bi_mount_type preset (diagonal-07 / diagonal-08)")
+    ap.add_argument("--mount-type", default="diagonal-08", help="bi_mount_type station (diagonal-07 / diagonal-08)")
     ap.add_argument("--mode", choices=("wrist", "circle", "combo", "hold"), default="wrist",
                     help="hold = keep the start pose fixed so you can hand-push the TCP to feel compliance")
     ap.add_argument("--servoj-gain", type=int, default=None,

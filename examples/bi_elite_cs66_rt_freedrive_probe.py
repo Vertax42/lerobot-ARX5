@@ -73,7 +73,7 @@ def main() -> None:
     bicfg = BiEliteCS66RTConfig()  # source of per-arm IPs + mount angles
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--arm", choices=("left", "right"), default="left")
-    ap.add_argument("--ip", default=None, help="override controller IP (else from preset)")
+    ap.add_argument("--ip", default=None, help="override controller IP (else from the station file)")
     ap.add_argument("--timeout-ms", type=int, default=200, help="reverse-socket read timeout in the script")
     ap.add_argument("--send-hz", type=float, default=20.0, help="freedrive heartbeat rate")
     ap.add_argument("--print-hz", type=float, default=10.0, help="pose print + CSV log rate")

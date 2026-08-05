@@ -4,15 +4,16 @@
 #
 # One recipe per physical station; this one targets the diagonal-02 station. Only the
 # frequently-changed knobs are listed; everything else uses the dataclass default.
-# Station hardware (arm/gripper SNs, cameras, home/start poses) comes from the
-# bi_mount_type=diagonal-02 preset and is not settable here. The robot:/teleop: blocks
-# mirror the record recipe — keep them in sync.
+# Station hardware (arm SNs, cameras, home/start poses) comes from
+# stations/bi_flexiv_rizon4_rt/diagonal-02.yaml; don't restate it here (a recipe
+# value would override the bench). The robot:/teleop: blocks mirror the record
+# recipe — keep them in sync.
 
 robot:
   type: bi_flexiv_rizon4_rt
   bi_mount_type: diagonal-02
   # Both grippers -> xense.taccap FollowerGripper (matched pair, single switch). Wrist +
-  # GSPS tactile SNs are auto-discovered at connect (taccap_discovery), so the preset's
+  # GSPS tactile SNs are auto-discovered at connect (taccap_discovery), so the station's
   # XC*/OG* SNs are ignored in this mode.
   gripper_type: taccap_follower
   use_force: false

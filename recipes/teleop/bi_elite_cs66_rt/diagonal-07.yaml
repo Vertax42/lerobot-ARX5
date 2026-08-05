@@ -3,13 +3,14 @@
 #   lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-07.yaml
 #
 # Only the frequently-changed knobs are listed; everything else uses the dataclass
-# default. Station hardware comes from the bi_mount_type preset and is not settable
-# here. diagonal-07 and diagonal-08 are identical setups, so the guard params below
-# are kept in lockstep with diagonal-08.yaml — keep the two in sync.
+# default. Station hardware comes from stations/bi_elite_cs66_rt/<bi_mount_type>.yaml;
+# don't restate it here (a recipe value would override the bench). diagonal-07
+# and diagonal-08 are identical setups, so the guard params below are kept in
+# lockstep with diagonal-08.yaml — keep the two in sync.
 
 robot:
   type: bi_elite_cs66_rt
-  bi_mount_type: diagonal-07 # IPs below match the diagonal-07 station preset
+  bi_mount_type: diagonal-07 # IPs below match the diagonal-07 station file
   left_robot_ip: 192.168.207.129
   right_robot_ip: 192.168.207.108
   control_mode: cartesian_servo # cartesian_servo | joint_servo
@@ -25,7 +26,7 @@ robot:
   payload_cog: [0.0, 0.0, 0.19] # m, relative to flange
   # ── Gripper: bi_taccap (TacCap follower, MIT impedance) ──
   # Both grippers -> xense.taccap FollowerGripper; wrist + GSPS tactile cameras are
-  # auto-discovered at connect (the preset's XC*/OG* SNs are ignored in this mode).
+  # auto-discovered at connect (the station's XC*/OG* SNs are ignored in this mode).
   # gripper_f_max is a serial-gripper knob and does not apply here.
   gripper_type: taccap_follower
   taccap_kp: 8.0          # MIT impedance stiffness (Nm/rad)

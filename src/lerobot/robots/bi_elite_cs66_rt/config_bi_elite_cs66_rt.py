@@ -261,7 +261,7 @@ class BiEliteCS66RTConfig(RobotConfig):
     taccap_require_calibrated: bool = True     # False only for bring-up (uncalibrated control)
 
     # Separate tactile sensors (XenseTactileCamera) attached at the bimanual
-    # camera level when enabled; SNs come from the preset.
+    # camera level when enabled; SNs come from the station.
     enable_tactile_sensors: bool = True
 
     # ── Robot payload (tool + gripper) ── Declared to each controller via setPayload at
@@ -277,10 +277,10 @@ class BiEliteCS66RTConfig(RobotConfig):
     left_gripper: SerialGripperConfig | TaccapFollowerGripperConfig | None = field(default=None, init=False)
     right_gripper: SerialGripperConfig | TaccapFollowerGripperConfig | None = field(default=None, init=False)
     # Set in __post_init__: in taccap_follower + auto-discover mode the wrist/tactile
-    # cameras are sniffed by the robot at connect rather than taken from the preset.
+    # cameras are sniffed by the robot at connect rather than taken from the station.
     _taccap_autodiscover: bool = field(default=False, init=False)
 
-    # Bimanual cameras (head + per-arm wrist + tactiles). Auto-populated from the preset.
+    # Bimanual cameras (head + per-arm wrist + tactiles). Auto-populated from the station.
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
 
     def __post_init__(self):

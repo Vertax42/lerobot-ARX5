@@ -184,7 +184,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     taccap_control_hz: int = 200    # ControlLoop resubmit rate
     # When gripper_type == "taccap_follower", auto-sniff the per-side wrist camera
     # and GSPS tactile sensor SNs (via TacCap + USB topology) at robot connect time
-    # instead of using the preset's XC*/OG* SNs. See taccap_discovery.py.
+    # instead of using the station's XC*/OG* SNs. See taccap_discovery.py.
     taccap_auto_discover_cameras: bool = True
     # Refuse to connect a taccap_follower gripper that reports an uncalibrated GripperConfig.
     # Set False ONLY for bring-up/debug — normalized [0, 1] gripper control is then uncalibrated

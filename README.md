@@ -183,7 +183,7 @@ sudo setcap cap_sys_nice+ep "$PY_EXE"
 getcap "$PY_EXE"  # should show: cap_sys_nice+ep
 ```
 
-## 🚀 Running teleop & record (recipes + station presets)
+## 🚀 Running teleop & record (recipes + stations)
 
 Teleoperation and recording are driven by **recipe** YAML files under
 [`recipes/`](recipes/) (see [`recipes/README.md`](recipes/README.md) for the full
@@ -194,15 +194,19 @@ lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-07.ya
 lerobot-record     --config_path=recipes/record/bi_flexiv_rizon4_rt/assemble_box.yaml
 ```
 
-**Station presets (`bi_mount_type`).** For the bimanual robots, all station-specific
-hardware — controller IPs/SNs, camera SNs, and per-arm home/start poses — is bundled
-into a named preset selected by `bi_mount_type`; a recipe just picks the preset. One
-preset = one physical station:
+**Stations (`bi_mount_type`).** For the bimanual robots, all station-specific
+hardware — controller IPs/SNs, camera SNs, mount geometry, per-arm home/start poses —
+lives in one YAML per physical bench under `stations/<robot_type>/`; a recipe just
+names the bench. Adding a bench is a new YAML, no Python change:
 
-| Robot | `bi_mount_type` presets |
-|---|---|
-| `bi_flexiv_rizon4_rt` | `forward-04`, `forward-05`, `forward-06`, `forward-dewu`, `diagonal-02` |
-| `bi_elite_cs66_rt` | `diagonal-07`, `diagonal-08` |
+```bash
+ls stations/bi_flexiv_rizon4_rt/   # forward-04, forward-05, forward-06, forward-dewu, diagonal-02
+ls stations/bi_elite_cs66_rt/      # diagonal-07, diagonal-08
+```
+
+Precedence is `dataclass default < station < recipe < CLI`, so an explicit
+`--robot.left_robot_sn=…` overrides the bench for a one-off run. See
+[`stations/README.md`](stations/README.md).
 
 **Gripper backend (`gripper_type`).** The bimanual arms drive one gripper type for
 both sides:

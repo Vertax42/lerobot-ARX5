@@ -18,7 +18,7 @@ transform the deployed driver applies in get_observation:
     R_world<-base = Rz(world_yaw)·Rz(zrot)·Rx(tilt)
 
 with the per-arm angles taken from ``BiEliteCS66RTConfig`` (the ``diagonal``
-preset). Use it to verify the inferred left-arm world_yaw=180° on-station:
+station file). Use it to verify the inferred left-arm world_yaw=180° on-station:
 
   • Pose both grippers pointing the SAME physical direction (e.g. straight down,
     or both "forward" toward the workspace). Their printed WORLD approach axis
@@ -138,7 +138,7 @@ def _print_cross_arm(left_world: np.ndarray, right_world: np.ndarray) -> None:
 
 
 def main() -> None:
-    cfg = BiEliteCS66RTConfig()  # loads the 'diagonal' preset: IPs + mount angles
+    cfg = BiEliteCS66RTConfig()  # loads the default station: IPs + mount angles
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--left-ip", default=cfg.left_robot_ip)
     ap.add_argument("--right-ip", default=cfg.right_robot_ip)
