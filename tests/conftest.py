@@ -27,7 +27,6 @@ pytest_plugins = [
     "tests.fixtures.dataset_factories",
     "tests.fixtures.files",
     "tests.fixtures.hub",
-    "tests.fixtures.optimizers",
 ]
 
 
