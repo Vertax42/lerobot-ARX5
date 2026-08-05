@@ -24,8 +24,12 @@ from lerobot.cameras.configs import CameraConfig
 from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
+from lerobot.robots.bi_flexiv_rizon4_rt.station import BiFlexivStationSpec
 from lerobot.robots.config import RobotConfig
 from lerobot.robots.grippers import SerialGripperConfig, TaccapFollowerGripperConfig
+from lerobot.robots.stations import load_station
+
+ROBOT_TYPE = "bi_flexiv_rizon4_rt"
 
 
 @RobotConfig.register_subclass("bi_flexiv_rizon4_rt")
@@ -41,13 +45,19 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         left_tcp.{x,y,z,r1-r6}, left_gripper.pos
         right_tcp.{x,y,z,r1-r6}, right_gripper.pos
 
+    Station hardware (arm SNs, camera SNs, home/start poses) is NOT written here:
+    it comes from ``stations/bi_flexiv_rizon4_rt/<bi_mount_type>.yaml``. Any of
+    those fields left unset (None) is filled from the station; an explicit value
+    passed in a recipe or on the CLI WINS. See ``stations/README.md``.
+
     Attributes:
-        left_robot_sn: Serial number of the left arm robot
-        right_robot_sn: Serial number of the right arm robot
-        bi_mount_type: Preset layout for robot/camera SNs and home/start poses
-            (one per station: "forward-04"/"forward-05"/"forward-06", "forward-dewu",
-            or "diagonal-02"). Serial grippers self-sort left/right by board-SN parity
-            at connect, so no gripper SN is pinned here.
+        left_robot_sn: Serial number of the left arm robot (None -> from station)
+        right_robot_sn: Serial number of the right arm robot (None -> from station)
+        bi_mount_type: Which station file to load — one per physical bench, e.g.
+            "forward-04"/"forward-05"/"forward-06", "forward-dewu", "diagonal-02".
+            May also be a path to a YAML for an uncommitted bench. Serial grippers
+            self-sort left/right by board-SN parity at connect, so no gripper SN
+            is pinned per station.
         use_force: Enable force control axes (both arms)
         inner_control_hz: How often each 1 kHz RT thread consumes a new Python command (1-1000 Hz)
         interpolate_cmds: Enable linear interpolation between consumed commands
@@ -73,9 +83,10 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             dataset frame built from it records the safe envelope. Set to 180 to disable.
     """
 
-    # Robot identification (overwritten from the bi_mount_type preset)
-    left_robot_sn: str = ""
-    right_robot_sn: str = ""
+    # Robot identification. None = take the station's value; set explicitly to
+    # override it (e.g. swapping in a spare arm without editing the station file).
+    left_robot_sn: str | None = None
+    right_robot_sn: str | None = None
     bi_mount_type: str = "forward-06"
     # Force control
     use_force: bool = False
@@ -118,28 +129,13 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     # Below Flexiv's 90° orientation-error safety (event 301005). Set to 180 to disable.
     commanded_actual_max_deg: float = 60.0
 
-    # Start position parameters (left arm)
-    left_start_position_degree: list[float] = field(
-        default_factory=lambda: [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24]
-    )
-    # left_TCP : x, y ,z, r, p, y = [955, 150, -110, 70, -170, 50]
-
-    # Start position parameters (right arm)
-    right_start_position_degree: list[float] = field(
-        default_factory=lambda: [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.60]
-    )
-
-    # right_TCP : x, y ,z, r, p, y = [955, -150, -110, -70, 170, -50]
+    # Start / home joint poses (J1..J7 degrees). None = take the station's value.
+    # Home is where each arm parks on disconnect.
+    left_start_position_degree: list[float] | None = None
+    right_start_position_degree: list[float] | None = None
+    left_home_position_degree: list[float] | None = None
+    right_home_position_degree: list[float] | None = None
     start_vel_scale: int = 50
-
-    # Home position parameters (left arm) - used on disconnect
-    left_home_position_degree: list[float] = field(
-        default_factory=lambda: [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24]
-    )
-    # Home position parameters (right arm) - used on disconnect
-    right_home_position_degree: list[float] = field(
-        default_factory=lambda: [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.60]
-    )
     home_vel_scale: int = 30
 
     # FT sensor zeroing
@@ -221,96 +217,22 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 f"inner_control_hz must be between 1 and 1000, got {self.inner_control_hz}"
             )
 
-        # ── Apply preset positions and device identifiers based on mounting type ──
-        _PRESETS = {
-            "forward-04": {
-                "left_sn": "Rizon4-063774",
-                "right_sn": "Rizon4R-062090",
-                "left_start": [86.90, 68.22, 23.55, 109.63, -3.01, 89.52, 2.96],
-                "right_start": [83.07, 67.85, 24.64, 107.57, 6.39, 95.96, 15.24],
-                "left_home": [86.90, 68.22, 23.55, 109.63, -3.01, 89.52, 2.96],
-                "right_home": [83.07, 67.85, 24.64, 107.57, 6.39, 95.96, 15.24],
-                "head_camera_sn": "344522070461",
-                "left_wrist_camera_sn": "XC000031",
-                "right_wrist_camera_sn": "XC000032",
-                "left_tactile_camera_sn_0": "OG001315",
-                "left_tactile_camera_sn_1": "OG001316",
-                "right_tactile_camera_sn_0": "OG001317",
-                "right_tactile_camera_sn_1": "OG001318",
-            },
-            "forward-05": {
-                "left_sn": "Rizon4-063786",
-                "right_sn": "Rizon4R-062096",
-                "left_start": [96.59, 65.45, -6.65, 78.76, 85.09, -5.48, -103.47],
-                "right_start": [96.93, 65.40, -7.06, 78.87, 85.03, -5.68, -103.20],
-                "left_home": [96.59, 65.45, -6.65, 78.76, 85.09, -5.48, -103.47],
-                "right_home": [96.93, 65.40, -7.06, 78.87, 85.03, -5.68, -103.20],
-                "head_camera_sn": "346522071766",
-                "left_wrist_camera_sn": "XC000047",
-                "right_wrist_camera_sn": "XC000054",
-                "left_tactile_camera_sn_0": "OG001359",
-                "left_tactile_camera_sn_1": "OG001360",
-                "right_tactile_camera_sn_0": "OG001369",
-                "right_tactile_camera_sn_1": "OG001370",
-            },
-            "forward-06": {
-                "left_sn": "Rizon4s-062412",
-                "right_sn": "Rizon4s-062881",
-                "left_start": [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24],
-                "right_start": [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.60],
-                "left_home": [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24],
-                "right_home": [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.60],
-                "head_camera_sn": "254322071102",
-                "left_wrist_camera_sn": "XC000035",
-                "right_wrist_camera_sn": "XC000036",
-                "left_tactile_camera_sn_0": "OG001323",
-                "left_tactile_camera_sn_1": "OG001324",
-                "right_tactile_camera_sn_0": "OG001325",
-                "right_tactile_camera_sn_1": "OG001326",
-            },
-            "forward-dewu": {
-                "left_sn": "Rizon4s-063458",
-                "right_sn": "Rizon4s-063670",
-                "left_start": [105.16, 66.69, -6.37, 77.95, 76.30, -2.83, -102.67],
-                "right_start": [-22.97, 65.41, 12.12, 98.98, -68.95, 0.55, 125.45],
-                "left_home": [105.16, 66.69, -6.37, 77.95, 76.30, -2.83, -102.67],
-                "right_home": [-22.97, 65.41, 12.12, 98.98, -68.95, 0.55, 125.45],
-                "head_camera_sn": "337322070722",
-                "left_wrist_camera_sn": "XC000021",
-                "right_wrist_camera_sn": "XC000012",
-                "left_tactile_camera_sn_0": "OG000950",
-                "left_tactile_camera_sn_1": "OG000949",
-                "right_tactile_camera_sn_0": "OG001310",
-                "right_tactile_camera_sn_1": "OG001311",
-            },
-            "diagonal-02": {
-                "left_sn": "Rizon4-063423",
-                "right_sn": "Rizon4-062855",
-                "left_start": [16.18, -26.29, -3.84, 114.00, 10.66, 84.24, 27.56],
-                "right_start": [31.91, -26.72, -27.42, 122.58, -13.93, 89.42, -1.31],
-                "left_home": [16.18, -26.29, -3.84, 114.00, 10.66, 84.24, 27.56],
-                "right_home": [31.91, -26.72, -27.42, 122.58, -13.93, 89.42, -1.31],
-                "head_camera_sn": "135522074323",
-                "left_wrist_camera_sn": "XC000003",
-                "right_wrist_camera_sn": "XC000004",
-                "left_tactile_camera_sn_0": "OG000867",
-                "left_tactile_camera_sn_1": "OG000865",
-                "right_tactile_camera_sn_0": "OG000142",
-                "right_tactile_camera_sn_1": "OG000866",
-            },
-        }
-        if self.bi_mount_type not in _PRESETS:
-            raise ValueError(
-                f"Unknown mounting type {self.bi_mount_type!r}, expected one of {list(_PRESETS)}"
-            )
-
-        preset = _PRESETS[self.bi_mount_type]
-        self.left_robot_sn = preset["left_sn"]
-        self.right_robot_sn = preset["right_sn"]
-        self.left_start_position_degree = preset["left_start"]
-        self.right_start_position_degree = preset["right_start"]
-        self.left_home_position_degree = preset["left_home"]
-        self.right_home_position_degree = preset["right_home"]
+        # ── Apply the station ── Fields left as None inherit the station's value;
+        # anything the caller set explicitly (recipe or CLI) is kept as-is.
+        station = load_station(BiFlexivStationSpec, ROBOT_TYPE, self.bi_mount_type)
+        left, right = station.arms["left"], station.arms["right"]
+        if self.left_robot_sn is None:
+            self.left_robot_sn = left.serial_number
+        if self.right_robot_sn is None:
+            self.right_robot_sn = right.serial_number
+        if self.left_start_position_degree is None:
+            self.left_start_position_degree = list(left.start_deg)
+        if self.right_start_position_degree is None:
+            self.right_start_position_degree = list(right.start_deg)
+        if self.left_home_position_degree is None:
+            self.left_home_position_degree = list(left.home_deg)
+        if self.right_home_position_degree is None:
+            self.right_home_position_degree = list(right.home_deg)
 
         # Validate Cartesian/force parameters
         if len(self.force_control_axis) != 6:
@@ -364,78 +286,72 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             self.right_use_gripper, self.right_gripper_serial_timeout, "right",
         )
 
-        # Camera configuration based on tactile sensors setting
-        self.cameras = {
-            "head": RealSenseCameraConfig(
-                serial_number_or_name=preset["head_camera_sn"],
-                fps=30,
-                width=640,
-                height=480,
-                warmup_s=1.0 if self.enable_tactile_sensors else 0.05,
-                use_depth=self.head_camera_use_depth,
-            ),
-        }
-
         # In taccap_follower + auto-discover mode, the wrist camera and GSPS tactile
         # SNs are hardware that changes with the gripper, so they are sniffed at
         # robot connect time (see taccap_discovery.py) rather than taken from the
-        # preset. Leave only `head` here; the robot injects the rest before building
-        # cameras. Any other mode keeps the preset-driven wiring below.
+        # station. Only `head` is wired here; the robot injects the rest before
+        # building cameras. Any other mode keeps the station-driven wiring.
         self._taccap_autodiscover = (
             self.gripper_type == "taccap_follower" and self.taccap_auto_discover_cameras
         )
-        if self._taccap_autodiscover:
-            return
+        # An explicitly-provided cameras dict wins over the station's, same as
+        # every other field.
+        if not self.cameras:
+            self.cameras = self._build_cameras(station)
 
-        self.cameras.update(
-            {
-                "left_wrist": OpenCVCameraConfig(
-                    index_or_path=preset["left_wrist_camera_sn"],
-                    fourcc="MJPG",
-                    width=640,
-                    height=480,
-                    fps=30,
-                    warmup_s=1.0,
-                ),
-                "right_wrist": OpenCVCameraConfig(
-                    index_or_path=preset["right_wrist_camera_sn"],
-                    fourcc="MJPG",
-                    width=640,
-                    height=480,
-                    fps=30,
-                    warmup_s=1.0,
-                ),
-            }
-        )
-        if self.enable_tactile_sensors:
-            self.cameras.update(
-                {
-                    "left_tactile_0": XenseTactileCameraConfig(
-                        serial_number=preset["left_tactile_camera_sn_0"],
-                        fps=30,
-                        output_types=[XenseOutputType.RECTIFY],
-                        warmup_s=0.05,
-                    ),
-                    "left_tactile_1": XenseTactileCameraConfig(
-                        serial_number=preset["left_tactile_camera_sn_1"],
-                        fps=30,
-                        output_types=[XenseOutputType.RECTIFY],
-                        warmup_s=0.05,
-                    ),
-                    "right_tactile_0": XenseTactileCameraConfig(
-                        serial_number=preset["right_tactile_camera_sn_0"],
-                        fps=30,
-                        output_types=[XenseOutputType.RECTIFY],
-                        warmup_s=0.05,
-                    ),
-                    "right_tactile_1": XenseTactileCameraConfig(
-                        serial_number=preset["right_tactile_camera_sn_1"],
-                        fps=30,
-                        output_types=[XenseOutputType.RECTIFY],
-                        warmup_s=0.05,
-                    ),
-                }
-            )
+    def _build_cameras(self, station: BiFlexivStationSpec) -> dict[str, CameraConfig]:
+        """Camera configs for this station, keyed by observation key.
+
+        The station supplies serials (and any per-camera override); the defaults
+        below are this robot's and are what the fleet runs on.
+        """
+        cameras: dict[str, CameraConfig] = {}
+        for label, spec in station.cameras.items():
+            if spec.type == "xense_tactile":
+                # Tactile sensors are separate XenseTactileCamera devices, not the
+                # gripper, so they are switched independently of gripper_type.
+                if not self.enable_tactile_sensors or self._taccap_autodiscover:
+                    continue
+                cameras[label] = XenseTactileCameraConfig(
+                    **{
+                        "serial_number": spec.serial,
+                        "fps": 30,
+                        "output_types": [XenseOutputType.RECTIFY],
+                        "warmup_s": 0.05,
+                        **spec.overrides,
+                    }
+                )
+            elif spec.type == "opencv":
+                if self._taccap_autodiscover:
+                    continue
+                cameras[label] = OpenCVCameraConfig(
+                    **{
+                        "index_or_path": spec.serial,
+                        "fourcc": "MJPG",
+                        "width": 640,
+                        "height": 480,
+                        "fps": 30,
+                        "warmup_s": 1.0,
+                        **spec.overrides,
+                    }
+                )
+            elif spec.type == "realsense":
+                cameras[label] = RealSenseCameraConfig(
+                    **{
+                        "serial_number_or_name": spec.serial,
+                        "fps": 30,
+                        "width": 640,
+                        "height": 480,
+                        # Long warmup only matters when the tactile cameras are
+                        # also coming up and contending for USB bandwidth.
+                        "warmup_s": 1.0 if self.enable_tactile_sensors else 0.05,
+                        "use_depth": self.head_camera_use_depth,
+                        **spec.overrides,
+                    }
+                )
+            else:  # unreachable: CameraSpec.validate() restricts the set
+                raise ValueError(f"unhandled station camera type {spec.type!r} for {label!r}")
+        return cameras
 
     def _make_gripper_config(
         self,

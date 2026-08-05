@@ -1,0 +1,37 @@
+# Station diagonal-02 — bimanual Flexiv Rizon4 RT.
+#
+# Selected with `bi_mount_type: diagonal-02` in a recipe, or
+# `--robot.bi_mount_type=diagonal-02` on the CLI.
+#
+# Hardware only. Control/tuning knobs (force control, servo rates, gripper
+# force, tactile on/off) belong in recipes/, not here — a station describes what
+# is bolted to the bench, not how a given run drives it.
+#
+# Grippers are absent on purpose: both backends resolve left/right at connect
+# (serial by board-SN parity, taccap by the firmware-burned SN), so there is no
+# per-bench gripper identity to pin.
+#
+# Anything set here is a DEFAULT — an explicit value in a recipe or on the CLI
+# wins. See stations/README.md.
+
+name: diagonal-02
+robot_type: bi_flexiv_rizon4_rt
+
+arms:
+  left:
+    serial_number: Rizon4-063423
+    start_deg: [16.18, -26.29, -3.84, 114.0, 10.66, 84.24, 27.56]
+    home_deg:  [16.18, -26.29, -3.84, 114.0, 10.66, 84.24, 27.56]
+  right:
+    serial_number: Rizon4-062855
+    start_deg: [31.91, -26.72, -27.42, 122.58, -13.93, 89.42, -1.31]
+    home_deg:  [31.91, -26.72, -27.42, 122.58, -13.93, 89.42, -1.31]
+
+cameras:
+  head:            {type: realsense,     serial: "135522074323"}
+  left_wrist:      {type: opencv,        serial: XC000003}
+  right_wrist:     {type: opencv,        serial: XC000004}
+  left_tactile_0:  {type: xense_tactile, serial: OG000867}
+  left_tactile_1:  {type: xense_tactile, serial: OG000865}
+  right_tactile_0: {type: xense_tactile, serial: OG000142}
+  right_tactile_1: {type: xense_tactile, serial: OG000866}

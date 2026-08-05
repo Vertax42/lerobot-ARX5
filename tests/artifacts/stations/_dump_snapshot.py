@@ -102,7 +102,9 @@ def snapshot_camera(cam) -> dict:
 def _jsonable(value):
     if isinstance(value, Path):
         return str(value)
-    if isinstance(value, list):
+    # Tuples become lists, matching what json.dumps writes into the fixture —
+    # otherwise a re-read fixture never compares equal to a live config.
+    if isinstance(value, (list, tuple)):
         return [_jsonable(v) for v in value]
     if isinstance(value, dict):
         return {k: _jsonable(v) for k, v in value.items()}

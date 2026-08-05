@@ -13,9 +13,11 @@
 Relationship to ``EliteCS66RTConfig`` mirrors ``BiFlexivRizon4RTConfig`` vs.
 ``FlexivRizon4RTConfig``: shared control/servo parameters keep the single-arm
 names and defaults, while station-specific values (controller IPs, start/home
-poses, camera SNs) are bundled per-arm and selected by ``bi_mount_type`` preset.
-Serial grippers self-sort left/right by board-SN parity at connect, so no gripper
-SN is pinned per station. Action / observation keys are ``left_``/``right_`` prefixed.
+poses, mount geometry, camera SNs) live in
+``stations/bi_elite_cs66_rt/<bi_mount_type>.yaml`` and are selected by
+``bi_mount_type``. Serial grippers self-sort left/right by board-SN parity at
+connect, so no gripper SN is pinned per station. Action / observation keys are
+``left_``/``right_`` prefixed.
 """
 
 from dataclasses import dataclass, field
@@ -26,154 +28,21 @@ from lerobot.cameras.configs import CameraConfig
 from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
+from lerobot.robots.bi_elite_cs66_rt.station import BiEliteStationSpec
 from lerobot.robots.config import RobotConfig
 from lerobot.robots.elite_cs66_rt.config_elite_cs66_rt import _validate_singularity_params
 from lerobot.robots.grippers import (
     SerialGripperConfig,
     TaccapFollowerGripperConfig,
 )
+from lerobot.robots.stations import load_station
+
+ROBOT_TYPE = "bi_elite_cs66_rt"
 
 
 class BiEliteCS66RTControlMode(str, Enum):
     CARTESIAN_SERVO = "cartesian_servo"
     JOINT_SERVO = "joint_servo"
-
-
-# Per-station presets. Each bundles both controllers' IPs, the MoveJ start/home
-# poses (J1..J6, radians), and camera SNs (head, per-arm wrist, per-arm tactile).
-# Serial grippers self-sort left/right by board-SN parity at connect, so no gripper
-# SN is bundled here. Tactile camera labels are pre-namespaced
-# (left_tactile_* / right_tactile_*) so the flat observation dict stays unique.
-#
-# NOTE: the "diagonal-07"/"diagonal-08" presets below describe real stations — the
-# two Elite CS66 arms are mounted diagonally/opposed (tilt about base-X + rotate about
-# Z, see the bi-arm mounting transform). Each has real controller IPs and per-arm
-# start/home joint poses (measured on the station). Grippers are serial (USB,
-# left/right self-sorted by board-SN parity — no IP/MAC, no pinned SN).
-#
-# Per-arm mounting → the world←base rotation R = Rz(γ)·Rz(β)·Rx(α) that lifts
-# base-frame TCP poses into a SHARED gravity-aligned world frame (x = facing,
-# y = left, z = up), matching the Flexiv convention so data is comparable.
-#   α = tilt about base-X, β = rotate about Z  — BOTH from the teach pendant
-#       (both controllers read α=45°, β=90°). These two only fix the gravity
-#       vector in base (i.e. recover "z up"); they do NOT fix the heading.
-#   γ = extra yaw about world-Z to align each arm's heading into the ONE shared
-#       world frame. The two arms are mounted symmetrically/diagonally (point-
-#       symmetric), so they face opposite directions: right γ=0° (defines the
-#       world), left γ=180°. The teach pendant cannot show this 180° (it's the
-#       residual yaw-about-gravity; see the bi-arm mounting-transform note).
-# Right (Rz(90°)·Rx(45°)) is validated empirically (base-X 130° pose → tool +Z
-# approach axis straight down). Verify the left 180° on-station via RTSI reads.
-_CANDLE_POSE = [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
-
-# Measured station start/home joint poses (J1..J6, radians).
-#   left  = [-80, -30,  90, -30,  90, 0] deg
-#   right = [-100, -150, -90, -150, -90, 0] deg
-_LEFT_START_POSE = [-1.3963, -0.5236, 1.5708, -0.5236, 1.5708, -0.7854]
-_RIGHT_START_POSE = [-1.7453, -2.6180, -1.5708, -2.6180, -1.5708, -0.7854]
-
-_PRESETS: dict[str, dict] = {
-    "diagonal-07": {
-        "left_ip": "192.168.207.129",
-        "right_ip": "192.168.207.108",
-        "left_local_ip": "",
-        "right_local_ip": "",
-        "left_start": list(_LEFT_START_POSE),
-        "right_start": list(_RIGHT_START_POSE),
-        "left_home": list(_LEFT_START_POSE),
-        "right_home": list(_RIGHT_START_POSE),
-        # Per-arm mounting → R = Rz(γ)·Rz(β)·Rx(α). tilt/zrot are the teach-pendant
-        # readings (both arms 45/90, fix the gravity vector only); world_yaw γ aligns
-        # headings into one shared world frame: right 0° (reference), left 180°
-        # (arms are point-symmetric / face opposite ways). See note above.
-        "right_tilt_deg": 45.0,
-        "right_zrot_deg": 90.0,
-        "right_world_yaw_deg": 0.0,
-        "left_tilt_deg": 45.0,
-        "left_zrot_deg": 90.0,
-        "left_world_yaw_deg": 180.0,
-        # Explicit world<-base rotation (rows = world X/Y/Z axes in base). When set
-        # it OVERRIDES the tilt/zrot/world_yaw angle build for that arm. The teach-
-        # pendant 45/90 angles assumed a tilt about base-X, but the LEFT arm is
-        # actually tilted 45° about base-Y (verified: freedrive-probe measurement +
-        # the base-link geometry). This matrix == base rotated about Z by 90° then
-        # about Y by 45°  ->  world X(fwd)=base+Y, world Z(up)=[0.707,0,0.707].
-        # Right is the point-symmetric partner of the (validated) left:
-        # R_right = Rz(180)·R_left  (forward flips to base-Y, up stays [0.707,0,0.707]).
-        # This matches the user's right-arm recipe (Z clockwise instead of left's CCW,
-        # Y 45°). VERIFY on-station with the axis test before trusting; if the heading
-        # is yawed, re-measure with the freedrive probe like the left.
-        "left_world_R": [
-            [0.0, 1.0, 0.0],
-            [-0.70710678, 0.0, 0.70710678],
-            [0.70710678, 0.0, 0.70710678],
-        ],
-        "right_world_R": [
-            [0.0, -1.0, 0.0],
-            [0.70710678, 0.0, -0.70710678],
-            [0.70710678, 0.0, 0.70710678],
-        ],
-        "head_camera_sn": "347522071393",
-        "left_wrist_camera_sn": "XC000043",
-        "right_wrist_camera_sn": "XC000044",
-        # Tactile sensor SNs (XenseTactileCamera). left = OG001345/OG001346,
-        # right = OG001347/OG001348.
-        "left_tactile_camera_sn_0": "OG001345",
-        "left_tactile_camera_sn_1": "OG001346",
-        "right_tactile_camera_sn_0": "OG001347",
-        "right_tactile_camera_sn_1": "OG001348",
-    },
-    "diagonal-08": {
-        "left_ip": "192.168.8.53",
-        "right_ip": "192.168.8.223",
-        "left_local_ip": "",
-        "right_local_ip": "",
-        "left_start": list(_LEFT_START_POSE),
-        "right_start": list(_RIGHT_START_POSE),
-        "left_home": list(_LEFT_START_POSE),
-        "right_home": list(_RIGHT_START_POSE),
-        # Per-arm mounting → R = Rz(γ)·Rz(β)·Rx(α). tilt/zrot are the teach-pendant
-        # readings (both arms 45/90, fix the gravity vector only); world_yaw γ aligns
-        # headings into one shared world frame: right 0° (reference), left 180°
-        # (arms are point-symmetric / face opposite ways). See note above.
-        "right_tilt_deg": 45.0,
-        "right_zrot_deg": 90.0,
-        "right_world_yaw_deg": 0.0,
-        "left_tilt_deg": 45.0,
-        "left_zrot_deg": 90.0,
-        "left_world_yaw_deg": 180.0,
-        # Explicit world<-base rotation (rows = world X/Y/Z axes in base). When set
-        # it OVERRIDES the tilt/zrot/world_yaw angle build for that arm. The teach-
-        # pendant 45/90 angles assumed a tilt about base-X, but the LEFT arm is
-        # actually tilted 45° about base-Y (verified: freedrive-probe measurement +
-        # the base-link geometry). This matrix == base rotated about Z by 90° then
-        # about Y by 45°  ->  world X(fwd)=base+Y, world Z(up)=[0.707,0,0.707].
-        # Right is the point-symmetric partner of the (validated) left:
-        # R_right = Rz(180)·R_left  (forward flips to base-Y, up stays [0.707,0,0.707]).
-        # This matches the user's right-arm recipe (Z clockwise instead of left's CCW,
-        # Y 45°). VERIFY on-station with the axis test before trusting; if the heading
-        # is yawed, re-measure with the freedrive probe like the left.
-        "left_world_R": [
-            [0.0, 1.0, 0.0],
-            [-0.70710678, 0.0, 0.70710678],
-            [0.70710678, 0.0, 0.70710678],
-        ],
-        "right_world_R": [
-            [0.0, -1.0, 0.0],
-            [0.70710678, 0.0, -0.70710678],
-            [0.70710678, 0.0, 0.70710678],
-        ],
-        "head_camera_sn": "346522074942",
-        "left_wrist_camera_sn": "XC000045",
-        "right_wrist_camera_sn": "XC000046",
-        # Tactile sensor SNs (XenseTactileCamera). left = OG001349/OG001350,
-        # right = OG001351/OG001352.
-        "left_tactile_camera_sn_0": "OG001349",
-        "left_tactile_camera_sn_1": "OG001350",
-        "right_tactile_camera_sn_0": "OG001351",
-        "right_tactile_camera_sn_1": "OG001352",
-    },
-}
 
 
 @RobotConfig.register_subclass("bi_elite_cs66_rt")
@@ -190,36 +59,44 @@ class BiEliteCS66RTConfig(RobotConfig):
     parity at connect. Cameras (head + per-arm wrist + optional tactiles) live at the
     bimanual level; tactile images come from separate XenseTactileCamera devices, not
     the gripper.
+
+    Station hardware (controller IPs, start/home poses, mount geometry, camera SNs)
+    is NOT written here: it comes from
+    ``stations/bi_elite_cs66_rt/<bi_mount_type>.yaml``. Any of those fields left
+    unset (None) is filled from the station; an explicit value passed in a recipe
+    or on the CLI WINS. See ``stations/README.md``.
     """
 
     # ── Per-arm identity / connection ──
-    # robot IPs default to "" (unset) → filled from the bi_mount_type preset in
-    # __post_init__. An explicitly-passed --robot.{left,right}_robot_ip OVERRIDES
-    # the preset. local_ip is taken from the preset.
-    left_robot_ip: str = ""
-    right_robot_ip: str = ""
-    left_local_ip: str = ""
-    right_local_ip: str = ""
+    # None = take the station's value. Set explicitly (recipe or CLI) to override
+    # it, e.g. when a controller is temporarily on a different address.
+    left_robot_ip: str | None = None
+    right_robot_ip: str | None = None
+    left_local_ip: str | None = None
+    right_local_ip: str | None = None
     bi_mount_type: str = "diagonal-08"
 
-    # ── Per-arm mounting → base↔world rotation (overwritten from the preset) ──
+    # ── Per-arm mounting → base↔world rotation (None = from the station) ──
     # R_world←base = Rz(γ)·Rz(β)·Rx(α): α=tilt about base-X, β=rotate about Z (both
     # from the teach pendant, fixing only the gravity vector), γ=extra world-Z yaw
     # that aligns each arm's heading into ONE shared world frame (x=facing, y=left,
     # z=up). The driver lifts base→world in get_observation and maps world→base in
-    # send_action. Both pendants read α=45/β=90; the arms are point-symmetric so
-    # left needs γ=180° (right γ=0° defines the world). Right is validated.
-    left_mount_tilt_deg: float = 45.0
-    left_mount_zrot_deg: float = 90.0
-    left_mount_world_yaw_deg: float = 180.0
-    right_mount_tilt_deg: float = 45.0
-    right_mount_zrot_deg: float = 90.0
-    right_mount_world_yaw_deg: float = 0.0
+    # send_action. On the existing diagonal benches both pendants read α=45/β=90 and
+    # the arms are point-symmetric, so left needs γ=180° (right γ=0° defines the
+    # world) — but that lives in the station file, not in these defaults.
+    left_mount_tilt_deg: float | None = None
+    left_mount_zrot_deg: float | None = None
+    left_mount_world_yaw_deg: float | None = None
+    right_mount_tilt_deg: float | None = None
+    right_mount_zrot_deg: float | None = None
+    right_mount_world_yaw_deg: float | None = None
 
-    # Optional explicit per-arm world<-base rotation (3x3, rows = world X/Y/Z in
-    # base). When not None it OVERRIDES the angle build above for that arm — used
-    # when the mounting isn't a clean Rz·Rx (e.g. the left arm tilts about base-Y).
-    # Populated from the preset's {side}_world_R.
+    # Explicit per-arm world<-base rotation (3x3, rows = world X/Y/Z in base). When
+    # set it OVERRIDES the angle build above for that arm — needed when the mounting
+    # isn't a clean Rz·Rx (e.g. the left arm tilts about base-Y).
+    #   None -> take the station's matrix (which may itself be absent -> use angles)
+    #   []   -> explicitly ignore the station's matrix and use the angles instead
+    # Normalized to None in __post_init__, so the driver only ever sees None or 3x3.
     left_world_rotation: list[list[float]] | None = None
     right_world_rotation: list[list[float]] | None = None
 
@@ -328,11 +205,11 @@ class BiEliteCS66RTConfig(RobotConfig):
     left_driver_port_offset: int = 0
     right_driver_port_offset: int = 10
 
-    # ── Per-arm Home / Start poses (J1..J6 radians; overwritten from preset) ──
-    left_start_position_rad: list[float] = field(default_factory=lambda: list(_CANDLE_POSE))
-    right_start_position_rad: list[float] = field(default_factory=lambda: list(_CANDLE_POSE))
-    left_home_position_rad: list[float] = field(default_factory=lambda: list(_CANDLE_POSE))
-    right_home_position_rad: list[float] = field(default_factory=lambda: list(_CANDLE_POSE))
+    # ── Per-arm Home / Start poses (J1..J6 radians; None = from the station) ──
+    left_start_position_rad: list[float] | None = None
+    right_start_position_rad: list[float] | None = None
+    left_home_position_rad: list[float] | None = None
+    right_home_position_rad: list[float] | None = None
     start_move_duration_s: float = 3.0
     home_move_duration_s: float = 3.0
     # Controller-side reverse-socket recv budget for trajectory (MoveJ) commands.
@@ -411,29 +288,27 @@ class BiEliteCS66RTConfig(RobotConfig):
 
         self._validate_shared_servo_params()
 
-        # ── Apply preset ──
-        if self.bi_mount_type not in _PRESETS:
-            raise ValueError(
-                f"Unknown bi_mount_type {self.bi_mount_type!r}, expected one of {list(_PRESETS)}"
-            )
-        preset = _PRESETS[self.bi_mount_type]
-        # CLI-passed IPs win; fall back to the preset when left unset ("").
-        self.left_robot_ip = self.left_robot_ip or preset["left_ip"]
-        self.right_robot_ip = self.right_robot_ip or preset["right_ip"]
-        self.left_local_ip = preset["left_local_ip"]
-        self.right_local_ip = preset["right_local_ip"]
-        self.left_start_position_rad = list(preset["left_start"])
-        self.right_start_position_rad = list(preset["right_start"])
-        self.left_home_position_rad = list(preset["left_home"])
-        self.right_home_position_rad = list(preset["right_home"])
-        self.left_mount_tilt_deg = preset["left_tilt_deg"]
-        self.left_mount_zrot_deg = preset["left_zrot_deg"]
-        self.left_mount_world_yaw_deg = preset["left_world_yaw_deg"]
-        self.right_mount_tilt_deg = preset["right_tilt_deg"]
-        self.right_mount_zrot_deg = preset["right_zrot_deg"]
-        self.right_mount_world_yaw_deg = preset["right_world_yaw_deg"]
-        self.left_world_rotation = preset.get("left_world_R")
-        self.right_world_rotation = preset.get("right_world_R")
+        # ── Apply the station ── Fields left as None inherit the station's value;
+        # anything the caller set explicitly (recipe or CLI) is kept as-is.
+        station = load_station(BiEliteStationSpec, ROBOT_TYPE, self.bi_mount_type)
+        for side in ("left", "right"):
+            arm = station.arms[side]
+            for attr, value in (
+                (f"{side}_robot_ip", arm.ip),
+                (f"{side}_local_ip", arm.local_ip),
+                (f"{side}_start_position_rad", list(arm.start_rad)),
+                (f"{side}_home_position_rad", list(arm.home_rad)),
+                (f"{side}_mount_tilt_deg", arm.mount.tilt_deg),
+                (f"{side}_mount_zrot_deg", arm.mount.zrot_deg),
+                (f"{side}_mount_world_yaw_deg", arm.mount.world_yaw_deg),
+                (f"{side}_world_rotation", arm.mount.world_rotation),
+            ):
+                if getattr(self, attr) is None:
+                    setattr(self, attr, value)
+            # [] means "ignore the station's matrix, use the angles" — collapse it
+            # to None so the driver's `is not None` check stays a two-way test.
+            if getattr(self, f"{side}_world_rotation") == []:
+                setattr(self, f"{side}_world_rotation", None)
 
         # ── Per-arm pose validation ──
         for name, pose in (
@@ -455,12 +330,15 @@ class BiEliteCS66RTConfig(RobotConfig):
 
         # ── Bimanual cameras ── In taccap_follower + auto-discover mode the wrist + GSPS
         # tactile cameras change with the gripper, so the robot sniffs them at connect
-        # (see _inject_taccap_cameras) instead of taking them from the preset; _build_cameras
-        # then wires only the head. Any other mode stays preset-driven.
+        # (see _inject_taccap_cameras) instead of taking them from the station;
+        # _build_cameras then wires only the head. Any other mode stays station-driven.
         self._taccap_autodiscover = (
             self.gripper_type == "taccap_follower" and self.taccap_auto_discover_cameras
         )
-        self._build_cameras(preset)
+        # An explicitly-provided cameras dict wins over the station's, same as
+        # every other field.
+        if not self.cameras:
+            self.cameras = self._build_cameras(station)
 
     def _validate_shared_servo_params(self) -> None:
         if self.payload_mass is not None:
@@ -601,70 +479,72 @@ class BiEliteCS66RTConfig(RobotConfig):
             init_open=self.gripper_init_open,
         )
 
-    def _build_cameras(self, preset: dict) -> None:
+    def _build_cameras(self, station: BiEliteStationSpec) -> dict[str, CameraConfig]:
+        """Camera configs for this station, keyed by observation key.
+
+        The station supplies serials (and any per-camera override); the defaults
+        below are this robot's and are what the fleet runs on. Keys are already
+        namespaced left_/right_ in the station file so the flat observation dict
+        stays unique.
+        """
         cameras: dict[str, CameraConfig] = {}
-        if preset.get("head_camera_sn"):
-            cameras["head"] = RealSenseCameraConfig(
-                serial_number_or_name=preset["head_camera_sn"],
-                fps=30,
-                width=640,
-                height=480,
-                warmup_s=1.0,
-            )
-        # taccap_follower + auto-discover: wrist + GSPS tactile are sniffed by the robot at
-        # connect (see the driver's _inject_taccap_cameras), so wire only the head here.
-        if self._taccap_autodiscover:
-            if cameras:
-                self.cameras = cameras
-            return
-        if preset.get("left_wrist_camera_sn"):
-            cameras["left_wrist"] = OpenCVCameraConfig(
-                index_or_path=preset["left_wrist_camera_sn"],
-                fourcc="MJPG",
-                width=640,
-                height=480,
-                fps=30,
-                warmup_s=1.0,
-            )
-        if preset.get("right_wrist_camera_sn"):
-            cameras["right_wrist"] = OpenCVCameraConfig(
-                index_or_path=preset["right_wrist_camera_sn"],
-                fourcc="MJPG",
-                width=640,
-                height=480,
-                fps=30,
-                warmup_s=1.0,
-            )
-        # Tactile sensors are separate XenseTactileCamera devices (not the
-        # serial gripper). Namespaced left_/right_ so the flat obs dict stays unique.
-        if self.enable_tactile_sensors:
-            for label, sn_key in (
-                ("left_tactile_0", "left_tactile_camera_sn_0"),
-                ("left_tactile_1", "left_tactile_camera_sn_1"),
-                ("right_tactile_0", "right_tactile_camera_sn_0"),
-                ("right_tactile_1", "right_tactile_camera_sn_1"),
-            ):
-                if preset.get(sn_key):
-                    cameras[label] = XenseTactileCameraConfig(
-                        serial_number=preset[sn_key],
-                        fps=30,
-                        output_types=[XenseOutputType.RECTIFY],
-                        warmup_s=0.05,
+        for label, spec in station.cameras.items():
+            if spec.type == "xense_tactile":
+                # Tactile sensors are separate XenseTactileCamera devices (not the
+                # serial gripper), so they are switched independently of gripper_type.
+                # taccap_follower + auto-discover sniffs them at connect instead
+                # (see the driver's _inject_taccap_cameras).
+                if not self.enable_tactile_sensors or self._taccap_autodiscover:
+                    continue
+                cameras[label] = XenseTactileCameraConfig(
+                    **{
+                        "serial_number": spec.serial,
+                        "fps": 30,
+                        "output_types": [XenseOutputType.RECTIFY],
+                        "warmup_s": 0.05,
                         # Override the OG xpack camera template: drop exposure
                         # 450 -> 250 and add brightness 38. The other keys mirror
                         # the probed OG template so they are NOT lost (the SDK
                         # replaces the whole camera.<os> dict): auto_exposure=1
                         # (manual, required for the manual exposure to apply),
                         # auto_wb=False, white_balance_t=5550.
-                        camera_properties={
+                        "camera_properties": {
                             "auto_exposure": 1,
                             "auto_wb": False,
                             "exposure": 250,
                             "white_balance_t": 5550,
                             "brightness": 38,
                         },
-                    )
-        # Only override the (empty) default when the preset actually supplies
-        # camera SNs, so a user-provided cameras dict isn't silently wiped.
-        if cameras:
-            self.cameras = cameras
+                        **spec.overrides,
+                    }
+                )
+            elif spec.type == "opencv":
+                # Wrist cameras are bolted to the gripper, so taccap auto-discover
+                # sniffs them at connect rather than reading them from the station.
+                if self._taccap_autodiscover:
+                    continue
+                cameras[label] = OpenCVCameraConfig(
+                    **{
+                        "index_or_path": spec.serial,
+                        "fourcc": "MJPG",
+                        "width": 640,
+                        "height": 480,
+                        "fps": 30,
+                        "warmup_s": 1.0,
+                        **spec.overrides,
+                    }
+                )
+            elif spec.type == "realsense":
+                cameras[label] = RealSenseCameraConfig(
+                    **{
+                        "serial_number_or_name": spec.serial,
+                        "fps": 30,
+                        "width": 640,
+                        "height": 480,
+                        "warmup_s": 1.0,
+                        **spec.overrides,
+                    }
+                )
+            else:  # unreachable: CameraSpec.validate() restricts the set
+                raise ValueError(f"unhandled station camera type {spec.type!r} for {label!r}")
+        return cameras

@@ -18,14 +18,11 @@ camera at connect time.
 import os
 from dataclasses import is_dataclass
 from pathlib import Path
-from typing import TypeVar
 
 import draccus
 import yaml
 
 from lerobot.robots.stations.spec import StationSpec
-
-T = TypeVar("T", bound=StationSpec)
 
 STATIONS_DIR_ENV = "LEROBOT_STATIONS_DIR"
 _STATIONS_DIRNAME = "stations"
@@ -122,7 +119,7 @@ def resolve_station_file(robot_type: str, name: str) -> Path:
     )
 
 
-def load_station(spec_cls: type[T], robot_type: str, name: str) -> T:
+def load_station[T: StationSpec](spec_cls: type[T], robot_type: str, name: str) -> T:
     """Load, decode and cross-check one station file.
 
     Raises with the file path attached on malformed YAML, unknown fields, a

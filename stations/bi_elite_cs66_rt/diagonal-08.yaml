@@ -1,0 +1,79 @@
+# Station diagonal-08 — bimanual Elite CS66 RT.
+#
+# Selected with `bi_mount_type: diagonal-08` in a recipe, or
+# `--robot.bi_mount_type=diagonal-08` on the CLI.
+#
+# Hardware only. Control/tuning knobs (servo gains, singularity guards, gripper
+# force, tactile on/off) belong in recipes/, not here — a station describes what
+# is bolted to the bench, not how a given run drives it.
+#
+# Grippers are absent on purpose: both backends resolve left/right at connect
+# (serial by board-SN parity, taccap by the firmware-burned SN), so there is no
+# per-bench gripper identity to pin.
+#
+# Anything set here is a DEFAULT — an explicit value in a recipe or on the CLI
+# wins. See stations/README.md.
+#
+# ── Mounting ────────────────────────────────────────────────────────────────
+# Same diagonal/opposed arrangement as diagonal-07; the full derivation is
+# written out in stations/bi_elite_cs66_rt/diagonal-07.yaml. In short:
+#
+#   R = Rz(world_yaw)·Rz(zrot)·Rx(tilt) lifts base-frame TCP poses into ONE
+#   shared gravity-aligned world frame (x = facing, y = left, z = up).
+#   tilt/zrot are the teach-pendant readings (both arms 45/90) and fix only the
+#   gravity vector; world_yaw is the residual yaw about gravity that the pendant
+#   cannot show — right 0° defines the world, left 180° because the arms are
+#   point-symmetric and face opposite ways.
+#
+#   `world_rotation` OVERRIDES that angle build and is what is in force here:
+#   the LEFT arm is actually tilted 45° about base-Y, not base-X (freedrive-probe
+#   measurement + base-link geometry), and RIGHT is its point-symmetric partner,
+#   R_right = Rz(180)·R_left.
+#
+# The angles are kept alongside the matrix even though they are inert here:
+# they record what the pendant actually reads.
+#
+# VERIFY on-station with the axis test before trusting the right arm; if the
+# heading comes out yawed, re-measure it with the freedrive probe like the left.
+
+name: diagonal-08
+robot_type: bi_elite_cs66_rt
+
+arms:
+  left:
+    ip: 192.168.8.53
+    local_ip: ""
+    # J1..J6 radians == [-80, -30, 90, -30, 90, 0] deg, measured on-station.
+    start_rad: [-1.3963, -0.5236, 1.5708, -0.5236, 1.5708, -0.7854]
+    home_rad:  [-1.3963, -0.5236, 1.5708, -0.5236, 1.5708, -0.7854]
+    mount:
+      tilt_deg: 45.0
+      zrot_deg: 90.0
+      world_yaw_deg: 180.0
+      world_rotation:
+        - [0.0, 1.0, 0.0]
+        - [-0.70710678, 0.0, 0.70710678]
+        - [0.70710678, 0.0, 0.70710678]
+  right:
+    ip: 192.168.8.223
+    local_ip: ""
+    # J1..J6 radians == [-100, -150, -90, -150, -90, 0] deg, measured on-station.
+    start_rad: [-1.7453, -2.618, -1.5708, -2.618, -1.5708, -0.7854]
+    home_rad:  [-1.7453, -2.618, -1.5708, -2.618, -1.5708, -0.7854]
+    mount:
+      tilt_deg: 45.0
+      zrot_deg: 90.0
+      world_yaw_deg: 0.0
+      world_rotation:
+        - [0.0, -1.0, 0.0]
+        - [0.70710678, 0.0, -0.70710678]
+        - [0.70710678, 0.0, 0.70710678]
+
+cameras:
+  head:            {type: realsense,     serial: "346522074942"}
+  left_wrist:      {type: opencv,        serial: XC000045}
+  right_wrist:     {type: opencv,        serial: XC000046}
+  left_tactile_0:  {type: xense_tactile, serial: OG001349}
+  left_tactile_1:  {type: xense_tactile, serial: OG001350}
+  right_tactile_0: {type: xense_tactile, serial: OG001351}
+  right_tactile_1: {type: xense_tactile, serial: OG001352}

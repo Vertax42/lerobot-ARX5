@@ -1,0 +1,37 @@
+# Station forward-04 — bimanual Flexiv Rizon4 RT.
+#
+# Selected with `bi_mount_type: forward-04` in a recipe, or
+# `--robot.bi_mount_type=forward-04` on the CLI.
+#
+# Hardware only. Control/tuning knobs (force control, servo rates, gripper
+# force, tactile on/off) belong in recipes/, not here — a station describes what
+# is bolted to the bench, not how a given run drives it.
+#
+# Grippers are absent on purpose: both backends resolve left/right at connect
+# (serial by board-SN parity, taccap by the firmware-burned SN), so there is no
+# per-bench gripper identity to pin.
+#
+# Anything set here is a DEFAULT — an explicit value in a recipe or on the CLI
+# wins. See stations/README.md.
+
+name: forward-04
+robot_type: bi_flexiv_rizon4_rt
+
+arms:
+  left:
+    serial_number: Rizon4-063774
+    start_deg: [86.9, 68.22, 23.55, 109.63, -3.01, 89.52, 2.96]
+    home_deg:  [86.9, 68.22, 23.55, 109.63, -3.01, 89.52, 2.96]
+  right:
+    serial_number: Rizon4R-062090
+    start_deg: [83.07, 67.85, 24.64, 107.57, 6.39, 95.96, 15.24]
+    home_deg:  [83.07, 67.85, 24.64, 107.57, 6.39, 95.96, 15.24]
+
+cameras:
+  head:            {type: realsense,     serial: "344522070461"}
+  left_wrist:      {type: opencv,        serial: XC000031}
+  right_wrist:     {type: opencv,        serial: XC000032}
+  left_tactile_0:  {type: xense_tactile, serial: OG001315}
+  left_tactile_1:  {type: xense_tactile, serial: OG001316}
+  right_tactile_0: {type: xense_tactile, serial: OG001317}
+  right_tactile_1: {type: xense_tactile, serial: OG001318}
