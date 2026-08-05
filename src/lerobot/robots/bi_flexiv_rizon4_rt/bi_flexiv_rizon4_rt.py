@@ -168,6 +168,8 @@ class BiFlexivRizon4RT(Robot):
         # cached_property accessed later, so it sees the completed cameras dict.
         if getattr(config, "_taccap_autodiscover", False):
             self._inject_taccap_cameras()
+        elif getattr(config, "_serial_autodiscover", False):
+            self._inject_serial_gripper_cameras()
         self.cameras = make_cameras_from_configs(config.cameras)
         np.set_printoptions(precision=6, suppress=True)
 
@@ -204,6 +206,57 @@ class BiFlexivRizon4RT(Robot):
                         warmup_s=0.05,
                     )
         self.logger.info(f"taccap auto-discovered cameras: {sorted(self.config.cameras)}")
+
+    def _inject_serial_gripper_cameras(self) -> None:
+        """Same as _inject_taccap_cameras for serial (parallel-jaw) grippers.
+
+        Each arm's gripper board, wrist camera and two tactile sensors share one
+        USB hub, so the gripper — already side-resolved by board-SN parity —
+        identifies the hub and the cameras on it follow. Keys and camera settings
+        match the station-driven wiring so datasets stay compatible either way.
+        """
+        from lerobot.robots.grippers.serial_discovery import discover_serial_gripper_cameras
+
+        # Only ask about sides that actually have a gripper; a bench running one
+        # arm without one should not fail discovery for the other.
+        wanted = tuple(
+            side
+            for side, enabled in (("left", self.config.left_use_gripper),
+                                  ("right", self.config.right_use_gripper))
+            if enabled
+        )
+        sides = discover_serial_gripper_cameras(sides=wanted) if wanted else {}
+        for side in wanted:
+            dev = sides.get(side)
+            if dev is None:
+                raise DeviceNotConnectedError(
+                    f"serial gripper auto-discover: no {side} gripper found, so its "
+                    "wrist and tactile cameras could not be resolved."
+                )
+            self.config.cameras[f"{side}_wrist"] = OpenCVCameraConfig(
+                index_or_path=dev.wrist_camera_name,
+                fourcc="MJPG",
+                width=640,
+                height=480,
+                fps=30,
+                warmup_s=1.0,
+            )
+            if self.config.enable_tactile_sensors:
+                if len(dev.tactile_sns) < 2:
+                    raise DeviceNotConnectedError(
+                        f"serial gripper auto-discover: expected 2 tactile sensors on "
+                        f"the {side} gripper's hub {dev.usb_hub}, found {dev.tactile_sns}."
+                    )
+                for i, sn in enumerate(dev.tactile_sns):
+                    self.config.cameras[f"{side}_tactile_{i}"] = XenseTactileCameraConfig(
+                        serial_number=sn,
+                        fps=30,
+                        output_types=[XenseOutputType.RECTIFY],
+                        warmup_s=0.05,
+                    )
+        self.logger.info(
+            f"serial gripper auto-discovered cameras: {sorted(self.config.cameras)}"
+        )
 
     # =========================================================================
     # Key initialization

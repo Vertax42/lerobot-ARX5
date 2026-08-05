@@ -162,6 +162,19 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     # rather than per-side.
     gripper_type: str = "serial"
 
+    # When gripper_type == "serial", auto-sniff the per-side wrist camera and
+    # tactile sensor SNs at connect instead of using the station's XC*/OG* SNs.
+    # Works the same way as taccap_auto_discover_cameras: each arm's gripper board,
+    # wrist camera and two tactile sensors share one USB hub, so the gripper (whose
+    # side comes from board-SN parity) identifies the hub and the rest follows.
+    # See serial_discovery.discover_serial_gripper_cameras.
+    #
+    # OFF by default: leaving it off keeps the station file the single source of
+    # truth, which is the verified behaviour. Turn it on per bench once you have
+    # confirmed the discovered SNs match the station's — then swapping a sensor
+    # stops being a config edit.
+    serial_auto_discover_cameras: bool = False
+
     # ========== Left gripper settings (per-arm: enable + serial wiring) ==========
     left_use_gripper: bool = True
     left_gripper_serial_timeout: float = 1.0
@@ -200,6 +213,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     )
     # Set in __post_init__: robot resolves wrist/tactile cameras at connect time.
     _taccap_autodiscover: bool = field(default=False, init=False)
+    _serial_autodiscover: bool = field(default=False, init=False)
 
     def __post_init__(self):
         super().__post_init__()
@@ -294,10 +308,28 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         self._taccap_autodiscover = (
             self.gripper_type == "taccap_follower" and self.taccap_auto_discover_cameras
         )
+        # Serial grippers can do the same, anchored on board-SN parity instead of
+        # the firmware SN. Both flags mean "the driver wires wrist + tactile at
+        # connect"; only the head comes from the station.
+        self._serial_autodiscover = (
+            self.gripper_type == "serial" and self.serial_auto_discover_cameras
+        )
         # An explicitly-provided cameras dict wins over the station's, same as
         # every other field.
         if not self.cameras:
             self.cameras = self._build_cameras(station)
+
+    @property
+    def _autodiscover_cameras(self) -> bool:
+        """True when the driver, not the station, supplies wrist + tactile cameras.
+
+        Either gripper backend can do it; they differ only in what anchors a side
+        (taccap: firmware SN; serial: board-SN parity). Everything downstream —
+        which cameras the station contributes, what the driver must inject — is
+        the same, so the camera builder branches on this rather than on which
+        backend is in use.
+        """
+        return self._taccap_autodiscover or self._serial_autodiscover
 
     def _build_cameras(self, station: BiFlexivStationSpec) -> dict[str, CameraConfig]:
         """Camera configs for this station, keyed by observation key.
@@ -310,7 +342,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             if spec.type == "xense_tactile":
                 # Tactile sensors are separate XenseTactileCamera devices, not the
                 # gripper, so they are switched independently of gripper_type.
-                if not self.enable_tactile_sensors or self._taccap_autodiscover:
+                if not self.enable_tactile_sensors or self._autodiscover_cameras:
                     continue
                 cameras[label] = XenseTactileCameraConfig(
                     **{
@@ -322,7 +354,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                     }
                 )
             elif spec.type == "opencv":
-                if self._taccap_autodiscover:
+                if self._autodiscover_cameras:
                     continue
                 cameras[label] = OpenCVCameraConfig(
                     **{

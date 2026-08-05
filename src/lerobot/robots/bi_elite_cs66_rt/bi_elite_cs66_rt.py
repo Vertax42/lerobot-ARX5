@@ -189,6 +189,8 @@ class BiEliteCS66RT(Robot):
         # camera drivers are built (config._build_cameras wired only the head).
         if getattr(config, "_taccap_autodiscover", False):
             self._inject_taccap_cameras()
+        elif getattr(config, "_serial_autodiscover", False):
+            self._inject_serial_gripper_cameras()
 
         self.cameras = make_cameras_from_configs(config.cameras)
 
@@ -225,6 +227,62 @@ class BiEliteCS66RT(Robot):
                         warmup_s=0.05,
                     )
         self.logger.info(f"taccap auto-discovered cameras: {sorted(self.config.cameras)}")
+
+    def _inject_serial_gripper_cameras(self) -> None:
+        """Same as _inject_taccap_cameras for serial (parallel-jaw) grippers.
+
+        Each arm's gripper board, wrist camera and two tactile sensors share one
+        USB hub, so the gripper — already side-resolved by board-SN parity —
+        identifies the hub and the cameras on it follow. Camera settings match
+        _build_cameras exactly (including TACTILE_CAMERA_PROPERTIES) so turning
+        discovery on does not change a single recorded pixel.
+        """
+        from lerobot.robots.bi_elite_cs66_rt.config_bi_elite_cs66_rt import (
+            TACTILE_CAMERA_PROPERTIES,
+        )
+        from lerobot.robots.grippers.serial_discovery import discover_serial_gripper_cameras
+
+        # Only ask about sides that actually have a gripper, so a bench running one
+        # arm without one does not fail discovery for the other.
+        wanted = tuple(
+            side
+            for side, enabled in (("left", self.config.left_use_gripper),
+                                  ("right", self.config.right_use_gripper))
+            if enabled
+        )
+        sides = discover_serial_gripper_cameras(sides=wanted) if wanted else {}
+        for side in wanted:
+            dev = sides.get(side)
+            if dev is None:
+                raise DeviceNotConnectedError(
+                    f"serial gripper auto-discover: no {side} gripper found, so its "
+                    "wrist and tactile cameras could not be resolved."
+                )
+            self.config.cameras[f"{side}_wrist"] = OpenCVCameraConfig(
+                index_or_path=dev.wrist_camera_name,
+                fourcc="MJPG",
+                width=640,
+                height=480,
+                fps=30,
+                warmup_s=1.0,
+            )
+            if self.config.enable_tactile_sensors:
+                if len(dev.tactile_sns) < 2:
+                    raise DeviceNotConnectedError(
+                        f"serial gripper auto-discover: expected 2 tactile sensors on "
+                        f"the {side} gripper's hub {dev.usb_hub}, found {dev.tactile_sns}."
+                    )
+                for i, sn in enumerate(dev.tactile_sns):
+                    self.config.cameras[f"{side}_tactile_{i}"] = XenseTactileCameraConfig(
+                        serial_number=sn,
+                        fps=30,
+                        output_types=[XenseOutputType.RECTIFY],
+                        warmup_s=0.05,
+                        camera_properties=dict(TACTILE_CAMERA_PROPERTIES),
+                    )
+        self.logger.info(
+            f"serial gripper auto-discovered cameras: {sorted(self.config.cameras)}"
+        )
 
     @staticmethod
     def _resolve_world_rotation(config: BiEliteCS66RTConfig, side: str) -> np.ndarray:

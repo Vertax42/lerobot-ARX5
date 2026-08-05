@@ -39,6 +39,23 @@ from lerobot.robots.stations import load_station
 
 ROBOT_TYPE = "bi_elite_cs66_rt"
 
+# Override for the OG xpack camera template on this robot's tactile sensors: drop
+# exposure 450 -> 250 and add brightness 38. The other keys mirror the probed OG
+# template so they are NOT lost (the SDK replaces the whole camera.<os> dict):
+# auto_exposure=1 (manual, required for the manual exposure to apply),
+# auto_wb=False, white_balance_t=5550.
+#
+# Shared so the auto-discovery path in the driver produces identical images to the
+# station-driven path — otherwise turning discovery on would silently re-expose
+# every tactile frame.
+TACTILE_CAMERA_PROPERTIES: dict[str, object] = {
+    "auto_exposure": 1,
+    "auto_wb": False,
+    "exposure": 250,
+    "white_balance_t": 5550,
+    "brightness": 38,
+}
+
 
 class BiEliteCS66RTControlMode(str, Enum):
     CARTESIAN_SERVO = "cartesian_servo"
@@ -258,6 +275,16 @@ class BiEliteCS66RTConfig(RobotConfig):
     taccap_grip_ff: float = 0.0     # constant MIT feed-forward torque (Nm); NEGATIVE = clamp harder, POSITIVE = open. |ff|<=3.5
     taccap_control_hz: int = 200    # ControlLoop resubmit rate
     taccap_auto_discover_cameras: bool = True  # sniff wrist + GSPS tactile SNs at connect
+    # Same idea for serial (parallel-jaw) grippers: each arm's gripper board, wrist
+    # camera and two tactile sensors share one USB hub, so the gripper — already
+    # side-resolved by board-SN parity — identifies the hub and the cameras follow.
+    # See serial_discovery.discover_serial_gripper_cameras.
+    #
+    # OFF by default: the station file stays the single source of truth, which is
+    # the verified behaviour. Turn it on per bench once the discovered SNs are
+    # confirmed to match the station's — then swapping a sensor is no longer a
+    # config edit.
+    serial_auto_discover_cameras: bool = False
     taccap_require_calibrated: bool = True     # False only for bring-up (uncalibrated control)
 
     # Separate tactile sensors (XenseTactileCamera) attached at the bimanual
@@ -279,6 +306,7 @@ class BiEliteCS66RTConfig(RobotConfig):
     # Set in __post_init__: in taccap_follower + auto-discover mode the wrist/tactile
     # cameras are sniffed by the robot at connect rather than taken from the station.
     _taccap_autodiscover: bool = field(default=False, init=False)
+    _serial_autodiscover: bool = field(default=False, init=False)
 
     # Bimanual cameras (head + per-arm wrist + tactiles). Auto-populated from the station.
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
@@ -334,6 +362,9 @@ class BiEliteCS66RTConfig(RobotConfig):
         # _build_cameras then wires only the head. Any other mode stays station-driven.
         self._taccap_autodiscover = (
             self.gripper_type == "taccap_follower" and self.taccap_auto_discover_cameras
+        )
+        self._serial_autodiscover = (
+            self.gripper_type == "serial" and self.serial_auto_discover_cameras
         )
         # An explicitly-provided cameras dict wins over the station's, same as
         # every other field.
@@ -479,6 +510,17 @@ class BiEliteCS66RTConfig(RobotConfig):
             init_open=self.gripper_init_open,
         )
 
+    @property
+    def _autodiscover_cameras(self) -> bool:
+        """True when the driver, not the station, supplies wrist + tactile cameras.
+
+        Either gripper backend can do it; they differ only in what anchors a side
+        (taccap: firmware SN; serial: board-SN parity). Everything downstream is
+        the same, so the camera builder branches on this rather than on which
+        backend is in use.
+        """
+        return self._taccap_autodiscover or self._serial_autodiscover
+
     def _build_cameras(self, station: BiEliteStationSpec) -> dict[str, CameraConfig]:
         """Camera configs for this station, keyed by observation key.
 
@@ -494,7 +536,7 @@ class BiEliteCS66RTConfig(RobotConfig):
                 # serial gripper), so they are switched independently of gripper_type.
                 # taccap_follower + auto-discover sniffs them at connect instead
                 # (see the driver's _inject_taccap_cameras).
-                if not self.enable_tactile_sensors or self._taccap_autodiscover:
+                if not self.enable_tactile_sensors or self._autodiscover_cameras:
                     continue
                 cameras[label] = XenseTactileCameraConfig(
                     **{
@@ -502,26 +544,16 @@ class BiEliteCS66RTConfig(RobotConfig):
                         "fps": 30,
                         "output_types": [XenseOutputType.RECTIFY],
                         "warmup_s": 0.05,
-                        # Override the OG xpack camera template: drop exposure
-                        # 450 -> 250 and add brightness 38. The other keys mirror
-                        # the probed OG template so they are NOT lost (the SDK
-                        # replaces the whole camera.<os> dict): auto_exposure=1
-                        # (manual, required for the manual exposure to apply),
-                        # auto_wb=False, white_balance_t=5550.
-                        "camera_properties": {
-                            "auto_exposure": 1,
-                            "auto_wb": False,
-                            "exposure": 250,
-                            "white_balance_t": 5550,
-                            "brightness": 38,
-                        },
+                        # See TACTILE_CAMERA_PROPERTIES — copied so a station
+                        # override cannot mutate the shared dict.
+                        "camera_properties": dict(TACTILE_CAMERA_PROPERTIES),
                         **spec.overrides,
                     }
                 )
             elif spec.type == "opencv":
                 # Wrist cameras are bolted to the gripper, so taccap auto-discover
                 # sniffs them at connect rather than reading them from the station.
-                if self._taccap_autodiscover:
+                if self._autodiscover_cameras:
                     continue
                 cameras[label] = OpenCVCameraConfig(
                     **{

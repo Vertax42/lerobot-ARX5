@@ -34,12 +34,17 @@ interleave their status queries).
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from glob import glob
 from threading import Lock
 
 from xensegripper import read_board_sn
 
+from lerobot.robots.grippers.usb_topology import (
+    hub_of_serial_device,
+    tactile_sns_by_hub,
+    video_names_by_hub,
+)
 from lerobot.utils.robot_utils import get_logger
 
 logger = get_logger("SerialGripperDiscovery")
@@ -188,3 +193,82 @@ def discover_serial_gripper_sides(
         sides[side] = SerialGripperSideDevice(side=side, sn=sn, port=port)
         logger.info(f"[{side}] gripper SN={sn} on {port}.")
     return sides
+
+
+# ── Camera discovery ─────────────────────────────────────────────────────────
+# A serial-gripper arm wires its gripper board, wrist camera and two tactile
+# sensors behind one per-side USB hub, so the gripper — whose side is already
+# known from board-SN parity — identifies the hub, and everything else on that
+# hub belongs to the same arm. Same shape as taccap_discovery, different anchor.
+
+
+@dataclass
+class SerialGripperCameras:
+    side: str                       # "left" | "right"
+    gripper_sn: str                 # board serial number that anchored the hub
+    usb_hub: str                    # e.g. "3-1"
+    wrist_camera_name: str          # v4l2-ctl device name, e.g. "XC000047"
+    tactile_sns: list[str] = field(default_factory=list)  # ordered by USB port
+
+
+def discover_serial_gripper_cameras(
+    sides: tuple[str, ...] = _SIDES,
+    baudrate: int = 115200,
+    device_id: int = 1,
+) -> dict[str, SerialGripperCameras]:
+    """Discover the wrist camera and tactile sensors on each serial gripper's hub.
+
+    Args:
+        sides: Which sides to resolve. Pass a single side when only one arm has a
+            gripper, so a missing gripper on the other arm isn't an error.
+
+    Returns:
+        ``{side: SerialGripperCameras}`` for the sides that resolved.
+
+    Raises:
+        RuntimeError: If a side's gripper is found but its hub, wrist camera or
+            tactile sensors cannot be resolved unambiguously. Failing here is
+            deliberate: silently guessing a camera would mislabel a dataset in a
+            way nobody notices until the recording is useless.
+    """
+    tactile_by_hub = tactile_sns_by_hub()
+    video_by_hub = video_names_by_hub()
+
+    found: dict[str, SerialGripperCameras] = {}
+    for side in sides:
+        port = find_port_by_side(side, baudrate=baudrate, device_id=device_id)
+        sn = _scan_port_sns(baudrate=baudrate, device_id=device_id).get(port, "")
+        hub = hub_of_serial_device(port)
+        if hub is None:
+            raise RuntimeError(
+                f"serial gripper auto-discover: could not resolve the USB hub for the "
+                f"{side} gripper on {port}; cannot map its cameras. Expected the gripper "
+                "board, wrist camera and tactile sensors to share one per-side hub."
+            )
+
+        tactile = [t_sn for _, t_sn in tactile_by_hub.get(hub, [])]
+        tactile_set = set(tactile)
+
+        # Whatever video device on this hub is not a tactile sensor is the wrist
+        # camera. Refuse to guess when that leaves anything other than exactly one.
+        candidates = [name for _, name in video_by_hub.get(hub, []) if name not in tactile_set]
+        if len(candidates) != 1:
+            raise RuntimeError(
+                f"serial gripper auto-discover: expected exactly one non-tactile video "
+                f"device on the {side} gripper's hub {hub}, found {candidates or 'none'} "
+                f"(tactile on this hub: {tactile}). Unplug anything else from that hub, "
+                "or pin the cameras in the station file and leave "
+                "serial_auto_discover_cameras off."
+            )
+
+        found[side] = SerialGripperCameras(
+            side=side,
+            gripper_sn=sn,
+            usb_hub=hub,
+            wrist_camera_name=candidates[0],
+            tactile_sns=tactile,
+        )
+        logger.info(
+            f"[{side}] gripper SN={sn} hub={hub} wrist={candidates[0]} tactile={tactile}"
+        )
+    return found

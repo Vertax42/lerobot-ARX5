@@ -152,11 +152,53 @@ arm's real tilt is about base-Y and not the base-X the pendant implies — is in
 parity (odd → left, even → right), taccap by the firmware-burned SN — so there is
 no per-bench gripper identity to pin.
 
-**Wrist and tactile cameras under `gripper_type: taccap_follower`.** Those move
-with the gripper, so with `taccap_auto_discover_cameras` the robot sniffs them at
-connect and the station's entries for them are skipped. Keep them in the file
-anyway: they are still correct for the serial backend, and the same station is
-used by both.
+**Wrist and tactile cameras, when auto-discovery is on.** Those move with the
+gripper, so the robot can sniff them at connect instead of reading them from the
+station — `taccap_auto_discover_cameras` (on by default) for TacCap grippers, and
+`serial_auto_discover_cameras` (**off** by default) for serial parallel-jaw ones.
+Keep the entries in the file either way: they are the source of truth whenever
+discovery is off, and the same station serves both backends.
+
+## Camera auto-discovery
+
+Each arm's gripper, wrist camera and two tactile sensors sit behind one per-side
+USB hub. The gripper already knows its own side — by firmware SN for TacCap, by
+board-SN parity for serial — so its hub identifies the arm, and every other
+device on that hub belongs to the same arm. No serial number required.
+
+The payoff is not the six saved lines; it is that swapping a tactile pad or a
+wrist camera stops being a config edit.
+
+```bash
+# What discovery would resolve, without connecting a robot:
+python -c "
+from lerobot.robots.grippers.serial_discovery import discover_serial_gripper_cameras
+for s, d in sorted(discover_serial_gripper_cameras().items()): print(s, d)"
+```
+
+For the serial backend this is **off by default**, so the station file stays the
+verified source of truth. Before turning it on for a bench, run the command above
+and check the six serials against that bench's station file. Then set it in the
+recipe:
+
+```yaml
+robot:
+  serial_auto_discover_cameras: true
+```
+
+Discovery **refuses rather than guesses**: if a hub has anything other than
+exactly one non-tactile video device, or fewer than two tactile sensors, it
+raises and names what it found. A plausible-but-wrong camera would mislabel a
+dataset in a way nobody notices until the recording is useless.
+
+Tactile order follows USB port, not enumeration order, so `*_tactile_0` is the
+same physical pad on every run.
+
+> Why topology rather than a naming rule: the wrist cameras do follow
+> odd→left/even→right across all seven benches, but the tactile serials follow
+> nothing — `diagonal-02` has left `OG000867, OG000865` and right `OG000142,
+> OG000866`, so any rule based on ordering or parity is already broken by the
+> hardware on the floor.
 
 ## Adding a bench
 

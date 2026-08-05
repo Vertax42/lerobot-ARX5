@@ -32,19 +32,12 @@ right), the identifiers the existing LeRobot camera stack needs:
 Side comes from the firmware-burned gripper SN via the TacCap SDK, never guessed.
 """
 
-import os
-import re
 from dataclasses import dataclass, field
 
+from lerobot.robots.grippers.usb_topology import hub_of_serial_device, tactile_sns_by_hub
 from lerobot.utils.robot_utils import get_logger
 
 logger = get_logger("TaccapDiscovery")
-
-# sysfs path like ".../usb1/1-3/1-3.1/1-3.1:1.2/tty/ttyACM1" — the top hub token
-# ("1-3") groups every device physically behind one gripper's USB hub, and the
-# full port token ("1-3.1") orders devices within that hub.
-_HUB_RE = re.compile(r"/usb\d+/(\d+-\d+)/")
-_PORT_RE = re.compile(r"/(\d+-\d+(?:\.\d+)+)/")
 
 _WRIST_NAME_PREFIX = "XC"  # wrist V4L2 name = "XC" + gripper SN minus product code
 
@@ -59,8 +52,8 @@ class TaccapSideDevices:
     tactile_sns: list[str] = field(default_factory=list)  # ordered GSPS serials
 
 
-def _import_sdks():
-    """Import the TacCap SDK and xensesdk, guarded with actionable errors."""
+def _import_taccap():
+    """Import the TacCap SDK, guarded with an actionable error."""
     try:
         import xense.taccap as taccap  # type: ignore
     except Exception as e:
@@ -69,41 +62,7 @@ def _import_sdks():
             "missing or stale. Rebuild it with `bash setup_env.sh --install` (or "
             f"`pip install third_party/taccap-gripper`). Original error: {e!r}"
         ) from e
-    try:
-        from xensesdk import Sensor  # type: ignore
-    except Exception as e:
-        raise RuntimeError(
-            "xensesdk is not importable — needed to enumerate GSPS visuotactile "
-            f"sensors. Install the xensesdk wheel. Original error: {e!r}"
-        ) from e
-    return taccap, Sensor
-
-
-def _sysfs_device_dir(dev_class: str, node: str) -> str:
-    """Realpath of /sys/class/<dev_class>/<node>/device (follows symlinks)."""
-    return os.path.realpath(f"/sys/class/{dev_class}/{os.path.basename(node)}/device")
-
-
-def _usb_hub_and_port(sysfs_dir: str) -> tuple[str | None, str | None]:
-    """Extract the USB hub token (e.g. '1-3') and full port token (e.g. '1-3.2')."""
-    padded = sysfs_dir + "/"
-    hub = _HUB_RE.search(padded)
-    port = _PORT_RE.search(padded)
-    return (hub.group(1) if hub else None, port.group(1) if port else None)
-
-
-def _gripper_hub(mcu_device: str) -> str | None:
-    """Resolve a gripper serial device path to its USB hub token."""
-    tty = os.path.realpath(mcu_device)                       # by-id → /dev/ttyACMx
-    hub, _ = _usb_hub_and_port(_sysfs_device_dir("tty", tty))
-    return hub
-
-
-def _video_node(cam) -> str:
-    """xensesdk scanSerialNumber() maps SN → cam id (int) or a /dev path."""
-    if isinstance(cam, str) and cam.startswith("/dev/"):
-        return cam
-    return f"/dev/video{int(cam)}"
+    return taccap
 
 
 def discover_taccap_sides() -> dict[str, TaccapSideDevices]:
@@ -117,7 +76,7 @@ def discover_taccap_sides() -> dict[str, TaccapSideDevices]:
         RuntimeError: If the SDKs are unavailable, no gripper is found, or a side's
             device topology can't be resolved.
     """
-    taccap, Sensor = _import_sdks()
+    taccap = _import_taccap()
 
     # --- 1. Sniff grippers per side, derive wrist name, resolve USB hub ---
     sides: dict[str, TaccapSideDevices] = {}
@@ -130,7 +89,7 @@ def discover_taccap_sides() -> dict[str, TaccapSideDevices]:
         parsed = taccap.parse_serial(eps.firmware_sn)
         product = parsed.product or "TCGU01"
         wrist_name = _WRIST_NAME_PREFIX + eps.firmware_sn[len(product):]
-        hub = _gripper_hub(eps.mcu_device)
+        hub = hub_of_serial_device(eps.mcu_device)
         if hub is None:
             raise RuntimeError(
                 f"Could not resolve USB hub for {side} gripper {eps.firmware_sn} "
@@ -152,23 +111,10 @@ def discover_taccap_sides() -> dict[str, TaccapSideDevices]:
         )
 
     # --- 2. Enumerate GSPS tactile sensors, map to side by USB hub ---
-    try:
-        gsps = Sensor.scanSerialNumber()  # {serial: cam_id}
-    except Exception as e:
-        raise RuntimeError(f"xensesdk Sensor.scanSerialNumber() failed: {e}") from e
-
-    # collect (usb_port, serial) per hub so we can order sensors deterministically
-    by_hub: dict[str, list[tuple[str, str]]] = {}
-    for sn, cam in gsps.items():
-        node = _video_node(cam)
-        hub, port = _usb_hub_and_port(_sysfs_device_dir("video4linux", node))
-        if hub is None:
-            logger.warn(f"Could not resolve USB hub for tactile sensor {sn} ({node}); skipping.")
-            continue
-        by_hub.setdefault(hub, []).append((port or node, sn))
+    by_hub = tactile_sns_by_hub()  # {hub: [(usb_port, serial), ...]}, port-ordered
 
     for side, dev in sides.items():
-        entries = sorted(by_hub.get(dev.usb_hub, []))  # by USB port ascending
+        entries = by_hub.get(dev.usb_hub, [])  # by USB port ascending
         dev.tactile_sns = [sn for _, sn in entries]
         logger.info(
             f"[{side}] gripper={dev.firmware_sn} hub={dev.usb_hub} "
