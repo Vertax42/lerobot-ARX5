@@ -1,10 +1,16 @@
-# Internal GitLab (192.168.1.61) submodule URLs.
+# Internal GitLab submodule URLs.
 #
 # The committed .gitmodules points every third_party submodule at its public
 # GitHub mirror (git@github.com:Vertax42/*). This file keeps the equivalent
 # internal GitLab URLs for use on the company network.
 #
-# Switch with:   scripts/submodule-remote.sh gitlab     (then: git submodule update --init --recursive)
+# The GitLab host is NOT written here — this repository is public, and the host
+# address is internal network topology. It comes from the XENSE_GITLAB_HOST
+# environment variable, which scripts/submodule-remote.sh substitutes into the
+# URLs below. Ask a teammate for the value; it is not recorded in the repo.
+#
+# Switch with:   XENSE_GITLAB_HOST=<host> scripts/submodule-remote.sh gitlab
+#                (then: git submodule update --init --recursive)
 # Switch back:   scripts/submodule-remote.sh github
 #
 # All submodule pins exist on BOTH remotes, so either set of URLs resolves the
@@ -12,25 +18,25 @@
 
 [submodule "third_party/ARX5_SDK"]
 	path = third_party/ARX5_SDK
-	url = git@192.168.1.61:physical-ai/robot_sdk/arx5_sdk.git
+	url = git@${XENSE_GITLAB_HOST}:physical-ai/robot_sdk/arx5_sdk.git
 [submodule "third_party/libpyflexiv"]
 	path = third_party/libpyflexiv
-	url = git@192.168.1.61:physical-ai/robot_sdk/libpyflexiv.git
+	url = git@${XENSE_GITLAB_HOST}:physical-ai/robot_sdk/libpyflexiv.git
 [submodule "third_party/XenseVR-PC-Service"]
 	path = third_party/XenseVR-PC-Service
-	url = git@192.168.1.61:physical-ai/tools/XenseVR-PC-Service.git
+	url = git@${XENSE_GITLAB_HOST}:physical-ai/tools/XenseVR-PC-Service.git
 [submodule "third_party/XGripper"]
 	path = third_party/XGripper
-	url = git@192.168.1.61:physical-ai/grippersdk/xgripper.git
+	url = git@${XENSE_GITLAB_HOST}:physical-ai/grippersdk/xgripper.git
 [submodule "third_party/xense_franka"]
 	path = third_party/xense_franka
-	url = git@192.168.1.61:physical-ai/robot_sdk/xense_franka.git
+	url = git@${XENSE_GITLAB_HOST}:physical-ai/robot_sdk/xense_franka.git
 [submodule "third_party/elite-robots-cs-sdk"]
 	path = third_party/elite-robots-cs-sdk
-	url = git@192.168.1.61:physical-ai/robot_sdk/elite-robots-cs-sdk.git
+	url = git@${XENSE_GITLAB_HOST}:physical-ai/robot_sdk/elite-robots-cs-sdk.git
 [submodule "third_party/elite-robots-cs-sdk-python"]
 	path = third_party/elite-robots-cs-sdk-python
-	url = git@192.168.1.61:physical-ai/robot_sdk/elite-robots-cs-sdk-python.git
+	url = git@${XENSE_GITLAB_HOST}:physical-ai/robot_sdk/elite-robots-cs-sdk-python.git
 [submodule "third_party/taccap-gripper"]
 	path = third_party/taccap-gripper
-	url = git@192.168.1.61:physical-ai/grippersdk/taccap-gripper.git
+	url = git@${XENSE_GITLAB_HOST}:physical-ai/grippersdk/taccap-gripper.git
