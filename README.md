@@ -4,7 +4,7 @@
 by XenseRobotics, used for Xense's multimodal tactile data acquisition system.
 This branch tracks **upstream lerobot v5.1**, with Xense-specific robots
 (Flexiv Rizon4 RT, Elite CS66 RT, and ARX5 — each single-arm and bimanual;
-Franka Research3; plus TacCap tactile grippers), teleoperators (Pico4 VR,
+plus TacCap tactile grippers), teleoperators (Pico4 VR,
 dual SpaceMouse, Vive tracker, TRLC leader, gamepad) and tactile cameras
 layered on top. For generic lerobot usage (datasets, policies, training
 scripts) refer to the
@@ -64,7 +64,6 @@ This repository uses `third_party/` git submodules to manage hardware SDK depend
 | `third_party/libpyflexiv` | `flexiv_rt` |
 | `third_party/XenseVR-PC-Service` | `xensevr_pc_service_sdk` |
 | `third_party/XGripper` | `xensegripper` |
-| `third_party/xense_franka` | `xense_franka` |
 | `third_party/elite-robots-cs-sdk` | Elite CS C++ SDK (builds `elite_cs_sdk`) |
 | `third_party/elite-robots-cs-sdk-python` | `elite_cs_sdk` (Elite CS Python bindings) |
 | `third_party/taccap-gripper` | `xense.taccap` (TacCap UMI tactile gripper SDK) |
@@ -97,7 +96,7 @@ This step will:
 - Update the conda environment from `conda_environment.yaml`
 - Install the main package from `pyproject.toml`
 - Install `xensesdk` from PyPI (`xensesdk==2.0.1`)
-- Build and install all `third_party` SDK packages: `pyarx`, `flexiv_rt`, `xensevr_pc_service_sdk`, `xensegripper`, `xense_franka`, `elite_cs_sdk` (Elite CS — built from the C++ + Python submodules), and `xense.taccap` (TacCap UMI gripper)
+- Build and install all `third_party` SDK packages: `pyarx`, `flexiv_rt`, `xensevr_pc_service_sdk`, `xensegripper`, `elite_cs_sdk` (Elite CS — built from the C++ + Python submodules), and `xense.taccap` (TacCap UMI gripper)
 - Configure SpaceMouse udev rules and HID permissions automatically
 
 > You will be prompted for `sudo` password during installation (for ARX5 real-time capability and udev rules).
@@ -127,8 +126,7 @@ bash ./setup_env.sh --install --help
 |---|---|---|
 | `--flexiv`, `--bi_flexiv` | `flexiv_rt` (+ `xense`) | `flexiv_rizon4_rt`, `bi_flexiv_rizon4_rt` |
 | `--elite`, `--bi_elite` | `elite_cs_sdk` (+ `xense`) | `elite_cs66_rt`, `bi_elite_cs66_rt` |
-| `--franka` | `pylibfranka` + `xense_franka` (+ `xense`) | `pylibfranka_research3` |
-| `--taccap`, `--bi_taccap` | `xense.taccap` (+ `xense`) | `taccap_gripper`, `bi_taccap_gripper` |
+| `--taccap`, `--bi_taccap` | `xense.taccap` (+ `xense`) | `taccap_follower` gripper (on any arm) |
 | `--xense` | `xensesdk` + `xensegripper` (XGripper) | serial / xense grippers + tactile sensors |
 | `--arx5`, `--bi_arx5` | `pyarx` | `arx5_follower`, `bi_arx5` |
 | `--pico4`, `--bi_pico4` | `xensevr_pc_service_sdk` | `pico4`, `bi_pico4` teleop |
@@ -142,7 +140,7 @@ bash ./setup_env.sh --install --help
 Notes:
 
 - **No selector = install all** — the existing `bash ./setup_env.sh --install` behavior is unchanged.
-- **Arms auto-include `xense`** — `--flexiv` / `--elite` / `--franka` / `--taccap` also build the xense gripper stack, because those arms drive xense grippers.
+- **Arms auto-include `xense`** — `--flexiv` / `--elite` / `--taccap` also build the xense gripper stack, because those arms drive xense grippers.
 - **Post-install verification** only checks the SDKs you selected.
 - **Code stays compatible with a partial install.** `import lerobot` and the CLIs
   (`lerobot-teleoperate`, `lerobot-record`, …) start fine even when an SDK is absent —
@@ -161,7 +159,6 @@ python -c 'import xensesdk; print("xensesdk OK ->", xensesdk.__file__)'
 python -c 'import xensegripper; print("xensegripper OK ->", xensegripper.__file__)'
 python -c 'import elite_cs_sdk; print("elite_cs_sdk OK ->", elite_cs_sdk.__file__)'
 python -c 'import xense.taccap; print("xense.taccap OK ->", xense.taccap.__file__)'
-python -c 'import xense_franka; print("xense_franka OK ->", xense_franka.__file__)'
 ```
 
 **Step 5:** 📌 **Note on FFmpeg / video:** v5.1 no longer pins `ffmpeg`

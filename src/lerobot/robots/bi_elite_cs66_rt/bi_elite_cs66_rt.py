@@ -66,13 +66,8 @@ from lerobot.robots.elite_cs66_rt.manipulability import (
     pose_delta,
     tool_consistency,
 )
-from lerobot.robots.grippers import (
-    SerialGripper,
-    SerialGripperConfig,
-    TaccapFollowerGripper,
-    TaccapFollowerGripperConfig,
-)
-from lerobot.robots.grippers.taccap_discovery import discover_taccap_sides
+from lerobot.grippers import Gripper, make_gripper_from_config
+from lerobot.grippers.taccap.discovery import discover_taccap_sides
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import (
@@ -95,20 +90,6 @@ _SIDES = ("left", "right")
 # Single-arm RTSI/recipe resource directory, reused as the on-disk fallback when
 # the SDK package doesn't ship the recipes. No need to duplicate recipe files.
 _ELITE_RESOURCE_DIR = Path(_elite_mod.__file__).resolve().parent / "resource"
-
-
-def _make_gripper(cfg):
-    """Instantiate the gripper driver matching the nested config type (None when no
-    gripper). Both drivers expose the same duck-typed contract (connect/disconnect/
-    get_gripper_position/set_gripper_position/initialize_gripper_position), so the rest
-    of the arm's gripper wiring stays driver-agnostic."""
-    if cfg is None:
-        return None
-    if isinstance(cfg, SerialGripperConfig):
-        return SerialGripper(cfg)
-    if isinstance(cfg, TaccapFollowerGripperConfig):
-        return TaccapFollowerGripper(cfg)
-    raise TypeError(f"Unsupported gripper config type: {type(cfg).__name__}")
 
 
 class BiEliteCS66RT(Robot):
@@ -140,9 +121,9 @@ class BiEliteCS66RT(Robot):
         self._dashboard: dict[str, Any] = {s: None for s in _SIDES}
         self._rtsi: dict[str, Any] = {s: None for s in _SIDES}
 
-        self._gripper: dict[str, SerialGripper | TaccapFollowerGripper | None] = {
-            "left": _make_gripper(config.left_gripper),
-            "right": _make_gripper(config.right_gripper),
+        self._gripper: dict[str, Gripper | None] = {
+            "left": make_gripper_from_config(config.left_gripper),
+            "right": make_gripper_from_config(config.right_gripper),
         }
 
         self._last_tcp_command: dict[str, np.ndarray | None] = {s: None for s in _SIDES}
@@ -213,6 +194,10 @@ class BiEliteCS66RT(Robot):
                 fps=30,
                 warmup_s=1.0,
             )
+            # This sweep already resolved the gripper MCU path. Hand it to the
+            # driver so its connect() skips a second find_left/find_right scan
+            # of the same bus.
+            self._adopt_taccap_mcu_device(side, dev.mcu_device)
             if self.config.enable_tactile_sensors:
                 if len(dev.tactile_sns) < 2:
                     raise DeviceNotConnectedError(
@@ -228,6 +213,18 @@ class BiEliteCS66RT(Robot):
                     )
         self.logger.info(f"taccap auto-discovered cameras: {sorted(self.config.cameras)}")
 
+    def _adopt_taccap_mcu_device(self, side: str, mcu_device: str) -> None:
+        """Pin an already-discovered MCU path onto that side's follower driver.
+
+        No-op when the side has no gripper, or when the operator pinned
+        ``mcu_device`` explicitly in config — an explicit value always wins.
+        """
+        gripper = self._gripper.get(side)
+        if gripper is None or getattr(gripper, "_mcu_device", None):
+            return
+        gripper._mcu_device = mcu_device
+        self.logger.debug(f"[{side}] taccap follower pinned to discovered {mcu_device}")
+
     def _inject_serial_gripper_cameras(self) -> None:
         """Same as _inject_taccap_cameras for serial (parallel-jaw) grippers.
 
@@ -240,7 +237,7 @@ class BiEliteCS66RT(Robot):
         from lerobot.robots.bi_elite_cs66_rt.config_bi_elite_cs66_rt import (
             TACTILE_CAMERA_PROPERTIES,
         )
-        from lerobot.robots.grippers.serial_discovery import discover_serial_gripper_cameras
+        from lerobot.grippers.serial.discovery import discover_serial_gripper_cameras
 
         # Only ask about sides that actually have a gripper, so a bench running one
         # arm without one does not fail discovery for the other.

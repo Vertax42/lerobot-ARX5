@@ -31,9 +31,9 @@ from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
 from lerobot.robots.bi_elite_cs66_rt.station import BiEliteStationSpec
 from lerobot.robots.config import RobotConfig
 from lerobot.robots.elite_cs66_rt.config_elite_cs66_rt import _validate_singularity_params
-from lerobot.robots.grippers import (
+from lerobot.grippers import (
     SerialGripperConfig,
-    TaccapFollowerGripperConfig,
+    TaccapFollowerConfig,
 )
 from lerobot.robots.stations import load_station
 
@@ -301,8 +301,8 @@ class BiEliteCS66RTConfig(RobotConfig):
     payload_cog: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.19])
 
     # Auto-created in __post_init__. Do not set directly. None when no gripper.
-    left_gripper: SerialGripperConfig | TaccapFollowerGripperConfig | None = field(default=None, init=False)
-    right_gripper: SerialGripperConfig | TaccapFollowerGripperConfig | None = field(default=None, init=False)
+    left_gripper: SerialGripperConfig | TaccapFollowerConfig | None = field(default=None, init=False)
+    right_gripper: SerialGripperConfig | TaccapFollowerConfig | None = field(default=None, init=False)
     # Set in __post_init__: in taccap_follower + auto-discover mode the wrist/tactile
     # cameras are sniffed by the robot at connect rather than taken from the station.
     _taccap_autodiscover: bool = field(default=False, init=False)
@@ -473,14 +473,14 @@ class BiEliteCS66RTConfig(RobotConfig):
 
     def _build_gripper_config(
         self, use_gripper: bool, serial_timeout: float, side: str
-    ) -> "SerialGripperConfig | TaccapFollowerGripperConfig | None":
+    ) -> "SerialGripperConfig | TaccapFollowerConfig | None":
         # Presence is per-arm: set {side}_use_gripper=False to run without a gripper.
         if not use_gripper:
             return None
         if self.gripper_type == "taccap_follower":
             # left/right resolved from the firmware-burned SN; wrist + GSPS tactile
             # cameras auto-discovered by the robot at connect.
-            return TaccapFollowerGripperConfig(
+            return TaccapFollowerConfig(
                 side=side,
                 kp=self.taccap_kp,
                 kd=self.taccap_kd,

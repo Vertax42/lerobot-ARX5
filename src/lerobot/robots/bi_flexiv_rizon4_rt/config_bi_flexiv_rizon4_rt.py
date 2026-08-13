@@ -26,7 +26,7 @@ from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
 from lerobot.robots.bi_flexiv_rizon4_rt.station import BiFlexivStationSpec
 from lerobot.robots.config import RobotConfig
-from lerobot.robots.grippers import SerialGripperConfig, TaccapFollowerGripperConfig
+from lerobot.grippers import SerialGripperConfig, TaccapFollowerConfig
 from lerobot.robots.stations import load_station
 
 ROBOT_TYPE = "bi_flexiv_rizon4_rt"
@@ -205,10 +205,10 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     taccap_require_calibrated: bool = True
 
     # Auto-created in __post_init__ (do not set directly)
-    left_gripper: SerialGripperConfig | TaccapFollowerGripperConfig | None = field(
+    left_gripper: SerialGripperConfig | TaccapFollowerConfig | None = field(
         default=None, init=False
     )
-    right_gripper: SerialGripperConfig | TaccapFollowerGripperConfig | None = field(
+    right_gripper: SerialGripperConfig | TaccapFollowerConfig | None = field(
         default=None, init=False
     )
     # Set in __post_init__: robot resolves wrist/tactile cameras at connect time.
@@ -390,7 +390,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         use_gripper: bool,
         serial_timeout: float,
         side: str,
-    ) -> "SerialGripperConfig | TaccapFollowerGripperConfig | None":
+    ) -> "SerialGripperConfig | TaccapFollowerConfig | None":
         """Build the per-side nested gripper config selected by ``self.gripper_type``.
 
         Both drivers auto-resolve left/right at connect: "serial" by board-SN parity
@@ -411,7 +411,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 init_open=self.gripper_init_open,
             )
         if gripper_type == "taccap_follower":
-            return TaccapFollowerGripperConfig(
+            return TaccapFollowerConfig(
                 side=side,
                 kp=self.taccap_kp,
                 kd=self.taccap_kd,

@@ -32,12 +32,14 @@ except Exception as _exc:  # noqa: BLE001 — any import-time failure should def
     XenseCamera = XenseGripper = None
     _XENSEGRIPPER_IMPORT_ERROR = _exc
 
-from lerobot.robots.flexiv_rizon4_rt.config_flare_gripper import FlareGripperConfig
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import get_logger
 
+from ..gripper import Gripper
+from .configuration_flare import FlareGripperConfig
 
-class FlareGripper:
+
+class FlareGripper(Gripper):
     config_class = FlareGripperConfig
 
     def __init__(
@@ -49,6 +51,7 @@ class FlareGripper:
                 "FlareGripper requires the xensegripper package (XGripper), which is not "
                 "importable under xensesdk 2.x. FlareGripper is deprecated and unused."
             ) from _XENSEGRIPPER_IMPORT_ERROR
+        super().__init__(config)
         self._config = config
         self._mac_addr = config.mac_addr
         self._cam_size = config.cam_size
@@ -60,7 +63,7 @@ class FlareGripper:
         self._gripper_v_max = config.gripper_v_max
         self._gripper_f_max = config.gripper_f_max
         self._init_open = config.init_open
-        self._logger = get_logger(f"FlareGripper-{self._mac_addr[:6]}")
+        self.logger = get_logger(f"FlareGripper-{self._mac_addr[:6]}")
 
         self._is_connected = False
         self._gripper: XenseGripper = None
@@ -69,26 +72,30 @@ class FlareGripper:
 
         self._available_sensors: dict = {}
         if self._enable_sensor:
-            self._logger.info(f"Scanning for sensors on device {self._mac_addr}...")
+            self.logger.info(f"Scanning for sensors on device {self._mac_addr}...")
             try:
                 sensor_sns = call_service(f"master_{self._mac_addr}", "scan_sensor_sn")
                 if not sensor_sns:
                     raise RuntimeError("No sensors found")
-                self._logger.info(f"Found {len(sensor_sns)} sensor(s):")
+                self.logger.info(f"Found {len(sensor_sns)} sensor(s):")
                 for sn, info in sensor_sns.items():
-                    self._logger.info(f"  - {sn}: {info}")
+                    self.logger.info(f"  - {sn}: {info}")
                 self._available_sensors = sensor_sns
             except Exception as e:
                 raise RuntimeError(f"Error scanning sensors: {e}") from e
         else:
-            self._logger.info("Tactile sensors disabled by config.")
+            self.logger.info("Tactile sensors disabled by config.")
+
+    @property
+    def is_connected(self) -> bool:
+        return self._is_connected
 
     def connect(self) -> None:
         """Connect to the Flare Gripper."""
         if self._is_connected:
             raise DeviceAlreadyConnectedError(f"{self} already connected")
 
-        self._logger.info(f"Connecting to Flare Gripper: {self._mac_addr}")
+        self.logger.info(f"Connecting to Flare Gripper: {self._mac_addr}")
         if self._enable_sensor:
             try:
                 if self._available_sensors:
@@ -96,26 +103,26 @@ class FlareGripper:
                         self._sensors[sn] = Sensor.create(
                             sn, mac_addr=self._mac_addr, rectify_size=self._rectify_size
                         )
-                    self._logger.info(f"✅ {len(self._sensors)} tactile sensors successfully connected.")
+                    self.logger.info(f"✅ {len(self._sensors)} tactile sensors successfully connected.")
                 else:
-                    self._logger.warn("No tactile sensors found")
+                    self.logger.warn("No tactile sensors found")
             except Exception as e:
                 raise RuntimeError(f"Error connecting to Flare Gripper tactile sensors: {e}") from e
         else:
-            self._logger.info("Skipping tactile sensor connection (disabled).")
+            self.logger.info("Skipping tactile sensor connection (disabled).")
 
         try:
             # connect camera
             camera_id = call_service(f"master_{self._mac_addr}", "list_camera")
             if camera_id is None:
-                self._logger.warn("No camera found")
+                self.logger.warn("No camera found")
             else:
                 self._camera = XenseCamera(
                     next(iter(camera_id.values())),
                     mac_addr=self._mac_addr,
                     frame_size=self._cam_size,
                 )
-                self._logger.info("✅ Camera successfully connected.")
+                self.logger.info("✅ Camera successfully connected.")
         except Exception as e:
             raise RuntimeError(f"Error connecting to Flare Gripper camera: {e}") from e
 
@@ -123,14 +130,14 @@ class FlareGripper:
             # connect gripper
             self._gripper = XenseGripper.create(self._mac_addr)
             if self._gripper is not None:
-                self._logger.info("✅ Gripper successfully connected.")
+                self.logger.info("✅ Gripper successfully connected.")
             else:
-                self._logger.warn("No gripper found")
+                self.logger.warn("No gripper found")
         except Exception as e:
             raise RuntimeError(f"Error connecting to Flare Gripper gripper: {e}") from e
 
         self._is_connected = True
-        self._logger.info("✅ Flare Gripper successfully connected.")
+        self.logger.info("✅ Flare Gripper successfully connected.")
 
     def register_button_callback(self, event_type: str, callback):
         if self._is_connected and self._gripper is not None:
@@ -141,12 +148,12 @@ class FlareGripper:
     def get_sensor(self, id: int | str) -> Sensor | None:
         if isinstance(id, int):
             if id > len(self._sensors) - 1:
-                self._logger.error(f"Sensor id {id} out of range")
+                self.logger.error(f"Sensor id {id} out of range")
                 return None
             id = list(self._sensors.keys())[id]
 
         if id not in self._sensors:
-            self._logger.error(f"Sensor {id} not found, available sensors: {list(self._sensors.keys())}")
+            self.logger.error(f"Sensor {id} not found, available sensors: {list(self._sensors.keys())}")
             return None
 
         return self._sensors[id]
@@ -200,7 +207,7 @@ class FlareGripper:
                         rectify = rectify[:, :, ::-1].copy()
                     sensor_data[key_name] = rectify
             except Exception as e:
-                self._logger.debug(f"Failed to read sensor {sn} rectify data: {e}")
+                self.logger.debug(f"Failed to read sensor {sn} rectify data: {e}")
 
         return sensor_data
 
@@ -222,7 +229,7 @@ class FlareGripper:
                     frame = frame[:, :, ::-1].copy()
                 return frame
         except Exception as e:
-            self._logger.debug(f"Failed to read camera frame: {e}")
+            self.logger.debug(f"Failed to read camera frame: {e}")
 
         return None
 
@@ -247,14 +254,14 @@ class FlareGripper:
         if not self._is_connected:
             raise DeviceNotConnectedError("Flare Gripper not connected")
 
-        self._logger.info("Disconnecting Flare Gripper...")
+        self.logger.info("Disconnecting Flare Gripper...")
 
         # Disconnect sensors
         for sn, sensor_obj in self._sensors.items():
             try:
                 sensor_obj.release()
             except Exception as e:
-                self._logger.debug(f"Error releasing sensor {sn}: {e}")
+                self.logger.debug(f"Error releasing sensor {sn}: {e}")
         self._sensors.clear()
 
         # Disconnect camera
@@ -262,7 +269,7 @@ class FlareGripper:
             try:
                 self._camera = None
             except Exception as e:
-                self._logger.debug(f"Error releasing camera: {e}")
+                self.logger.debug(f"Error releasing camera: {e}")
             self._camera = None
 
         # Disconnect gripper
@@ -270,8 +277,8 @@ class FlareGripper:
             try:
                 self._gripper = None
             except Exception as e:
-                self._logger.debug(f"Error releasing gripper: {e}")
+                self.logger.debug(f"Error releasing gripper: {e}")
             self._gripper = None
 
         self._is_connected = False
-        self._logger.info("✅ Flare Gripper disconnected.")
+        self.logger.info("✅ Flare Gripper disconnected.")

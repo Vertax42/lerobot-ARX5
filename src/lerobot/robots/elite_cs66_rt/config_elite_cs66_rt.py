@@ -16,7 +16,7 @@ from pathlib import Path
 
 from lerobot.cameras.configs import CameraConfig
 from lerobot.robots.config import RobotConfig
-from lerobot.robots.grippers.config_xense_gripper import (
+from lerobot.grippers.xense.configuration_xense import (
     SensorOutputType,
     XenseGripperConfig,
 )
@@ -260,9 +260,9 @@ class EliteCS66RTConfig(RobotConfig):
     # and lets the trip through. 1e-4 verified vs the datasheet limits; do NOT raise toward 1e-2.
     joint_vel_dls_lambda: float = 1e-4
 
-    # Gripper backend dispatch. Mirror the flexiv_rizon4_rt + pylibfranka_research3
-    # pattern: a single string selects the driver, the gripper-specific config is
-    # auto-built from exposed gripper_* fields in __post_init__.
+    # Gripper backend dispatch. Mirrors the flexiv_rizon4_rt pattern: a single
+    # string selects the driver, the gripper-specific config is auto-built from
+    # exposed gripper_* fields in __post_init__.
     #   "none"          - no gripper attached; gripper.pos absent from features
     #   "xense_gripper" - XenseGripper (USB/network, independent of arm)
     #   "dahuan_rs485"  - planned: Dahuan industrial gripper over CS66 tool RS485

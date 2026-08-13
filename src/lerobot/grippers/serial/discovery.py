@@ -40,7 +40,7 @@ from threading import Lock
 
 from xensegripper import read_board_sn
 
-from lerobot.robots.grippers.usb_topology import (
+from ..usb_topology import (
     hub_of_serial_device,
     tactile_sns_by_hub,
     video_names_by_hub,

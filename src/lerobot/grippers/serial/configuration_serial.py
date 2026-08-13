@@ -18,9 +18,12 @@
 
 from dataclasses import dataclass
 
+from ..configs import GripperConfig
 
-@dataclass
-class SerialGripperConfig:
+
+@GripperConfig.register_subclass("serial")
+@dataclass(kw_only=True)
+class SerialGripperConfig(GripperConfig):
     """Configuration for the serial-port Xense gripper (XenseSerialGripper).
 
     This gripper communicates directly over a USB-serial port and does not

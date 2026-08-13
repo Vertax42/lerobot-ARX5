@@ -14,21 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Configuration for Flexiv Rizon4 robot."""
+"""Configuration for the Flare (UMI-like) gripper."""
 
 from dataclasses import dataclass, field
-from enum import Enum
+
+from ..configs import GripperConfig, SensorOutputType  # noqa: F401  (re-exported)
 
 
-class SensorOutputType(Enum):
-    """Output type for tactile sensors."""
-
-    RECTIFY = "rectify"
-    DIFFERENCE = "difference"
-
-
-@dataclass
-class FlareGripperConfig:
+@GripperConfig.register_subclass("flare")
+@dataclass(kw_only=True)
+class FlareGripperConfig(GripperConfig):
     """Configuration for FlareGripper.
 
     The FlareGripper is UMI-Like gripper device.

@@ -8,5 +8,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-from .config_bi_taccap_gripper import BiTaccapGripperConfig
-from .bi_taccap_gripper import BiTaccapGripper
+"""Xense gripper backend (USB/network, with embedded visuotactile sensors)."""
+
+from .configuration_xense import XenseGripperConfig  # noqa: F401
+from .xense_gripper import XenseGripper  # noqa: F401

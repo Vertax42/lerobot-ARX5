@@ -31,7 +31,7 @@ from importlib.util import find_spec
 
 import pytest
 
-from lerobot.robots.grippers import usb_topology as topo
+from lerobot.grippers import usb_topology as topo
 
 HAS_FLEXIV = find_spec("flexiv_rt") is not None
 HAS_ELITE = find_spec("elite_cs_sdk") is not None
@@ -163,7 +163,7 @@ def test_wrist_inference_detects_missing_and_ambiguous(fake_topology):
 def test_discovery_refuses_when_not_exactly_one_candidate(monkeypatch, fake_topology):
     """A wrong-but-plausible camera is worse than a failure: it silently mislabels
     a dataset. Discovery must raise, naming what it found."""
-    from lerobot.robots.grippers import serial_discovery as sd
+    from lerobot.grippers.serial import discovery as sd
 
     monkeypatch.setattr(sd, "find_port_by_side", lambda side, **kw: "/dev/ttyUSB0")
     monkeypatch.setattr(sd, "_scan_port_sns", lambda **kw: {"/dev/ttyUSB0": "000031"})
@@ -174,7 +174,7 @@ def test_discovery_refuses_when_not_exactly_one_candidate(monkeypatch, fake_topo
 
 
 def test_discovery_resolves_a_well_formed_hub(monkeypatch, fake_topology):
-    from lerobot.robots.grippers import serial_discovery as sd
+    from lerobot.grippers.serial import discovery as sd
 
     monkeypatch.setattr(sd, "find_port_by_side", lambda side, **kw: "/dev/ttyUSB0")
     monkeypatch.setattr(sd, "_scan_port_sns", lambda **kw: {"/dev/ttyUSB0": "000031"})
@@ -192,7 +192,7 @@ def test_discovery_resolves_a_well_formed_hub(monkeypatch, fake_topology):
 def test_discovery_fails_loudly_when_hub_unresolvable(monkeypatch, fake_topology):
     """A gripper plugged straight into the host has no hub to group by; that is a
     wiring problem the operator must know about, not something to work around."""
-    from lerobot.robots.grippers import serial_discovery as sd
+    from lerobot.grippers.serial import discovery as sd
 
     monkeypatch.setattr(sd, "find_port_by_side", lambda side, **kw: "/dev/ttyUSB0")
     monkeypatch.setattr(sd, "_scan_port_sns", lambda **kw: {"/dev/ttyUSB0": "000031"})

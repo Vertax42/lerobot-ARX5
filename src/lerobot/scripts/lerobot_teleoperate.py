@@ -93,35 +93,6 @@ lerobot-teleoperate \
     --fps=30
 ```
 
-
-Example (Flexiv Rizon4 RT + Pico4):
-
-```shell
-lerobot-teleoperate \
-    --robot.type=pylibfranka_research3 \
-    --teleop.type=pico4 \
-    --fps=30 \
-    --display_data=true
-```
-
-Example (Flexiv Rizon4 RT + SpaceMouse):
-
-lerobot-teleoperate \
-    --robot.type=pylibfranka_research3 \
-    --teleop.type=spacemouse \
-    --fps=30 \
-    --display_data=true
-
-Example (Franka research3 + BtGamepad):
-
-```shell
-lerobot-teleoperate \
-    --robot.type=pylibfranka_research3 \
-    --teleop.type=btgamepad \
-    --fps=30 \
-    --display_data=true
-```
-
 """
 
 # ── TacCap SDK / OpenCV glib load-order shim ─────────────────────────────────
@@ -155,9 +126,6 @@ from lerobot.robots import (  # noqa: F401
     elite_cs66_rt,
     flexiv_rizon4_rt,
     make_robot_from_config,
-    pylibfranka_research3,
-    taccap_gripper,
-    bi_taccap_gripper,
     mock_robot,
 )
 from lerobot.teleoperators import (  # noqa: F401
@@ -184,13 +152,6 @@ from lerobot.utils.utils import move_cursor_up
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
 logger = get_logger("Teleoperate")
-
-
-# Self-driven, sensor-only robots: they have no teleoperator — running them through
-# lerobot-teleoperate just streams get_observation() to Rerun (data-stream + viz).
-# A placeholder teleop (e.g. --teleop.type=mock_teleop) satisfies the CLI but is
-# ignored. Mirrors v0.4.4's xense_flare / bi_xense_flare_grippers data-collection path.
-SELF_DRIVEN_TELEOP_ROBOTS = frozenset({"taccap_gripper", "bi_taccap_gripper"})
 
 
 @dataclass
@@ -351,70 +312,6 @@ def teleop_loop(
 # ---------------------------------------------------------------------------
 # Specialised teleop loops
 # ---------------------------------------------------------------------------
-def self_driven_teleop_loop(
-    robot: Robot,
-    fps: int,
-    display_data: bool = False,
-    duration: float | None = None,
-    display_compressed_images: bool = True,
-    debug_timing: bool = False,
-):
-    """Data-stream + Rerun visualisation loop for self-driven, sensor-only robots
-    (``taccap_gripper`` / ``bi_taccap_gripper``).
-
-    These robots have no teleoperator: we only read ``robot.get_observation()`` and
-    stream it to Rerun with an empty action. ``send_action`` is a no-op, so nothing
-    is ever commanded. Mirrors v0.4.4's ``bi_xense_flare_grippers_teleop_loop``.
-    """
-    display_len = max((len(key) for key in robot.observation_features), default=20)
-    start = time.perf_counter()
-
-    while True:
-        loop_start = time.perf_counter()
-
-        obs_t0 = time.perf_counter()
-        obs = robot.get_observation()
-        obs_time_ms = (time.perf_counter() - obs_t0) * 1e3
-
-        if display_data:
-            log_rerun_data(
-                observation=obs,
-                action={},
-                compress_images=display_compressed_images,
-            )
-            if not debug_timing:
-                scalar_items = [
-                    (k, v) for k, v in obs.items() if not isinstance(v, np.ndarray)
-                ]
-                print("\n" + "-" * (display_len + 12))
-                print(f"{'NAME':<{display_len}} | {'OBS':>9}")
-                for key, value in scalar_items:
-                    print(f"{key:<{display_len}} | {float(value):>9.4f}")
-                move_cursor_up(len(scalar_items) + 3)
-
-        dt_s = time.perf_counter() - loop_start
-        precise_sleep(max(1 / fps - dt_s, 0.0))
-        loop_s = time.perf_counter() - loop_start
-
-        if debug_timing:
-            cam_count = sum(1 for v in obs.values() if isinstance(v, np.ndarray))
-            print(
-                f"\r\033[K"
-                f"obs: {obs_time_ms:5.1f}ms | "
-                f"loop: {loop_s * 1e3:5.1f}ms | "
-                f"target: {1e3 / fps:.1f}ms | "
-                f"eff: {(1 / fps) / loop_s * 100:5.1f}% | "
-                f"cams: {cam_count}",
-                end="",
-                flush=True,
-            )
-        elif not display_data:
-            print(f"Self-driven loop time: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz)")
-            move_cursor_up(1)
-
-        if duration is not None and time.perf_counter() - start >= duration:
-            return
-
 
 def mock_robot_teleop_loop(
     teleop: Teleoperator,
@@ -863,12 +760,6 @@ def spacemouse_teleop_loop(
     timing_stats = {"obs_times": [], "loop_times": []}
 
     is_flexiv_rt = robot.name == "flexiv_rizon4_rt"
-    # pylibfranka_research3 in Cartesian impedance mode also needs special handling for reset
-    is_pylibfranka_cartesian = (
-        robot.name == "pylibfranka_research3"
-        and hasattr(robot.config, "control_mode")
-        and robot.config.control_mode.value == "cartesian_impedance"
-    )
     is_flexiv = is_flexiv_rt and teleop.name == "spacemouse"
 
     # bi_arx5 takes a prefixed schema (left_tcp.* / right_tcp.*) but a single
@@ -960,25 +851,6 @@ def spacemouse_teleop_loop(
                         teleop._start_gripper_pos = current_pose_euler[6]
                         logger.info(
                             "Reset to initial position triggered by both buttons"
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to reset robot position: {e}\n{traceback.format_exc()}"
-                        )
-                elif is_pylibfranka_cartesian and hasattr(
-                    robot, "reset_to_initial_position"
-                ):
-                    try:
-                        # pylibfranka_research3: blocking reset via WebSocket move_home.
-                        robot.reset_to_initial_position()
-                        current_pose_euler = robot.get_current_tcp_pose_euler()
-                        teleop.reset_to_pose(
-                            current_pose_euler[:6], current_pose_euler[6]
-                        )
-                        teleop._start_pose_6d = current_pose_euler[:6].copy()
-                        teleop._start_gripper_pos = current_pose_euler[6]
-                        logger.info(
-                            "Reset to initial position triggered by both buttons (pylibfranka)"
                         )
                     except Exception as e:
                         logger.error(
@@ -1409,90 +1281,6 @@ def elite_cs66_rt_pico4_teleop_loop(
             print(
                 f"\r\033[K{loop_s * 1e3:5.1f}ms ({1 / loop_s:3.0f}Hz) | "
                 f"{dryrun_str}{enable_str} | {grip_str} | {gripper_pos_str} | {ori_str}",
-                end="",
-                flush=True,
-            )
-
-        if duration is not None and time.perf_counter() - start >= duration:
-            return
-
-
-def btgamepad_teleop_loop(
-    teleop: Teleoperator,
-    robot: Robot,
-    fps: int,
-    display_data: bool = False,
-    duration: float | None = None,
-    dryrun: bool = False,
-):
-    """
-    Teleop loop for BT Gamepad with Pylibfranka Research3 robot.
-
-    Control scheme:
-    - Left stick: XY position control
-    - Right stick Y: Z position control
-    - Right stick X: Rotation around Z axis
-    - LB/RB: Open/close gripper
-    - BACK button: Reset to initial position
-    """
-    display_len = max(len(key) for key in robot.action_features)
-    start = time.perf_counter()
-
-    while True:
-        loop_start = time.perf_counter()
-
-        obs = robot.get_observation()
-        raw_action = teleop.get_action()
-
-        reset_button = teleop.get_reset_button()
-        if reset_button:
-            try:
-                if dryrun:
-                    logger.info(
-                        "[DRYRUN] Reset to initial position (BACK pressed) - robot movement skipped"
-                    )
-                    current_pose_quat = robot.get_current_tcp_pose_quat()
-                    teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
-                else:
-                    if hasattr(robot, "reset_to_initial_position"):
-                        robot.reset_to_initial_position()
-                    logger.info("Reset to initial position (BACK pressed)")
-                    current_pose_quat = robot.get_current_tcp_pose_quat()
-                    teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
-            except Exception as e:
-                logger.error(
-                    f"Failed to reset robot position: {e}\n{traceback.format_exc()}"
-                )
-            if display_data:
-                log_rerun_data(observation=obs)
-            _print_obs_state(obs, display_len, "RESETTING")
-            continue
-
-        teleop_action = raw_action
-        robot_action_to_send = teleop_action
-
-        if not dryrun:
-            _ = robot.send_action(robot_action_to_send)
-
-        if display_data:
-            log_rerun_data(observation=obs, action=teleop_action)
-            print("\n" + "-" * (display_len + 10))
-            print(f"{'NAME':<{display_len}} | {'NORM':>7}")
-            for motor, value in robot_action_to_send.items():
-                print(f"{motor:<{display_len}} | {value:>7.4f}")
-            move_cursor_up(len(robot_action_to_send) + 5)
-
-        dt_s = time.perf_counter() - loop_start
-        precise_sleep(max(1 / fps - dt_s, 0))
-        loop_s = time.perf_counter() - loop_start
-
-        if not display_data:
-            gripper_pos_str = (
-                f"gripper={robot_action_to_send.get('gripper.pos', 0.0):.2f}"
-            )
-            dryrun_str = "[DRYRUN] | " if dryrun else ""
-            print(
-                f"\r\033[Ktime: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz) | {dryrun_str}{gripper_pos_str}",
                 end="",
                 flush=True,
             )
@@ -2136,307 +1924,6 @@ def teleoperate(cfg: TeleoperateConfig):
             except KeyboardInterrupt:
                 logger.info("Teleoperation interrupted by user")
 
-        # ======================== Pylibfranka Research3 ========================
-        # Check if this is Pylibfranka Research3 robot with pico4
-        elif cfg.robot.type == "pylibfranka_research3" and cfg.teleop.type == "pico4":
-            logger.info(
-                "Detected Pylibfranka Research3 robot with Pico4, using specialized teleop loop"
-            )
-
-            robot = None
-            teleop = None
-
-            try:
-                # Create robot instance
-                robot = make_robot_from_config(cfg.robot)
-
-                # Ensure robot is in CARTESIAN_IMPEDANCE mode for pico4 teleop
-                from lerobot.robots.pylibfranka_research3.config_pylibfranka_research3 import (
-                    ControlMode as FR3ControlMode,
-                )
-
-                if robot.config.control_mode != FR3ControlMode.CARTESIAN_IMPEDANCE:
-                    raise ValueError(
-                        f"Pico4 teleoperation requires CARTESIAN_IMPEDANCE mode, "
-                        f"but robot is configured with {robot.config.control_mode}"
-                    )
-
-                # Connect to robot (launches ws_teleop_server, moves to home)
-                try:
-                    robot.connect(go_to_start=True)
-                    logger.info(f"Start EEF pose: {robot.get_current_tcp_pose_quat()}")
-                except Exception as e:
-                    logger.error(
-                        f"Failed to connect to robot: {e}\n{traceback.format_exc()}"
-                    )
-                    raise
-
-                # Connect to teleoperator with robot's current TCP pose
-                try:
-                    teleop = make_teleoperator_from_config(cfg.teleop)
-                    teleop.connect(
-                        current_tcp_pose_quat=robot.get_current_tcp_pose_quat()
-                    )
-                    logger.info("Connected to Pico4")
-                except Exception as e:
-                    logger.error(
-                        f"Failed to connect to Pico4: {e}\n{traceback.format_exc()}"
-                    )
-                    raise
-
-                # Run teleoperation loop (reuse pico4_teleop_loop — same action format)
-                try:
-                    pico4_teleop_loop(
-                        teleop=teleop,
-                        robot=robot,
-                        fps=cfg.fps,
-                        display_data=cfg.display_data,
-                        duration=cfg.teleop_time_s,
-                        dryrun=cfg.dryrun,
-                    )
-                except KeyboardInterrupt:
-                    logger.info("Teleoperation interrupted by user")
-                except Exception as e:
-                    logger.error(
-                        f"Error during teleoperation loop: {e}\n{traceback.format_exc()}"
-                    )
-                    raise
-
-            except Exception as e:
-                logger.error(
-                    f"Error in teleoperation setup or execution: {e}\n{traceback.format_exc()}"
-                )
-            finally:
-                if cfg.display_data:
-                    try:
-                        rr.rerun_shutdown()
-                    except Exception as e:
-                        logger.warn(f"Error shutting down rerun: {e}")
-
-                if teleop is not None:
-                    try:
-                        if teleop.is_connected:
-                            teleop.disconnect()
-                            logger.info("Pico4 disconnected")
-                    except Exception as e:
-                        logger.error(
-                            f"Error disconnecting Pico4: {e}\n{traceback.format_exc()}"
-                        )
-
-                if robot is not None:
-                    try:
-                        if robot.is_connected:
-                            robot.disconnect()
-                            logger.info("Robot safely disconnected")
-                    except Exception as e:
-                        logger.error(
-                            f"Error disconnecting robot: {e}\n{traceback.format_exc()}"
-                        )
-
-        # Check if this is Pylibfranka Research3 robot with spacemouse
-        elif (
-            cfg.robot.type == "pylibfranka_research3"
-            and cfg.teleop.type == "spacemouse"
-        ):
-            logger.info(
-                "Detected Pylibfranka Research3 robot with Spacemouse, using specialized teleop loop"
-            )
-
-            robot = None
-            teleop = None
-
-            try:
-                # Create robot instance
-                robot = make_robot_from_config(cfg.robot)
-
-                # Ensure robot is in CARTESIAN_IMPEDANCE mode for spacemouse teleop
-                from lerobot.robots.pylibfranka_research3.config_pylibfranka_research3 import (
-                    ControlMode as FR3ControlMode,
-                )
-
-                if robot.config.control_mode != FR3ControlMode.CARTESIAN_IMPEDANCE:
-                    raise ValueError(
-                        f"Spacemouse teleoperation requires CARTESIAN_IMPEDANCE mode, "
-                        f"but robot is configured with {robot.config.control_mode}"
-                    )
-
-                # Connect to robot (launches ws_teleop_server, moves to home)
-                try:
-                    robot.connect(go_to_start=True)
-                    start_obs = robot.get_observation()
-                    tcp_keys = [k for k in start_obs if k.startswith("tcp.")]
-                    logger.info(
-                        "Start pose: "
-                        + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys)
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Failed to connect to robot: {e}\n{traceback.format_exc()}"
-                    )
-                    raise
-
-                # Connect to teleoperator with robot's current TCP pose (Euler format for spacemouse)
-                try:
-                    teleop = make_teleoperator_from_config(cfg.teleop)
-                    teleop.connect(
-                        current_tcp_pose_euler=robot.get_current_tcp_pose_euler()
-                    )
-                    logger.info("Connected to Spacemouse")
-                except Exception as e:
-                    logger.error(
-                        f"Failed to connect to Spacemouse: {e}\n{traceback.format_exc()}"
-                    )
-                    raise
-
-                # Run teleoperation loop (reuse spacemouse_teleop_loop — handles Euler→6D conversion)
-                try:
-                    spacemouse_teleop_loop(
-                        teleop=teleop,
-                        robot=robot,
-                        fps=cfg.fps,
-                        display_data=cfg.display_data,
-                        duration=cfg.teleop_time_s,
-                        dryrun=cfg.dryrun,
-                        debug_timing=cfg.debug_timing,
-                        no_obs=cfg.no_obs,
-                    )
-                except KeyboardInterrupt:
-                    logger.info("Teleoperation interrupted by user")
-                except Exception as e:
-                    logger.error(
-                        f"Error during teleoperation loop: {e}\n{traceback.format_exc()}"
-                    )
-                    raise
-
-            except Exception as e:
-                logger.error(
-                    f"Error in teleoperation setup or execution: {e}\n{traceback.format_exc()}"
-                )
-            finally:
-                if cfg.display_data:
-                    try:
-                        rr.rerun_shutdown()
-                    except Exception as e:
-                        logger.warn(f"Error shutting down rerun: {e}")
-
-                if teleop is not None:
-                    try:
-                        if teleop.is_connected:
-                            teleop.disconnect()
-                            logger.info("Spacemouse disconnected")
-                    except Exception as e:
-                        logger.error(
-                            f"Error disconnecting Spacemouse: {e}\n{traceback.format_exc()}"
-                        )
-
-                if robot is not None:
-                    try:
-                        if robot.is_connected:
-                            robot.disconnect()
-                            logger.info("Robot safely disconnected")
-                    except Exception as e:
-                        logger.error(
-                            f"Error disconnecting robot: {e}\n{traceback.format_exc()}"
-                        )
-
-        # Check if this is Pylibfranka Research3 robot with btgamepad
-        elif (
-            cfg.robot.type == "pylibfranka_research3" and cfg.teleop.type == "btgamepad"
-        ):
-            logger.info(
-                "Detected Pylibfranka Research3 robot with BT Gamepad, using specialized teleop loop"
-            )
-
-            robot = None
-            teleop = None
-
-            try:
-                # Create robot instance
-                robot = make_robot_from_config(cfg.robot)
-
-                # Ensure robot is in CARTESIAN_IMPEDANCE mode for btgamepad teleop
-                from lerobot.robots.pylibfranka_research3.config_pylibfranka_research3 import (
-                    ControlMode as FR3ControlMode,
-                )
-
-                if robot.config.control_mode != FR3ControlMode.CARTESIAN_IMPEDANCE:
-                    raise ValueError(
-                        f"BT Gamepad teleoperation requires CARTESIAN_IMPEDANCE mode, "
-                        f"but robot is configured with {robot.config.control_mode}"
-                    )
-
-                # Connect to robot (launches ws_teleop_server, moves to home)
-                try:
-                    robot.connect(go_to_start=True)
-                    logger.info(f"Start EEF pose: {robot.get_current_tcp_pose_quat()}")
-                except Exception as e:
-                    logger.error(
-                        f"Failed to connect to robot: {e}\n{traceback.format_exc()}"
-                    )
-                    raise
-
-                # Connect to teleoperator with robot's current TCP pose (quat format for btgamepad)
-                try:
-                    teleop = make_teleoperator_from_config(cfg.teleop)
-                    teleop.connect(
-                        current_tcp_pose_quat=robot.get_current_tcp_pose_quat()
-                    )
-                    logger.info("Connected to BT Gamepad")
-                except Exception as e:
-                    logger.error(
-                        f"Failed to connect to BT Gamepad: {e}\n{traceback.format_exc()}"
-                    )
-                    raise
-
-                # Run teleoperation loop
-                try:
-                    btgamepad_teleop_loop(
-                        teleop=teleop,
-                        robot=robot,
-                        fps=cfg.fps,
-                        display_data=cfg.display_data,
-                        duration=cfg.teleop_time_s,
-                        dryrun=cfg.dryrun,
-                    )
-                except KeyboardInterrupt:
-                    logger.info("Teleoperation interrupted by user")
-                except Exception as e:
-                    logger.error(
-                        f"Error during teleoperation loop: {e}\n{traceback.format_exc()}"
-                    )
-                    raise
-
-            except Exception as e:
-                logger.error(
-                    f"Error in teleoperation setup or execution: {e}\n{traceback.format_exc()}"
-                )
-            finally:
-                if cfg.display_data:
-                    try:
-                        rr.rerun_shutdown()
-                    except Exception as e:
-                        logger.warn(f"Error shutting down rerun: {e}")
-
-                if teleop is not None:
-                    try:
-                        if teleop.is_connected:
-                            teleop.disconnect()
-                            logger.info("BT Gamepad disconnected")
-                    except Exception as e:
-                        logger.error(
-                            f"Error disconnecting BT Gamepad: {e}\n{traceback.format_exc()}"
-                        )
-
-                if robot is not None:
-                    try:
-                        if robot.is_connected:
-                            robot.disconnect()
-                            logger.info("Robot safely disconnected")
-                    except Exception as e:
-                        logger.error(
-                            f"Error disconnecting robot: {e}\n{traceback.format_exc()}"
-                        )
-
         # ======================== Mock Robot ========================
         elif cfg.robot.type == "mock_robot":
             logger.info("Detected mock robot, using mock teleop loop")
@@ -2452,29 +1939,6 @@ def teleoperate(cfg: TeleoperateConfig):
                     display_data=cfg.display_data,
                     duration=cfg.teleop_time_s,
                     dryrun=cfg.dryrun,
-                    debug_timing=cfg.debug_timing,
-                )
-            except KeyboardInterrupt:
-                pass
-
-        # --- taccap_gripper / bi_taccap_gripper (self-driven, data-stream + Rerun) ---
-        elif cfg.robot.type in SELF_DRIVEN_TELEOP_ROBOTS:
-            logger.info(
-                f"Detected {cfg.robot.type} (self-driven) — streaming observations to Rerun"
-            )
-            robot = make_robot_from_config(cfg.robot)
-            robot.connect()
-            # The teleop (e.g. mock_teleop) is a CLI placeholder and is NOT used; we
-            # connect it only so _cleanup can tear it down symmetrically.
-            teleop = make_teleoperator_from_config(cfg.teleop)
-            teleop.connect()
-            try:
-                self_driven_teleop_loop(
-                    robot=robot,
-                    fps=cfg.fps,
-                    display_data=cfg.display_data,
-                    duration=cfg.teleop_time_s,
-                    display_compressed_images=display_compressed_images,
                     debug_timing=cfg.debug_timing,
                 )
             except KeyboardInterrupt:

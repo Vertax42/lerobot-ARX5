@@ -24,8 +24,8 @@ import flexiv_rt
 from lerobot.cameras.configs import CameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.robots.config import RobotConfig
-from lerobot.robots.flexiv_rizon4_rt.config_flare_gripper import FlareGripperConfig, SensorOutputType
-from lerobot.robots.grippers.config_xense_gripper import XenseGripperConfig
+from lerobot.grippers.flare.configuration_flare import FlareGripperConfig, SensorOutputType
+from lerobot.grippers.xense.configuration_xense import XenseGripperConfig
 
 
 @RobotConfig.register_subclass("flexiv_rizon4_rt")

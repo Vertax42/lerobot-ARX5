@@ -1,17 +1,12 @@
 from dataclasses import dataclass, field
 from typing import Dict
 
-from enum import Enum
-
-class SensorOutputType(Enum):
-    """Output type for tactile sensors."""
-
-    RECTIFY = "rectify"
-    DIFFERENCE = "difference"
+from ..configs import GripperConfig, SensorOutputType  # noqa: F401  (re-exported)
 
 
-@dataclass
-class XenseGripperConfig:
+@GripperConfig.register_subclass("xense")
+@dataclass(kw_only=True)
+class XenseGripperConfig(GripperConfig):
     """Configuration for XenseGripper
     
     Attributes:

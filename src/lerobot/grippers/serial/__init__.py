@@ -8,5 +8,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-from .config_taccap_gripper import TaccapGripperConfig
-from .taccap_gripper import TaccapGripper
+"""Serial (XGripper) parallel-jaw gripper backend."""
+
+from .configuration_serial import SerialGripperConfig  # noqa: F401
+from .serial_gripper import SerialGripper  # noqa: F401

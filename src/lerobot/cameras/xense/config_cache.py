@@ -22,8 +22,8 @@ result into the SDK's per-serial cache dir (``CONFIG_CACHE_DIR`` == the camera's
 loads config from that cache (``camera_xense.py`` passes ``config_path``) with no
 flash read, so the connect — parallel or not — never triggers a device reset.
 
-Aligned with ``robots/taccap_gripper`` on ``dev/taccap-gripper``; kept here in the
-shared Xense camera package so any robot with Xense tactile cameras can reuse it.
+Kept in the shared Xense camera package so any robot with Xense tactile cameras
+can reuse it.
 """
 
 from __future__ import annotations

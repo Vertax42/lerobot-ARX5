@@ -64,8 +64,8 @@ import flexiv_rt as frt
 import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
-from lerobot.robots.flexiv_rizon4_rt.flare_gripper import FlareGripper
-from lerobot.robots.grippers.xense_gripper import XenseGripper
+from lerobot.grippers.flare.flare_gripper import FlareGripper
+from lerobot.grippers.xense.xense_gripper import XenseGripper
 from lerobot.robots.flexiv_rizon4_rt.config_flexiv_rizon4_rt import FlexivRizon4RTConfig
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
@@ -126,7 +126,7 @@ class FlexivRizon4RT(Robot):
         self._is_connected = False
 
         # Gripper (independent of arm control backend)
-        self._gripper: FlareGripper | XenseGripper | None = None
+        self._gripper: Gripper | None = None
         if config.use_gripper and config.gripper_type == "flare_gripper":
             self._gripper = FlareGripper(config.gripper)
         elif config.use_gripper and config.gripper_type == "xense_gripper":

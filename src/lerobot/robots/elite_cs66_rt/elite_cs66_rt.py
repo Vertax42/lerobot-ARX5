@@ -36,7 +36,7 @@ from lerobot.robots.elite_cs66_rt.manipulability import (
     pose_delta,
     tool_consistency,
 )
-from lerobot.robots.grippers.xense_gripper import XenseGripper
+from lerobot.grippers.xense.xense_gripper import XenseGripper
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import (
@@ -229,7 +229,7 @@ class EliteCS66RT(Robot):
         self._driver = None
         self._rtsi = None
         self._is_connected = False
-        self._gripper: XenseGripper | None = (
+        self._gripper: Gripper | None = (
             XenseGripper(config.gripper) if config.gripper is not None else None
         )
         self._last_tcp_command: np.ndarray | None = None

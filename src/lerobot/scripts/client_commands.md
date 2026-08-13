@@ -43,64 +43,6 @@ means a single source of truth plus provenance — recipes are committed, so
 `dataclass default < station < recipe < CLI`, so any flag below overrides both.
 The per-robot flag lists below remain valid as a reference and for one-off runs.
 
-## TacCap-Gripper lerobot-teleoperate command
-
-`taccap_gripper` / `bi_taccap_gripper` are **self-driven** (sensors only) — there is
-no taccap teleoperator. `lerobot-teleoperate` just streams `get_observation()` to
-Rerun; `--teleop.type=mock_teleop` is an **ignored placeholder**. Everything is
-addressed **by serial** — tactile via xensesdk (`Sensor.create(serial)` resolves the
-video port), wrist via `/dev/v4l/by-id`. Prerequisite: `xense.taccap` importable
-(`bash ./setup_env.sh --install`).
-
-### Bimanual (`bi_taccap_gripper`) — cameras + gripper only (no Pico4 trackers)
-
-```bash
-lerobot-teleoperate \
-    --robot.type=bi_taccap_gripper \
-    --robot.left_firmware_sn=TCGU01A24Z0003m \
-    --robot.right_firmware_sn=TCGU01A24Z0004m \
-    --robot.left_enable_tracker=false \
-    --robot.right_enable_tracker=false \
-    --robot.left_wrist_camera_serial=XCA24Z0003m \
-    --robot.right_wrist_camera_serial=XCA24Z0004m \
-    --robot.left_tactile_serials='[GSPS01A24Z0003, GSPS01A24Z0004]' \
-    --robot.right_tactile_serials='[GSPS01A24Z0005, GSPS01A24Z0006]' \
-    --teleop.type=mock_teleop \
-    --fps=30 \
-    --display_data=true
-```
-
-To add 6D pose, drop the two `*_enable_tracker=false` lines and pin both Pico4 SNs
-(trackers default ON; with two units `tracker_sn=None` is ambiguous; needs the
-XenseVR PC service):
-
-```bash
-    --robot.left_tracker_sn=<L-pico4-sn> \
-    --robot.right_tracker_sn=<R-pico4-sn> \
-```
-
-### Single (`taccap_gripper`)
-
-```bash
-lerobot-teleoperate \
-    --robot.type=taccap_gripper \
-    --robot.firmware_sn=TCGU01A24Z0003m \
-    --robot.enable_tracker=false \
-    --robot.wrist_camera_serial=XCA24Z0003m \
-    --robot.tactile_serials='[GSPS01A24Z0003, GSPS01A24Z0004]' \
-    --teleop.type=mock_teleop \
-    --fps=30 \
-    --display_data=true
-```
-
-> Notes: tactile sensors open **by serial** (xensesdk resolves the video port); obs
-> keys are `tactile_0/1` (single) or `left_/right_tactile_0/1` (bi). The rectify image
-> is landscape `(400,700,3)` (transposed like v0.4.4) — width/height auto-derive, don't
-> hard-code. Wrist: pass the model serial (`XCA…`), resolved via `/dev/v4l/by-id`
-> (USB iSerial `01.00.00` is non-unique); explicit `*_wrist_camera_index_or_path` still
-> overrides. Recording (no teleop): `lerobot-record --robot.type=bi_taccap_gripper …`
-> (same robot flags, swap `--teleop.*` for `--dataset.*`).
-
 ## BiARX5 Robot lerobot-teleoperate command
 
 ```bash
@@ -169,22 +111,6 @@ lerobot-annotate-reward \
     --repo-id Xense/xense_bi_arx5_tie_shoelaces \
     --new-repo-id Vertax/test_annotated \
     --push-to-hub
-```
-
-## Franka robot lerobot-record command
-
-```bash
-lerobot-record \
-  --robot.type=pylibfranka_research3 \
-  --robot.control_mode=cartesian_impedance \
-  --teleop.type=btgamepad \
-  --dataset.repo_id=franka_btgamepad/ceshi20260209 \
-  --dataset.num_episodes=2 \
-  --dataset.single_task="pick" \
-  --dataset.fps=30 \
-  --resume=false \
-  --dataset.push_to_hub=false \
-  --display_data=true
 ```
 
 ## Bimanual Flexiv Rizon4 RT + Bi-Pico4 lerobot-record command

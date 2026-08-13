@@ -49,13 +49,8 @@ from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.utils import make_cameras_from_configs
 from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
 from lerobot.robots.bi_flexiv_rizon4_rt.config_bi_flexiv_rizon4_rt import BiFlexivRizon4RTConfig
-from lerobot.robots.grippers import (
-    SerialGripper,
-    SerialGripperConfig,
-    TaccapFollowerGripper,
-    TaccapFollowerGripperConfig,
-)
-from lerobot.robots.grippers.taccap_discovery import discover_taccap_sides
+from lerobot.grippers import Gripper, make_gripper_from_config
+from lerobot.grippers.taccap.discovery import discover_taccap_sides
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import (
@@ -68,23 +63,6 @@ from lerobot.utils.robot_utils import (
 JOINT_DOF = 7  # Flexiv Rizon4 robot joint DOF
 POSE_SIZE_QUAT = 7  # [x, y, z, qw, qx, qy, qz]
 POSE_SIZE_6D = 9  # [x, y, z, r1..r6]
-
-
-def _make_gripper(cfg):
-    """Instantiate the gripper driver matching the nested config type.
-
-    Returns None when no gripper is configured for that side. Both drivers expose
-    the same duck-typed contract (connect/disconnect/get_gripper_position/
-    set_gripper_position/initialize_gripper_position), so the rest of the arm's
-    gripper wiring is driver-agnostic.
-    """
-    if cfg is None:
-        return None
-    if isinstance(cfg, SerialGripperConfig):
-        return SerialGripper(cfg)
-    if isinstance(cfg, TaccapFollowerGripperConfig):
-        return TaccapFollowerGripper(cfg)
-    raise TypeError(f"Unsupported gripper config type: {type(cfg).__name__}")
 
 
 class BiFlexivRizon4RT(Robot):
@@ -147,11 +125,11 @@ class BiFlexivRizon4RT(Robot):
 
         # Grippers — driver is selected by the nested config type (serial vs taccap
         # follower). Both implement the same duck-typed contract the arm relies on.
-        self._left_gripper = _make_gripper(config.left_gripper)
+        self._left_gripper = make_gripper_from_config(config.left_gripper)
         if self._left_gripper is None:
             self.logger.info("Left arm: no gripper configured.")
 
-        self._right_gripper = _make_gripper(config.right_gripper)
+        self._right_gripper = make_gripper_from_config(config.right_gripper)
         if self._right_gripper is None:
             self.logger.info("Right arm: no gripper configured.")
 
@@ -192,6 +170,10 @@ class BiFlexivRizon4RT(Robot):
                 fps=30,
                 warmup_s=1.0,
             )
+            # This sweep already resolved the gripper MCU path. Hand it to the
+            # driver so its connect() skips a second find_left/find_right scan
+            # of the same bus.
+            self._adopt_taccap_mcu_device(side, dev.mcu_device)
             if self.config.enable_tactile_sensors:
                 if len(dev.tactile_sns) < 2:
                     raise DeviceNotConnectedError(
@@ -207,6 +189,18 @@ class BiFlexivRizon4RT(Robot):
                     )
         self.logger.info(f"taccap auto-discovered cameras: {sorted(self.config.cameras)}")
 
+    def _adopt_taccap_mcu_device(self, side: str, mcu_device: str) -> None:
+        """Pin an already-discovered MCU path onto that side's follower driver.
+
+        No-op when the side has no gripper, or when the operator pinned
+        ``mcu_device`` explicitly in config — an explicit value always wins.
+        """
+        gripper = self._left_gripper if side == "left" else self._right_gripper
+        if gripper is None or getattr(gripper, "_mcu_device", None):
+            return
+        gripper._mcu_device = mcu_device
+        self.logger.debug(f"[{side}] taccap follower pinned to discovered {mcu_device}")
+
     def _inject_serial_gripper_cameras(self) -> None:
         """Same as _inject_taccap_cameras for serial (parallel-jaw) grippers.
 
@@ -215,7 +209,7 @@ class BiFlexivRizon4RT(Robot):
         identifies the hub and the cameras on it follow. Keys and camera settings
         match the station-driven wiring so datasets stay compatible either way.
         """
-        from lerobot.robots.grippers.serial_discovery import discover_serial_gripper_cameras
+        from lerobot.grippers.serial.discovery import discover_serial_gripper_cameras
 
         # Only ask about sides that actually have a gripper; a bench running one
         # arm without one should not fail discovery for the other.
@@ -817,7 +811,7 @@ class BiFlexivRizon4RT(Robot):
     def _move_arm_to_position(
         self,
         robot: frt.Robot,
-        gripper: SerialGripper | None,
+        gripper: Gripper | None,
         side: str,
         target_position_degree: list[float],
         vel_scale: int,
@@ -1018,7 +1012,7 @@ class BiFlexivRizon4RT(Robot):
 
     def _read_gripper_state(
         self,
-        gripper: SerialGripper | None,
+        gripper: Gripper | None,
         use_gripper: bool,
         gripper_key: str,
         obs_dict: dict,
@@ -1118,7 +1112,7 @@ class BiFlexivRizon4RT(Robot):
     def _send_gripper_action(
         self,
         action: dict[str, Any],
-        gripper: SerialGripper | None,
+        gripper: Gripper | None,
         use_gripper: bool,
         gripper_key: str,
     ) -> None:

@@ -25,6 +25,8 @@ per-unit SN/port needs configuring in the common case.
 
 from dataclasses import dataclass
 
+from ..configs import GripperConfig
+
 # Hard bound on the constant feed-forward torque, to catch sign/scale typos before
 # they reach the motor. The MIT impedance path applies feed-forward with NO firmware
 # max_torque clamp (only position/velocity modes clamp), and ~3.5 Nm is the top of the
@@ -33,8 +35,9 @@ from dataclasses import dataclass
 MAX_FEEDFORWARD_TORQUE_NM = 3.5
 
 
-@dataclass
-class TaccapFollowerGripperConfig:
+@GripperConfig.register_subclass("taccap_follower")
+@dataclass(kw_only=True)
+class TaccapFollowerConfig(GripperConfig):
     """Configuration for a single TacCap follower gripper.
 
     Identification:
@@ -86,20 +89,20 @@ class TaccapFollowerGripperConfig:
     def __post_init__(self):
         if self.side not in ("left", "right"):
             raise ValueError(
-                f"TaccapFollowerGripperConfig: side must be 'left' or 'right', got {self.side!r}."
+                f"TaccapFollowerConfig: side must be 'left' or 'right', got {self.side!r}."
             )
         if not self.kp > 0.0:
-            raise ValueError(f"TaccapFollowerGripperConfig: kp must be positive, got {self.kp}.")
+            raise ValueError(f"TaccapFollowerConfig: kp must be positive, got {self.kp}.")
         if not self.kd >= 0.0:
-            raise ValueError(f"TaccapFollowerGripperConfig: kd must be non-negative, got {self.kd}.")
+            raise ValueError(f"TaccapFollowerConfig: kd must be non-negative, got {self.kd}.")
         if abs(self.feedforward_torque) > MAX_FEEDFORWARD_TORQUE_NM:
             raise ValueError(
-                f"TaccapFollowerGripperConfig: |feedforward_torque| must be <= "
+                f"TaccapFollowerConfig: |feedforward_torque| must be <= "
                 f"{MAX_FEEDFORWARD_TORQUE_NM} Nm, got {self.feedforward_torque}. "
                 "Sign: negative = closing/clamp, positive = opening. Values past "
                 "~1 Nm are a hard crush (the SDK's gentle-grasp example aborts at 0.30 Nm)."
             )
         if not 0 < self.control_hz <= 500:
             raise ValueError(
-                f"TaccapFollowerGripperConfig: control_hz must be in (0, 500], got {self.control_hz}."
+                f"TaccapFollowerConfig: control_hz must be in (0, 500], got {self.control_hz}."
             )

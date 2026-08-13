@@ -779,32 +779,6 @@ install_elite() {
     echo "[elite] Done. Verify with: python -c 'import elite_cs_sdk; print(elite_cs_sdk.__file__)'"
 }
 
-# ── Hardware module: Franka Research 3 ───────────────────────────────────────
-
-install_franka() {
-    echo ""
-    echo "══════════════════════════════════════════"
-    echo " Franka Research 3 (pylibfranka)  →  websockets"
-    echo "══════════════════════════════════════════"
-
-    local SDK_DIR="$PROJECT_ROOT/third_party/xense_franka"
-
-    if [[ ! -d "$SDK_DIR" ]]; then
-        echo "ERROR: $SDK_DIR not found."
-        echo "  Run: git submodule update --init third_party/xensesdk"
-        return 1
-    fi
-
-    uv pip install \
-        "websockets>=12.0" \
-        "pylibfranka==0.20.3"
-
-    uv pip install -e "$SDK_DIR"
-
-    uv pip install "websockets>=12.0"
-    echo "[franka] Done. Verify with: python -c 'import websockets; print(websockets.__version__)'"
-}
-
 # ── Hardware module: SpaceMouse ───────────────────────────────────────────────
 
 install_spacemouse() {
@@ -908,7 +882,7 @@ elif [[ "$1" == "--install" ]]; then
     SELECTED=""
     add_key() { case " $SELECTED " in *" $1 "*) ;; *) SELECTED="$SELECTED $1" ;; esac; }
     is_sel()  { case " $SELECTED " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
-    select_all_hw() { local k; for k in arx5 flexiv franka pico4 xense taccap elite spacemouse dynamixel; do add_key "$k"; done; }
+    select_all_hw() { local k; for k in arx5 flexiv pico4 xense taccap elite spacemouse dynamixel; do add_key "$k"; done; }
     print_install_usage() {
         cat <<'USAGE'
 Usage: ./setup_env.sh --install [hardware selectors]
@@ -918,7 +892,6 @@ Usage: ./setup_env.sh --install [hardware selectors]
 Per-hardware-family selectors (arms auto-include the xense gripper stack):
   --flexiv,  --bi_flexiv     Flexiv Rizon4 RT    (+ xense)
   --elite,   --bi_elite      Elite CS66 RT       (+ xense)
-  --franka                   Franka Research3    (+ xense)
   --taccap,  --bi_taccap     TacCap gripper      (+ xense)
   --xense                    Xense tactile sensors + XGripper serial gripper
   --arx5,    --bi_arx5       ARX5 arm
@@ -941,7 +914,6 @@ USAGE
                 --core|--none)            : ;;  # no-op: core is always installed
                 --flexiv|--bi_flexiv)     add_key flexiv; add_key xense ;;
                 --elite|--bi_elite)       add_key elite;  add_key xense ;;
-                --franka)                 add_key franka; add_key xense ;;
                 --taccap|--bi_taccap)     add_key taccap; add_key xense ;;
                 --xense)                  add_key xense ;;
                 --arx5|--bi_arx5)         add_key arx5 ;;
@@ -1049,7 +1021,6 @@ USAGE
 
     if is_sel arx5;       then install_arx5      || echo "[WARN] arx5 installation skipped or failed (see above)"; fi
     if is_sel flexiv;     then install_flexiv    || echo "[WARN] flexiv installation skipped or failed (see above)"; fi
-    if is_sel franka;     then install_franka    || echo "[WARN] franka installation skipped or failed (see above)"; fi
     if is_sel pico4;      then ( install_pico4 ) || echo "[WARN] pico4 installation skipped or failed (see above)"; fi
     if is_sel xense;      then install_xense     || echo "[WARN] xense installation skipped or failed (see above)"; fi
     if is_sel taccap;     then install_taccap    || echo "[WARN] taccap installation skipped or failed (see above)"; fi
@@ -1064,7 +1035,7 @@ USAGE
     echo " Post-install verification"
     echo "══════════════════════════════════════════"
     # Verify only the SDKs that were selected for install (lerobot core always).
-    # franka + spacemouse have no verify probe today — kept that way.
+    # spacemouse has no verify probe today — kept that way.
     _VERIFY_LINES='lerobot|import importlib.metadata as M, lerobot; print("v"+M.version("lerobot"), "->", lerobot.__file__)'
     if is_sel arx5;      then _VERIFY_LINES+=$'\n''pyarx|import importlib.metadata as M, pyarx; print("v"+M.version("pyarx"), "->", pyarx.__file__)'; fi
     if is_sel flexiv;    then _VERIFY_LINES+=$'\n''flexiv_rt|import importlib.metadata as M, flexiv_rt; print("v"+M.version("flexiv_rt"), "->", flexiv_rt.__file__)'; fi

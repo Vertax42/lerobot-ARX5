@@ -20,27 +20,24 @@ Wraps ``xense.taccap.FollowerGripper``. The follower drives an FDCAN motor via
 the MIT force-position (impedance) primitive. A background ``ControlLoop`` (a C++
 thread) resubmits the latest normalized target at a fixed rate and keeps a
 thread-safe observation fresh, so ``get_gripper_position`` / ``set_gripper_position``
-are non-blocking and match the duck-typed gripper contract used by the arm robots
-(same as ``SerialGripper``):
-
-    connect() / disconnect()
-    get_gripper_position() -> float in [0, 1]   (0 = closed, 1 = open)
-    set_gripper_position(float in [0, 1])
-    initialize_gripper_position(float in [0, 1])
+are non-blocking.
 
 Left/right units are told apart by the firmware-burned serial number via the
-SDK's side-aware discovery (``find_left`` / ``find_right``).
+SDK's side-aware discovery (``find_left`` / ``find_right``). When the arm has
+already run ``discover_taccap_sides()`` — it does, to wire the wrist + tactile
+cameras — it passes the resolved device path through ``config.mcu_device`` so
+this driver does not re-enumerate the bus a second time per side.
 
 The ``xense.taccap`` SDK is imported lazily (guarded) so importing the grippers
 package does not hard-fail on hosts where the native extension is not built —
 the error is raised with rebuild guidance at ``connect()`` time instead.
 """
 
-import time
-
-from lerobot.robots.grippers.config_taccap_follower_gripper import TaccapFollowerGripperConfig
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import get_logger
+
+from ..gripper import Gripper
+from .configuration_taccap import TaccapFollowerConfig
 
 try:
     import xense.taccap as taccap  # type: ignore
@@ -53,12 +50,8 @@ except Exception as e:  # pragma: no cover - depends on native build being prese
 # GripperConfig.flags bit 0 = calibrated (see SDK gripper_control_test.py).
 _CALIBRATED_FLAG = 0x0001
 
-# initialize_gripper_position() reach-wait defaults.
-_INIT_POSITION_TOLERANCE = 0.03
-_INIT_TIMEOUT_S = 3.0
 
-
-class TaccapFollowerGripper:
+class TaccapFollower(Gripper):
     """Wrapper around ``xense.taccap.FollowerGripper`` for arm robots.
 
     Normalized position convention (matches ``SerialGripper``):
@@ -67,17 +60,18 @@ class TaccapFollowerGripper:
 
     Example::
 
-        cfg = TaccapFollowerGripperConfig(side="left")
-        g = TaccapFollowerGripper(cfg)
+        cfg = TaccapFollowerConfig(side="left")
+        g = TaccapFollower(cfg)
         g.connect()
         g.set_gripper_position(0.5)
         print(g.get_gripper_position())
         g.disconnect()
     """
 
-    config_class = TaccapFollowerGripperConfig
+    config_class = TaccapFollowerConfig
 
-    def __init__(self, config: TaccapFollowerGripperConfig):
+    def __init__(self, config: TaccapFollowerConfig):
+        super().__init__(config)
         self._config = config
         self._side = config.side
         self._mcu_device = config.mcu_device
@@ -88,7 +82,7 @@ class TaccapFollowerGripper:
         self._init_open = config.init_open
         self._require_calibrated = config.require_calibrated
 
-        self._logger = get_logger(f"TaccapFollowerGripper-{config.side}")
+        self.logger = get_logger(f"TaccapFollower-{config.side}")
         self._is_connected: bool = False
         self._gripper = None  # xense.taccap.FollowerGripper
         self._loop = None     # xense.taccap.ControlLoop
@@ -98,12 +92,22 @@ class TaccapFollowerGripper:
         self._cached_position: float = 1.0 if config.init_open else 0.0
 
     def __str__(self) -> str:
-        return f"TaccapFollowerGripper({self._side})"
+        return f"TaccapFollower({self._side})"
+
+    @property
+    def is_connected(self) -> bool:
+        return self._is_connected
 
     # ── Connection lifecycle ───────────────────────────────────────────────────
 
     def _resolve_device(self) -> str:
-        """Return the MCU device path for this side (explicit override or by SN)."""
+        """Return the MCU device path for this side.
+
+        Prefers ``config.mcu_device`` — the arm fills it in from the
+        ``discover_taccap_sides()`` sweep it already ran for the cameras, so the
+        common bimanual path enumerates the bus once instead of once per side
+        again here. Falls back to a side-aware scan when nothing was injected.
+        """
         if self._mcu_device:
             return self._mcu_device
         finder = taccap.find_left if self._side == "left" else taccap.find_right
@@ -125,7 +129,7 @@ class TaccapFollowerGripper:
             )
 
         device = self._resolve_device()
-        self._logger.info(f"Opening follower gripper (side={self._side}) on {device}...")
+        self.logger.info(f"Opening follower gripper (side={self._side}) on {device}...")
         try:
             self._gripper = taccap.FollowerGripper(device)
         except Exception as e:
@@ -134,57 +138,82 @@ class TaccapFollowerGripper:
                 f"Failed to open TacCap follower (side={self._side}) on {device}: {e}"
             ) from e
 
-        # Calibration is required for normalized [0, 1] control.
+        # From here the device handle is open. Anything that throws must release it
+        # before propagating: _is_connected is still False, so disconnect() would
+        # refuse to run and the handle would be stranded until GC.
         try:
-            cfg = self._gripper.get_gripper_config()
-            calibrated = bool(cfg.flags & _CALIBRATED_FLAG)
-        except Exception as e:
-            calibrated = False
-            self._logger.warn(f"Could not read gripper config (assuming uncalibrated): {e}")
-        if not calibrated and self._require_calibrated:
-            self._gripper = None
-            raise RuntimeError(
-                f"TacCap follower (side={self._side}) is not calibrated; normalized [0, 1] "
-                "control requires calibration. Calibrate first (zero at full close, then "
-                "write max_open), or enable firmware power-on auto-cal. See "
-                "third_party/taccap-gripper/python/examples/calibrate.py."
-            )
+            # Calibration is required for normalized [0, 1] control.
+            try:
+                cfg = self._gripper.get_gripper_config()
+                calibrated = bool(cfg.flags & _CALIBRATED_FLAG)
+            except Exception as e:
+                calibrated = False
+                self.logger.warn(f"Could not read gripper config (assuming uncalibrated): {e}")
+            if not calibrated and self._require_calibrated:
+                raise RuntimeError(
+                    f"TacCap follower (side={self._side}) is not calibrated; normalized [0, 1] "
+                    "control requires calibration. Calibrate first (zero at full close, then "
+                    "write max_open), or enable firmware power-on auto-cal. See "
+                    "third_party/taccap-gripper/python/examples/calibrate.py."
+                )
 
-        # Enable the motor before any motion.
-        self._gripper.motor.clear_fault()
-        self._gripper.motor.enable()
+            # Enable the motor before any motion.
+            self._gripper.motor.clear_fault()
+            self._gripper.motor.enable()
 
-        # Background control loop: resubmits latest target at control_hz, keeps a
-        # fresh thread-safe observation. start() seeds target = current pos (no jump).
-        # feedforward_torque is a CONSTANT bias added to every MIT frame (negative =
-        # closing/clamp); with a non-zero clamp bias the jaw settles ~ff/kp rad short
-        # of any commanded open, and init_open below will warn on the timeout — expected.
-        self._loop = taccap.ControlLoop(
-            self._gripper,
-            hz=self._control_hz,
-            kp=self._kp,
-            kd=self._kd,
-            feedforward_torque=self._feedforward_torque,
-        )
-        if self._feedforward_torque != 0.0:
-            self._logger.info(
-                f"MIT feed-forward torque bias = {self._feedforward_torque:+.2f} Nm "
-                f"({'closing/clamp' if self._feedforward_torque < 0 else 'opening'})."
+            # Background control loop: resubmits latest target at control_hz, keeps a
+            # fresh thread-safe observation. start() seeds target = current pos (no jump).
+            # feedforward_torque is a CONSTANT bias added to every MIT frame (negative =
+            # closing/clamp); with a non-zero clamp bias the jaw settles ~ff/kp rad short
+            # of any commanded open, and init_open below will warn on the timeout — expected.
+            self._loop = taccap.ControlLoop(
+                self._gripper,
+                hz=self._control_hz,
+                kp=self._kp,
+                kd=self._kd,
+                feedforward_torque=self._feedforward_torque,
             )
-        self._loop.start()
+            if self._feedforward_torque != 0.0:
+                self.logger.info(
+                    f"MIT feed-forward torque bias = {self._feedforward_torque:+.2f} Nm "
+                    f"({'closing/clamp' if self._feedforward_torque < 0 else 'opening'})."
+                )
+            self._loop.start()
+        except Exception:
+            self._release_after_failed_connect()
+            raise
 
         self._is_connected = True
         try:
             self._cached_position = float(self._loop.observation().position)
         except Exception:
             self._cached_position = 1.0 if self._init_open else 0.0
-        self._logger.info(f"TacCap follower connected (side={self._side}) on {device}.")
+        self.logger.info(f"TacCap follower connected (side={self._side}) on {device}.")
 
         if self._init_open:
             try:
                 self.initialize_gripper_position(1.0)
             except Exception as e:
-                self._logger.warn(f"Gripper init-open failed (non-fatal): {e}")
+                self.logger.warn(f"Gripper init-open failed (non-fatal): {e}")
+
+    def _release_after_failed_connect(self) -> None:
+        """Best-effort teardown of a partially-opened device.
+
+        Mirrors disconnect(), but tolerates every step being absent — we may be
+        anywhere between "handle open" and "loop running" when this fires.
+        """
+        if self._loop is not None:
+            try:
+                self._loop.stop()
+            except Exception as e:  # pragma: no cover — best-effort
+                self.logger.debug(f"Error stopping control loop during rollback: {e}")
+            self._loop = None
+        if self._gripper is not None:
+            try:
+                self._gripper.motor.disable()
+            except Exception as e:  # pragma: no cover — best-effort
+                self.logger.debug(f"Error disabling motor during rollback: {e}")
+            self._gripper = None
 
     def disconnect(self) -> None:
         """Stop the control loop, disable the motor, and release the device."""
@@ -195,30 +224,36 @@ class TaccapFollowerGripper:
             try:
                 self._loop.stop()
             except Exception as e:
-                self._logger.debug(f"Error stopping control loop: {e}")
+                self.logger.debug(f"Error stopping control loop: {e}")
             self._loop = None
 
         if self._gripper is not None:
             try:
                 self._gripper.motor.disable()
             except Exception as e:
-                self._logger.debug(f"Error disabling follower motor: {e}")
+                self.logger.debug(f"Error disabling follower motor: {e}")
             self._gripper = None
 
         self._is_connected = False
-        self._logger.info(f"TacCap follower disconnected (side={self._side}).")
+        self.logger.info(f"TacCap follower disconnected (side={self._side}).")
 
     # ── Position interface ─────────────────────────────────────────────────────
 
     def get_gripper_position(self) -> float:
         """Return normalized position in [0, 1] from the control loop's latest
-        observation (non-blocking). Returns 0.0 if not connected."""
+        observation (non-blocking).
+
+        Raises:
+            DeviceNotConnectedError: If not connected. (This used to return 0.0,
+                which is indistinguishable from a genuinely closed jaw — a
+                disconnected gripper read as "fully closed" to every caller.)
+        """
         if not self._is_connected or self._loop is None:
-            return 0.0
+            raise DeviceNotConnectedError(f"{self} is not connected.")
         try:
             self._cached_position = _clamp01(float(self._loop.observation().position))
         except Exception as e:
-            self._logger.debug(f"observation() read failed, returning cached: {e}")
+            self.logger.debug(f"observation() read failed, returning cached: {e}")
         return self._cached_position
 
     def set_gripper_position(self, normalized_pos: float) -> None:
@@ -228,28 +263,6 @@ class TaccapFollowerGripper:
         if not 0.0 <= normalized_pos <= 1.0:
             raise ValueError(f"normalized_pos must be in [0, 1], got {normalized_pos}.")
         self._loop.set_target(normalized_pos)
-
-    def initialize_gripper_position(
-        self,
-        normalized_pos: float,
-        tolerance: float = _INIT_POSITION_TOLERANCE,
-        timeout: float = _INIT_TIMEOUT_S,
-    ) -> None:
-        """Command a target and block until the gripper reaches it (or timeout).
-
-        Used by the arm during homing; kept name-compatible with SerialGripper so
-        the arm's gripper wiring works unchanged.
-        """
-        self.set_gripper_position(normalized_pos)
-        deadline = time.perf_counter() + timeout
-        while time.perf_counter() < deadline:
-            if abs(self.get_gripper_position() - normalized_pos) <= tolerance:
-                return
-            time.sleep(0.02)
-        self._logger.warn(
-            f"Gripper did not reach init target {normalized_pos:.3f} within {timeout:.1f}s "
-            f"(current={self.get_gripper_position():.3f})."
-        )
 
 
 def _clamp01(x: float) -> float:
