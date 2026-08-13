@@ -1,15 +1,74 @@
-# Record recipe — bimanual Flexiv Rizon4 RT (forward mount) + Bi-Pico4.
+# Record recipe — bimanual Flexiv Rizon4 RT (forward mount, bench 06) + Bi-Pico4.
 #   lerobot-record --config_path=recipes/record/bi_flexiv_rizon4_rt/assemble_box.yaml
 #
-# Only the frequently-changed knobs are listed; everything else uses the dataclass
-# default. Station hardware (robot SNs, cameras, home/start poses) comes from
-# stations/bi_flexiv_rizon4_rt/forward-06.yaml; don't restate it here (a recipe
-# value would override the bench). The robot:/teleop: blocks mirror the teleop
-# recipe — keep them in sync.
+# Self-contained: this file carries both the bench hardware and the run's tuning.
+# Anything not listed uses the dataclass default.
 
 robot:
   type: bi_flexiv_rizon4_rt
-  bi_mount_type: forward-06 # forward-04 | forward-05 | forward-06 | forward-dewu | diagonal-02
+
+  # ── Bench hardware (forward-06) ─────────────────────────────────────────────
+  # Joint angles are in DEGREES (J1..J7), the units flexiv_rt takes.
+  # Serial grippers do not auto-discover cameras, so all seven are pinned. The
+  # tactile sensors run at exposure 250 / brightness 38 (the
+  # XenseTactileCameraConfig default), so nothing needs restating per camera.
+  left_robot_sn: Rizon4s-062412
+  right_robot_sn: Rizon4s-062881
+  left_start_position_degree: [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24]
+  right_start_position_degree: [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.6]
+  left_home_position_degree: [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24]
+  right_home_position_degree: [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.6]
+  cameras:
+    head:
+      type: intelrealsense
+      serial_number_or_name: "254322071102"
+      fps: 30
+      width: 640
+      height: 480
+      warmup_s: 1
+      use_depth: false
+    left_tactile_0:
+      type: xense
+      serial_number: OG001323
+      fps: 30
+      output_types: [rectify]
+      warmup_s: 0.05
+    left_tactile_1:
+      type: xense
+      serial_number: OG001324
+      fps: 30
+      output_types: [rectify]
+      warmup_s: 0.05
+    left_wrist:
+      type: opencv
+      index_or_path: XC000035
+      fourcc: MJPG
+      width: 640
+      height: 480
+      fps: 30
+      warmup_s: 1
+    right_tactile_0:
+      type: xense
+      serial_number: OG001325
+      fps: 30
+      output_types: [rectify]
+      warmup_s: 0.05
+    right_tactile_1:
+      type: xense
+      serial_number: OG001326
+      fps: 30
+      output_types: [rectify]
+      warmup_s: 0.05
+    right_wrist:
+      type: opencv
+      index_or_path: XC000036
+      fourcc: MJPG
+      width: 640
+      height: 480
+      fps: 30
+      warmup_s: 1
+
+  # ── Control ─────────────────────────────────────────────────────────────────
   use_force: false
   log_level: INFO
   left_use_gripper: true

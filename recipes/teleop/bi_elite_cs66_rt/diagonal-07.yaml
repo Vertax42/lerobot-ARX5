@@ -1,18 +1,86 @@
-# Teleop recipe — bimanual Elite CS66 RT (diagonal mount, station 07) + Bi-Pico4.
-# One recipe per physical station; this one targets the diagonal-07 station (.207.129/.108).
+# Teleop recipe — bimanual Elite CS66 RT (diagonal mount, bench 07) + Bi-Pico4.
+# Self-contained: this file carries both the bench hardware and the run's tuning.
 #   lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-07.yaml
 #
-# Only the frequently-changed knobs are listed; everything else uses the dataclass
-# default. Station hardware comes from stations/bi_elite_cs66_rt/<bi_mount_type>.yaml;
-# don't restate it here (a recipe value would override the bench). diagonal-07
-# and diagonal-08 are identical setups, so the guard params below are kept in
-# lockstep with diagonal-08.yaml — keep the two in sync.
+# Anything not listed uses the dataclass default. diagonal-07 and diagonal-08 are
+# identical setups, so the guard params below are kept in lockstep with
+# diagonal-08.yaml — keep the two in sync.
 
 robot:
   type: bi_elite_cs66_rt
-  bi_mount_type: diagonal-07 # IPs below match the diagonal-07 station file
-  left_robot_ip: 192.168.207.129
-  right_robot_ip: 192.168.207.108
+
+  # ── Bench hardware (diagonal-07) ────────────────────────────────────────────
+  left_robot_ip: "192.168.207.129"
+  right_robot_ip: "192.168.207.108"
+  left_local_ip: "" # "" lets the OS route; set to pin the host NIC for RTSI
+  right_local_ip: ""
+  # Joint angles in RADIANS (J1..J6), the units the Elite SDK takes.
+  left_start_position_rad: [-1.3963, -0.5236, 1.5708, -0.5236, 1.5708, -0.7854]
+  right_start_position_rad: [-1.7453, -2.618, -1.5708, -2.618, -1.5708, -0.7854]
+  left_home_position_rad: [-1.3963, -0.5236, 1.5708, -0.5236, 1.5708, -0.7854]
+  right_home_position_rad: [-1.7453, -2.618, -1.5708, -2.618, -1.5708, -0.7854]
+
+  # ── Mounting ────────────────────────────────────────────────────────────────
+  # The two CS66 arms are mounted diagonally/opposed. Each arm's world<-base
+  # rotation R lifts its base-frame TCP poses into ONE SHARED gravity-aligned
+  # world frame (x = facing, y = left, z = up), matching the Flexiv convention so
+  # recorded data is comparable across robots.
+  #
+  # The *_mount_*_deg angles below build R = Rz(world_yaw)·Rz(zrot)·Rx(tilt):
+  #   tilt_deg (α)      tilt about base-X    ┐ BOTH read off the teach pendant
+  #   zrot_deg (β)      rotation about Z     ┘ (both controllers read α=45, β=90).
+  #                     These two only fix the gravity vector in base (recover
+  #                     "z up"); they do NOT fix the heading.
+  #   world_yaw_deg (γ) extra yaw about world-Z aligning each arm's heading into
+  #                     the one shared world frame. The arms are mounted
+  #                     point-symmetrically and so face opposite directions:
+  #                     right γ=0° (defines the world), left γ=180°. The teach
+  #                     pendant CANNOT show this 180° — it is the residual yaw
+  #                     about gravity.
+  #
+  # *_world_rotation (rows = world X/Y/Z axes in base) OVERRIDES the angle build,
+  # and is what is actually in force on this bench. The pendant's 45/90 assumed a
+  # tilt about base-X, but the LEFT arm is actually tilted 45° about base-Y —
+  # verified two ways: a freedrive-probe measurement, and the base-link geometry.
+  # The matrix below == base rotated about Z by 90° then about Y by 45°, giving
+  # world X(fwd) = base +Y and world Z(up) = [.707, 0, .707].
+  #
+  # RIGHT is the point-symmetric partner of the (validated) LEFT:
+  #   R_right = Rz(180)·R_left   forward flips to base -Y, up stays [.707,0,.707]
+  # Earlier, Rz(90°)·Rx(45°) for the right arm was validated empirically (a base-X
+  # 130° pose put the tool +Z approach axis straight down).
+  #
+  # The angles are kept even though the matrices make them inert: they record what
+  # the pendant actually reads, which is what you need when re-deriving a bench.
+  left_mount_tilt_deg: 45.0
+  left_mount_zrot_deg: 90.0
+  left_mount_world_yaw_deg: 180.0
+  right_mount_tilt_deg: 45.0
+  right_mount_zrot_deg: 90.0
+  right_mount_world_yaw_deg: 0.0
+  left_world_rotation:
+    - [0.0, 1.0, 0.0]
+    - [-0.70710678, 0.0, 0.70710678]
+    - [0.70710678, 0.0, 0.70710678]
+  right_world_rotation:
+    - [0.0, -1.0, 0.0]
+    - [0.70710678, 0.0, -0.70710678]
+    - [0.70710678, 0.0, 0.70710678]
+
+  # ── Cameras ─────────────────────────────────────────────────────────────────
+  # Only the head is pinned here: taccap_auto_discover_cameras (below) sniffs the
+  # per-side wrist + GSPS tactile cameras off the gripper's USB hub at connect.
+  cameras:
+    head:
+      type: intelrealsense
+      serial_number_or_name: "347522071393"
+      fps: 30
+      width: 640
+      height: 480
+      warmup_s: 1
+      use_depth: false
+
+  # ── Control ─────────────────────────────────────────────────────────────────
   control_mode: cartesian_servo # cartesian_servo | joint_servo
   servoj_gain: 300 # [100, 2000]
   left_use_gripper: true
@@ -26,7 +94,7 @@ robot:
   payload_cog: [0.0, 0.0, 0.19] # m, relative to flange
   # ── Gripper: bi_taccap (TacCap follower, MIT impedance) ──
   # Both grippers -> xense.taccap FollowerGripper; wrist + GSPS tactile cameras are
-  # auto-discovered at connect (the station's XC*/OG* SNs are ignored in this mode).
+  # auto-discovered at connect, which is why only the head camera is pinned above.
   # gripper_f_max is a serial-gripper knob and does not apply here.
   gripper_type: taccap_follower
   taccap_kp: 8.0          # MIT impedance stiffness (Nm/rad)

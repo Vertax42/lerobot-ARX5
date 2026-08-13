@@ -1,17 +1,127 @@
-# Record recipe — bimanual Elite CS66 RT (diagonal mount) + Bi-Pico4. SMOKE TEST.
+# Record recipe — bimanual Elite CS66 RT (diagonal mount, bench 08) + Bi-Pico4.
+# SMOKE TEST.
 #   lerobot-record --config_path=recipes/record/bi_elite_cs66_rt/test.yaml
 #
-# Only the frequently-changed knobs are listed; everything else uses the dataclass
-# default. Station hardware (cameras, mount geometry, local_ip, home/start poses)
-# comes from stations/bi_elite_cs66_rt/diagonal-08.yaml; don't restate it here
-# (a recipe value would override the bench). The robot:/teleop: blocks mirror
-# the teleop recipe — keep them in sync.
+# Self-contained: this file carries both the bench hardware and the run's tuning.
+# Anything not listed uses the dataclass default. The robot:/teleop: blocks mirror
+# recipes/teleop/bi_elite_cs66_rt/diagonal-08.yaml (same bench) — keep in sync.
 
 robot:
   type: bi_elite_cs66_rt
-  bi_mount_type: diagonal-08 # IPs below match the diagonal-08 station file
-  left_robot_ip: 192.168.8.53
-  right_robot_ip: 192.168.8.223
+
+  # ── Bench hardware (diagonal-08) ────────────────────────────────────────────
+  left_robot_ip: "192.168.8.53"
+  right_robot_ip: "192.168.8.223"
+  left_local_ip: "" # "" lets the OS route; set to pin the host NIC for RTSI
+  right_local_ip: ""
+  # Joint angles in RADIANS (J1..J6), the units the Elite SDK takes.
+  left_start_position_rad: [-1.3963, -0.5236, 1.5708, -0.5236, 1.5708, -0.7854]
+  right_start_position_rad: [-1.7453, -2.618, -1.5708, -2.618, -1.5708, -0.7854]
+  left_home_position_rad: [-1.3963, -0.5236, 1.5708, -0.5236, 1.5708, -0.7854]
+  right_home_position_rad: [-1.7453, -2.618, -1.5708, -2.618, -1.5708, -0.7854]
+
+  # ── Mounting ────────────────────────────────────────────────────────────────
+  # Same diagonal/opposed mounting as diagonal-07 — see that recipe for the full
+  # derivation (the pendant's 45/90 assumes a tilt about base-X, but the LEFT arm
+  # is actually tilted 45° about base-Y, verified by freedrive-probe measurement
+  # plus base-link geometry; the 180° world_yaw is the residual yaw about gravity
+  # that the pendant cannot show). *_world_rotation OVERRIDES the angles; the
+  # angles are kept because they record what the pendant reads.
+  left_mount_tilt_deg: 45.0
+  left_mount_zrot_deg: 90.0
+  left_mount_world_yaw_deg: 180.0
+  right_mount_tilt_deg: 45.0
+  right_mount_zrot_deg: 90.0
+  right_mount_world_yaw_deg: 0.0
+  left_world_rotation:
+    - [0.0, 1.0, 0.0]
+    - [-0.70710678, 0.0, 0.70710678]
+    - [0.70710678, 0.0, 0.70710678]
+  right_world_rotation:
+    - [0.0, -1.0, 0.0]
+    - [0.70710678, 0.0, -0.70710678]
+    - [0.70710678, 0.0, 0.70710678]
+
+  # ── Cameras ─────────────────────────────────────────────────────────────────
+  # Serial grippers do not auto-discover cameras, so all seven are pinned here.
+  # These are OG sensors; each tactile camera carries the exposure override tuned
+  # for this bench. GSPS sensors (the TacCap grippers) must NOT use these values —
+  # they belong on their own xpack template (omit camera_properties).
+  cameras:
+    head:
+      type: intelrealsense
+      serial_number_or_name: "346522074942"
+      fps: 30
+      width: 640
+      height: 480
+      warmup_s: 1
+      use_depth: false
+    left_wrist:
+      type: opencv
+      index_or_path: XC000045
+      fourcc: MJPG
+      width: 640
+      height: 480
+      fps: 30
+      warmup_s: 1
+    right_wrist:
+      type: opencv
+      index_or_path: XC000046
+      fourcc: MJPG
+      width: 640
+      height: 480
+      fps: 30
+      warmup_s: 1
+    left_tactile_0:
+      type: xense
+      serial_number: OG001349
+      fps: 30
+      output_types: [rectify]
+      warmup_s: 0.05
+      camera_properties:   # OG sensor override, tuned on this bench
+        auto_exposure: 1
+        auto_wb: false
+        exposure: 250
+        white_balance_t: 5550
+        brightness: 38
+    left_tactile_1:
+      type: xense
+      serial_number: OG001350
+      fps: 30
+      output_types: [rectify]
+      warmup_s: 0.05
+      camera_properties:   # OG sensor override, tuned on this bench
+        auto_exposure: 1
+        auto_wb: false
+        exposure: 250
+        white_balance_t: 5550
+        brightness: 38
+    right_tactile_0:
+      type: xense
+      serial_number: OG001351
+      fps: 30
+      output_types: [rectify]
+      warmup_s: 0.05
+      camera_properties:   # OG sensor override, tuned on this bench
+        auto_exposure: 1
+        auto_wb: false
+        exposure: 250
+        white_balance_t: 5550
+        brightness: 38
+    right_tactile_1:
+      type: xense
+      serial_number: OG001352
+      fps: 30
+      output_types: [rectify]
+      warmup_s: 0.05
+      camera_properties:   # OG sensor override, tuned on this bench
+        auto_exposure: 1
+        auto_wb: false
+        exposure: 250
+        white_balance_t: 5550
+        brightness: 38
+
+  # ── Control ─────────────────────────────────────────────────────────────────
   control_mode: cartesian_servo # cartesian_servo | joint_servo
   servoj_gain: 300 # [100, 2000]
   left_use_gripper: true

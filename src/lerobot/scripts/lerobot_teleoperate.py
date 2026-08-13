@@ -86,7 +86,6 @@ Example (Bimanual Elite CS66 RT + Bi-Pico4):
 ```shell
 lerobot-teleoperate \
     --robot.type=bi_elite_cs66_rt \
-    --robot.bi_mount_type=diagonal \
     --robot.left_robot_ip=192.168.8.53 \
     --robot.right_robot_ip=192.168.8.223 \
     --teleop.type=bi_pico4 \

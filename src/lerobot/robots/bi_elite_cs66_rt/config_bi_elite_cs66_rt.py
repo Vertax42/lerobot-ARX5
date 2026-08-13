@@ -12,11 +12,10 @@
 
 Relationship to ``EliteCS66RTConfig`` mirrors ``BiFlexivRizon4RTConfig`` vs.
 ``FlexivRizon4RTConfig``: shared control/servo parameters keep the single-arm
-names and defaults, while station-specific values (controller IPs, start/home
-poses, mount geometry, camera SNs) live in
-``stations/bi_elite_cs66_rt/<bi_mount_type>.yaml`` and are selected by
-``bi_mount_type``. Serial grippers self-sort left/right by board-SN parity at
-connect, so no gripper SN is pinned per station. Action / observation keys are
+names and defaults. Bench hardware (controller IPs, start/home poses, mount
+geometry, camera SNs) is supplied by the recipe — each recipe under ``recipes/``
+is self-contained. Serial grippers self-sort left/right by board-SN parity at
+connect, so no gripper SN is configured. Action / observation keys are
 ``left_``/``right_`` prefixed.
 """
 
@@ -28,33 +27,14 @@ from lerobot.cameras.configs import CameraConfig
 from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
-from lerobot.robots.bi_elite_cs66_rt.station import BiEliteStationSpec
 from lerobot.robots.config import RobotConfig
 from lerobot.robots.elite_cs66_rt.config_elite_cs66_rt import _validate_singularity_params
 from lerobot.grippers import (
     SerialGripperConfig,
     TaccapFollowerConfig,
 )
-from lerobot.robots.stations import load_station
 
 ROBOT_TYPE = "bi_elite_cs66_rt"
-
-# Override for the OG xpack camera template on this robot's tactile sensors: drop
-# exposure 450 -> 250 and add brightness 38. The other keys mirror the probed OG
-# template so they are NOT lost (the SDK replaces the whole camera.<os> dict):
-# auto_exposure=1 (manual, required for the manual exposure to apply),
-# auto_wb=False, white_balance_t=5550.
-#
-# Shared so the auto-discovery path in the driver produces identical images to the
-# station-driven path — otherwise turning discovery on would silently re-expose
-# every tactile frame.
-TACTILE_CAMERA_PROPERTIES: dict[str, object] = {
-    "auto_exposure": 1,
-    "auto_wb": False,
-    "exposure": 250,
-    "white_balance_t": 5550,
-    "brightness": 38,
-}
 
 
 class BiEliteCS66RTControlMode(str, Enum):
@@ -77,30 +57,24 @@ class BiEliteCS66RTConfig(RobotConfig):
     bimanual level; tactile images come from separate XenseTactileCamera devices, not
     the gripper.
 
-    Station hardware (controller IPs, start/home poses, mount geometry, camera SNs)
-    is NOT written here: it comes from
-    ``stations/bi_elite_cs66_rt/<bi_mount_type>.yaml``. Any of those fields left
-    unset (None) is filled from the station; an explicit value passed in a recipe
-    or on the CLI WINS. See ``stations/README.md``.
+    Bench hardware (controller IPs, start/home poses, mount geometry, camera SNs)
+    is supplied by the recipe; see ``recipes/README.md``.
     """
 
     # ── Per-arm identity / connection ──
-    # None = take the station's value. Set explicitly (recipe or CLI) to override
-    # it, e.g. when a controller is temporarily on a different address.
-    left_robot_ip: str | None = None
-    right_robot_ip: str | None = None
-    left_local_ip: str | None = None
-    right_local_ip: str | None = None
-    bi_mount_type: str = "diagonal-08"
+    left_robot_ip: str = ""
+    right_robot_ip: str = ""
+    left_local_ip: str = ""   # "" lets the OS route; set to pin the host NIC for RTSI
+    right_local_ip: str = ""
 
-    # ── Per-arm mounting → base↔world rotation (None = from the station) ──
+    # ── Per-arm mounting → base↔world rotation ──
     # R_world←base = Rz(γ)·Rz(β)·Rx(α): α=tilt about base-X, β=rotate about Z (both
     # from the teach pendant, fixing only the gravity vector), γ=extra world-Z yaw
     # that aligns each arm's heading into ONE shared world frame (x=facing, y=left,
     # z=up). The driver lifts base→world in get_observation and maps world→base in
     # send_action. On the existing diagonal benches both pendants read α=45/β=90 and
     # the arms are point-symmetric, so left needs γ=180° (right γ=0° defines the
-    # world) — but that lives in the station file, not in these defaults.
+    # world) — set per bench in the recipe, not defaulted here.
     left_mount_tilt_deg: float | None = None
     left_mount_zrot_deg: float | None = None
     left_mount_world_yaw_deg: float | None = None
@@ -111,8 +85,8 @@ class BiEliteCS66RTConfig(RobotConfig):
     # Explicit per-arm world<-base rotation (3x3, rows = world X/Y/Z in base). When
     # set it OVERRIDES the angle build above for that arm — needed when the mounting
     # isn't a clean Rz·Rx (e.g. the left arm tilts about base-Y).
-    #   None -> take the station's matrix (which may itself be absent -> use angles)
-    #   []   -> explicitly ignore the station's matrix and use the angles instead
+    #   None -> no matrix; build the rotation from the angles above
+    #   []   -> same as None (accepted so a recipe can explicitly opt out)
     # Normalized to None in __post_init__, so the driver only ever sees None or 3x3.
     left_world_rotation: list[list[float]] | None = None
     right_world_rotation: list[list[float]] | None = None
@@ -222,11 +196,22 @@ class BiEliteCS66RTConfig(RobotConfig):
     left_driver_port_offset: int = 0
     right_driver_port_offset: int = 10
 
-    # ── Per-arm Home / Start poses (J1..J6 radians; None = from the station) ──
-    left_start_position_rad: list[float] | None = None
-    right_start_position_rad: list[float] | None = None
-    left_home_position_rad: list[float] | None = None
-    right_home_position_rad: list[float] | None = None
+    # ── Per-arm Home / Start poses (J1..J6 radians) ──
+    # Defaults are the single-arm candle pose; every real bench overrides all four
+    # in its recipe (the arms are mounted at an angle, so the candle is not a
+    # usable start there).
+    left_start_position_rad: list[float] = field(
+        default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
+    )
+    right_start_position_rad: list[float] = field(
+        default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
+    )
+    left_home_position_rad: list[float] = field(
+        default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
+    )
+    right_home_position_rad: list[float] = field(
+        default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
+    )
     start_move_duration_s: float = 3.0
     home_move_duration_s: float = 3.0
     # Controller-side reverse-socket recv budget for trajectory (MoveJ) commands.
@@ -280,15 +265,15 @@ class BiEliteCS66RTConfig(RobotConfig):
     # side-resolved by board-SN parity — identifies the hub and the cameras follow.
     # See serial_discovery.discover_serial_gripper_cameras.
     #
-    # OFF by default: the station file stays the single source of truth, which is
+    # OFF by default: the recipe stays the single source of truth, which is
     # the verified behaviour. Turn it on per bench once the discovered SNs are
-    # confirmed to match the station's — then swapping a sensor is no longer a
+    # confirmed to match the recipe's — then swapping a sensor is no longer a
     # config edit.
     serial_auto_discover_cameras: bool = False
     taccap_require_calibrated: bool = True     # False only for bring-up (uncalibrated control)
 
     # Separate tactile sensors (XenseTactileCamera) attached at the bimanual
-    # camera level when enabled; SNs come from the station.
+    # camera level when enabled; SNs come from the recipe.
     enable_tactile_sensors: bool = True
 
     # ── Robot payload (tool + gripper) ── Declared to each controller via setPayload at
@@ -304,11 +289,11 @@ class BiEliteCS66RTConfig(RobotConfig):
     left_gripper: SerialGripperConfig | TaccapFollowerConfig | None = field(default=None, init=False)
     right_gripper: SerialGripperConfig | TaccapFollowerConfig | None = field(default=None, init=False)
     # Set in __post_init__: in taccap_follower + auto-discover mode the wrist/tactile
-    # cameras are sniffed by the robot at connect rather than taken from the station.
+    # cameras are sniffed by the robot at connect rather than pinned in the recipe.
     _taccap_autodiscover: bool = field(default=False, init=False)
     _serial_autodiscover: bool = field(default=False, init=False)
 
-    # Bimanual cameras (head + per-arm wrist + tactiles). Auto-populated from the station.
+    # Bimanual cameras (head + per-arm wrist + tactiles). Supplied by the recipe.
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
 
     def __post_init__(self):
@@ -316,25 +301,9 @@ class BiEliteCS66RTConfig(RobotConfig):
 
         self._validate_shared_servo_params()
 
-        # ── Apply the station ── Fields left as None inherit the station's value;
-        # anything the caller set explicitly (recipe or CLI) is kept as-is.
-        station = load_station(BiEliteStationSpec, ROBOT_TYPE, self.bi_mount_type)
         for side in ("left", "right"):
-            arm = station.arms[side]
-            for attr, value in (
-                (f"{side}_robot_ip", arm.ip),
-                (f"{side}_local_ip", arm.local_ip),
-                (f"{side}_start_position_rad", list(arm.start_rad)),
-                (f"{side}_home_position_rad", list(arm.home_rad)),
-                (f"{side}_mount_tilt_deg", arm.mount.tilt_deg),
-                (f"{side}_mount_zrot_deg", arm.mount.zrot_deg),
-                (f"{side}_mount_world_yaw_deg", arm.mount.world_yaw_deg),
-                (f"{side}_world_rotation", arm.mount.world_rotation),
-            ):
-                if getattr(self, attr) is None:
-                    setattr(self, attr, value)
-            # [] means "ignore the station's matrix, use the angles" — collapse it
-            # to None so the driver's `is not None` check stays a two-way test.
+            # [] means "ignore the matrix, use the angles" — collapse it to None so
+            # the driver's `is not None` check stays a two-way test.
             if getattr(self, f"{side}_world_rotation") == []:
                 setattr(self, f"{side}_world_rotation", None)
 
@@ -358,18 +327,14 @@ class BiEliteCS66RTConfig(RobotConfig):
 
         # ── Bimanual cameras ── In taccap_follower + auto-discover mode the wrist + GSPS
         # tactile cameras change with the gripper, so the robot sniffs them at connect
-        # (see _inject_taccap_cameras) instead of taking them from the station;
-        # _build_cameras then wires only the head. Any other mode stays station-driven.
+        # (see _inject_taccap_cameras) and the recipe only pins the head. Any other
+        # mode expects the recipe to pin every camera.
         self._taccap_autodiscover = (
             self.gripper_type == "taccap_follower" and self.taccap_auto_discover_cameras
         )
         self._serial_autodiscover = (
             self.gripper_type == "serial" and self.serial_auto_discover_cameras
         )
-        # An explicitly-provided cameras dict wins over the station's, same as
-        # every other field.
-        if not self.cameras:
-            self.cameras = self._build_cameras(station)
 
     def _validate_shared_servo_params(self) -> None:
         if self.payload_mass is not None:
@@ -512,71 +477,10 @@ class BiEliteCS66RTConfig(RobotConfig):
 
     @property
     def _autodiscover_cameras(self) -> bool:
-        """True when the driver, not the station, supplies wrist + tactile cameras.
+        """True when the driver, not the recipe, supplies wrist + tactile cameras.
 
         Either gripper backend can do it; they differ only in what anchors a side
         (taccap: firmware SN; serial: board-SN parity). Everything downstream is
-        the same, so the camera builder branches on this rather than on which
-        backend is in use.
+        the same, so callers branch on this rather than on which backend is in use.
         """
         return self._taccap_autodiscover or self._serial_autodiscover
-
-    def _build_cameras(self, station: BiEliteStationSpec) -> dict[str, CameraConfig]:
-        """Camera configs for this station, keyed by observation key.
-
-        The station supplies serials (and any per-camera override); the defaults
-        below are this robot's and are what the fleet runs on. Keys are already
-        namespaced left_/right_ in the station file so the flat observation dict
-        stays unique.
-        """
-        cameras: dict[str, CameraConfig] = {}
-        for label, spec in station.cameras.items():
-            if spec.type == "xense_tactile":
-                # Tactile sensors are separate XenseTactileCamera devices (not the
-                # serial gripper), so they are switched independently of gripper_type.
-                # taccap_follower + auto-discover sniffs them at connect instead
-                # (see the driver's _inject_taccap_cameras).
-                if not self.enable_tactile_sensors or self._autodiscover_cameras:
-                    continue
-                cameras[label] = XenseTactileCameraConfig(
-                    **{
-                        "serial_number": spec.serial,
-                        "fps": 30,
-                        "output_types": [XenseOutputType.RECTIFY],
-                        "warmup_s": 0.05,
-                        # See TACTILE_CAMERA_PROPERTIES — copied so a station
-                        # override cannot mutate the shared dict.
-                        "camera_properties": dict(TACTILE_CAMERA_PROPERTIES),
-                        **spec.overrides,
-                    }
-                )
-            elif spec.type == "opencv":
-                # Wrist cameras are bolted to the gripper, so taccap auto-discover
-                # sniffs them at connect rather than reading them from the station.
-                if self._autodiscover_cameras:
-                    continue
-                cameras[label] = OpenCVCameraConfig(
-                    **{
-                        "index_or_path": spec.serial,
-                        "fourcc": "MJPG",
-                        "width": 640,
-                        "height": 480,
-                        "fps": 30,
-                        "warmup_s": 1.0,
-                        **spec.overrides,
-                    }
-                )
-            elif spec.type == "realsense":
-                cameras[label] = RealSenseCameraConfig(
-                    **{
-                        "serial_number_or_name": spec.serial,
-                        "fps": 30,
-                        "width": 640,
-                        "height": 480,
-                        "warmup_s": 1.0,
-                        **spec.overrides,
-                    }
-                )
-            else:  # unreachable: CameraSpec.validate() restricts the set
-                raise ValueError(f"unhandled station camera type {spec.type!r} for {label!r}")
-        return cameras

@@ -24,7 +24,7 @@ inference — because either one getting it wrong mislabels a dataset in a way t
 only shows up long after the recording.
 
 Topology is faked here (no hardware). The end-to-end check runs on a bench; see
-stations/README.md.
+recipes/README.md.
 """
 
 from importlib.util import find_spec
@@ -205,38 +205,32 @@ def test_discovery_fails_loudly_when_hub_unresolvable(monkeypatch, fake_topology
 # ── Config wiring ───────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
-    ("robot_type", "station"),
-    [("bi_flexiv_rizon4_rt", "forward-06"), ("bi_elite_cs66_rt", "diagonal-08")],
-)
-def test_serial_autodiscover_is_off_by_default(robot_type, station):
-    """Default off is what keeps the station file the verified source of truth —
-    the golden snapshots in test_stations.py depend on this."""
-    cfg = _config(robot_type)(bi_mount_type=station)
+ROBOT_TYPES = ["bi_flexiv_rizon4_rt", "bi_elite_cs66_rt"]
+
+
+@pytest.mark.parametrize("robot_type", ROBOT_TYPES)
+def test_serial_autodiscover_is_off_by_default(robot_type):
+    """Default off keeps the recipe's pinned camera SNs the source of truth."""
+    cfg = _config(robot_type)()
     assert cfg.serial_auto_discover_cameras is False
     assert cfg._serial_autodiscover is False
     assert cfg._autodiscover_cameras is False
-    assert "left_wrist" in cfg.cameras, "station must still supply the cameras"
 
 
-@pytest.mark.parametrize(
-    ("robot_type", "station"),
-    [("bi_flexiv_rizon4_rt", "forward-06"), ("bi_elite_cs66_rt", "diagonal-08")],
-)
-def test_serial_autodiscover_leaves_only_head(robot_type, station):
-    cfg = _config(robot_type)(bi_mount_type=station, serial_auto_discover_cameras=True)
+@pytest.mark.parametrize("robot_type", ROBOT_TYPES)
+def test_serial_autodiscover_flag_arms_the_driver(robot_type):
+    """With the flag on, the driver injects wrist + tactile at connect. The recipe
+    is then expected to pin only the head — nothing here filters its cameras."""
+    cfg = _config(robot_type)(serial_auto_discover_cameras=True)
     assert cfg._serial_autodiscover is True
-    assert sorted(cfg.cameras) == ["head"], "the driver injects wrist + tactile at connect"
+    assert cfg._autodiscover_cameras is True
 
 
-@pytest.mark.parametrize(
-    ("robot_type", "station"),
-    [("bi_flexiv_rizon4_rt", "forward-06"), ("bi_elite_cs66_rt", "diagonal-08")],
-)
-def test_serial_flag_is_inert_under_taccap(robot_type, station):
+@pytest.mark.parametrize("robot_type", ROBOT_TYPES)
+def test_serial_flag_is_inert_under_taccap(robot_type):
     """The flag names the serial backend; it must not change taccap behaviour."""
     cfg = _config(robot_type)(
-        bi_mount_type=station, gripper_type="taccap_follower", serial_auto_discover_cameras=True
+        gripper_type="taccap_follower", serial_auto_discover_cameras=True
     )
     assert cfg._serial_autodiscover is False
 

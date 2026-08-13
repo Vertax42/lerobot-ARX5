@@ -24,10 +24,8 @@ from lerobot.cameras.configs import CameraConfig
 from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
-from lerobot.robots.bi_flexiv_rizon4_rt.station import BiFlexivStationSpec
 from lerobot.robots.config import RobotConfig
 from lerobot.grippers import SerialGripperConfig, TaccapFollowerConfig
-from lerobot.robots.stations import load_station
 
 ROBOT_TYPE = "bi_flexiv_rizon4_rt"
 
@@ -46,18 +44,14 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         right_tcp.{x,y,z,r1-r6}, right_gripper.pos
 
     Station hardware (arm SNs, camera SNs, home/start poses) is NOT written here:
-    it comes from ``stations/bi_flexiv_rizon4_rt/<bi_mount_type>.yaml``. Any of
-    those fields left unset (None) is filled from the station; an explicit value
-    passed in a recipe or on the CLI WINS. See ``stations/README.md``.
+    it is supplied by the recipe — each recipe under ``recipes/`` is
+    self-contained. See ``recipes/README.md``.
 
     Attributes:
-        left_robot_sn: Serial number of the left arm robot (None -> from station)
-        right_robot_sn: Serial number of the right arm robot (None -> from station)
-        bi_mount_type: Which station file to load — one per physical bench, e.g.
-            "forward-04"/"forward-05"/"forward-06", "forward-dewu", "diagonal-02".
-            May also be a path to a YAML for an uncommitted bench. Serial grippers
-            self-sort left/right by board-SN parity at connect, so no gripper SN
-            is pinned per station.
+        left_robot_sn: Serial number of the left arm robot
+        right_robot_sn: Serial number of the right arm robot
+            Serial grippers self-sort left/right by board-SN parity at connect,
+            so no gripper SN is configured.
         use_force: Enable force control axes (both arms)
         inner_control_hz: How often each 1 kHz RT thread consumes a new Python command (1-1000 Hz)
         interpolate_cmds: Enable linear interpolation between consumed commands
@@ -83,11 +77,9 @@ class BiFlexivRizon4RTConfig(RobotConfig):
             dataset frame built from it records the safe envelope. Set to 180 to disable.
     """
 
-    # Robot identification. None = take the station's value; set explicitly to
-    # override it (e.g. swapping in a spare arm without editing the station file).
-    left_robot_sn: str | None = None
-    right_robot_sn: str | None = None
-    bi_mount_type: str = "forward-06"
+    # Robot identification — set per bench in the recipe.
+    left_robot_sn: str = ""
+    right_robot_sn: str = ""
     # Force control
     use_force: bool = False
 
@@ -129,12 +121,13 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     # Below Flexiv's 90° orientation-error safety (event 301005). Set to 180 to disable.
     commanded_actual_max_deg: float = 60.0
 
-    # Start / home joint poses (J1..J7 degrees). None = take the station's value.
-    # Home is where each arm parks on disconnect.
-    left_start_position_degree: list[float] | None = None
-    right_start_position_degree: list[float] | None = None
-    left_home_position_degree: list[float] | None = None
-    right_home_position_degree: list[float] | None = None
+    # Start / home joint poses (J1..J7 degrees), set per bench in the recipe.
+    # Home is where each arm parks on disconnect. The zero default is not a usable
+    # pose on any real bench — every recipe overrides all four.
+    left_start_position_degree: list[float] = field(default_factory=lambda: [0.0] * 7)
+    right_start_position_degree: list[float] = field(default_factory=lambda: [0.0] * 7)
+    left_home_position_degree: list[float] = field(default_factory=lambda: [0.0] * 7)
+    right_home_position_degree: list[float] = field(default_factory=lambda: [0.0] * 7)
     start_vel_scale: int = 50
     home_vel_scale: int = 30
 
@@ -163,15 +156,15 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     gripper_type: str = "serial"
 
     # When gripper_type == "serial", auto-sniff the per-side wrist camera and
-    # tactile sensor SNs at connect instead of using the station's XC*/OG* SNs.
+    # tactile sensor SNs at connect instead of the recipe's XC*/OG* SNs.
     # Works the same way as taccap_auto_discover_cameras: each arm's gripper board,
     # wrist camera and two tactile sensors share one USB hub, so the gripper (whose
     # side comes from board-SN parity) identifies the hub and the rest follows.
     # See serial_discovery.discover_serial_gripper_cameras.
     #
-    # OFF by default: leaving it off keeps the station file the single source of
+    # OFF by default: leaving it off keeps the recipe the single source of
     # truth, which is the verified behaviour. Turn it on per bench once you have
-    # confirmed the discovered SNs match the station's — then swapping a sensor
+    # confirmed the discovered SNs match the recipe's — then swapping a sensor
     # stops being a config edit.
     serial_auto_discover_cameras: bool = False
 
@@ -197,7 +190,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     taccap_control_hz: int = 200    # ControlLoop resubmit rate
     # When gripper_type == "taccap_follower", auto-sniff the per-side wrist camera
     # and GSPS tactile sensor SNs (via TacCap + USB topology) at robot connect time
-    # instead of using the station's XC*/OG* SNs. See taccap_discovery.py.
+    # instead of the recipe's XC*/OG* SNs. See grippers/taccap/discovery.py.
     taccap_auto_discover_cameras: bool = True
     # Refuse to connect a taccap_follower gripper that reports an uncalibrated GripperConfig.
     # Set False ONLY for bring-up/debug — normalized [0, 1] gripper control is then uncalibrated
@@ -231,22 +224,6 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 f"inner_control_hz must be between 1 and 1000, got {self.inner_control_hz}"
             )
 
-        # ── Apply the station ── Fields left as None inherit the station's value;
-        # anything the caller set explicitly (recipe or CLI) is kept as-is.
-        station = load_station(BiFlexivStationSpec, ROBOT_TYPE, self.bi_mount_type)
-        left, right = station.arms["left"], station.arms["right"]
-        if self.left_robot_sn is None:
-            self.left_robot_sn = left.serial_number
-        if self.right_robot_sn is None:
-            self.right_robot_sn = right.serial_number
-        if self.left_start_position_degree is None:
-            self.left_start_position_degree = list(left.start_deg)
-        if self.right_start_position_degree is None:
-            self.right_start_position_degree = list(right.start_deg)
-        if self.left_home_position_degree is None:
-            self.left_home_position_degree = list(left.home_deg)
-        if self.right_home_position_degree is None:
-            self.right_home_position_degree = list(right.home_deg)
 
         # Validate Cartesian/force parameters
         if len(self.force_control_axis) != 6:
@@ -302,88 +279,28 @@ class BiFlexivRizon4RTConfig(RobotConfig):
 
         # In taccap_follower + auto-discover mode, the wrist camera and GSPS tactile
         # SNs are hardware that changes with the gripper, so they are sniffed at
-        # robot connect time (see taccap_discovery.py) rather than taken from the
-        # station. Only `head` is wired here; the robot injects the rest before
-        # building cameras. Any other mode keeps the station-driven wiring.
+        # robot connect time (see taccap discovery) rather than pinned in the
+        # recipe, which then only pins `head`. Any other mode expects the recipe to
+        # pin every camera.
         self._taccap_autodiscover = (
             self.gripper_type == "taccap_follower" and self.taccap_auto_discover_cameras
         )
         # Serial grippers can do the same, anchored on board-SN parity instead of
         # the firmware SN. Both flags mean "the driver wires wrist + tactile at
-        # connect"; only the head comes from the station.
+        # connect"; only the head comes from the recipe.
         self._serial_autodiscover = (
             self.gripper_type == "serial" and self.serial_auto_discover_cameras
         )
-        # An explicitly-provided cameras dict wins over the station's, same as
-        # every other field.
-        if not self.cameras:
-            self.cameras = self._build_cameras(station)
 
     @property
     def _autodiscover_cameras(self) -> bool:
-        """True when the driver, not the station, supplies wrist + tactile cameras.
+        """True when the driver, not the recipe, supplies wrist + tactile cameras.
 
         Either gripper backend can do it; they differ only in what anchors a side
-        (taccap: firmware SN; serial: board-SN parity). Everything downstream —
-        which cameras the station contributes, what the driver must inject — is
-        the same, so the camera builder branches on this rather than on which
-        backend is in use.
+        (taccap: firmware SN; serial: board-SN parity). Everything downstream is
+        the same, so callers branch on this rather than on which backend is in use.
         """
         return self._taccap_autodiscover or self._serial_autodiscover
-
-    def _build_cameras(self, station: BiFlexivStationSpec) -> dict[str, CameraConfig]:
-        """Camera configs for this station, keyed by observation key.
-
-        The station supplies serials (and any per-camera override); the defaults
-        below are this robot's and are what the fleet runs on.
-        """
-        cameras: dict[str, CameraConfig] = {}
-        for label, spec in station.cameras.items():
-            if spec.type == "xense_tactile":
-                # Tactile sensors are separate XenseTactileCamera devices, not the
-                # gripper, so they are switched independently of gripper_type.
-                if not self.enable_tactile_sensors or self._autodiscover_cameras:
-                    continue
-                cameras[label] = XenseTactileCameraConfig(
-                    **{
-                        "serial_number": spec.serial,
-                        "fps": 30,
-                        "output_types": [XenseOutputType.RECTIFY],
-                        "warmup_s": 0.05,
-                        **spec.overrides,
-                    }
-                )
-            elif spec.type == "opencv":
-                if self._autodiscover_cameras:
-                    continue
-                cameras[label] = OpenCVCameraConfig(
-                    **{
-                        "index_or_path": spec.serial,
-                        "fourcc": "MJPG",
-                        "width": 640,
-                        "height": 480,
-                        "fps": 30,
-                        "warmup_s": 1.0,
-                        **spec.overrides,
-                    }
-                )
-            elif spec.type == "realsense":
-                cameras[label] = RealSenseCameraConfig(
-                    **{
-                        "serial_number_or_name": spec.serial,
-                        "fps": 30,
-                        "width": 640,
-                        "height": 480,
-                        # Long warmup only matters when the tactile cameras are
-                        # also coming up and contending for USB bandwidth.
-                        "warmup_s": 1.0 if self.enable_tactile_sensors else 0.05,
-                        "use_depth": self.head_camera_use_depth,
-                        **spec.overrides,
-                    }
-                )
-            else:  # unreachable: CameraSpec.validate() restricts the set
-                raise ValueError(f"unhandled station camera type {spec.type!r} for {label!r}")
-        return cameras
 
     def _make_gripper_config(
         self,

@@ -33,15 +33,17 @@ lerobot-record --config_path=recipes/record/bi_elite_cs66_rt/test.yaml \
 ```
 
 Recipes are split by CLI then by robot type (`recipes/{teleop,record}/<robot_type>/<name>.yaml`)
-and spell out every honored knob with its value; station hardware (cameras, SNs,
-mount geometry, poses) lives in `stations/<robot_type>/<bi_mount_type>.yaml`,
-which a recipe selects by name. One file per station (teleop) / dataset (record)
-means a single source of truth plus provenance — recipes are committed, so
-`git log recipes/` shows exactly what produced each dataset. See
-[`recipes/README.md`](../../../recipes/README.md) and
-[`stations/README.md`](../../../stations/README.md). Precedence is
-`dataclass default < station < recipe < CLI`, so any flag below overrides both.
-The per-robot flag lists below remain valid as a reference and for one-off runs.
+and are self-contained: each spells out both the bench hardware (cameras, SNs,
+mount geometry, poses) and every honored tuning knob. One file per bench (teleop)
+/ dataset (record) means a single source of truth plus provenance — recipes are
+committed, so `git log recipes/` shows exactly what produced each dataset. See
+[`recipes/README.md`](../../../recipes/README.md). Precedence is
+`dataclass default < recipe < CLI`, so any flag below overrides the recipe.
+
+**The per-robot flag lists below are a reference for one-off runs and debugging,
+not the day-to-day path** — use `--config_path` with a recipe for real runs.
+Bench hardware is no longer selected by name, so these examples spell out only
+the arm identity; a real run needs the full hardware block a recipe carries.
 
 ## BiARX5 Robot lerobot-teleoperate command
 
@@ -60,7 +62,6 @@ lerobot-teleoperate \
 ```bash
 lerobot-teleoperate \
     --robot.type=bi_flexiv_rizon4_rt \
-    --robot.bi_mount_type=forward-dewu \
     --teleop.type=bi_pico4 \
     --fps=30 \
     --display_data=true \
@@ -72,7 +73,6 @@ lerobot-teleoperate \
 ```bash
 lerobot-teleoperate \
     --robot.type=bi_elite_cs66_rt \
-    --robot.bi_mount_type=diagonal-07 \
     --teleop.type=bi_pico4 \
     --fps=30 \
     --display_data=true
@@ -80,7 +80,6 @@ lerobot-teleoperate \
 
 lerobot-teleoperate \
     --robot.type=bi_elite_cs66_rt \
-    --robot.bi_mount_type=diagonal-08 \
     --teleop.type=bi_pico4 \
     --fps=30 \
     --dryrun=false
@@ -120,7 +119,6 @@ lerobot-annotate-reward \
 ```bash
 lerobot-record \
     --robot.type=bi_flexiv_rizon4_rt \
-    --robot.bi_mount_type=forward \
     --robot.left_robot_sn=Rizon4s-063458 \
     --robot.right_robot_sn=Rizon4s-063670 \
     --teleop.type=bi_pico4 \
@@ -140,7 +138,6 @@ lerobot-record \
 ```bash
 lerobot-record \
     --robot.type=bi_flexiv_rizon4_rt \
-    --robot.bi_mount_type=forward-06 \
     --robot.left_robot_sn=Rizon4s-062412 \
     --robot.right_robot_sn=Rizon4s-062881 \
     --teleop.type=bi_pico4 \
@@ -160,7 +157,6 @@ lerobot-record \
 ```bash
 lerobot-record \
     --robot.type=bi_flexiv_rizon4_rt \
-    --robot.bi_mount_type=forward_dewu \
     --robot.left_robot_sn=Rizon4s-063458 \
     --robot.right_robot_sn=Rizon4s-063670 \
     --teleop.type=bi_pico4 \
@@ -180,7 +176,6 @@ lerobot-record \
 ```bash
 lerobot-record \
     --robot.type=bi_flexiv_rizon4_rt \
-    --robot.bi_mount_type=forward_dewu \
     --robot.left_robot_sn=Rizon4s-063458 \
     --robot.right_robot_sn=Rizon4s-063670 \
     --teleop.type=bi_pico4 \
@@ -202,7 +197,6 @@ lerobot-record \
 ```bash
 lerobot-record \
     --robot.type=bi_flexiv_rizon4_rt \
-    --robot.bi_mount_type=side \
     --robot.left_robot_sn=Rizon4-063423 \
     --robot.right_robot_sn=Rizon4-062855 \
     --teleop.type=bi_pico4 \
@@ -274,7 +268,6 @@ Equivalent explicit command (for one-off runs / reference):
 ```bash
 lerobot-record \
     --robot.type=bi_elite_cs66_rt \
-    --robot.bi_mount_type=diagonal \
     --robot.left_robot_ip=192.168.8.53 \
     --robot.right_robot_ip=192.168.8.223 \
     --teleop.type=bi_pico4 \

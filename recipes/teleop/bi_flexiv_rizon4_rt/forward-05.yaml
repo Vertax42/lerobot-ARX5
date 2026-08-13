@@ -1,0 +1,98 @@
+# Teleop recipe — bimanual Flexiv Rizon4 RT (forward mount, bench 05) + Bi-Pico4.
+#   lerobot-teleoperate --config_path=recipes/teleop/bi_flexiv_rizon4_rt/forward-05.yaml
+#
+# ⚠️ NOT VERIFIED ON THIS BENCH. Created when stations/ was folded into recipes,
+# to preserve the hardware that stations/bi_flexiv_rizon4_rt/forward-05.yaml held —
+# that bench had no recipe of its own. The arm SNs, poses and camera SNs below are
+# exact (transcribed from the station file at 3b964bc6).
+#
+# ⚠️ THE GRIPPER BACKEND IS A GUESS. This runs `serial` (the dataclass default),
+# which is what the old station file's camera list implied — but nothing confirms
+# what is actually bolted to this bench. If it has TacCap followers, this will
+# hang at connect scanning /dev/ttyACM* for serial gripper boards that aren't
+# there; switch to the taccap form (see forward-01.yaml / forward-04.yaml, where
+# only `head` is pinned and the wrist + tactile cameras are auto-discovered).
+# Everything under "Control" is copied from forward-04 and unvalidated here.
+#
+# Self-contained: this file carries both the bench hardware and the run's tuning.
+
+robot:
+  type: bi_flexiv_rizon4_rt
+
+  # ── Bench hardware (forward-05) ─────────────────────────────────────────
+  # Joint angles are in DEGREES (J1..J7), the units flexiv_rt takes.
+  # Serial grippers do not auto-discover cameras, so all seven are pinned. The
+  # tactile sensors run at exposure 250 / brightness 38 (the
+  # XenseTactileCameraConfig default), so nothing needs restating per camera.
+  left_robot_sn: Rizon4-063786
+  right_robot_sn: Rizon4R-062096
+  left_start_position_degree: [96.59, 65.45, -6.65, 78.76, 85.09, -5.48, -103.47]
+  right_start_position_degree: [96.93, 65.4, -7.06, 78.87, 85.03, -5.68, -103.2]
+  left_home_position_degree: [96.59, 65.45, -6.65, 78.76, 85.09, -5.48, -103.47]
+  right_home_position_degree: [96.93, 65.4, -7.06, 78.87, 85.03, -5.68, -103.2]
+  cameras:
+    head:
+      type: intelrealsense
+      serial_number_or_name: "346522071766"
+      fps: 30
+      width: 640
+      height: 480
+      warmup_s: 1
+      use_depth: false
+    left_tactile_0:
+      type: xense
+      serial_number: OG001359
+      fps: 30
+      output_types: [rectify]
+      warmup_s: 0.05
+    left_tactile_1:
+      type: xense
+      serial_number: OG001360
+      fps: 30
+      output_types: [rectify]
+      warmup_s: 0.05
+    left_wrist:
+      type: opencv
+      index_or_path: XC000047
+      fourcc: MJPG
+      width: 640
+      height: 480
+      fps: 30
+      warmup_s: 1
+    right_tactile_0:
+      type: xense
+      serial_number: OG001369
+      fps: 30
+      output_types: [rectify]
+      warmup_s: 0.05
+    right_tactile_1:
+      type: xense
+      serial_number: OG001370
+      fps: 30
+      output_types: [rectify]
+      warmup_s: 0.05
+    right_wrist:
+      type: opencv
+      index_or_path: XC000054
+      fourcc: MJPG
+      width: 640
+      height: 480
+      fps: 30
+      warmup_s: 1
+
+  # ── Control (copied from forward-04 — unverified here) ──────────────────────
+  use_force: false
+  log_level: INFO
+  left_use_gripper: true
+  right_use_gripper: true
+  gripper_f_max: 40.0 # N
+  enable_tactile_sensors: true
+
+teleop:
+  type: bi_pico4
+  pos_sensitivity: 1.0
+  ori_sensitivity: 1.0
+
+# ── Teleoperate loop (top level) ──
+fps: 30
+display_data: true

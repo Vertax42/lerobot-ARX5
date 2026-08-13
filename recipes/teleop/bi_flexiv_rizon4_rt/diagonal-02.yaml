@@ -1,20 +1,39 @@
-# Teleop recipe — bimanual Flexiv Rizon4 RT (diagonal mount, station 02) + Bi-Pico4,
+# Teleop recipe — bimanual Flexiv Rizon4 RT (diagonal mount, bench 02) + Bi-Pico4,
 # with TacCap follower grippers (bi_taccap).
 #   lerobot-teleoperate --config_path=recipes/teleop/bi_flexiv_rizon4_rt/diagonal-02.yaml
 #
-# One recipe per physical station; this one targets the diagonal-02 station. Only the
-# frequently-changed knobs are listed; everything else uses the dataclass default.
-# Station hardware (arm SNs, cameras, home/start poses) comes from
-# stations/bi_flexiv_rizon4_rt/diagonal-02.yaml; don't restate it here (a recipe
-# value would override the bench). The robot:/teleop: blocks mirror the record
-# recipe — keep them in sync.
+# Self-contained: this file carries both the bench hardware and the run's tuning.
+# Anything not listed uses the dataclass default.
 
 robot:
   type: bi_flexiv_rizon4_rt
-  bi_mount_type: diagonal-02
-  # Both grippers -> xense.taccap FollowerGripper (matched pair, single switch). Wrist +
-  # GSPS tactile SNs are auto-discovered at connect (taccap_discovery), so the station's
-  # XC*/OG* SNs are ignored in this mode.
+
+  # ── Bench hardware (diagonal-02) ────────────────────────────────────────────
+  left_robot_sn: Rizon4-063423
+  right_robot_sn: Rizon4-062855
+  # Joint angles in DEGREES (J1..J7), the units flexiv_rt takes.
+  left_start_position_degree: [16.18, -26.29, -3.84, 114.0, 10.66, 84.24, 27.56]
+  right_start_position_degree: [31.91, -26.72, -27.42, 122.58, -13.93, 89.42, -1.31]
+  left_home_position_degree: [16.18, -26.29, -3.84, 114.0, 10.66, 84.24, 27.56]
+  right_home_position_degree: [31.91, -26.72, -27.42, 122.58, -13.93, 89.42, -1.31]
+
+  # ── Cameras ─────────────────────────────────────────────────────────────────
+  # Only the head is pinned: taccap_auto_discover_cameras (below) sniffs the
+  # per-side wrist + GSPS tactile cameras off the gripper's USB hub at connect.
+  cameras:
+    head:
+      type: intelrealsense
+      serial_number_or_name: "135522074323"
+      fps: 30
+      width: 640
+      height: 480
+      warmup_s: 1
+      use_depth: false
+
+  # ── Gripper ─────────────────────────────────────────────────────────────────
+  # Both grippers -> xense.taccap FollowerGripper (matched pair, single switch).
+  # Wrist + GSPS tactile SNs are auto-discovered at connect (taccap discovery),
+  # which is why only the head camera is pinned above.
   gripper_type: taccap_follower
   use_force: false
   log_level: INFO

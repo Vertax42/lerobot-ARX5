@@ -54,6 +54,7 @@ Run on the station with a hand on the e-stop:
 import argparse
 import math
 import time
+from pathlib import Path
 
 import numpy as np
 
@@ -137,7 +138,8 @@ def _pose_err(req_pos, req_rot6, ach_pos, ach_rot6):
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--arm", choices=("left", "right"), default="left")
-    ap.add_argument("--mount-type", default="diagonal-08", help="bi_mount_type station (diagonal-07 / diagonal-08)")
+    ap.add_argument("--recipe", default="recipes/teleop/bi_elite_cs66_rt/diagonal-08.yaml",
+                    help="recipe YAML supplying the bench hardware (IPs, poses, mount rotation)")
     ap.add_argument("--mode", choices=("wrist", "circle", "combo", "hold"), default="wrist",
                     help="hold = keep the start pose fixed so you can hand-push the TCP to feel compliance")
     ap.add_argument("--servoj-gain", type=int, default=None,
@@ -200,10 +202,15 @@ def main() -> None:
             print("Aborted.")
             return
 
-    cfg_kwargs = {"bi_mount_type": args.mount_type}
+    # Bench hardware comes from the recipe (recipes are self-contained).
+    import draccus
+    import yaml
+
+    raw = yaml.safe_load(Path(args.recipe).read_text())["robot"]
+    raw.pop("type", None)
     if args.servoj_gain is not None:
-        cfg_kwargs["servoj_gain"] = args.servoj_gain  # validated to [100, 2000] in __post_init__
-    cfg = BiEliteCS66RTConfig(**cfg_kwargs)
+        raw["servoj_gain"] = args.servoj_gain  # validated to [100, 2000] in __post_init__
+    cfg = draccus.decode(BiEliteCS66RTConfig, raw)
     cfg.cameras = {}
     cfg.left_gripper = None
     cfg.right_gripper = None

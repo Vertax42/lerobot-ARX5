@@ -1,29 +1,33 @@
-# Teleop recipe — bimanual Flexiv Rizon4 RT (forward mount, bench 04) + Bi-Pico4,
+# Teleop recipe — bimanual Flexiv Rizon4 RT (forward mount, bench 01) + Bi-Pico4,
 # with TacCap follower grippers (bi_taccap).
-#   lerobot-teleoperate --config_path=recipes/teleop/bi_flexiv_rizon4_rt/forward-04.yaml
+#   lerobot-teleoperate --config_path=recipes/teleop/bi_flexiv_rizon4_rt/forward-01.yaml
 #
 # Self-contained: this file carries both the bench hardware and the run's tuning.
 # Anything not listed uses the dataclass default.
+#
+# ⚠️ The arm SNs and poses below came from the old stations/ file for this bench
+# and have NOT been re-checked against the hardware; the gripper block HAS
+# (two TacCap followers, TCGU01A25Z0011s / TCGU01A25Z0012s).
 
 robot:
   type: bi_flexiv_rizon4_rt
 
-  # ── Bench hardware (forward-04) ─────────────────────────────────────────────
-  left_robot_sn: Rizon4-063774
-  right_robot_sn: Rizon4R-062090
+  # ── Bench hardware (forward-01) ─────────────────────────────────────────────
+  left_robot_sn: Rizon4s-063458
+  right_robot_sn: Rizon4s-063670
   # Joint angles in DEGREES (J1..J7), the units flexiv_rt takes.
-  left_start_position_degree: [86.9, 68.22, 23.55, 109.63, -3.01, 89.52, 2.96]
-  right_start_position_degree: [83.07, 67.85, 24.64, 107.57, 6.39, 95.96, 15.24]
-  left_home_position_degree: [86.9, 68.22, 23.55, 109.63, -3.01, 89.52, 2.96]
-  right_home_position_degree: [83.07, 67.85, 24.64, 107.57, 6.39, 95.96, 15.24]
+  left_start_position_degree: [88.62, 74.83, 22.87, 112.79, -0.55, 87.02, 0.72]
+  right_start_position_degree: [-24.33, 71.20, -4.84, 118.72, 3.88, 95.72, 3.64]
+  left_home_position_degree: [88.62, 74.83, 22.87, 112.79, -0.55, 87.02, 0.72]
+  right_home_position_degree: [-24.33, 71.20, -4.84, 118.72, 3.88, 95.72, 3.64]
 
   # ── Cameras ─────────────────────────────────────────────────────────────────
   # Only the head is pinned: taccap_auto_discover_cameras (below) sniffs the
-  # per-side wrist + GSPS tactile cameras off the gripper's USB hub at connect.
+  # per-side wrist + GSPS tactile cameras off each gripper's USB hub at connect.
   cameras:
     head:
       type: intelrealsense
-      serial_number_or_name: "344522070461"
+      serial_number_or_name: "337322070722"
       fps: 30
       width: 640
       height: 480

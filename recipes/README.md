@@ -35,7 +35,7 @@ recipes/
 ```
 recipes/
   teleop/
-    bi_elite_cs66_rt/diagonal-08.yaml   # one recipe per physical station
+    bi_elite_cs66_rt/diagonal-08.yaml   # one recipe per physical bench
     bi_flexiv_rizon4_rt/forward-04.yaml
   record/
     bi_elite_cs66_rt/test.yaml
@@ -56,28 +56,41 @@ value you had — verify before trimming.)
 The `robot:` and `teleop:` blocks are **identical** between a robot's record and
 teleop recipe (same hardware, same teleop device) — keep the two in sync.
 
-**Station hardware belongs in `stations/`, not here**: cameras, robot SNs/IPs,
-mount geometry (`*_mount_*_deg`, `world_rotation`), `local_ip`, and home/start
-poses all live in `stations/<robot_type>/<bi_mount_type>.yaml`. A recipe picks
-the bench with `bi_mount_type` and otherwise leaves that hardware alone. See
-[`../stations/README.md`](../stations/README.md).
+**A recipe is self-contained.** It carries the bench hardware — cameras, robot
+SNs/IPs, mount geometry (`*_mount_*_deg`, `world_rotation`), `local_ip`, home and
+start poses — alongside the run's tuning. One file is everything a run needs.
 
 Precedence is lowest to highest:
 
 ```
-dataclass default  <  station YAML  <  recipe YAML  <  CLI --robot.xxx=
+dataclass default  <  recipe YAML  <  CLI --robot.xxx=
 ```
 
-So a hardware value written into a recipe **does** take effect and overrides the
-station. That makes a one-off swap easy (a spare arm, a controller on a
-temporary address) and a stale copy dangerous — don't restate station hardware
-in a recipe just to document it. The Elite recipes list `left_robot_ip` /
-`right_robot_ip` for exactly this reason: they are operationally useful to see
-next to the station name, and they match their station.
+The cost of self-containment is duplication: two recipes on the same bench each
+hold their own copy of that bench's hardware (today `diagonal-08` is shared by
+`teleop/bi_elite_cs66_rt/diagonal-08.yaml` and `record/bi_elite_cs66_rt/test.yaml`).
+**When a bench changes — a swapped camera, a re-mounted arm, a new controller
+address — grep every recipe naming that bench and update all of them.** A missed
+copy does not fail loudly; it silently records with the wrong serial.
 
-> This changed with the `stations/` migration. Previously the preset overwrote
-> these unconditionally and a hardware value in a recipe was silently discarded.
-> If you carry an old recipe with a stale SN or IP in it, it will start winning.
+### Cameras
+
+How many cameras a recipe pins depends on the gripper backend:
+
+- `gripper_type: taccap_follower` with `taccap_auto_discover_cameras: true`
+  (the default) — pin only `head`. The per-side wrist and GSPS tactile cameras
+  are sniffed off the gripper's USB hub at connect.
+- `gripper_type: serial` — pin all seven (head, two wrists, four tactiles);
+  serial grippers do not auto-discover by default.
+
+Tactile cameras take their tuned exposure from the `XenseTactileCameraConfig`
+default (`camera_properties`), so a recipe entry stays short. Pass
+`camera_properties: null` on a camera to fall back to its xpack template.
+
+> **History.** Bench hardware used to live in `stations/<robot_type>/<name>.yaml`,
+> selected by a `bi_mount_type` field. That layer was removed at 3b964bc6`^`;
+> the station files (including two benches that had no recipe, `forward-05` and
+> `forward-dewu`, now recipes of their own) are recoverable from git history there.
 
 Flexiv `force_control_frame` is a C++ enum with no YAML decoder, so it is set in
 code (defaults to `WORLD`) and omitted from the recipe.
@@ -91,9 +104,8 @@ that selects the robot / teleop class. Enums use their string value
 
 ## Naming convention
 
-- `teleop/<robot_type>/<variant>.yaml` — one recipe **per physical station**;
-  variant = mount + station number, matching the station file it selects, e.g.
-  `diagonal-08.yaml`, `forward-05.yaml`.
+- `teleop/<robot_type>/<variant>.yaml` — one recipe **per physical bench**;
+  variant = mount + bench number, e.g. `diagonal-08.yaml`, `forward-05.yaml`.
 - `record/<robot_type>/<task>.yaml` — one per dataset/campaign, e.g.
   `assemble_box.yaml`. Keep a `test.yaml` smoke-test per robot (2 short
   episodes, `push_to_hub: false`).
