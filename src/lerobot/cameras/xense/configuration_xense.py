@@ -12,10 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 from ..configs import CameraConfig
+
+# Camera template override for **OG** tactile sensors on the Elite benches:
+# exposure 450 -> 250, plus brightness 38.
+#
+# NOT a fleet-wide default. It is tuned for OG sensors under that bench's
+# lighting; the GSPS sensors in the TacCap grippers have a different xpack
+# baseline and come out visibly over-bright with these values. Sensors that are
+# not OG should be left on their own xpack template (camera_properties=None),
+# which is what xense-taccap-lerobot does for the TacCap path.
+#
+# The other keys mirror the probed OG template so they are NOT lost — xensesdk
+# replaces the whole camera.<os> dict rather than merging, so auto_exposure=1
+# (manual, required for the manual exposure to apply), auto_wb=False and
+# white_balance_t have to be restated alongside the two values actually tuned.
+OG_TACTILE_CAMERA_PROPERTIES: dict[str, float] = {
+    "auto_exposure": 1,
+    "auto_wb": False,
+    "exposure": 250,
+    "white_balance_t": 5550,
+    "brightness": 38,
+}
 
 
 class XenseOutputType(Enum):
@@ -115,6 +136,10 @@ class XenseTactileCameraConfig(CameraConfig):
     # auto_exposure=1 (manual) is required for a manual `exposure` to take
     # effect, and drop auto_wb/white_balance_t at your peril. None -> use the
     # sensor's xpack template unchanged.
+    #
+    # None (the default) = use the sensor's own xpack template, which is right for
+    # GSPS sensors and is what the TacCap path does. Override per camera only where
+    # a sensor family has been tuned for a bench — see OG_TACTILE_CAMERA_PROPERTIES.
     camera_properties: dict[str, float] | None = None
 
     def __post_init__(self):

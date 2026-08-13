@@ -230,13 +230,11 @@ class BiEliteCS66RT(Robot):
 
         Each arm's gripper board, wrist camera and two tactile sensors share one
         USB hub, so the gripper — already side-resolved by board-SN parity —
-        identifies the hub and the cameras on it follow. Camera settings match
-        _build_cameras exactly (including TACTILE_CAMERA_PROPERTIES) so turning
-        discovery on does not change a single recorded pixel.
+        identifies the hub and the cameras on it follow. Camera settings match a
+        recipe-supplied camera exactly (the tuned tactile exposure is now the
+        XenseTactileCameraConfig default) so turning discovery on does not change
+        a single recorded pixel.
         """
-        from lerobot.robots.bi_elite_cs66_rt.config_bi_elite_cs66_rt import (
-            TACTILE_CAMERA_PROPERTIES,
-        )
         from lerobot.grippers.serial.discovery import discover_serial_gripper_cameras
 
         # Only ask about sides that actually have a gripper, so a bench running one
@@ -275,7 +273,6 @@ class BiEliteCS66RT(Robot):
                         fps=30,
                         output_types=[XenseOutputType.RECTIFY],
                         warmup_s=0.05,
-                        camera_properties=dict(TACTILE_CAMERA_PROPERTIES),
                     )
         self.logger.info(
             f"serial gripper auto-discovered cameras: {sorted(self.config.cameras)}"
