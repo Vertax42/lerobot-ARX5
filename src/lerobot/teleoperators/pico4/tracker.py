@@ -33,9 +33,8 @@ the same coordinate transform that the controller-based teleop applies
 (e.g. ``teleop_pico4`` does a Pico→world remap in
 ``_transform_pico_to_world_coordinate``; you'd reuse that on top of ``get_pose_raw()``).
 
-For pure handheld data collection (taccap_gripper) there is no arm,
-so we don't remap — we emit the raw xrt frame and leave reframing to
-post-processing.
+For handheld data collection there is no arm to align to, so we don't
+remap — we emit the raw xrt frame and leave reframing to post-processing.
 
 The world origin is the headset position the moment the Unity VR app
 started — *not* when xrt.init() ran, *not* when you clicked Connect in

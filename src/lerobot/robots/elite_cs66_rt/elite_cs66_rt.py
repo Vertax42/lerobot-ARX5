@@ -36,7 +36,7 @@ from lerobot.robots.elite_cs66_rt.manipulability import (
     pose_delta,
     tool_consistency,
 )
-from lerobot.grippers import make_gripper_from_config
+from lerobot.grippers import Gripper, make_gripper_from_config
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import (

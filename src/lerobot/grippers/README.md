@@ -92,6 +92,15 @@ Finding the *gripper* is separate, always on, and not switchable: `serial` resol
 its side from the board SN's parity (odd → left), `taccap_follower` from the
 firmware-burned SN. That is why no recipe pins a gripper SN.
 
+When a gripper or its cameras do not show up, run the discovery by hand — it
+prints what it found and how it classified each side:
+
+```python
+from lerobot.grippers.serial import discover_serial_gripper_sides   # port + board SN per side
+from lerobot.grippers.serial import discover_serial_gripper_cameras # + wrist/tactile on each hub
+from lerobot.grippers.taccap import discover_taccap_sides           # the TacCap equivalent
+```
+
 Note that the gripper object itself never returns image or tactile data. Those
 sensors are ordinary entries in the robot's `cameras`, whether pinned in the recipe
 or injected by discovery.

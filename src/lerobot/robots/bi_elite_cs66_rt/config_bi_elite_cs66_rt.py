@@ -24,9 +24,6 @@ from enum import Enum
 from pathlib import Path
 
 from lerobot.cameras.configs import CameraConfig
-from lerobot.cameras.opencv import OpenCVCameraConfig
-from lerobot.cameras.realsense import RealSenseCameraConfig
-from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
 from lerobot.robots.config import RobotConfig
 from lerobot.robots.elite_cs66_rt.config_elite_cs66_rt import _validate_singularity_params
 from lerobot.grippers import GripperConfig

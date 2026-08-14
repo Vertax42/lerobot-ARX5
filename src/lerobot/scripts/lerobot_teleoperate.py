@@ -109,7 +109,6 @@ import time
 import traceback
 from dataclasses import asdict, dataclass
 from pprint import pformat
-from typing import Any
 
 import numpy as np
 import rerun as rr
@@ -144,7 +143,6 @@ from lerobot.utils.import_utils import register_third_party_plugins
 from lerobot.utils.robot_utils import (
     get_logger,
     precise_sleep,
-    rotation_6d_to_quaternion,
     busy_wait,
 )
 from lerobot.utils.utils import move_cursor_up
@@ -759,7 +757,6 @@ def spacemouse_teleop_loop(
     timing_stats = {"obs_times": [], "loop_times": []}
 
     is_flexiv_rt = robot.name == "flexiv_rizon4_rt"
-    is_flexiv = is_flexiv_rt and teleop.name == "spacemouse"
 
     # bi_arx5 takes a prefixed schema (left_tcp.* / right_tcp.*) but a single
     # SpaceMouse emits the unprefixed single-arm schema (tcp.* / gripper.pos).
@@ -835,22 +832,6 @@ def spacemouse_teleop_loop(
                 elif is_flexiv_rt and hasattr(robot, "reset_to_initial_position"):
                     try:
                         robot.reset_to_initial_position()
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to reset robot position: {e}\n{traceback.format_exc()}"
-                        )
-                elif is_flexiv_nrt and hasattr(robot, "reset_to_initial_position"):
-                    try:
-                        robot.reset_to_initial_position()
-                        current_pose_euler = robot.get_current_tcp_pose_euler()
-                        teleop.reset_to_pose(
-                            current_pose_euler[:6], current_pose_euler[6]
-                        )
-                        teleop._start_pose_6d = current_pose_euler[:6].copy()
-                        teleop._start_gripper_pos = current_pose_euler[6]
-                        logger.info(
-                            "Reset to initial position triggered by both buttons"
-                        )
                     except Exception as e:
                         logger.error(
                             f"Failed to reset robot position: {e}\n{traceback.format_exc()}"

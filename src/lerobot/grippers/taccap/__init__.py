@@ -12,3 +12,7 @@
 
 from .configuration_taccap import TaccapFollowerConfig  # noqa: F401
 from .taccap_follower import TaccapFollower  # noqa: F401
+
+# Bring-up helper: what the arms call to wire the per-side wrist + GSPS cameras,
+# and the one to run by hand when a gripper does not show up.
+from .discovery import discover_taccap_sides  # noqa: F401

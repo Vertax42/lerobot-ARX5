@@ -21,9 +21,6 @@ from dataclasses import dataclass, field, replace
 import flexiv_rt
 
 from lerobot.cameras.configs import CameraConfig
-from lerobot.cameras.opencv import OpenCVCameraConfig
-from lerobot.cameras.realsense import RealSenseCameraConfig
-from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
 from lerobot.robots.config import RobotConfig
 from lerobot.grippers import GripperConfig
 

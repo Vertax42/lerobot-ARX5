@@ -664,7 +664,7 @@ PY
     echo "[xense] Done. Verify with: python -c 'import xensesdk; print(xensesdk)'"
 }
 
-# ── Hardware module: TacCap-Gripper (taccap_gripper UMI device) ───────────────
+# ── Hardware module: TacCap gripper SDK (xense.taccap) ───────────────────────
 
 install_taccap() {
     echo ""

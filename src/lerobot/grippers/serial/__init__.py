@@ -12,3 +12,12 @@
 
 from .configuration_serial import SerialGripperConfig  # noqa: F401
 from .serial_gripper import SerialGripper  # noqa: F401
+
+# Bring-up helpers. discover_serial_gripper_cameras is what the arms call;
+# discover_serial_gripper_sides is the one to run by hand when a gripper does not
+# show up — it reports which board SN answered on which port, and how parity
+# classified it.
+from .discovery import (  # noqa: F401
+    discover_serial_gripper_cameras,
+    discover_serial_gripper_sides,
+)
