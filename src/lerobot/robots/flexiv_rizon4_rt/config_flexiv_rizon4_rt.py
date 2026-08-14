@@ -176,11 +176,6 @@ class FlexivRizon4RTConfig(RobotConfig):
                 f"start_vel_scale must be between 1 and 100, got {self.start_vel_scale}"
             )
 
-        # `use_gripper=False` drops a gripper the recipe did configure, without
-        # having to delete the block.
-        if not self.use_gripper:
-            self.gripper = None
-
         # # Camera configuration for realsense cameras
         # self.cameras = {
         #     "top": RealSenseCameraConfig(

@@ -64,7 +64,7 @@ import flexiv_rt as frt
 import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
-from lerobot.grippers import make_gripper_from_config
+from lerobot.grippers import Gripper, make_gripper_from_config
 from lerobot.robots.flexiv_rizon4_rt.config_flexiv_rizon4_rt import FlexivRizon4RTConfig
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
@@ -342,7 +342,7 @@ class FlexivRizon4RT(Robot):
             self.logger.info("Robot is now operational.")
 
             # --- 3. Connect Flare Gripper + cameras ---
-            if self._gripper and self.config.use_gripper:
+            if self._gripper is not None:
                 self.logger.info("Connecting Flare Gripper...")
                 self._gripper.connect()
 
@@ -387,7 +387,7 @@ class FlexivRizon4RT(Robot):
             mode_desc = "RT_CARTESIAN_MOTION_FORCE"
             mode_desc += " (force enabled)" if self.config.use_force else " (motion only)"
 
-            if self._gripper and self.config.use_gripper:
+            if self._gripper is not None:
                 gripper_status = f"with {type(self._gripper).__name__}"
             else:
                 gripper_status = "no gripper"
@@ -447,7 +447,7 @@ class FlexivRizon4RT(Robot):
                     self.logger.warn(f"Error calling robot.Stop(): {e}")
 
             # 4. Disconnect gripper + cameras
-            if self._gripper and self.config.use_gripper:
+            if self._gripper is not None:
                 try:
                     self._gripper.disconnect()
                 except Exception as e:
@@ -581,20 +581,13 @@ class FlexivRizon4RT(Robot):
         self._robot.SwitchMode(frt.Mode.NRT_PLAN_EXECUTION)
         self._robot.ExecutePlan("PLAN-Home")
 
-        # Initialize gripper position during move
+        # Initialize gripper position during move. Normalized through the Gripper
+        # contract (0 = closed, 1 = open) rather than reaching into the vendor
+        # handle with millimetres — the two backends measure travel differently.
         if self._gripper is not None:
-            if self.config.gripper_init_open:
-                self._gripper._gripper.set_position_sync(
-                    self.config.gripper_max_pos,
-                    vmax=self.config.gripper_v_max / 2,
-                    fmax=self.config.gripper_f_max / 2,
-                )
-            else:
-                self._gripper._gripper.set_position_sync(
-                    0.0,
-                    vmax=self.config.gripper_v_max / 2,
-                    fmax=self.config.gripper_f_max / 2,
-                )
+            self._gripper.initialize_gripper_position(
+                1.0 if self._gripper.config.init_open else 0.0
+            )
 
         # Wait for plan to finish
         timeout = 30.0
@@ -637,20 +630,13 @@ class FlexivRizon4RT(Robot):
         )
         self.logger.info("MoveJ command sent, waiting for completion...")
 
-        # Initialize gripper position during move
+        # Initialize gripper position during move. Normalized through the Gripper
+        # contract (0 = closed, 1 = open) rather than reaching into the vendor
+        # handle with millimetres — the two backends measure travel differently.
         if self._gripper is not None:
-            if self.config.gripper_init_open:
-                self._gripper._gripper.set_position_sync(
-                    self.config.gripper_max_pos,
-                    vmax=self.config.gripper_v_max / 2,
-                    fmax=self.config.gripper_f_max / 2,
-                )
-            else:
-                self._gripper._gripper.set_position_sync(
-                    0.0,
-                    vmax=self.config.gripper_v_max / 2,
-                    fmax=self.config.gripper_f_max / 2,
-                )
+            self._gripper.initialize_gripper_position(
+                1.0 if self._gripper.config.init_open else 0.0
+            )
 
         # Wait for MoveJ to complete.
         # NOTE: Flexiv SDK docs warn that most primitives won't cause busy()
@@ -804,7 +790,7 @@ class FlexivRizon4RT(Robot):
         # --- Gripper ---
         # Position only: neither backend carries a camera or tactile sensor. A
         # TacCap gripper's wrist and GSPS sensors arrive through `cameras`.
-        if self._gripper is not None and self.config.use_gripper:
+        if self._gripper is not None:
             obs_dict[self._gripper_key] = self._gripper.get_gripper_position()
 
         # --- External cameras ---
@@ -883,7 +869,7 @@ class FlexivRizon4RT(Robot):
 
         Action key: gripper.pos (normalized 0-1)
         """
-        if not self._gripper or not self.config.use_gripper:
+        if self._gripper is None:
             return
 
         if self._gripper_key not in action:
@@ -1055,7 +1041,7 @@ class FlexivRizon4RT(Robot):
         euler = quaternion_to_euler(tcp_pose[3], tcp_pose[4], tcp_pose[5], tcp_pose[6])
 
         gripper_pos = 0.0
-        if self._gripper and self.config.use_gripper:
+        if self._gripper is not None:
             gripper_pos = self._gripper.get_gripper_position()
 
         return np.array(
@@ -1080,7 +1066,7 @@ class FlexivRizon4RT(Robot):
             tcp_pose = self._robot.states().tcp_pose
 
         gripper_pos = 0.0
-        if self._gripper and self.config.use_gripper:
+        if self._gripper is not None:
             gripper_pos = self._gripper.get_gripper_position()
 
         return np.array(

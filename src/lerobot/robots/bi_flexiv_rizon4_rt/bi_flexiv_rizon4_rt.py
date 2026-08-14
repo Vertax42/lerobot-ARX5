@@ -781,11 +781,6 @@ class BiFlexivRizon4RT(Robot):
                 "left",
                 self.config.left_start_position_degree,
                 self.config.start_vel_scale,
-                self.config.left_use_gripper,
-                self.config.gripper_init_open,
-                self.config.gripper_max_pos,
-                self.config.gripper_v_max,
-                self.config.gripper_f_max,
             )
             right_future = executor.submit(
                 self._move_arm_to_position,
@@ -794,11 +789,6 @@ class BiFlexivRizon4RT(Robot):
                 "right",
                 self.config.right_start_position_degree,
                 self.config.start_vel_scale,
-                self.config.right_use_gripper,
-                self.config.gripper_init_open,
-                self.config.gripper_max_pos,
-                self.config.gripper_v_max,
-                self.config.gripper_f_max,
             )
             done, _ = wait([left_future, right_future])
 
@@ -824,11 +814,6 @@ class BiFlexivRizon4RT(Robot):
         side: str,
         target_position_degree: list[float],
         vel_scale: int,
-        use_gripper: bool = False,
-        gripper_init_open: bool = True,
-        gripper_max_pos: float = 85.0,
-        gripper_v_max: float = 80.0,
-        gripper_f_max: float = 20.0,
     ) -> None:
         """Move a single arm to a target joint position via MoveJ (blocking)."""
         if robot is None:
@@ -848,9 +833,11 @@ class BiFlexivRizon4RT(Robot):
         # Initialize gripper during arm motion with hybrid logic:
         # skip if already near target, otherwise fall back to a non-blocking
         # command when the background gripper poller is already running.
-        if gripper is not None and use_gripper:
-            target_normalized = 1.0 if gripper_init_open else 0.0
-            gripper.initialize_gripper_position(target_normalized)
+        # `gripper is None` already means this side has no gripper — the arm config
+        # resolves {side}_use_gripper into that. init_open comes off the gripper's
+        # own config, so both backends answer it the same way.
+        if gripper is not None:
+            gripper.initialize_gripper_position(1.0 if gripper.config.init_open else 0.0)
 
         timeout = 30.0
         start_time = time.time()
@@ -1255,16 +1242,8 @@ class BiFlexivRizon4RT(Robot):
                         else self.config.right_start_position_degree
                     )
                     gripper = self._left_gripper if side == "left" else self._right_gripper
-                    use_gripper = (
-                        self.config.left_use_gripper if side == "left" else self.config.right_use_gripper
-                    )
-                    init_open = self.config.gripper_init_open
-                    max_pos = self.config.gripper_max_pos
-                    v_max = self.config.gripper_v_max
-                    f_max = self.config.gripper_f_max
                     self._move_arm_to_position(
-                        robot, gripper, side, start_deg, self.config.start_vel_scale,
-                        use_gripper, init_open, max_pos, v_max, f_max
+                        robot, gripper, side, start_deg, self.config.start_vel_scale
                     )
                 else:
                     self._go_to_home_arm(robot, side)
