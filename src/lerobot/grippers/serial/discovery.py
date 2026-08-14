@@ -257,8 +257,8 @@ def discover_serial_gripper_cameras(
                 f"serial gripper auto-discover: expected exactly one non-tactile video "
                 f"device on the {side} gripper's hub {hub}, found {candidates or 'none'} "
                 f"(tactile on this hub: {tactile}). Unplug anything else from that hub, "
-                "or pin the cameras in the station file and leave "
-                "serial_auto_discover_cameras off."
+                "or pin the cameras in the recipe and leave the gripper "
+                "block's auto_discover_cameras off."
             )
 
         found[side] = SerialGripperCameras(

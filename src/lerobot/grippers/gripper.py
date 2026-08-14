@@ -18,8 +18,8 @@
 
 Grippers are arm-agnostic: an arm robot holds one (or one per side) and drives it
 through the small contract below, without knowing which backend is underneath.
-That contract used to be duck-typed across four unrelated classes; this ABC makes
-it explicit.
+Two backends exist: ``serial`` (USB-serial parallel jaw) and ``taccap_follower``
+(the centric TacCap gripper).
 
 Normalized position convention, uniform across every backend:
 
@@ -27,18 +27,17 @@ Normalized position convention, uniform across every backend:
     1.0  →  fully open
 
 Subclasses must implement connection lifecycle, ``is_connected`` and the two
-position methods. Two further methods have working defaults so a backend only
-overrides them when it can do better (or at all):
+position methods. ``initialize_gripper_position`` has a working default — command
+a target, then poll until it is reached — that a backend overrides only if its SDK
+offers a genuine blocking move.
 
-- ``initialize_gripper_position`` — command a target and block until reached.
-  The default drives ``set_gripper_position`` then polls ``get_gripper_position``.
-- ``get_sensor_data`` — tactile passthrough merged into the arm's observation.
-  Defaults to ``{}`` for grippers with no sensors.
+Grippers do not carry tactile data. The visuotactile sensors on a TacCap gripper
+are surfaced as ordinary cameras (auto-discovered off the gripper's USB hub), not
+through the gripper object.
 """
 
 import abc
 import time
-from typing import Any
 
 from lerobot.utils.robot_utils import get_logger
 
@@ -150,12 +149,3 @@ class Gripper(abc.ABC):
             f"(current={self.get_gripper_position():.3f})."
         )
 
-    # ── Optional tactile passthrough ───────────────────────────────────────────
-
-    def get_sensor_data(self) -> dict[str, Any]:
-        """Tactile/sensor frames to merge into the arm's observation.
-
-        Defaults to empty — most grippers carry no sensors. Backends with embedded
-        visuotactile sensors override this.
-        """
-        return {}

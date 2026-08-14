@@ -16,7 +16,7 @@
 
 """Configuration for BiFlexivRizon4RT dual-arm robot (real-time via flexiv_rt)."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import flexiv_rt
 
@@ -25,7 +25,7 @@ from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
 from lerobot.robots.config import RobotConfig
-from lerobot.grippers import SerialGripperConfig, TaccapFollowerConfig
+from lerobot.grippers import GripperConfig
 
 ROBOT_TYPE = "bi_flexiv_rizon4_rt"
 
@@ -147,63 +147,25 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     left_rt_cpu_affinity: int = 2
     right_rt_cpu_affinity: int = 3
 
-    # Which gripper driver drives BOTH arms: "serial" (XenseSerialGripper) or
-    # "taccap_follower" (xense.taccap FollowerGripper). Either way left/right is
-    # auto-resolved at connect: serial by board-SN parity (odd SN → left, even SN
-    # → right; see serial_discovery.find_port_by_side), taccap by firmware SN.
-    # Grippers are always swapped as a matched pair, so this is a single switch
-    # rather than per-side.
-    gripper_type: str = "serial"
-
-    # When gripper_type == "serial", auto-sniff the per-side wrist camera and
-    # tactile sensor SNs at connect instead of the recipe's XC*/OG* SNs.
-    # Works the same way as taccap_auto_discover_cameras: each arm's gripper board,
-    # wrist camera and two tactile sensors share one USB hub, so the gripper (whose
-    # side comes from board-SN parity) identifies the hub and the rest follows.
-    # See serial_discovery.discover_serial_gripper_cameras.
+    # ── Grippers ── One `gripper:` block in the recipe describes BOTH arms; the two
+    # are always a matched pair, and each backend resolves its own side at connect
+    # (serial: board-SN parity, odd → left; taccap: the firmware-burned SN). The
+    # block is cloned per side in __post_init__ with `side` stamped, so nothing in
+    # the recipe has to name a side.
     #
-    # OFF by default: leaving it off keeps the recipe the single source of
-    # truth, which is the verified behaviour. Turn it on per bench once you have
-    # confirmed the discovered SNs match the recipe's — then swapping a sensor
-    # stops being a config edit.
-    serial_auto_discover_cameras: bool = False
-
-    # ========== Left gripper settings (per-arm: enable + serial wiring) ==========
+    # The block is typed (see lerobot.grippers.GripperConfig), so `type: serial`
+    # with a taccap knob in it — or a typo — is rejected at parse time instead of
+    # being silently ignored, which is what the old flat gripper_type + taccap_* /
+    # gripper_* fields did.
+    #
+    # None = no gripper on either arm. Set {side}_use_gripper=False to drop just one.
+    gripper: GripperConfig | None = None
     left_use_gripper: bool = True
-    left_gripper_serial_timeout: float = 1.0
-
-    # ========== Right gripper settings (per-arm: enable + serial wiring) ==========
     right_use_gripper: bool = True
-    right_gripper_serial_timeout: float = 1.0
-
-    # ========== Shared gripper mechanical / motion params (both arms) ==========
-    gripper_min_pos: float = 0.0  # mm — fully closed
-    gripper_max_pos: float = 85.0  # mm — fully open
-    gripper_v_max: float = 100.0  # mm/s
-    gripper_f_max: float = 40.0  # N
-    gripper_init_open: bool = True
-
-    # ========== TacCap follower control params (used when gripper_type == "taccap_follower") ==========
-    taccap_kp: float = 8.0          # MIT impedance stiffness (Nm/rad)
-    taccap_kd: float = 1.0          # MIT impedance damping (Nm·s/rad)
-    taccap_grip_ff: float = 0.0     # constant MIT feed-forward torque (Nm); NEGATIVE = clamp harder, POSITIVE = open. |ff|<=3.5
-    taccap_control_hz: int = 200    # ControlLoop resubmit rate
-    # When gripper_type == "taccap_follower", auto-sniff the per-side wrist camera
-    # and GSPS tactile sensor SNs (via TacCap + USB topology) at robot connect time
-    # instead of the recipe's XC*/OG* SNs. See grippers/taccap/discovery.py.
-    taccap_auto_discover_cameras: bool = True
-    # Refuse to connect a taccap_follower gripper that reports an uncalibrated GripperConfig.
-    # Set False ONLY for bring-up/debug — normalized [0, 1] gripper control is then uncalibrated
-    # (positions won't map to real open/close). Prefer calibrating (examples/calibrate.py).
-    taccap_require_calibrated: bool = True
 
     # Auto-created in __post_init__ (do not set directly)
-    left_gripper: SerialGripperConfig | TaccapFollowerConfig | None = field(
-        default=None, init=False
-    )
-    right_gripper: SerialGripperConfig | TaccapFollowerConfig | None = field(
-        default=None, init=False
-    )
+    left_gripper: GripperConfig | None = field(default=None, init=False)
+    right_gripper: GripperConfig | None = field(default=None, init=False)
     # Set in __post_init__: robot resolves wrist/tactile cameras at connect time.
     _taccap_autodiscover: bool = field(default=False, init=False)
     _serial_autodiscover: bool = field(default=False, init=False)
@@ -269,28 +231,18 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 f"home_vel_scale must be between 1 and 100, got {self.home_vel_scale}"
             )
 
-        # Build per-side gripper configs; both sides use the same gripper_type.
-        self.left_gripper = self._make_gripper_config(
-            self.left_use_gripper, self.left_gripper_serial_timeout, "left",
-        )
-        self.right_gripper = self._make_gripper_config(
-            self.right_use_gripper, self.right_gripper_serial_timeout, "right",
-        )
+        # Build per-side gripper configs from the shared block.
+        # ── Per-side gripper configs ── clone the shared block, stamping the side.
+        self.left_gripper = self._side_gripper("left", self.left_use_gripper)
+        self.right_gripper = self._side_gripper("right", self.right_use_gripper)
 
-        # In taccap_follower + auto-discover mode, the wrist camera and GSPS tactile
-        # SNs are hardware that changes with the gripper, so they are sniffed at
-        # robot connect time (see taccap discovery) rather than pinned in the
-        # recipe, which then only pins `head`. Any other mode expects the recipe to
-        # pin every camera.
-        self._taccap_autodiscover = (
-            self.gripper_type == "taccap_follower" and self.taccap_auto_discover_cameras
-        )
-        # Serial grippers can do the same, anchored on board-SN parity instead of
-        # the firmware SN. Both flags mean "the driver wires wrist + tactile at
-        # connect"; only the head comes from the recipe.
-        self._serial_autodiscover = (
-            self.gripper_type == "serial" and self.serial_auto_discover_cameras
-        )
+        # With auto-discovery on, the wrist + tactile cameras travel with the
+        # gripper, so the robot sniffs them at connect and the recipe pins only
+        # `head`. Otherwise the recipe pins every camera.
+        gt = self.gripper.type if self.gripper is not None else None
+        discover = self.gripper is not None and self.gripper.auto_discover_cameras
+        self._taccap_autodiscover = discover and gt == "taccap_follower"
+        self._serial_autodiscover = discover and gt == "serial"
 
     @property
     def _autodiscover_cameras(self) -> bool:
@@ -302,41 +254,14 @@ class BiFlexivRizon4RTConfig(RobotConfig):
         """
         return self._taccap_autodiscover or self._serial_autodiscover
 
-    def _make_gripper_config(
-        self,
-        use_gripper: bool,
-        serial_timeout: float,
-        side: str,
-    ) -> "SerialGripperConfig | TaccapFollowerConfig | None":
-        """Build the per-side nested gripper config selected by ``self.gripper_type``.
+    def _side_gripper(self, side: str, use_gripper: bool) -> GripperConfig | None:
+        """The shared ``gripper`` block with ``side`` stamped, or None for no gripper.
 
-        Both drivers auto-resolve left/right at connect: "serial" by board-SN parity
-        (odd → left, even → right), "taccap_follower" by the firmware-burned SN.
-        Baudrate uses the SerialGripperConfig default (115200).
+        Both arms always run the same backend with the same tuning — they are a
+        matched pair — so the recipe writes one block and each side gets a copy.
+        ``side`` is what lets each backend resolve which physical unit is which
+        (serial: board-SN parity; taccap: the firmware-burned SN).
         """
-        if not use_gripper:
+        if not use_gripper or self.gripper is None:
             return None
-        gripper_type = self.gripper_type
-        if gripper_type == "serial":
-            return SerialGripperConfig(
-                side=side,
-                serial_timeout=serial_timeout,
-                gripper_min_pos=self.gripper_min_pos,
-                gripper_max_pos=self.gripper_max_pos,
-                gripper_v_max=self.gripper_v_max,
-                gripper_f_max=self.gripper_f_max,
-                init_open=self.gripper_init_open,
-            )
-        if gripper_type == "taccap_follower":
-            return TaccapFollowerConfig(
-                side=side,
-                kp=self.taccap_kp,
-                kd=self.taccap_kd,
-                feedforward_torque=self.taccap_grip_ff,
-                control_hz=self.taccap_control_hz,
-                init_open=self.gripper_init_open,
-                require_calibrated=self.taccap_require_calibrated,
-            )
-        raise ValueError(
-            f"gripper_type must be 'serial' or 'taccap_follower', got {gripper_type!r}."
-        )
+        return replace(self.gripper, side=side)

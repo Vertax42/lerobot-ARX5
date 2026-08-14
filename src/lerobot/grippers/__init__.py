@@ -19,13 +19,11 @@ Xense/TacCap SDKs. Driver classes are NOT imported here; get one through
 ``make_gripper_from_config``, which imports only the branch it needs.
 """
 
-from .configs import GripperConfig, SensorOutputType  # noqa: F401
+from .configs import GripperConfig  # noqa: F401
 from .gripper import Gripper  # noqa: F401
 from .utils import make_gripper_from_config  # noqa: F401
 
 # Config-only imports: safe without any hardware SDK present, and required so the
 # @register_subclass side effects run before a config is parsed or dispatched.
-from .flare.configuration_flare import FlareGripperConfig  # noqa: F401
 from .serial.configuration_serial import SerialGripperConfig  # noqa: F401
 from .taccap.configuration_taccap import TaccapFollowerConfig  # noqa: F401
-from .xense.configuration_xense import XenseGripperConfig  # noqa: F401

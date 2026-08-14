@@ -42,7 +42,8 @@ robot:
     - [0.70710678, 0.0, 0.70710678]
 
   # ── Cameras ─────────────────────────────────────────────────────────────────
-  # Serial grippers do not auto-discover cameras, so all seven are pinned here.
+  # Only the head is pinned: both gripper backends sniff their own wrist +
+  # tactile cameras off the gripper's USB hub at connect.
   # These are OG sensors; each tactile camera carries the exposure override tuned
   # for this bench. GSPS sensors (the TacCap grippers) must NOT use these values —
   # they belong on their own xpack template (omit camera_properties).
@@ -55,77 +56,35 @@ robot:
       height: 480
       warmup_s: 1
       use_depth: false
-    left_wrist:
-      type: opencv
-      index_or_path: XC000045
-      fourcc: MJPG
-      width: 640
-      height: 480
-      fps: 30
-      warmup_s: 1
-    right_wrist:
-      type: opencv
-      index_or_path: XC000046
-      fourcc: MJPG
-      width: 640
-      height: 480
-      fps: 30
-      warmup_s: 1
-    left_tactile_0:
-      type: xense
-      serial_number: OG001349
-      fps: 30
-      output_types: [rectify]
-      warmup_s: 0.05
-      camera_properties:   # OG sensor override, tuned on this bench
-        auto_exposure: 1
-        auto_wb: false
-        exposure: 250
-        white_balance_t: 5550
-        brightness: 38
-    left_tactile_1:
-      type: xense
-      serial_number: OG001350
-      fps: 30
-      output_types: [rectify]
-      warmup_s: 0.05
-      camera_properties:   # OG sensor override, tuned on this bench
-        auto_exposure: 1
-        auto_wb: false
-        exposure: 250
-        white_balance_t: 5550
-        brightness: 38
-    right_tactile_0:
-      type: xense
-      serial_number: OG001351
-      fps: 30
-      output_types: [rectify]
-      warmup_s: 0.05
-      camera_properties:   # OG sensor override, tuned on this bench
-        auto_exposure: 1
-        auto_wb: false
-        exposure: 250
-        white_balance_t: 5550
-        brightness: 38
-    right_tactile_1:
-      type: xense
-      serial_number: OG001352
-      fps: 30
-      output_types: [rectify]
-      warmup_s: 0.05
-      camera_properties:   # OG sensor override, tuned on this bench
-        auto_exposure: 1
-        auto_wb: false
-        exposure: 250
-        white_balance_t: 5550
-        brightness: 38
+    # Wrist + tactile are discovered off each gripper's USB hub at connect
+    # (gripper.auto_discover_cameras). What this bench had when the pins were
+    # removed, for cross-checking the first discovery run:
+    #   left_tactile_0: OG001349
+    #   left_tactile_1: OG001350
+    #   left_wrist: XC000045
+    #   right_tactile_0: OG001351
+    #   right_tactile_1: OG001352
+    #   right_wrist: XC000046
 
   # ── Control ─────────────────────────────────────────────────────────────────
   control_mode: cartesian_servo # cartesian_servo | joint_servo
   servoj_gain: 300 # [100, 2000]
+  # ── Gripper ── One block for both arms; `side` is stamped per arm at build time.
+  gripper:
+    type: serial
+    gripper_v_max: 100.0    # mm/s
+    gripper_f_max: 30.0    # N
+    gripper_min_pos: 0.0    # mm — fully closed
+    gripper_max_pos: 85.0   # mm — fully open
+    serial_timeout: 1.0
+    init_open: true
+    # Everything else worth tuning, at its default — uncomment to change.
+    # auto_discover_cameras: true        # sniff wrist + tactile off this gripper's USB hub
+    # port: ""                            # explicit /dev path; overrides sn + side
+    # sn: null                            # board SN; scanned across ports when port unset
+    # side: null                          # stamped automatically per arm — do not set here
   left_use_gripper: true
   right_use_gripper: true
-  gripper_f_max: 30.0 # N
   enable_tactile_sensors: true
 
   # ── Singularity / joint-overspeed guards (fixes the down-near-table trips) ──

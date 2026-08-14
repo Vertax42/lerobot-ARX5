@@ -30,27 +30,34 @@ robot:
       warmup_s: 1
       use_depth: false
 
-  # ── Gripper ─────────────────────────────────────────────────────────────────
-  # Both grippers -> xense.taccap FollowerGripper (matched pair, single switch).
-  # Wrist + GSPS tactile SNs are auto-discovered at connect (taccap discovery),
-  # which is why only the head camera is pinned above.
-  gripper_type: taccap_follower
+  # ── Control ─────────────────────────────────────────────────────────────────
   use_force: false
   log_level: INFO
-  left_use_gripper: true
-  right_use_gripper: true
   enable_tactile_sensors: true
 
-  taccap_kp: 8.0 # MIT impedance stiffness (Nm/rad)
-  taccap_kd: 1.0 # MIT impedance damping (Nm·s/rad)
-  # ⚠️ HIGH GRIP FORCE — constant closing feed-forward torque. NEGATIVE = clamp.
-  # -3.0 Nm is ~10x the SDK gentle-grasp abort (0.30 Nm) and near the motor's ceiling:
-  # it is a hard crush. It is a CONSTANT bias, so the jaw also settles ~3/kp≈0.375 rad
-  # short of full open and holds the closed stop under load even empty (runs hot). Back
-  # off toward -0.3 if it stalls the motor / can't open / overheats. Bounded |ff|<=3.5.
-  taccap_grip_ff: -3.0 # constant MIT feed-forward torque (Nm), negative = closing
-  taccap_control_hz: 200 # ControlLoop resubmit rate
-  taccap_auto_discover_cameras: true
+  # ── Gripper ── One block for both arms; `side` is stamped per arm at build time.
+  # Both grippers -> xense.taccap FollowerGripper (matched pair, single switch).
+  # auto_discover_cameras sniffs the wrist + GSPS tactile SNs off each gripper's
+  # USB hub at connect, which is why only the head camera is pinned above.
+  gripper:
+    type: taccap_follower
+    kp: 8.0                 # MIT impedance stiffness (Nm/rad)
+    kd: 1.0                 # MIT impedance damping (Nm·s/rad)
+    # ⚠️ HIGH GRIP FORCE — constant closing feed-forward torque. NEGATIVE = clamp.
+    # -3.0 Nm is ~10x the SDK gentle-grasp abort (0.30 Nm) and near the motor's
+    # ceiling: it is a hard crush. Being a CONSTANT bias, the jaw also settles
+    # ~3/kp≈0.375 rad short of full open and holds the closed stop under load even
+    # empty (runs hot). Back off toward -0.3 if it stalls / can't open / overheats.
+    feedforward_torque: -3.0    # Nm, negative = closing
+    control_hz: 200         # ControlLoop resubmit rate
+    auto_discover_cameras: true
+    require_calibrated: true
+    init_open: true
+    # Everything else worth tuning, at its default — uncomment to change.
+    # side: left                          # stamped automatically per arm — do not set here
+    # mcu_device: null                    # explicit MCU path; the arm fills this from discovery
+  left_use_gripper: true
+  right_use_gripper: true
 
 teleop:
   type: bi_pico4

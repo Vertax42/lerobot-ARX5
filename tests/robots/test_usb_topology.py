@@ -31,6 +31,8 @@ from importlib.util import find_spec
 
 import pytest
 
+from lerobot.grippers import SerialGripperConfig, TaccapFollowerConfig
+
 from lerobot.grippers import usb_topology as topo
 
 HAS_FLEXIV = find_spec("flexiv_rt") is not None
@@ -209,30 +211,48 @@ ROBOT_TYPES = ["bi_flexiv_rizon4_rt", "bi_elite_cs66_rt"]
 
 
 @pytest.mark.parametrize("robot_type", ROBOT_TYPES)
-def test_serial_autodiscover_is_off_by_default(robot_type):
-    """Default off keeps the recipe's pinned camera SNs the source of truth."""
-    cfg = _config(robot_type)()
-    assert cfg.serial_auto_discover_cameras is False
-    assert cfg._serial_autodiscover is False
+def test_both_backends_discover_their_cameras_by_default(robot_type):
+    """Both backends are the same shape of device — one USB hub carrying the
+    gripper, its wrist camera and its two tactile sensors — so both sniff their
+    own cameras and the recipe pins only the head. Pinning SNs by hand was the
+    older, worse way; a pinned SN goes stale the moment a sensor is swapped."""
+    for cfg_cls, taccap_expected, serial_expected in (
+        (SerialGripperConfig, False, True),
+        (TaccapFollowerConfig, True, False),
+    ):
+        cfg = _config(robot_type)(gripper=cfg_cls())
+        assert cfg.gripper.auto_discover_cameras is True
+        assert cfg._autodiscover_cameras is True
+        assert cfg._taccap_autodiscover is taccap_expected
+        assert cfg._serial_autodiscover is serial_expected
+
+
+@pytest.mark.parametrize("robot_type", ROBOT_TYPES)
+def test_discovery_can_be_turned_off_per_bench(robot_type):
+    """A bench with something else on the hub has to pin its cameras instead —
+    discovery refuses to guess through an ambiguous hub."""
+    cfg = _config(robot_type)(gripper=SerialGripperConfig(auto_discover_cameras=False))
     assert cfg._autodiscover_cameras is False
-
-
-@pytest.mark.parametrize("robot_type", ROBOT_TYPES)
-def test_serial_autodiscover_flag_arms_the_driver(robot_type):
-    """With the flag on, the driver injects wrist + tactile at connect. The recipe
-    is then expected to pin only the head — nothing here filters its cameras."""
-    cfg = _config(robot_type)(serial_auto_discover_cameras=True)
-    assert cfg._serial_autodiscover is True
-    assert cfg._autodiscover_cameras is True
-
-
-@pytest.mark.parametrize("robot_type", ROBOT_TYPES)
-def test_serial_flag_is_inert_under_taccap(robot_type):
-    """The flag names the serial backend; it must not change taccap behaviour."""
-    cfg = _config(robot_type)(
-        gripper_type="taccap_follower", serial_auto_discover_cameras=True
-    )
     assert cfg._serial_autodiscover is False
+
+
+@pytest.mark.parametrize("robot_type", ROBOT_TYPES)
+def test_no_gripper_means_no_autodiscovery(robot_type):
+    """Nothing to sniff cameras off when there is no gripper."""
+    cfg = _config(robot_type)(gripper=None)
+    assert cfg._autodiscover_cameras is False
+    assert cfg.left_gripper is None and cfg.right_gripper is None
+
+
+@pytest.mark.parametrize("robot_type", ROBOT_TYPES)
+def test_shared_block_is_cloned_per_side(robot_type):
+    """One block in the recipe, one config per arm, each stamped with its side —
+    that stamp is what lets each backend resolve which physical unit is which."""
+    cfg = _config(robot_type)(gripper=TaccapFollowerConfig(kp=9.5))
+    assert cfg.left_gripper.side == "left"
+    assert cfg.right_gripper.side == "right"
+    assert cfg.left_gripper.kp == cfg.right_gripper.kp == 9.5
+    assert cfg.left_gripper is not cfg.right_gripper
 
 
 def _config(robot_type: str):

@@ -51,14 +51,4 @@ def make_gripper_from_config(config: GripperConfig | None) -> Gripper | None:
 
         return TaccapFollower(config)
 
-    elif gripper_type == "xense":
-        from .xense import XenseGripper
-
-        return XenseGripper(config)
-
-    elif gripper_type == "flare":
-        from .flare import FlareGripper
-
-        return FlareGripper(config)
-
     raise ValueError(f"Unknown gripper type {gripper_type!r} (config: {config}).")

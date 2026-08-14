@@ -16,10 +16,7 @@ from pathlib import Path
 
 from lerobot.cameras.configs import CameraConfig
 from lerobot.robots.config import RobotConfig
-from lerobot.grippers.xense.configuration_xense import (
-    SensorOutputType,
-    XenseGripperConfig,
-)
+from lerobot.grippers import GripperConfig
 
 
 class EliteCS66RTControlMode(str, Enum):
@@ -260,32 +257,18 @@ class EliteCS66RTConfig(RobotConfig):
     # and lets the trip through. 1e-4 verified vs the datasheet limits; do NOT raise toward 1e-2.
     joint_vel_dls_lambda: float = 1e-4
 
-    # Gripper backend dispatch. Mirrors the flexiv_rizon4_rt pattern: a single
-    # string selects the driver, the gripper-specific config is auto-built from
-    # exposed gripper_* fields in __post_init__.
-    #   "none"          - no gripper attached; gripper.pos absent from features
-    #   "xense_gripper" - XenseGripper (USB/network, independent of arm)
-    #   "dahuan_rs485"  - planned: Dahuan industrial gripper over CS66 tool RS485
-    #                     (raises NotImplementedError until driver lands)
-    gripper_type: str = "none"
-
-    # XenseGripper-specific parameters (used when gripper_type=="xense_gripper").
-    # Mirror flexiv's gripper_* field set so a Xense gripper can move between
-    # arms without reconfiguring.
-    gripper_mac_addr: str = ""
-    gripper_enable_sensor: bool = True
-    gripper_rectify_size: tuple[int, int] = (96, 160)
-    gripper_sensor_output_type: SensorOutputType = SensorOutputType.RECTIFY
-    gripper_sensor_keys: dict[str, str] = field(default_factory=dict)
-    gripper_min_pos: float = 0.0
-    gripper_max_pos: float = 85.0
-    gripper_v_max: float = 100.0   # mm/s
-    gripper_f_max: float = 30.0    # N
-    gripper_init_open: bool = True
-
-    # Auto-created in __post_init__ from gripper_* parameters. Do not set
-    # directly. None when gripper_type=="none".
-    gripper: XenseGripperConfig | None = field(default=None, init=False)
+    # ── Gripper ── A typed block in the recipe, e.g.
+    #     gripper:
+    #       type: serial            # or taccap_follower
+    #       side: left
+    #       gripper_f_max: 30.0
+    # Decoded through lerobot.grippers.GripperConfig, so a knob belonging to the
+    # other backend (or a typo) is rejected at parse time rather than ignored.
+    # None = no gripper; gripper.pos is then absent from the feature schema.
+    #
+    # A single arm has no side to infer, so `side` (or `port`/`sn`) has to be set
+    # in the block for the serial backend to find its board.
+    gripper: GripperConfig | None = None
 
     # External cameras.
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
@@ -395,52 +378,3 @@ class EliteCS66RTConfig(RobotConfig):
                 "use_background_servo_loop=True is only supported with control_mode=CARTESIAN_SERVO. "
                 "Set use_background_servo_loop=False for joint servo mode."
             )
-        # Gripper dispatch
-        if self.gripper_type == "xense_gripper":
-            if not self.gripper_mac_addr:
-                raise ValueError(
-                    "gripper_type='xense_gripper' requires gripper_mac_addr to be set."
-                )
-            if self.gripper_min_pos >= self.gripper_max_pos:
-                raise ValueError(
-                    "gripper_min_pos must be smaller than gripper_max_pos, got "
-                    f"{self.gripper_min_pos} >= {self.gripper_max_pos}"
-                )
-            self.gripper = XenseGripperConfig(
-                mac_addr=self.gripper_mac_addr,
-                enable_sensor=self.gripper_enable_sensor,
-                rectify_size=self.gripper_rectify_size,
-                sensor_output_type=self.gripper_sensor_output_type,
-                sensor_keys=self.gripper_sensor_keys,
-                gripper_min_pos=self.gripper_min_pos,
-                gripper_max_pos=self.gripper_max_pos,
-                gripper_v_max=self.gripper_v_max,
-                gripper_f_max=self.gripper_f_max,
-                init_open=self.gripper_init_open,
-            )
-        elif self.gripper_type == "dahuan_rs485":
-            raise NotImplementedError(
-                "Dahuan RS485 gripper driver (over CS66 tool RS485 via Elite SDK "
-                "ScriptCommandInterface) is planned but not yet implemented."
-            )
-        elif self.gripper_type != "none":
-            raise ValueError(
-                f"gripper_type must be one of 'none' / 'xense_gripper' / "
-                f"'dahuan_rs485', got {self.gripper_type!r}"
-            )
-
-        # Cross-check: gripper sensor names and camera names land in the same
-        # observation/features dict (see EliteCS66RT.observation_features). A
-        # collision silently lets one entry overwrite the other in dict
-        # assignment order, producing a corrupt dataset where the same key
-        # alternates between a tactile rectify and a camera frame from step
-        # to step. Fail loud at config time instead.
-        if self.gripper is not None:
-            sensor_names = set(self.gripper.sensor_keys.values())
-            camera_names = set(self.cameras.keys())
-            overlap = sensor_names & camera_names
-            if overlap:
-                raise ValueError(
-                    f"Feature key collision between gripper sensor_keys and "
-                    f"cameras: {sorted(overlap)}. Rename one side."
-                )

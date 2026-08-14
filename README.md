@@ -127,7 +127,7 @@ bash ./setup_env.sh --install --help
 | `--flexiv`, `--bi_flexiv` | `flexiv_rt` (+ `xense`) | `flexiv_rizon4_rt`, `bi_flexiv_rizon4_rt` |
 | `--elite`, `--bi_elite` | `elite_cs_sdk` (+ `xense`) | `elite_cs66_rt`, `bi_elite_cs66_rt` |
 | `--taccap`, `--bi_taccap` | `xense.taccap` (+ `xense`) | `taccap_follower` gripper (on any arm) |
-| `--xense` | `xensesdk` + `xensegripper` (XGripper) | serial / xense grippers + tactile sensors |
+| `--xense` | `xensesdk` + `xensegripper` (XGripper) | `serial` gripper + tactile sensors |
 | `--arx5`, `--bi_arx5` | `pyarx` | `arx5_follower`, `bi_arx5` |
 | `--pico4`, `--bi_pico4` | `xensevr_pc_service_sdk` | `pico4`, `bi_pico4` teleop |
 | `--spacemouse` | `pyspacemouse` | `spacemouse` teleop |
@@ -207,15 +207,30 @@ ls recipes/teleop/bi_elite_cs66_rt/     # diagonal-07, diagonal-08
 Precedence is `dataclass default < recipe < CLI`, so an explicit
 `--robot.left_robot_sn=…` overrides the recipe for a one-off run.
 
-**Gripper backend (`gripper_type`).** The bimanual arms drive one gripper type for
-both sides:
+**Gripper (`gripper:`).** Every robot takes one typed gripper block; a bimanual arm
+writes it once and both sides get a copy with `side` stamped in (the two are always
+a matched pair). Two backends:
 
-- `serial` (default) — `XenseSerialGripper` over USB. Left/right are **auto-discovered
-  by board-SN parity** (odd SN → left, even SN → right) at connect, so no per-station
-  gripper SN is configured.
-- `taccap_follower` — `xense.taccap` FollowerGripper (MIT-impedance actuated TacCap
-  gripper); left/right resolved from the firmware-burned SN, and its wrist + GSPS
-  tactile cameras are auto-discovered at connect.
+- `serial` — `XenseSerialGripper`, a parallel jaw over USB serial. Left/right are
+  **auto-discovered by board-SN parity** (odd SN → left, even SN → right) at
+  connect, so no gripper SN is configured.
+- `taccap_follower` — `xense.taccap` FollowerGripper, the centric TacCap gripper
+  (MIT impedance). Left/right resolved from the firmware-burned SN, and its wrist
+  + GSPS tactile cameras auto-discovered at connect.
+
+```yaml
+robot:
+  gripper:
+    type: taccap_follower
+    kp: 8.0
+    feedforward_torque: -3.0   # negative = clamp harder
+    auto_discover_cameras: true
+```
+
+The block is decoded through the gripper registry, so a knob belonging to the other
+backend — or a typo — is **rejected at parse time** rather than silently ignored.
+See [`src/lerobot/grippers/README.md`](src/lerobot/grippers/README.md) for the full
+field lists and the driver contract.
 
 ## 🐭 SpaceMouse Teleoperation System
 
@@ -337,9 +352,7 @@ All 3Dconnexion devices supported by PySpaceMouse:
 - SpaceMouse Compact
 - And more...
 
-## 🤖 Flexiv Rizon4 Robot with Flare Gripper Policy Implementation
-
-Lerobot record XenseFlare dataset can be directly used for FlexivRizon4 policy training.  🎉
+## 🤖 Recording on Flexiv Rizon4
 
 ### Bimanual Flexiv Rizon4 RT + BiPico4 Record Controls
 

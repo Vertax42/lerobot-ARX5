@@ -85,6 +85,10 @@ class TaccapFollowerConfig(GripperConfig):
     # ── Behavior ───────────────────────────────────────────────────────────────
     init_open: bool = True
     require_calibrated: bool = True
+    # On by default: a TacCap gripper is a self-contained USB hub carrying its own
+    # wrist camera and two GSPS sensors, so they travel with the gripper and are
+    # cheaper to sniff than to pin per bench.
+    auto_discover_cameras: bool = True
 
     def __post_init__(self):
         if self.side not in ("left", "right"):

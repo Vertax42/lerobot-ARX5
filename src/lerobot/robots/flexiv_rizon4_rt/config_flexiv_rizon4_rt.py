@@ -17,15 +17,13 @@
 """Configuration for Flexiv Rizon4 RT robot (real-time via flexiv_rt)."""
 
 from dataclasses import dataclass, field
-from typing import Union
 
 import flexiv_rt
 
 from lerobot.cameras.configs import CameraConfig
 from lerobot.cameras.realsense import RealSenseCameraConfig
 from lerobot.robots.config import RobotConfig
-from lerobot.grippers.flare.configuration_flare import FlareGripperConfig, SensorOutputType
-from lerobot.grippers.xense.configuration_xense import XenseGripperConfig
+from lerobot.grippers import GripperConfig
 
 
 @RobotConfig.register_subclass("flexiv_rizon4_rt")
@@ -123,27 +121,18 @@ class FlexivRizon4RTConfig(RobotConfig):
     retry_interval_sec: float = 1.0
 
     # ========== Gripper (end-effector) settings ==========
-    use_gripper: bool = True
-    gripper_type: str = "flare_gripper"  # Options: "flare_gripper", "xense_gripper"
-
-    gripper_mac_addr: str = "e2b26adbb104"
-    gripper_cam_size: tuple[int, int] = (640, 480)
-    gripper_rectify_size: tuple[int, int] = (400, 700)
-    gripper_sensor_output_type: SensorOutputType = SensorOutputType.RECTIFY
-    gripper_sensor_keys: dict[str, str] = field(
-        default_factory=lambda: {
-            "OG000657": "right_tactile",
-            "OG000450": "left_tactile",
-        }
-    )
-    gripper_min_pos: float = 0.0
-    gripper_max_pos: float = 85.0
-    gripper_v_max: float = 80.0  # mm/s
-    gripper_f_max: float = 20.0  # N
-    gripper_init_open: bool = True
-
-    # Auto-created in __post_init__ from gripper_* parameters (do not set directly)
-    gripper: Union[XenseGripperConfig, FlareGripperConfig] | None = field(default=None, init=False)
+    # A typed block in the recipe, e.g.
+    #     gripper:
+    #       type: serial            # or taccap_follower
+    #       side: left
+    #       gripper_f_max: 20.0
+    # Decoded through lerobot.grippers.GripperConfig, so a knob belonging to the
+    # other backend (or a typo) is rejected at parse time rather than ignored.
+    # None = no gripper; gripper.pos is then absent from the feature schema.
+    #
+    # A single arm has no side to infer, so `side` (or `port`/`sn`) has to be set
+    # in the block for the serial backend to find its board.
+    gripper: GripperConfig | None = None
 
     def __post_init__(self):
         super().__post_init__()
@@ -187,32 +176,9 @@ class FlexivRizon4RTConfig(RobotConfig):
                 f"start_vel_scale must be between 1 and 100, got {self.start_vel_scale}"
             )
 
-        # Create gripper config from exposed parameters
-        if self.use_gripper and self.gripper_type == "flare_gripper":
-            self.gripper = FlareGripperConfig(
-                mac_addr=self.gripper_mac_addr,
-                cam_size=self.gripper_cam_size,
-                rectify_size=self.gripper_rectify_size,
-                sensor_output_type=self.gripper_sensor_output_type,
-                sensor_keys=self.gripper_sensor_keys,
-                gripper_max_pos=self.gripper_max_pos,
-                gripper_v_max=self.gripper_v_max,
-                gripper_f_max=self.gripper_f_max,
-                init_open=self.gripper_init_open,
-            )
-        elif self.use_gripper and self.gripper_type == "xense_gripper":
-            self.gripper = XenseGripperConfig(
-                mac_addr=self.gripper_mac_addr,
-                rectify_size=self.gripper_rectify_size,
-                sensor_output_type=self.gripper_sensor_output_type,
-                sensor_keys=self.gripper_sensor_keys,
-                gripper_min_pos=self.gripper_min_pos,
-                gripper_max_pos=self.gripper_max_pos,
-                gripper_v_max=self.gripper_v_max,
-                gripper_f_max=self.gripper_f_max,
-                init_open=self.gripper_init_open,
-            )
-        else:
+        # `use_gripper=False` drops a gripper the recipe did configure, without
+        # having to delete the block.
+        if not self.use_gripper:
             self.gripper = None
 
         # # Camera configuration for realsense cameras

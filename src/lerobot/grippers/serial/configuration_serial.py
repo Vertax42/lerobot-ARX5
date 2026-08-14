@@ -17,6 +17,7 @@
 """Configuration for pure-serial Xense gripper (no ezros / xensesdk required)."""
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 from ..configs import GripperConfig
 
@@ -60,9 +61,26 @@ class SerialGripperConfig(GripperConfig):
     side: str | None = None        # "left"/"right" — parity auto-discover when port+sn unset
 
     # ── Serial connection ──────────────────────────────────────────────────────
+    # baudrate and device_id are fixed in practice, hence protocol_fixed_fields:
+    #   - 115200 is the only rate the firmware speaks, and the protocol has no
+    #     command to change it (see Command in xensegripper.xense_gripper) — only
+    #     a firmware reflash would.
+    #   - device_id is the RS-485 address byte in each packet. The protocol carries
+    #     it because a bus can hold several devices; our wiring gives every gripper
+    #     its own USB serial port, so it is always the default 1. There is no
+    #     command to change it either.
     baudrate: int = 115200
+    device_id: int = 1
     serial_timeout: float = 1.0
-    device_id: int = 1  # XenseSerialGripper device ID on the RS-485 bus
+
+    protocol_fixed_fields: ClassVar[frozenset[str]] = frozenset({"baudrate", "device_id"})
+
+    # On, like the TacCap backend. A serial gripper is the same shape of device: one
+    # USB hub carrying the gripper board, its wrist camera and its two tactile
+    # sensors, with the board SN's parity naming the side (odd → left). So the
+    # cameras follow the gripper and there is nothing a recipe can pin that
+    # discovery cannot work out — pinning SNs by hand was the older, worse way.
+    auto_discover_cameras: bool = True
 
     # ── Mechanical limits ──────────────────────────────────────────────────────
     gripper_min_pos: float = 0.0   # mm — fully closed
@@ -76,8 +94,10 @@ class SerialGripperConfig(GripperConfig):
     init_open: bool = True
 
     def __post_init__(self):
-        if not self.port and not self.sn and not self.side:
-            raise ValueError("SerialGripperConfig: provide one of 'port', 'sn', or 'side'.")
+        # NOTE: "at least one of port / sn / side" is deliberately NOT checked here.
+        # A bimanual recipe writes ONE shared gripper block and the arm clones it
+        # per side, so the block as written legitimately has no identity yet.
+        # SerialGripper.connect() raises if it still cannot resolve a port.
         if self.side is not None and self.side not in ("left", "right"):
             raise ValueError(
                 f"SerialGripperConfig: side must be 'left' or 'right', got {self.side!r}."

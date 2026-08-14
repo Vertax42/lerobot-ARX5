@@ -9,9 +9,8 @@ robot:
 
   # ── Bench hardware (forward-06) ─────────────────────────────────────────────
   # Joint angles are in DEGREES (J1..J7), the units flexiv_rt takes.
-  # Serial grippers do not auto-discover cameras, so all seven are pinned. The
-  # tactile sensors run at exposure 250 / brightness 38 (the
-  # XenseTactileCameraConfig default), so nothing needs restating per camera.
+  # Only the head is pinned: both gripper backends sniff their own wrist +
+  # tactile cameras off the gripper's USB hub at connect.
   left_robot_sn: Rizon4s-062412
   right_robot_sn: Rizon4s-062881
   left_start_position_degree: [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24]
@@ -27,53 +26,35 @@ robot:
       height: 480
       warmup_s: 1
       use_depth: false
-    left_tactile_0:
-      type: xense
-      serial_number: OG001323
-      fps: 30
-      output_types: [rectify]
-      warmup_s: 0.05
-    left_tactile_1:
-      type: xense
-      serial_number: OG001324
-      fps: 30
-      output_types: [rectify]
-      warmup_s: 0.05
-    left_wrist:
-      type: opencv
-      index_or_path: XC000035
-      fourcc: MJPG
-      width: 640
-      height: 480
-      fps: 30
-      warmup_s: 1
-    right_tactile_0:
-      type: xense
-      serial_number: OG001325
-      fps: 30
-      output_types: [rectify]
-      warmup_s: 0.05
-    right_tactile_1:
-      type: xense
-      serial_number: OG001326
-      fps: 30
-      output_types: [rectify]
-      warmup_s: 0.05
-    right_wrist:
-      type: opencv
-      index_or_path: XC000036
-      fourcc: MJPG
-      width: 640
-      height: 480
-      fps: 30
-      warmup_s: 1
+    # Wrist + tactile are discovered off each gripper's USB hub at connect
+    # (gripper.auto_discover_cameras). What this bench had when the pins were
+    # removed, for cross-checking the first discovery run:
+    #   left_tactile_0: OG001323
+    #   left_tactile_1: OG001324
+    #   left_wrist: XC000035
+    #   right_tactile_0: OG001325
+    #   right_tactile_1: OG001326
+    #   right_wrist: XC000036
 
   # ── Control ─────────────────────────────────────────────────────────────────
   use_force: false
   log_level: INFO
+  # ── Gripper ── One block for both arms; `side` is stamped per arm at build time.
+  gripper:
+    type: serial
+    gripper_v_max: 100.0    # mm/s
+    gripper_f_max: 40.0    # N
+    gripper_min_pos: 0.0    # mm — fully closed
+    gripper_max_pos: 85.0   # mm — fully open
+    serial_timeout: 1.0
+    init_open: true
+    # Everything else worth tuning, at its default — uncomment to change.
+    # auto_discover_cameras: true        # sniff wrist + tactile off this gripper's USB hub
+    # port: ""                            # explicit /dev path; overrides sn + side
+    # sn: null                            # board SN; scanned across ports when port unset
+    # side: null                          # stamped automatically per arm — do not set here
   left_use_gripper: true
   right_use_gripper: true
-  gripper_f_max: 40.0 # N
   enable_tactile_sensors: true
 
 teleop:

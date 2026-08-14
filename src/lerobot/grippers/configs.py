@@ -27,20 +27,9 @@ module stays importable on a host where that gripper's SDK was never built.
 
 import abc
 from dataclasses import dataclass
-from enum import Enum
+from typing import ClassVar
 
 import draccus  # type: ignore  # TODO: add type stubs for draccus
-
-
-class SensorOutputType(Enum):
-    """Output type for the visuotactile sensors embedded in a gripper.
-
-    Single definition shared by the Xense and Flare backends — these were
-    previously two byte-identical enums in separate config modules.
-    """
-
-    RECTIFY = "rectify"
-    DIFFERENCE = "difference"
 
 
 @dataclass(kw_only=True)
@@ -48,7 +37,32 @@ class GripperConfig(draccus.ChoiceRegistry, abc.ABC):  # type: ignore  # TODO: a
     """Base class for gripper configurations.
 
     Subclasses register themselves with ``@GripperConfig.register_subclass("<name>")``;
-    that name is what ``type`` returns and what the factory dispatches on.
+    that name is what ``type`` returns and what the factory dispatches on. A robot's
+    ``gripper:`` block in a recipe is decoded through that registry, so draccus
+    rejects a knob that belongs to a different backend instead of silently ignoring
+    it — which is what the old flat ``gripper_type`` + ``taccap_*``/``gripper_*``
+    fields did.
+    """
+
+    #: Fields a recipe should not bother listing: pinned by the wire protocol or
+    #: the wiring, with no command to change them. They stay configurable (a CLI
+    #: override still works, and odd hardware may need one) but are left out of
+    #: the commented reference block in recipes, so that block only carries knobs
+    #: worth turning. ``tests/robots/test_recipe_gripper_blocks.py`` reads this.
+    protocol_fixed_fields: ClassVar[frozenset[str]] = frozenset()
+
+    auto_discover_cameras: bool = False
+    """Sniff this gripper's wrist + tactile cameras off its own USB hub at connect.
+
+    Cameras only. Finding the *gripper* is always automatic and not switchable:
+    each backend resolves its own side at connect (serial by board-SN parity,
+    taccap by the firmware-burned SN), which is why no recipe pins a gripper SN.
+
+    On means the recipe pins just the head camera and the robot injects the rest.
+    TacCap defaults to on — its wrist and GSPS sensors travel with the gripper, so
+    swapping one swaps them. Serial defaults to off — those cameras are mounted on
+    the bench, so the recipe stays their source of truth until discovery has been
+    checked against it there.
     """
 
     @property

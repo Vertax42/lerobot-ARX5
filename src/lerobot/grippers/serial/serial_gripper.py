@@ -109,6 +109,16 @@ class SerialGripper(Gripper):
             raise DeviceAlreadyConnectedError(f"{self} is already connected.")
 
         # Resolve the serial port: explicit port > exact SN scan > parity discovery.
+        # The config deliberately allows all three to be unset (a bimanual recipe
+        # writes one shared block and the arm stamps `side` per side), so this is
+        # where a block that never got an identity has to be caught.
+        if not self._config.port and not self._config.sn and not self._config.side:
+            raise ValueError(
+                f"{self}: cannot resolve a serial port — set one of 'port', 'sn' or "
+                "'side' on the gripper config. On a bimanual arm the side is stamped "
+                "automatically, so seeing this means the gripper was built standalone."
+            )
+
         if self._config.port:
             self._port = self._config.port
         elif self._config.sn:

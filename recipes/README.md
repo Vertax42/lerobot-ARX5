@@ -56,6 +56,27 @@ value you had — verify before trimming.)
 The `robot:` and `teleop:` blocks are **identical** between a robot's record and
 teleop recipe (same hardware, same teleop device) — keep the two in sync.
 
+### Grippers
+
+The gripper is one typed block, not a pile of flat knobs:
+
+```yaml
+robot:
+  gripper:
+    type: serial            # or taccap_follower
+    gripper_v_max: 100.0
+    gripper_f_max: 30.0
+  left_use_gripper: true    # bimanual only — drop one side without deleting the block
+  right_use_gripper: true
+```
+
+A bimanual arm writes the block once; each side gets a copy with `side` stamped in,
+which is what lets the backend resolve which physical unit is which. Because the
+block is decoded through the gripper registry, writing `kp:` under `type: serial`
+(or misspelling a field) fails the parse instead of being quietly dropped. The two
+backends and their fields are documented in
+[`../src/lerobot/grippers/README.md`](../src/lerobot/grippers/README.md).
+
 **A recipe is self-contained.** It carries the bench hardware — cameras, robot
 SNs/IPs, mount geometry (`*_mount_*_deg`, `world_rotation`), `local_ip`, home and
 start poses — alongside the run's tuning. One file is everything a run needs.
@@ -75,13 +96,15 @@ copy does not fail loudly; it silently records with the wrong serial.
 
 ### Cameras
 
-How many cameras a recipe pins depends on the gripper backend:
+A recipe pins only `head`. Both gripper backends are the same shape of device — a
+USB hub carrying the gripper board, its wrist camera and its two tactile sensors —
+so each sniffs its own cameras off that hub at connect
+(`gripper.auto_discover_cameras`, on by default for both). Nothing a recipe could
+pin is something discovery cannot work out, and a pinned SN goes stale the moment
+a sensor is swapped.
 
-- `gripper_type: taccap_follower` with `taccap_auto_discover_cameras: true`
-  (the default) — pin only `head`. The per-side wrist and GSPS tactile cameras
-  are sniffed off the gripper's USB hub at connect.
-- `gripper_type: serial` — pin all seven (head, two wrists, four tactiles);
-  serial grippers do not auto-discover by default.
+Set `auto_discover_cameras: false` and pin all seven if a bench genuinely needs it
+(e.g. something else shares the hub, which discovery refuses to guess through).
 
 Tactile cameras take their tuned exposure from the `XenseTactileCameraConfig`
 default (`camera_properties`), so a recipe entry stays short. Pass

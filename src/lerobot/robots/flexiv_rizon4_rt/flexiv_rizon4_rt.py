@@ -46,7 +46,7 @@ Key Differences from NRT Driver (flexiv_rizon4):
     - get_observation() -> cc.get_state() (reads from SHM)
     - disconnect() -> cc.stop() (blocks until RT thread joins)
     - Uses busy() polling instead of primitive_states() for MoveJ wait
-    - Reuses FlareGripper (independent of arm control backend)
+    - Gripper is arm-agnostic (serial or taccap follower)
 
 6D Rotation Representation:
     - r1, r2, r3: First column of rotation matrix
@@ -64,8 +64,7 @@ import flexiv_rt as frt
 import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
-from lerobot.grippers.flare.flare_gripper import FlareGripper
-from lerobot.grippers.xense.xense_gripper import XenseGripper
+from lerobot.grippers import make_gripper_from_config
 from lerobot.robots.flexiv_rizon4_rt.config_flexiv_rizon4_rt import FlexivRizon4RTConfig
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
@@ -126,12 +125,8 @@ class FlexivRizon4RT(Robot):
         self._is_connected = False
 
         # Gripper (independent of arm control backend)
-        self._gripper: Gripper | None = None
-        if config.use_gripper and config.gripper_type == "flare_gripper":
-            self._gripper = FlareGripper(config.gripper)
-        elif config.use_gripper and config.gripper_type == "xense_gripper":
-            self._gripper = XenseGripper(config.gripper)
-        else:
+        self._gripper: Gripper | None = make_gripper_from_config(config.gripper)
+        if self._gripper is None:
             self.logger.info("No gripper configured, proceeding without gripper.")
 
         # Home TCP pose - stored after moving to home position
@@ -247,27 +242,14 @@ class FlexivRizon4RT(Robot):
 
     @property
     def _cameras_ft(self) -> dict[str, tuple]:
-        """Return camera/image features from gripper and external cameras."""
-        features = {}
+        """Return camera/image features from the configured cameras.
 
-        if self._gripper and self.config.use_gripper:
-            if self.config.gripper_type == "flare_gripper":
-                features["wrist_cam"] = (
-                    self._gripper._config.cam_size[1],
-                    self._gripper._config.cam_size[0],
-                    3,
-                )
-            if self._gripper._config.enable_sensor:
-                features["left_tactile"] = (
-                    self._gripper._config.rectify_size[1],
-                    self._gripper._config.rectify_size[0],
-                    3,
-                )
-                features["right_tactile"] = (
-                    self._gripper._config.rectify_size[1],
-                    self._gripper._config.rectify_size[0],
-                    3,
-                )
+        Nothing comes through the gripper: neither backend carries a camera. A
+        TacCap gripper's wrist and tactile sensors are ordinary cameras, wired
+        into ``cameras`` (auto-discovered off the gripper's USB hub when the
+        gripper block asks for it).
+        """
+        features = {}
 
         for cam in self.cameras:
             features[cam] = (self.config.cameras[cam].height, self.config.cameras[cam].width, 3)
@@ -406,16 +388,7 @@ class FlexivRizon4RT(Robot):
             mode_desc += " (force enabled)" if self.config.use_force else " (motion only)"
 
             if self._gripper and self.config.use_gripper:
-                if self.config.gripper_type == "flare_gripper":
-                    gripper_devices = ["gripper", "wrist_cam"]
-                    if self._gripper._config.enable_sensor:
-                        gripper_devices.append("tactile")
-                    gripper_status = f"with FlareGripper ({' + '.join(gripper_devices)})"
-                elif self.config.gripper_type == "xense_gripper":
-                    gripper_devices = ["gripper"]
-                    if self._gripper._config.enable_sensor:
-                        gripper_devices.append("tactile")
-                    gripper_status = f"with XenseGripper ({' + '.join(gripper_devices)})"
+                gripper_status = f"with {type(self._gripper).__name__}"
             else:
                 gripper_status = "no gripper"
             self.logger.info(f"Flexiv Rizon4 RT connected and ready in {mode_desc} mode ({gripper_status}).")
@@ -828,21 +801,10 @@ class FlexivRizon4RT(Robot):
                     for i, key in enumerate(self._wrench_keys):
                         obs_dict[key] = ext_wrench[i]
 
-        # --- Gripper data (gripper + wrist_cam + tactile) ---
+        # --- Gripper ---
+        # Position only: neither backend carries a camera or tactile sensor. A
+        # TacCap gripper's wrist and GSPS sensors arrive through `cameras`.
         if self._gripper is not None and self.config.use_gripper:
-            if self._gripper._enable_sensor:
-                sensor_data = self._gripper.get_sensor_data()
-                for key, data in sensor_data.items():
-                    obs_dict[key] = data
-
-            if self.config.gripper_type == "flare_gripper":
-                camera_frame = self._gripper.get_camera_frame()
-                if camera_frame is not None:
-                    obs_dict["wrist_cam"] = camera_frame
-                else:
-                    h, w = self._gripper._config.cam_size[1], self._gripper._config.cam_size[0]
-                    obs_dict["wrist_cam"] = np.zeros((h, w, 3), dtype=np.uint8)
-
             obs_dict[self._gripper_key] = self._gripper.get_gripper_position()
 
         # --- External cameras ---

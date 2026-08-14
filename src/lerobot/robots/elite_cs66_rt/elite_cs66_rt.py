@@ -36,7 +36,7 @@ from lerobot.robots.elite_cs66_rt.manipulability import (
     pose_delta,
     tool_consistency,
 )
-from lerobot.grippers.xense.xense_gripper import XenseGripper
+from lerobot.grippers import make_gripper_from_config
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import (
@@ -229,9 +229,7 @@ class EliteCS66RT(Robot):
         self._driver = None
         self._rtsi = None
         self._is_connected = False
-        self._gripper: Gripper | None = (
-            XenseGripper(config.gripper) if config.gripper is not None else None
-        )
+        self._gripper: Gripper | None = make_gripper_from_config(config.gripper)
         self._last_tcp_command: np.ndarray | None = None
         self._target_tcp_command: np.ndarray | None = None
         self._reach_warn_time: float = 0.0  # throttle for the workspace-guard warning
@@ -267,16 +265,6 @@ class EliteCS66RT(Robot):
 
         if self._gripper is not None:
             features["gripper.pos"] = float
-            if self._gripper._enable_sensor:
-                # Mirror flexiv: left/right tactile rectify/difference images
-                # come back as HxWx3 RGB arrays. Sensor keys default to
-                # left_tactile / right_tactile (see XenseGripperConfig).
-                for sensor_name in self.config.gripper_sensor_keys.values():
-                    features[sensor_name] = (
-                        self.config.gripper_rectify_size[1],
-                        self.config.gripper_rectify_size[0],
-                        3,
-                    )
 
         for cam_name in self.cameras:
             features[cam_name] = (self.config.cameras[cam_name].height, self.config.cameras[cam_name].width, 3)
@@ -550,7 +538,7 @@ class EliteCS66RT(Robot):
         # And the gripper, if connect() got that far.
         if self._gripper is not None:
             try:
-                if getattr(self._gripper, "_is_connected", False):
+                if self._gripper.is_connected:
                     self._gripper.disconnect()
             except Exception:
                 pass
@@ -826,8 +814,6 @@ class EliteCS66RT(Robot):
 
         if self._gripper is not None:
             obs["gripper.pos"] = self._gripper.get_gripper_position()
-            if self._gripper._enable_sensor:
-                obs.update(self._gripper.get_sensor_data())
 
         for cam_name, cam in self.cameras.items():
             obs[cam_name] = cam.async_read()
@@ -1248,7 +1234,7 @@ class EliteCS66RT(Robot):
 
         if self._gripper is not None:
             try:
-                if getattr(self._gripper, "_is_connected", False):
+                if self._gripper.is_connected:
                     self._gripper.disconnect()
             except Exception as exc:
                 self.logger.warn(f"Gripper disconnect failed: {exc}")
