@@ -1,0 +1,115 @@
+# `grippers` — arm-agnostic gripper drivers
+
+Grippers are their own device family, alongside `cameras/` and `motors/`: an arm
+holds one (or one per side) and drives it through a small contract, without
+knowing which backend is underneath. Layout mirrors `cameras/` — an ABC and a
+config registry at the top, one subpackage per backend below.
+
+```
+grippers/
+  gripper.py        Gripper ABC
+  configs.py        GripperConfig — the draccus choice registry
+  utils.py          make_gripper_from_config
+  usb_topology.py   shared USB-hub helpers (used by both discoveries)
+  serial/           SerialGripper   — USB-serial parallel jaw
+  taccap/           TaccapFollower  — centric TacCap gripper
+```
+
+## The two backends
+
+| | `serial` | `taccap_follower` |
+|---|---|---|
+| Hardware | parallel jaw, USB serial (XGripper) | centric TacCap gripper, FDCAN motor |
+| Control | position + force/velocity limits | MIT impedance (kp / kd / feed-forward) |
+| Side resolved by | board-SN parity (odd → left) | firmware-burned SN |
+| On its USB hub | wrist cam + 2 tactile | wrist cam + 2 GSPS |
+| SDK | `xensegripper` | `xense.taccap` |
+
+Both SDKs are optional builds. `make_gripper_from_config` imports only the branch
+it selects, so this package stays importable on a host with neither installed;
+the error surfaces at `connect()` with rebuild guidance.
+
+## Configuring one
+
+A robot takes a single typed `gripper:` block:
+
+```yaml
+robot:
+  gripper:
+    type: taccap_follower
+    kp: 8.0                  # MIT impedance stiffness (Nm/rad)
+    kd: 1.0                  # damping (Nm·s/rad)
+    feedforward_torque: -3.0 # constant bias; NEGATIVE = clamp harder, |ff| <= 3.5
+    control_hz: 200
+    auto_discover_cameras: true
+```
+
+```yaml
+robot:
+  gripper:
+    type: serial
+    gripper_v_max: 100.0     # mm/s
+    gripper_f_max: 30.0      # N
+    gripper_min_pos: 0.0
+    gripper_max_pos: 85.0
+```
+
+The block is decoded through `GripperConfig`, a `draccus.ChoiceRegistry`. That is
+what makes a wrong knob **fail loudly**:
+
+```yaml
+gripper:
+  type: serial
+  feedforward_torque: -3.0   # -> DecodingError: unknown field
+```
+
+Before this was a typed block the same line was accepted and silently ignored,
+because every backend's knobs were flattened onto the arm config as
+`gripper_type` + `taccap_*` + `gripper_*`, and only the ones matching the selected
+backend were read.
+
+### Bimanual arms
+
+Write the block **once**. Both arms are always a matched pair, so the arm config
+clones it per side with `side` stamped in — that stamp is what lets each backend
+work out which physical unit is which. Drop one side with
+`left_use_gripper: false` / `right_use_gripper: false` without touching the block.
+
+### Single arms
+
+There is no side to infer, so a `serial` gripper needs `side` (or `port` / `sn`)
+written in the block for the driver to find its board. `SerialGripper.connect()`
+raises if it cannot resolve one.
+
+## Cameras
+
+`auto_discover_cameras` lives on the gripper because what is discoverable is a
+property of the backend. Both are the same shape of device — one USB hub carrying
+the gripper board, its wrist camera and its two tactile sensors — so both default
+to **on**: the recipe pins only `head` and the robot sniffs the rest at connect.
+
+Finding the *gripper* is separate, always on, and not switchable: `serial` resolves
+its side from the board SN's parity (odd → left), `taccap_follower` from the
+firmware-burned SN. That is why no recipe pins a gripper SN.
+
+Note that the gripper object itself never returns image or tactile data. Those
+sensors are ordinary entries in the robot's `cameras`, whether pinned in the recipe
+or injected by discovery.
+
+## The contract
+
+```python
+class Gripper(abc.ABC):
+    is_connected: bool                      # property
+    def connect() -> None
+    def disconnect() -> None
+    def get_gripper_position() -> float     # normalized, 0.0 = closed, 1.0 = open
+    def set_gripper_position(pos: float)    # normalized, non-blocking
+
+    # Default implementation: command, then poll until reached. Override only if
+    # the SDK offers a genuine blocking move.
+    def initialize_gripper_position(pos, tolerance=0.03, timeout=3.0)
+```
+
+`0.0 = closed, 1.0 = open` is uniform across backends — an arm never has to know
+the underlying units (mm of jaw travel, or radians of motor angle).
