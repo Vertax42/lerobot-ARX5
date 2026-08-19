@@ -85,6 +85,7 @@ lerobot-record \
 
 import threading
 import time
+import traceback
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -922,6 +923,13 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
                 dataset.save_episode()
                 recorded_episodes += 1
+    except BaseException:
+        # Say why the recording stopped. Without this the only trace is the
+        # "Stop recording" line below, and a session that died one second in
+        # looks exactly like one the operator ended — the log carried neither
+        # the exception nor a traceback.
+        logger.error(f"Recording stopped by an error:\n{traceback.format_exc()}")
+        raise
     finally:
         log_say("Stop recording", cfg.play_sounds, blocking=True)
 
@@ -940,8 +948,21 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         # when the dataset was never created — and an unguarded call there
         # raises AttributeError on None, replacing the real failure with one
         # that points nowhere near it.
+        #
+        # The upload is also not allowed to become the failure. It is the last
+        # step, it depends on a network the recording did not, and raising here
+        # discards whatever exception was already propagating — twice now the
+        # reported error came from this line while the real one was never
+        # printed. The episodes are on disk either way; `lerobot-record` can be
+        # re-run with push only, or the dataset pushed by hand.
         if cfg.dataset.push_to_hub and dataset is not None:
-            dataset.push_to_hub(tags=cfg.dataset.tags, private=cfg.dataset.private)
+            try:
+                dataset.push_to_hub(tags=cfg.dataset.tags, private=cfg.dataset.private)
+            except Exception as e:
+                logger.error(
+                    f"Recording is saved at {dataset.root}, but pushing it to the "
+                    f"Hub failed: {e!r}"
+                )
 
         log_say("Exiting", cfg.play_sounds)
     return dataset

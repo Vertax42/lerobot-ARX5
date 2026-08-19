@@ -18,38 +18,33 @@
 robot:
   type: bi_flexiv_rizon4_rt
 
-  # ── Bench hardware (forward-06) ─────────────────────────────────────────────
-  # Joint angles are in DEGREES (J1..J7), the units flexiv_rt takes.
-  # Only the head is pinned: both gripper backends sniff their own wrist +
-  # tactile cameras off the gripper's USB hub at connect.
-  left_robot_sn: Rizon4s-062412
-  right_robot_sn: Rizon4s-062881
-  left_start_position_degree: [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24]
-  right_start_position_degree: [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.6]
-  left_home_position_degree: [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24]
-  right_home_position_degree: [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.6]
+  # ── Bench hardware (forward-01) ─────────────────────────────────────────────
+  left_robot_sn: Rizon4s-063458
+  right_robot_sn: Rizon4s-063670
+  # Joint angles in DEGREES (J1..J7), the units flexiv_rt takes.
+  left_start_position_degree: [88.62, 74.83, 22.87, 112.79, -0.55, 87.02, 0.72]
+  right_start_position_degree: [-24.33, 71.20, -4.84, 118.72, 3.88, 95.72, 3.64]
+  left_home_position_degree: [88.62, 74.83, 22.87, 112.79, -0.55, 87.02, 0.72]
+  right_home_position_degree: [-24.33, 71.20, -4.84, 118.72, 3.88, 95.72, 3.64]
+
+  # ── Cameras ─────────────────────────────────────────────────────────────────
+  # Only the head is pinned: taccap_auto_discover_cameras (below) sniffs the
+  # per-side wrist + GSPS tactile cameras off each gripper's USB hub at connect.
   cameras:
     head:
       type: intelrealsense
-      serial_number_or_name: "254322071102"
+      serial_number_or_name: "337322070722"
       fps: 30
       width: 640
       height: 480
       warmup_s: 1
       use_depth: false
-    # Wrist + tactile are discovered off each gripper's USB hub at connect
-    # (gripper.auto_discover_cameras). What this bench had when the pins were
-    # removed, for cross-checking the first discovery run:
-    #   left_tactile_0: OG001323
-    #   left_tactile_1: OG001324
-    #   left_wrist: XC000035
-    #   right_tactile_0: OG001325
-    #   right_tactile_1: OG001326
-    #   right_wrist: XC000036
 
   # ── Control ─────────────────────────────────────────────────────────────────
   use_force: false
   log_level: INFO
+  enable_tactile_sensors: true
+
   # ── Gripper ── One block for both arms; `side` is stamped per arm at build time.
   # Both grippers -> xense.taccap FollowerGripper (matched pair, single switch).
   # auto_discover_cameras sniffs the wrist + GSPS tactile SNs off each gripper's
@@ -68,7 +63,6 @@ robot:
     # mcu_device: null                    # explicit MCU path; the arm fills this from discovery
   left_use_gripper: true
   right_use_gripper: true
-  enable_tactile_sensors: true
 
 teleop:
   type: bi_pico4
