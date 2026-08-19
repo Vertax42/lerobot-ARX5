@@ -1,0 +1,74 @@
+# Teleop recipe — bimanual Flexiv Rizon4 RT (forward mount, bench 01) + Bi-Pico4,
+# with serial (XGripper) parallel-jaw grippers.
+#   lerobot-teleoperate --config_path=recipes/teleop/bi_flexiv_rizon4_rt/forward-01-xgripper.yaml
+#
+# Bench 01 carries both gripper families; the arm block is identical either way,
+# so the two recipes differ only in `gripper:`. For the TacCap pair see
+# forward-01-taccap.yaml.
+#
+# Self-contained: this file carries both the bench hardware and the run's tuning.
+# Anything not listed uses the dataclass default.
+#
+# Verified on the bench 2026-08-19: start/home poses confirmed by the operator;
+# gripper boards 000035 (left, hub 3-6) / 000036 (right, hub 3-7) — sides come
+# from SN parity, odd -> left, even -> right; head RealSense 337322070722 present.
+
+robot:
+  type: bi_flexiv_rizon4_rt
+
+  # ── Bench hardware (forward-01) ─────────────────────────────────────────────
+  left_robot_sn: Rizon4s-063458
+  right_robot_sn: Rizon4s-063670
+  # Joint angles in DEGREES (J1..J7), the units flexiv_rt takes.
+  left_start_position_degree: [88.62, 74.83, 22.87, 112.79, -0.55, 87.02, 0.72]
+  right_start_position_degree: [-24.33, 71.20, -4.84, 118.72, 3.88, 95.72, 3.64]
+  left_home_position_degree: [88.62, 74.83, 22.87, 112.79, -0.55, 87.02, 0.72]
+  right_home_position_degree: [-24.33, 71.20, -4.84, 118.72, 3.88, 95.72, 3.64]
+
+  # ── Cameras ─────────────────────────────────────────────────────────────────
+  # Only the head is pinned: the gripper block's auto_discover_cameras (below)
+  # sniffs the per-side wrist + tactile cameras off each gripper's USB hub at
+  # connect, anchored by the board SN that already resolved the side.
+  cameras:
+    head:
+      type: intelrealsense
+      serial_number_or_name: "337322070722"
+      fps: 30
+      width: 640
+      height: 480
+      warmup_s: 1
+      use_depth: false
+
+  # ── Control ─────────────────────────────────────────────────────────────────
+  use_force: false
+  log_level: INFO
+  enable_tactile_sensors: true
+
+  # ── Gripper ── One block for both arms; `side` is stamped per arm at build time.
+  # Both grippers -> XenseSerialGripper over USB serial (no IP / MAC / network).
+  # Neither port nor sn is pinned: parity discovery reads each board's SN and
+  # resolves the side from it, which then anchors the camera sniff above.
+  gripper:
+    type: serial
+    gripper_v_max: 100.0    # mm/s
+    gripper_f_max: 30.0     # N
+    gripper_min_pos: 0.0    # mm — fully closed
+    gripper_max_pos: 85.0   # mm — fully open
+    serial_timeout: 1.0
+    init_open: true
+    auto_discover_cameras: true   # sniff wrist + tactile off this gripper's USB hub
+    # Everything else worth tuning, at its default — uncomment to change.
+    # port: ""                            # explicit /dev path; overrides sn + side
+    # sn: null                            # board SN; scanned across ports when port unset
+    # side: null                          # stamped automatically per arm — do not set here
+  left_use_gripper: true
+  right_use_gripper: true
+
+teleop:
+  type: bi_pico4
+  pos_sensitivity: 1.0
+  ori_sensitivity: 1.0
+
+# ── Teleoperate loop (top level) ──
+fps: 30
+display_data: true

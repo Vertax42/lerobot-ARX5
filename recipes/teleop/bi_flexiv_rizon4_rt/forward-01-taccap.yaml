@@ -1,13 +1,17 @@
 # Teleop recipe — bimanual Flexiv Rizon4 RT (forward mount, bench 01) + Bi-Pico4,
-# with TacCap follower grippers (bi_taccap).
-#   lerobot-teleoperate --config_path=recipes/teleop/bi_flexiv_rizon4_rt/forward-01.yaml
+# with TacCap follower grippers.
+#   lerobot-teleoperate --config_path=recipes/teleop/bi_flexiv_rizon4_rt/forward-01-taccap.yaml
+#
+# Bench 01 carries both gripper families; the arm block is identical either way,
+# so the two recipes differ only in `gripper:`. For the parallel-jaw pair see
+# forward-01-xgripper.yaml.
 #
 # Self-contained: this file carries both the bench hardware and the run's tuning.
 # Anything not listed uses the dataclass default.
 #
-# ⚠️ The arm SNs and poses below came from the old stations/ file for this bench
-# and have NOT been re-checked against the hardware; the gripper block HAS
-# (two TacCap followers, TCGU01A25Z0011s / TCGU01A25Z0012s).
+# Verified on the bench 2026-08-19: start/home poses confirmed by the operator;
+# grippers TCGU01A25Z0011s (left, hub 3-1) / TCGU01A25Z0012s (right, hub 3-5);
+# head RealSense 337322070722 present.
 
 robot:
   type: bi_flexiv_rizon4_rt

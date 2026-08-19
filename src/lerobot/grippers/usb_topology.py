@@ -65,6 +65,26 @@ def video_node(cam) -> str:
     return f"/dev/video{int(cam)}"
 
 
+def usb_vid_pid(device: str) -> tuple[str, str] | None:
+    """USB ``(vendor_id, product_id)`` behind a tty node, lowercase hex, or None.
+
+    Walks up from the tty's sysfs node to the first ancestor carrying idVendor —
+    that is the USB device, whereas the tty itself sits on an interface.
+    """
+    path = sysfs_device_dir("tty", device)
+    while path and path != "/":
+        vid = os.path.join(path, "idVendor")
+        pid = os.path.join(path, "idProduct")
+        if os.path.isfile(vid) and os.path.isfile(pid):
+            try:
+                with open(vid) as f_v, open(pid) as f_p:
+                    return f_v.read().strip().lower(), f_p.read().strip().lower()
+            except OSError:
+                return None
+        path = os.path.dirname(path)
+    return None
+
+
 def hub_of_serial_device(device: str) -> str | None:
     """USB hub token behind which a serial device (tty) sits.
 

@@ -38,6 +38,7 @@ from lerobot.utils.robot_utils import get_logger
 
 from ..gripper import Gripper
 from .configuration_serial import SerialGripperConfig
+
 # find_port_by_sn is re-exported here for backward compatibility; both it and the
 # parity-based find_port_by_side share discovery's scan lock so exact-SN
 # lookups and side discovery never interleave on the RS-485 bus.

@@ -1756,16 +1756,18 @@ def teleoperate(cfg: TeleoperateConfig):
             robot = make_robot_from_config(cfg.robot)
             teleop = make_teleoperator_from_config(cfg.teleop)
 
-            # Pre-initialize the VR SDK in background while the robot connects
-            # (robot.connect() takes ~20-40s; VR SDK init takes ~3s → free overlap)
-            from concurrent.futures import ThreadPoolExecutor as _TPE
-
+            # Bring the VR side up FIRST, then the robot. pre_init caps out at
+            # ~3s (0.5s + 25 polls), while robot.connect() takes 20-40s and moves
+            # both arms to the start pose partway through. Running them in
+            # parallel looked like free overlap, but the executor's __exit__
+            # calls shutdown(wait=True), so a pre_init failure could not
+            # propagate until the robot future finished — the arms travelled for
+            # a session that was already dead. Observed on the bench: pre_init
+            # raised at +3s, the error surfaced 22s later, 19s after the arms had
+            # moved. Losing at most 3s of overlap is the cheaper trade.
             try:
-                with _TPE(max_workers=2) as _ex:
-                    _robot_fut = _ex.submit(robot.connect, go_to_start=True)
-                    _teleop_fut = _ex.submit(teleop.pre_init)
-                    _teleop_fut.result()  # raise immediately if VR SDK fails
-                    _robot_fut.result()  # raise immediately if robot fails
+                teleop.pre_init()
+                robot.connect(go_to_start=True)
             except KeyboardInterrupt:
                 logger.info("Startup interrupted by user")
                 raise
@@ -1818,16 +1820,18 @@ def teleoperate(cfg: TeleoperateConfig):
                 )
             teleop = make_teleoperator_from_config(cfg.teleop)
 
-            # Pre-initialize the VR SDK in background while the robot connects
-            # (dual-arm bring-up + go-to-start is slow; VR SDK init ~3s → free overlap)
-            from concurrent.futures import ThreadPoolExecutor as _TPE
-
+            # Bring the VR side up FIRST, then the robot. pre_init caps out at
+            # ~3s (0.5s + 25 polls), while robot.connect() takes 20-40s and moves
+            # both arms to the start pose partway through. Running them in
+            # parallel looked like free overlap, but the executor's __exit__
+            # calls shutdown(wait=True), so a pre_init failure could not
+            # propagate until the robot future finished — the arms travelled for
+            # a session that was already dead. Observed on the bench: pre_init
+            # raised at +3s, the error surfaced 22s later, 19s after the arms had
+            # moved. Losing at most 3s of overlap is the cheaper trade.
             try:
-                with _TPE(max_workers=2) as _ex:
-                    _robot_fut = _ex.submit(robot.connect, go_to_start=True)
-                    _teleop_fut = _ex.submit(teleop.pre_init)
-                    _teleop_fut.result()  # raise immediately if VR SDK fails
-                    _robot_fut.result()  # raise immediately if robot fails
+                teleop.pre_init()
+                robot.connect(go_to_start=True)
             except KeyboardInterrupt:
                 logger.info("Startup interrupted by user")
                 raise
