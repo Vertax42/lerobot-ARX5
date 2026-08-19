@@ -144,7 +144,7 @@ def test_a_real_calibration_is_used_as_is():
 @pytest.mark.parametrize(
     ("case", "kwargs"),
     [
-        ("firmware too old",   dict(cal=_cal(310.0, 311.0), version=(1, 1, 1))),
+        ("firmware too old",   dict(cal=_cal(310.0, 311.0), version=(1, 0, 0))),
         ("never calibrated",   dict(cal=None)),
         ("empty record",       dict(cal=_cal(0.0, 0.0))),
         ("no version reported", dict(cal=_cal(310.0, 311.0), version=None)),
@@ -173,14 +173,23 @@ def test_the_firmware_gate_names_the_version_it_wants():
     """A version error that does not say the required version is a riddle."""
     from lerobot.grippers.taccap.taccap_follower import TaccapFollower
 
-    reason = _follower(cal=None, version=(1, 1, 1))._fisheye_firmware_shortfall()
+    reason = _follower(cal=None, version=(1, 0, 0))._fisheye_firmware_shortfall()
 
-    assert "1.1.1" in reason
+    assert "1.0.0" in reason
     assert ".".join(str(p) for p in TaccapFollower.FISHEYE_MIN_FIRMWARE) in reason
 
 
-def test_new_enough_firmware_does_not_trip_the_gate():
-    assert _follower(cal=_cal(310.0, 311.0), version=(2, 0, 0))._fisheye_firmware_shortfall() is None
+@pytest.mark.parametrize("version", [(1, 1, 0), (1, 1, 1), (1, 1, 2)])
+def test_shipping_firmware_does_not_trip_the_gate(version):
+    """Command-set numbers and firmware numbers are different sequences.
+
+    Cmd::CameraFisheyeCal belongs to command set V2.0, but follower 1.1.0
+    already carries V2.1 — so a gate written against "2.0.0" would call every
+    shipping unit too old and send the reader off to flash firmware that changes
+    nothing. Bench-checked: 1.1.1 answers the read; what it lacks is a stored
+    calibration, not the command.
+    """
+    assert _follower(cal=_cal(310.0, 311.0), version=version)._fisheye_firmware_shortfall() is None
 
 
 # --------------------------------------------------------------------------- #

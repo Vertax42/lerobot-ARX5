@@ -215,8 +215,14 @@ class TaccapFollower(Gripper):
                 self.logger.debug(f"Error disabling motor during rollback: {e}")
             self._gripper = None
 
-    #: Command set that first carried the wrist fisheye record.
-    FISHEYE_MIN_FIRMWARE = (2, 0, 0)
+    #: Follower firmware that first answered Cmd::CameraFisheyeCal (0x2B).
+    #:
+    #: The command belongs to command set V2.0, but command-set numbers and
+    #: firmware numbers are different sequences — follower 1.1.0 already carries
+    #: V2.1. Comparing a firmware version against "2.0.0" would call every
+    #: shipping unit too old, and point the reader at an upgrade that changes
+    #: nothing here. Verified on the bench: 1.1.1 answers the read.
+    FISHEYE_MIN_FIRMWARE = (1, 1, 0)
 
     def read_wrist_fisheye_calibration(self):
         """The wrist lens' fisheye intrinsics for this gripper.
@@ -251,7 +257,10 @@ class TaccapFollower(Gripper):
                 elif not is_usable_fisheye_cal(cal):
                     # An uncalibrated unit answers with an all-zero record rather
                     # than a NACK; remapping with fx = fy = 0 yields a black frame.
-                    reason = "the firmware answered with an empty calibration record"
+                    reason = (
+                        "the wrist lens has never been calibrated — the firmware "
+                        "answered the read with an empty record"
+                    )
                 else:
                     return cal, False
 
@@ -272,7 +281,7 @@ class TaccapFollower(Gripper):
         if tuple(version.tuple) < self.FISHEYE_MIN_FIRMWARE:
             return (
                 f"its firmware is {version.major}.{version.minor}.{version.patch}, "
-                f"older than the {needed} that first carried the fisheye record"
+                f"older than the {needed} that first answered the fisheye read"
             )
         return None
 
