@@ -18,12 +18,11 @@ permissions:
   contents: read
   pull-requests: write
 
+# Disarmed for this fork: uploads doc previews to upstream's bucket.
+# Kept rather than deleted so it can be restored by putting its triggers back;
+# see ci.yml for the checks this repository does run.
 on:
-  # Triggered by the completion of the main 'Documentation' workflow.
-  workflow_run: # zizmor: ignore[dangerous-triggers] We follow the same pattern as in Transformers
-    workflows: ["Documentation"]
-    types:
-      - completed
+  workflow_dispatch:
 
 jobs:
   # This job uploads a preview of the documentation for a pull request.

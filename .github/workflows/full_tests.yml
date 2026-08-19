@@ -15,21 +15,11 @@
 # This workflow handles full testing.
 name: Full Tests
 
+# Disarmed for this fork: superseded by ci.yml; the heavy matrix needs upstream's runners.
+# Kept rather than deleted so it can be restored by putting its triggers back;
+# see ci.yml for the checks this repository does run.
 on:
-  # Allows running this workflow manually from the Actions tab
   workflow_dispatch:
-
-  pull_request_review:
-    types: [submitted]
-  push:
-    branches:
-      - main
-    paths:
-      - "src/**"
-      - "tests/**"
-      - ".github/workflows/**"
-      - "pyproject.toml"
-      - "Makefile"
 
 permissions:
   contents: read

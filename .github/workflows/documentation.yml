@@ -15,33 +15,12 @@
 # This workflow handles building documentation for both main branches and PRs.
 name: Documentation
 
+# Disarmed for this fork: builds and uploads upstream's hosted docs.
+# Kept rather than deleted so it can be restored by putting its triggers back;
+# see ci.yml for the checks this repository does run.
 on:
-  # Allows running this workflow manually from the Actions tab
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version tag (e.g. v0.1.2) - Leave empty for standard main build'
-        required: false
-        type: string
 
-  # Triggers the workflow on push events to main for the docs folder
-  push:
-    branches:
-      - main
-    paths:
-      - "docs/**"
-
-  # Triggers the workflow on pull request events targeting main for the docs folder
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "docs/**"
-
-  release:
-    types: [published]
-
-# Ensures that only the latest commit for a PR or branch is built, canceling older runs.
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true

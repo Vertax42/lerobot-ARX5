@@ -15,13 +15,11 @@
 # This workflow labels pull requests based on the files that were changed.
 name: Pull Request Labeler
 
+# Disarmed for this fork: triages against upstream's label set.
+# Kept rather than deleted so it can be restored by putting its triggers back;
+# see ci.yml for the checks this repository does run.
 on:
-  # Allows labeling pull requests when they are opened or updated
-  # zizmor: ignore[dangerous-triggers] Needed to label PRs from forks
-  pull_request_target:
-    branches:
-      - main
-    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 
 permissions:
   contents: read

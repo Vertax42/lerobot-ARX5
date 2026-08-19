@@ -14,12 +14,12 @@
 
 name: Create Release and Publish to PyPI
 
+# Disarmed for this fork: publishes the `lerobot` package to PyPI — this fork must never do that.
+# Kept rather than deleted so it can be restored by putting its triggers back;
+# see ci.yml for the checks this repository does run.
 on:
-  push:
-    tags:
-      - 'v*.*.*' # Trigger on tags like v0.1.0, v1.0.0
+  workflow_dispatch:
 
-# Sets up the environment variables
 env:
   UV_VERSION: "0.8.0"
   PYTHON_VERSION: "3.12"
@@ -29,6 +29,7 @@ jobs:
   build-and-publish:
     name: Build and publish Python distributions
     runs-on: ubuntu-latest
+    # Upstream's own guard: on a fork this job is a no-op regardless.
     if: github.repository == 'huggingface/lerobot'
     outputs:
       version: ${{ steps.extract_info.outputs.tag_version }}

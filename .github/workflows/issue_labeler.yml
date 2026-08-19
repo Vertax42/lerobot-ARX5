@@ -14,10 +14,11 @@
 
 # This workflow automatically labels issues based on their content.
 name: Issue Labeler
+# Disarmed for this fork: triages against upstream's label set.
+# Kept rather than deleted so it can be restored by putting its triggers back;
+# see ci.yml for the checks this repository does run.
 on:
-  # Trigger on new issues and edits to existing issues
-  issues:
-    types: [opened, edited]
+  workflow_dispatch:
 
 permissions:
   contents: read

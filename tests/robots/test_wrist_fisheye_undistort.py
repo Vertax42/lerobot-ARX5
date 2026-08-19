@@ -17,6 +17,8 @@ images is discovered at training time. Verified on the bench against firmware
 an error — so "read_fisheye did not raise" is not enough to trust it.
 """
 
+import importlib.util
+
 import numpy as np
 import pytest
 
@@ -24,6 +26,25 @@ from lerobot.cameras.xense import XenseWristCameraConfig
 from lerobot.cameras.xense.configuration_wrist import (
     FISHEYE_CALIB_HEIGHT,
     FISHEYE_CALIB_WIDTH,
+)
+
+
+#: Half this file exercises the driver's passthrough and the config, which are
+#: ours. The other half reaches into the gripper SDK for the reference
+#: calibration and the undistorter — that is an optional extra, absent on CI and
+#: on any host without a TacCap gripper.
+def _importable(name: str) -> bool:
+    # find_spec imports the parent package, so a missing `xense` raises rather
+    # than returning None — which is exactly the case this guard is for.
+    try:
+        return importlib.util.find_spec(name) is not None
+    except ModuleNotFoundError:
+        return False
+
+
+requires_taccap = pytest.mark.skipif(
+    not _importable("xense.taccap"),
+    reason="xense.taccap (the gripper SDK) is not installed",
 )
 
 
@@ -153,6 +174,7 @@ def _follower(**kw):
 # --------------------------------------------------------------------------- #
 
 
+@requires_taccap
 def test_a_units_own_calibration_passes_straight_through():
     cal = _cal(310.5, 311.2)
     follower = _follower(calibration=cal)
@@ -164,6 +186,7 @@ def test_a_units_own_calibration_passes_straight_through():
     assert follower._gripper.calibration.calls == 1
 
 
+@requires_taccap
 def test_the_reference_fallback_is_reported_and_warned_about():
     """Whatever the SDK decided must reach the caller, and be visible in the log.
 
@@ -190,6 +213,7 @@ def test_the_reference_fallback_is_reported_and_warned_about():
     assert "never been calibrated" in warnings[0], "the SDK's reason must survive"
 
 
+@requires_taccap
 def test_a_units_own_calibration_is_not_warned_about():
     follower = _follower(calibration=_cal(310.5, 311.2))
     follower.read_wrist_fisheye_calibration()
@@ -209,6 +233,7 @@ def test_reading_from_a_disconnected_gripper_is_refused():
         follower.read_wrist_fisheye_calibration()
 
 
+@requires_taccap
 def test_the_sdk_fallback_is_itself_usable():
     """Guard the guard: a fallback that fails is_usable would rectify to black."""
     from xense.taccap import FISHEYE_FALLBACK_CAL, is_usable_fisheye_cal
@@ -251,6 +276,7 @@ RECTIFY_INTERPOLATION = "INTER_CUBIC"
 
 
 @pytest.mark.parametrize("balance", [0.0, 0.5, 1.0])
+@requires_taccap
 def test_rectification_matches_opencvs_own_fisheye_implementation(balance):
     """The strongest check available without a calibration target in frame."""
     import cv2
@@ -266,6 +292,7 @@ def test_rectification_matches_opencvs_own_fisheye_implementation(balance):
     assert identical > 0.99, f"only {identical:.1%} of pixels match OpenCV"
 
 
+@requires_taccap
 def test_rectification_actually_moves_pixels():
     """A no-op undistorter would pass every other test in this file.
 
@@ -284,6 +311,7 @@ def test_rectification_actually_moves_pixels():
     assert displacement.max() > 50.0
 
 
+@requires_taccap
 def test_a_wider_balance_shortens_the_focal_length():
     from xense.taccap import FISHEYE_FALLBACK_CAL, FisheyeUndistorter
 
@@ -294,6 +322,7 @@ def test_a_wider_balance_shortens_the_focal_length():
     assert widest == pytest.approx(0.70, abs=1e-3)
 
 
+@requires_taccap
 def test_an_undistorter_is_reusable_across_frames():
     """The shape that keeps rectification affordable: build once, apply many.
 
@@ -334,6 +363,7 @@ def test_the_camera_builds_one_undistorter_and_keeps_it():
     assert hasattr(cam, "_undistorter")
 
 
+@requires_taccap
 def test_rectification_resamples_with_cubic_not_bilinear():
     """Bilinear here is a quality regression that nothing else would catch.
 

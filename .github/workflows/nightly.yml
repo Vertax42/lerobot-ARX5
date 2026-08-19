@@ -17,15 +17,12 @@ name: Nightly
 permissions:
   contents: read
 
+# Disarmed for this fork: upstream's nightly matrix; needs their secrets and their runners.
+# Kept rather than deleted so it can be restored by putting its triggers back;
+# see ci.yml for the checks this repository does run.
 on:
-  # Allows running this workflow manually from the Actions tab
   workflow_dispatch:
 
-  # Runs at 02:00
-  schedule:
-    - cron: "0 2 * * *"
-
-# Sets up the environment variables
 env:
   UV_VERSION: "0.8.0"
   PYTHON_VERSION: "3.12"

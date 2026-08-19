@@ -17,21 +17,12 @@ name: Security
 permissions:
   contents: read
 
+# Disarmed for this fork: superseded by ci.yml's hook set (gitleaks, bandit, zizmor).
+# Kept rather than deleted so it can be restored by putting its triggers back;
+# see ci.yml for the checks this repository does run.
 on:
-  # Allows running this workflow manually from the Actions tab
   workflow_dispatch:
 
-  # Triggers the workflow on push events to main
-  push:
-    branches:
-      - main
-
-  # Triggers the workflow on pull request events targeting main
-  pull_request:
-    branches:
-      - main
-
-# Ensures that only the latest commit for a PR or branch is built, canceling older runs.
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true

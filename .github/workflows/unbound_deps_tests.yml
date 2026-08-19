@@ -15,13 +15,11 @@
 # This workflow handles full testing with unboud dependencies versions.
 name: Unbound Dependency Tests
 
+# Disarmed for this fork: upstream's dependency-drift probe.
+# Kept rather than deleted so it can be restored by putting its triggers back;
+# see ci.yml for the checks this repository does run.
 on:
-  # Allows running this workflow manually from the Actions tab
   workflow_dispatch:
-
-  # Run on the 1st and 15th of every month at 09:00 UTC
-  # schedule:
-  #  - cron: '0 2 1,15 * *'
 
 permissions:
   contents: read
