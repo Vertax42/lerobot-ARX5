@@ -46,7 +46,6 @@ meta/, data/, videos/. When omitted, defaults to $HF_LEROBOT_HOME/{repo_id}.
 """
 
 import argparse
-import logging
 import shutil
 from pathlib import Path
 from typing import Any
@@ -84,7 +83,10 @@ from lerobot.datasets.utils import (
 )
 from lerobot.datasets.video_utils import concatenate_video_files, get_video_duration_in_s
 from lerobot.utils.constants import HF_LEROBOT_HOME
+from lerobot.utils.robot_utils import get_logger
 from lerobot.utils.utils import init_logging
+
+logger = get_logger("convert_v21_to_v30")
 
 V21 = "v2.1"
 V30 = "v3.0"
@@ -170,7 +172,7 @@ def validate_local_dataset_version(local_path: Path) -> None:
 
 
 def convert_tasks(root, new_root):
-    logging.info(f"Converting tasks from {root} to {new_root}")
+    logger.info(f"Converting tasks from {root} to {new_root}")
     tasks, _ = legacy_load_tasks(root)
     task_indices = tasks.keys()
     task_strings = tasks.values()
@@ -212,7 +214,7 @@ def convert_data(root: Path, new_root: Path, data_file_size_in_mb: int):
     paths_to_cat = []
     episodes_metadata = []
 
-    logging.info(f"Converting data files from {len(ep_paths)} episodes")
+    logger.info(f"Converting data files from {len(ep_paths)} episodes")
 
     for ep_idx, ep_path in enumerate(tqdm.tqdm(ep_paths, desc="convert data files")):
         ep_size_in_mb = get_parquet_file_size_in_mb(ep_path)
@@ -265,7 +267,7 @@ def get_image_keys(root):
 
 
 def convert_videos(root: Path, new_root: Path, video_file_size_in_mb: int):
-    logging.info(f"Converting videos from {root} to {new_root}")
+    logger.info(f"Converting videos from {root} to {new_root}")
 
     video_keys = get_video_keys(root)
     if len(video_keys) == 0:
@@ -402,7 +404,7 @@ def generate_episode_metadata_dict(episodes_legacy_metadata, episodes_metadata, 
 
 
 def convert_episodes_metadata(root, new_root, episodes_metadata, episodes_video_metadata=None):
-    logging.info(f"Converting episodes metadata from {root} to {new_root}")
+    logger.info(f"Converting episodes metadata from {root} to {new_root}")
 
     episodes_legacy_metadata = legacy_load_episodes(root)
     episodes_stats = legacy_load_episodes_stats(root)
@@ -435,7 +437,7 @@ def convert_info(root, new_root, data_file_size_in_mb, video_file_size_in_mb):
     info["data_path"] = DEFAULT_DATA_PATH
     info["video_path"] = DEFAULT_VIDEO_PATH if info["video_path"] is not None else None
     info["fps"] = int(info["fps"])
-    logging.info(f"Converting info from {root} to {new_root}")
+    logger.info(f"Converting info from {root} to {new_root}")
     for key in info["features"]:
         if info["features"][key]["dtype"] == "video":
             # already has fps in video_info

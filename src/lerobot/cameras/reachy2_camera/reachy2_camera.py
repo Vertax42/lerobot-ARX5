@@ -18,7 +18,6 @@ Provides the Reachy2Camera class for capturing frames from Reachy 2 cameras usin
 
 from __future__ import annotations
 
-import logging
 import os
 import platform
 import time
@@ -47,11 +46,12 @@ else:
 
 
 from lerobot.utils.errors import DeviceNotConnectedError
+from lerobot.utils.robot_utils import get_logger
 
 from ..camera import Camera
 from .configuration_reachy2_camera import ColorMode, Reachy2CameraConfig
 
-logger = logging.getLogger(__name__)
+logger = get_logger("Reachy2Camera")
 
 
 class Reachy2Camera(Camera):
@@ -138,7 +138,7 @@ class Reachy2Camera(Camera):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         if color_mode is not None:
-            logger.warning(f"{self} read() color_mode parameter is deprecated and will be removed in future versions.")
+            logger.warn(f"{self} read() color_mode parameter is deprecated and will be removed in future versions.")
 
         frame: NDArray[Any] = np.empty((0, 0, 3), dtype=np.uint8)
 

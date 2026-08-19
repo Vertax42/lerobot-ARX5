@@ -14,13 +14,14 @@
 
 # TODO(Virgile) : Robustify mode control , only the MIT protocole is implemented for now
 
-import logging
 import time
 from contextlib import contextmanager
 from copy import deepcopy
 from functools import cached_property
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, TypedDict
+
+import spdlog
 
 from lerobot.utils.decorators import check_if_already_connected, check_if_not_connected
 from lerobot.utils.import_utils import _can_available
@@ -32,6 +33,7 @@ else:
 import numpy as np
 
 from lerobot.utils.errors import DeviceNotConnectedError
+from lerobot.utils.robot_utils import get_logger
 from lerobot.utils.utils import enter_pressed, move_cursor_up
 
 from ..motors_bus import Motor, MotorCalibration, MotorsBusBase, NameOrID, Value
@@ -53,7 +55,7 @@ from .tables import (
     MotorType,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger("RobStrideMotorsBus")
 
 
 class MotorState(TypedDict):
@@ -263,7 +265,7 @@ class RobstrideMotorsBus(MotorsBusBase):
     def update_motor_state(self, motor: NameOrID) -> bool:
         has_fault, msg = self._query_status_via_clear_fault(motor)
         if msg is None:
-            logger.warning(f"No response received from motor '{motor}' during state update.")
+            logger.warn(f"No response received from motor '{motor}' during state update.")
             raise ConnectionError(f"No response received from motor '{motor}' during state update.")
         if has_fault:
             logger.error(f"Fault reported by motor '{motor}' during state update. msg={msg.data.hex()}")
@@ -332,7 +334,7 @@ class RobstrideMotorsBus(MotorsBusBase):
             try:
                 self.disable_torque()
             except Exception as e:
-                logger.warning(f"Failed to disable torque during disconnect: {e}")
+                logger.warn(f"Failed to disable torque during disconnect: {e}")
 
         if self.canbus:
             self.canbus.shutdown()
@@ -460,7 +462,7 @@ class RobstrideMotorsBus(MotorsBusBase):
                         )
 
             # Only log warnings if we're in debug mode to reduce overhead
-            if logger.isEnabledFor(logging.DEBUG):
+            if logger.should_log(spdlog.LogLevel.DEBUG):
                 if messages_seen:
                     logger.debug(
                         f"Received {len(messages_seen)} message(s) from IDs {set(messages_seen)}, but expected 0x{expected_recv_id:02X}"
@@ -705,7 +707,7 @@ class RobstrideMotorsBus(MotorsBusBase):
         try:
             self._decode_motor_state(msg.data)
         except Exception as e:
-            logger.warning(f"Failed to decode response from {motor}: {e}")
+            logger.warn(f"Failed to decode response from {motor}: {e}")
 
     def _get_cached_value(self, motor: str, data_name: str) -> Value:
         """Retrieve a specific value from the state cache."""
@@ -853,7 +855,7 @@ class RobstrideMotorsBus(MotorsBusBase):
         for motor in updated_motors:
             recv_id = self._get_motor_recv_id(motor)
             if recv_id not in responses:
-                logger.warning(f"Packet drop: {motor} (ID: 0x{recv_id:02X}). Using last known state.")
+                logger.warn(f"Packet drop: {motor} (ID: 0x{recv_id:02X}). Using last known state.")
 
     def read_calibration(self) -> dict[str, MotorCalibration]:
         """Read calibration data from motors."""

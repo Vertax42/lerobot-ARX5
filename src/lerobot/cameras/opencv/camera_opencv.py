@@ -16,7 +16,6 @@
 Provides the OpenCVCamera class for capturing frames from cameras using OpenCV.
 """
 
-import logging
 import math
 import os
 import platform
@@ -35,6 +34,7 @@ import cv2  # type: ignore  # TODO: add type stubs for OpenCV
 
 from lerobot.utils.decorators import check_if_already_connected, check_if_not_connected
 from lerobot.utils.errors import DeviceNotConnectedError
+from lerobot.utils.robot_utils import get_logger
 
 from ..camera import Camera
 from ..utils import get_cv2_rotation
@@ -47,7 +47,7 @@ from .configuration_opencv import ColorMode, OpenCVCameraConfig
 # treat the same cameras as new devices. Thus we select a higher bound to search indices.
 MAX_OPENCV_INDEX = 60
 
-logger = logging.getLogger(__name__)
+logger = get_logger("OpenCVCamera")
 
 
 def _parse_v4l2_devices() -> dict[str, list[str]]:
@@ -327,7 +327,7 @@ class OpenCVCamera(Camera):
         if fourcc_unreadable:
             logger.debug(f"{self} set fourcc={self.config.fourcc} (backend cannot confirm via readback).")
         elif actual_fourcc != self.config.fourcc:
-            logger.warning(
+            logger.warn(
                 f"{self} failed to set fourcc={self.config.fourcc} (actual={actual_fourcc}, success={success}). "
                 f"Continuing with default format."
             )
@@ -518,7 +518,7 @@ class OpenCVCamera(Camera):
         start_time = time.perf_counter()
 
         if color_mode is not None:
-            logger.warning(f"{self} read() color_mode parameter is deprecated and will be removed in future versions.")
+            logger.warn(f"{self} read() color_mode parameter is deprecated and will be removed in future versions.")
 
         if self.thread is None or not self.thread.is_alive():
             raise RuntimeError(f"{self} read thread is not running.")
@@ -601,7 +601,7 @@ class OpenCVCamera(Camera):
             except Exception as e:
                 if failure_count <= 10:
                     failure_count += 1
-                    logger.warning(f"Error reading frame in background thread for {self}: {e}")
+                    logger.warn(f"Error reading frame in background thread for {self}: {e}")
                 else:
                     raise RuntimeError(f"{self} exceeded maximum consecutive read failures.") from e
 

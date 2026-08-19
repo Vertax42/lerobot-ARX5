@@ -22,7 +22,6 @@
 from __future__ import annotations
 
 import abc
-import logging
 from collections.abc import Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -36,12 +35,13 @@ from deepdiff import DeepDiff
 from tqdm import tqdm
 
 from lerobot.utils.decorators import check_if_already_connected, check_if_not_connected
+from lerobot.utils.robot_utils import get_logger
 from lerobot.utils.utils import enter_pressed, move_cursor_up
 
 type NameOrID = str | int
 type Value = int | float
 
-logger = logging.getLogger(__name__)
+logger = get_logger("MotorsBus")
 
 
 class MotorsBusBase(abc.ABC):
@@ -155,7 +155,9 @@ def assert_same_address(model_ctrl_table: dict[str, dict], motor_models: list[st
         )
 
 
-class MotorNormMode(str, Enum):
+# Not StrEnum: str(MotorNormMode.DEGREES) yields "MotorNormMode.DEGREES" here and
+# the bare value there, and calibration files on disk were written with one of them.
+class MotorNormMode(str, Enum):  # noqa: UP042
     RANGE_0_100 = "range_0_100"
     RANGE_M100_100 = "range_m100_100"
     DEGREES = "degrees"

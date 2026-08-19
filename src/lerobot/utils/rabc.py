@@ -14,13 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
 from huggingface_hub import hf_hub_download
+
+from lerobot.utils.robot_utils import get_logger
+
+logger = get_logger("rabc")
 
 
 def resolve_hf_path(path: str | Path) -> Path:
@@ -75,7 +78,7 @@ class RABCWeights:
         self.progress_column = f"progress_{head_mode}"
 
         # Load progress values
-        logging.info(f"Loading SARM progress values from {self.progress_path}")
+        logger.info(f"Loading SARM progress values from {self.progress_path}")
         self.df = pd.read_parquet(self.progress_path)
 
         # Check if the requested head mode column exists
@@ -83,7 +86,7 @@ class RABCWeights:
             available = [c for c in self.df.columns if c.startswith("progress")]
             raise ValueError(f"Column '{self.progress_column}' not found. Available progress columns: {available}")
 
-        logging.info(f"Using progress column: {self.progress_column}")
+        logger.info(f"Using progress column: {self.progress_column}")
 
         self.progress_lookup = {}
         self.episode_lookup = {}
@@ -106,8 +109,8 @@ class RABCWeights:
                 "end": int(ep_df["index"].max()) + 1,
             }
 
-        logging.info(f"Loaded {len(self.progress_lookup)} frame progress values")
-        logging.info(f"Chunk size for delta computation: {chunk_size}")
+        logger.info(f"Loaded {len(self.progress_lookup)} frame progress values")
+        logger.info(f"Chunk size for delta computation: {chunk_size}")
 
         # Compute global statistics for weight computation
         self._compute_global_stats()
@@ -138,11 +141,11 @@ class RABCWeights:
         if all_deltas:
             self.delta_mean = max(np.mean(all_deltas), 0.0)
             self.delta_std = max(np.std(all_deltas), self.epsilon)
-            logging.info(f"Progress delta stats: mean={self.delta_mean:.4f}, std={self.delta_std:.4f}")
+            logger.info(f"Progress delta stats: mean={self.delta_mean:.4f}, std={self.delta_std:.4f}")
         else:
             self.delta_mean = 0.0
             self.delta_std = self.epsilon
-            logging.warning("No valid progress deltas found, using default stats")
+            logger.warn("No valid progress deltas found, using default stats")
 
     def compute_batch_weights(self, batch: dict) -> tuple[torch.Tensor, dict]:
         """
@@ -164,7 +167,7 @@ class RABCWeights:
         """
         indices = batch.get("index")
         if indices is None:
-            logging.warning("RA-BC: Batch missing 'index' key, using uniform weights")
+            logger.warn("RA-BC: Batch missing 'index' key, using uniform weights")
             batch_size = self._get_batch_size(batch)
             return torch.ones(batch_size, device=self.device), {"raw_mean_weight": 1.0}
 

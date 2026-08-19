@@ -16,7 +16,10 @@
 from collections.abc import Callable
 from typing import Any
 
+from lerobot.utils.robot_utils import get_logger
 from lerobot.utils.utils import format_big_number
+
+logger = get_logger("logging_utils")
 
 
 class AverageMeter:
@@ -66,7 +69,7 @@ class MetricsTracker:
     train_metrics.loss = loss
 
     # display current metrics
-    logging.info(train_metrics)
+    logger.info(train_metrics)
 
     # export for wandb
     wandb.log(train_metrics.to_dict())

@@ -27,7 +27,6 @@ lerobot-imgtransform-viz \
 ```
 """
 
-import logging
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
@@ -42,6 +41,9 @@ from lerobot.datasets.transforms import (
     ImageTransformsConfig,
     make_transform_from_config,
 )
+from lerobot.utils.robot_utils import get_logger
+
+logger = get_logger("lerobot_imgtransform_viz")
 
 OUTPUT_DIR = Path("outputs/image_transforms")
 to_pil = ToPILImage()
@@ -62,7 +64,7 @@ def save_all_transforms(cfg: ImageTransformsConfig, original_frame, output_dir, 
 
 def save_each_transform(cfg: ImageTransformsConfig, original_frame, output_dir, n_examples):
     if not cfg.enable:
-        logging.warning(
+        logger.warn(
             "No single transforms will be saved, because `image_transforms.enable=False`. To enable, set `enable` to True in `ImageTransformsConfig` or in the command line with `--image_transforms.enable=True`."
         )
         return

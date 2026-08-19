@@ -28,7 +28,6 @@ Action features (14D):
 - right_gripper.pos: Right gripper position normalized to [0=open, 1=closed]
 """
 
-import logging
 import math
 import time
 
@@ -37,11 +36,12 @@ import numpy as np
 from lerobot.motors import Motor, MotorNormMode
 from lerobot.motors.dynamixel import DynamixelMotorsBus, OperatingMode
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
+from lerobot.utils.robot_utils import get_logger
 
 from ..teleoperator import Teleoperator
 from .configuration_bi_trlc import BiTRLCConfig
 
-logger = logging.getLogger(__name__)
+logger = get_logger("BiTRLC")
 
 ARM_JOINTS = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"]
 

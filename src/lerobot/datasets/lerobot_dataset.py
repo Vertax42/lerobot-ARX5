@@ -15,7 +15,6 @@
 # limitations under the License.
 import concurrent.futures
 import contextlib
-import logging
 import shutil
 import tempfile
 import time
@@ -80,6 +79,9 @@ from lerobot.datasets.video_utils import (
     resolve_vcodec,
 )
 from lerobot.utils.constants import HF_LEROBOT_HOME
+from lerobot.utils.robot_utils import get_logger
+
+logger = get_logger("LeRobotDataset")
 
 CODEBASE_VERSION = "v3.0"
 
@@ -524,8 +526,7 @@ class LeRobotDatasetMetadata:
                 f"{obj.root} already exists, so creating this dataset would "
                 "overwrite it.\n"
                 + (
-                    "It is empty — most likely an earlier run failed during "
-                    "startup. Delete it and try again."
+                    "It is empty — most likely an earlier run failed during startup. Delete it and try again."
                     if empty
                     else "Resume into it, choose a different repo_id, or delete it."
                 )
@@ -920,10 +921,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         }
 
         # Determine requested episodes
-        if self.episodes is None:
-            requested_episodes = set(range(self.meta.total_episodes))
-        else:
-            requested_episodes = set(self.episodes)
+        requested_episodes = set(range(self.meta.total_episodes)) if self.episodes is None else set(self.episodes)
 
         # Check if all requested episodes are available in cached data
         if not requested_episodes.issubset(available_episodes):
@@ -1173,7 +1171,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
         if self._streaming_encoder is not None and not self._streaming_encoder._episode_active:
             video_keys = list(self.meta.video_keys)
-            logging.info(f"[streaming_encoder] warming up {len(video_keys)} encoder(s): {video_keys}")
+            logger.info(f"[streaming_encoder] warming up {len(video_keys)} encoder(s): {video_keys}")
             t0 = time.perf_counter()
             self._streaming_encoder.start_episode(
                 video_keys=video_keys,
@@ -1182,7 +1180,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 wait_until_ready=True,
             )
             elapsed_ms = (time.perf_counter() - t0) * 1e3
-            logging.info(f"[streaming_encoder] all encoders ready in {elapsed_ms:.1f}ms")
+            logger.info(f"[streaming_encoder] all encoders ready in {elapsed_ms:.1f}ms")
 
     # TODO(Steven): consider move this to utils
     def _get_image_file_path(self, episode_index: int, image_key: str, frame_index: int) -> Path:
@@ -1360,7 +1358,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
                             temp_path = future.result()
                             results[video_key] = temp_path
                         except Exception as exc:
-                            logging.error(f"Video encoding failed for {video_key}: {exc}")
+                            logger.error(f"Video encoding failed for {video_key}: {exc}")
                             raise exc
 
                 for video_key in self.meta.video_keys:
@@ -1397,7 +1395,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         if end_episode is None:
             end_episode = self.num_episodes
 
-        logging.info(
+        logger.info(
             f"Batch encoding {self.batch_encoding_size} videos for episodes {start_episode} to {end_episode - 1}"
         )
 
@@ -1407,7 +1405,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         episode_df = pd.read_parquet(episode_df_path)
 
         for ep_idx in range(start_episode, end_episode):
-            logging.info(f"Encoding videos for episode {ep_idx}")
+            logger.info(f"Encoding videos for episode {ep_idx}")
 
             if (
                 self.meta.episodes[ep_idx]["data/chunk_index"] != chunk_idx
@@ -1534,10 +1532,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         temp_path: Path | None = None,
     ) -> dict:
         # Encode episode frames into a temporary video
-        if temp_path is None:
-            ep_path = self._encode_temporary_episode_video(video_key, episode_index)
-        else:
-            ep_path = temp_path
+        ep_path = self._encode_temporary_episode_video(video_key, episode_index) if temp_path is None else temp_path
 
         ep_size_in_mb = get_file_size_in_mb(ep_path)
         ep_duration_in_s = get_video_duration_in_s(ep_path)
@@ -1629,7 +1624,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
     def start_image_writer(self, num_processes: int = 0, num_threads: int = 4) -> None:
         if isinstance(self.image_writer, AsyncImageWriter):
-            logging.warning(
+            logger.warn(
                 "You are starting a new AsyncImageWriter that is replacing an already existing one in the dataset."
             )
 
@@ -1794,7 +1789,7 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
         for repo_id, ds in zip(self.repo_ids, self._datasets, strict=True):
             extra_keys = set(ds.features).difference(intersection_features)
             if extra_keys:
-                logging.warning(
+                logger.warn(
                     f"keys {extra_keys} of {repo_id} were disabled as they are not contained in all the other datasets."
                 )
                 self.disabled_features.update(extra_keys)

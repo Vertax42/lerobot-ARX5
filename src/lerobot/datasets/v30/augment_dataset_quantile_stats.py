@@ -35,7 +35,6 @@ python src/lerobot/datasets/v30/augment_dataset_quantile_stats.py \
 
 import argparse
 import concurrent.futures
-import logging
 from pathlib import Path
 
 import numpy as np
@@ -47,7 +46,10 @@ from tqdm import tqdm
 from lerobot.datasets.compute_stats import DEFAULT_QUANTILES, aggregate_stats, get_feature_stats
 from lerobot.datasets.lerobot_dataset import CODEBASE_VERSION, LeRobotDataset
 from lerobot.datasets.utils import write_stats
+from lerobot.utils.robot_utils import get_logger
 from lerobot.utils.utils import init_logging
+
+logger = get_logger("augment_quantile_stats")
 
 
 def has_quantile_stats(stats: dict[str, dict] | None, quantile_list_keys: list[str] | None = None) -> bool:
@@ -65,11 +67,7 @@ def has_quantile_stats(stats: dict[str, dict] | None, quantile_list_keys: list[s
     if stats is None:
         return False
 
-    for feature_stats in stats.values():
-        if any(q_key in feature_stats for q_key in quantile_list_keys):
-            return True
-
-    return False
+    return any(any(q_key in feature_stats for q_key in quantile_list_keys) for feature_stats in stats.values())
 
 
 def process_single_episode(dataset: LeRobotDataset, episode_idx: int) -> dict:
@@ -82,7 +80,7 @@ def process_single_episode(dataset: LeRobotDataset, episode_idx: int) -> dict:
     Returns:
         Dictionary containing episode statistics
     """
-    logging.info(f"Computing stats for episode {episode_idx}")
+    logger.info(f"Computing stats for episode {episode_idx}")
 
     start_idx = dataset.meta.episodes[episode_idx]["dataset_from_index"]
     end_idx = dataset.meta.episodes[episode_idx]["dataset_to_index"]
@@ -136,18 +134,18 @@ def compute_quantile_stats_for_dataset(dataset: LeRobotDataset) -> dict[str, dic
         when video keys are present. For datasets without videos, we use parallel processing
         with ThreadPoolExecutor for better performance.
     """
-    logging.info(f"Computing quantile statistics for dataset with {dataset.num_episodes} episodes")
+    logger.info(f"Computing quantile statistics for dataset with {dataset.num_episodes} episodes")
 
     episode_stats_list = []
     has_videos = len(dataset.meta.video_keys) > 0
 
     if has_videos:
-        logging.info("Dataset contains video keys - using sequential processing for thread safety")
+        logger.info("Dataset contains video keys - using sequential processing for thread safety")
         for episode_idx in tqdm(range(dataset.num_episodes), desc="Processing episodes"):
             ep_stats = process_single_episode(dataset, episode_idx)
             episode_stats_list.append(ep_stats)
     else:
-        logging.info("Dataset has no video keys - using parallel processing for better performance")
+        logger.info("Dataset has no video keys - using parallel processing for better performance")
         max_workers = min(dataset.num_episodes, 16)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -171,7 +169,7 @@ def compute_quantile_stats_for_dataset(dataset: LeRobotDataset) -> dict[str, dic
     if not episode_stats_list:
         raise ValueError("No episode data found for computing statistics")
 
-    logging.info(f"Aggregating statistics from {len(episode_stats_list)} episodes")
+    logger.info(f"Aggregating statistics from {len(episode_stats_list)} episodes")
     return aggregate_stats(episode_stats_list)
 
 
@@ -187,33 +185,33 @@ def augment_dataset_with_quantile_stats(
         root: Local root directory for the dataset
         overwrite: Overwrite existing quantile statistics if they already exist
     """
-    logging.info(f"Loading dataset: {repo_id}")
+    logger.info(f"Loading dataset: {repo_id}")
     dataset = LeRobotDataset(
         repo_id=repo_id,
         root=root,
     )
 
     if not overwrite and has_quantile_stats(dataset.meta.stats):
-        logging.info("Dataset already contains quantile statistics. No action needed.")
+        logger.info("Dataset already contains quantile statistics. No action needed.")
         return
 
-    logging.info("Dataset does not contain quantile statistics. Computing them now...")
+    logger.info("Dataset does not contain quantile statistics. Computing them now...")
 
     new_stats = compute_quantile_stats_for_dataset(dataset)
 
-    logging.info("Updating dataset metadata with new quantile statistics")
+    logger.info("Updating dataset metadata with new quantile statistics")
     dataset.meta.stats = new_stats
 
     write_stats(new_stats, dataset.meta.root)
 
-    logging.info("Successfully updated dataset with quantile statistics")
+    logger.info("Successfully updated dataset with quantile statistics")
     dataset.push_to_hub()
 
     hub_api = HfApi()
     try:
         hub_api.delete_tag(repo_id, tag=CODEBASE_VERSION, repo_type="dataset")
     except HTTPError as e:
-        logging.info(f"tag={CODEBASE_VERSION} probably doesn't exist. Skipping exception ({e})")
+        logger.info(f"tag={CODEBASE_VERSION} probably doesn't exist. Skipping exception ({e})")
         pass
     hub_api.create_tag(repo_id, tag=CODEBASE_VERSION, revision=None, repo_type="dataset")
 

@@ -15,7 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 import shutil
 from pathlib import Path
 
@@ -42,6 +41,9 @@ from lerobot.datasets.utils import (
     write_tasks,
 )
 from lerobot.datasets.video_utils import concatenate_video_files, get_video_duration_in_s
+from lerobot.utils.robot_utils import get_logger
+
+logger = get_logger("aggregate")
 
 
 def validate_all_metadata(all_metadata: list[LeRobotDatasetMetadata]):
@@ -252,7 +254,7 @@ def aggregate_datasets(
         video_files_size_in_mb: Maximum size for video files in MB (defaults to DEFAULT_VIDEO_FILE_SIZE_IN_MB)
         chunk_size: Maximum number of files per chunk (defaults to DEFAULT_CHUNK_SIZE)
     """
-    logging.info("Start aggregate_datasets")
+    logger.info("Start aggregate_datasets")
 
     if data_files_size_in_mb is None:
         data_files_size_in_mb = DEFAULT_DATA_FILE_SIZE_IN_MB
@@ -281,7 +283,7 @@ def aggregate_datasets(
         video_files_size_in_mb=video_files_size_in_mb,
     )
 
-    logging.info("Find all tasks")
+    logger.info("Find all tasks")
     unique_tasks = pd.concat([m.tasks for m in all_metadata]).index.unique()
     dst_meta.tasks = pd.DataFrame({"task_index": range(len(unique_tasks))}, index=pd.Index(unique_tasks, name="task"))
 
@@ -305,7 +307,7 @@ def aggregate_datasets(
         dst_meta.info["total_frames"] += src_meta.total_frames
 
     finalize_aggregation(dst_meta, all_metadata)
-    logging.info("Aggregation complete.")
+    logger.info("Aggregation complete.")
 
 
 def aggregate_videos(src_meta, dst_meta, videos_idx, video_files_size_in_mb, chunk_size):
@@ -620,10 +622,10 @@ def finalize_aggregation(aggr_meta, all_metadata):
         aggr_meta: Aggregated dataset metadata.
         all_metadata: List of all source dataset metadata objects.
     """
-    logging.info("write tasks")
+    logger.info("write tasks")
     write_tasks(aggr_meta.tasks, aggr_meta.root)
 
-    logging.info("write info")
+    logger.info("write info")
     aggr_meta.info.update(
         {
             "total_tasks": len(aggr_meta.tasks),
@@ -634,6 +636,6 @@ def finalize_aggregation(aggr_meta, all_metadata):
     )
     write_info(aggr_meta.info, aggr_meta.root)
 
-    logging.info("write stats")
+    logger.info("write stats")
     aggr_meta.stats = aggregate_stats([m.stats for m in all_metadata])
     write_stats(aggr_meta.stats, aggr_meta.root)

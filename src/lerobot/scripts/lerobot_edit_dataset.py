@@ -154,7 +154,6 @@ Using JSON config file:
 """
 
 import abc
-import logging
 import shutil
 import sys
 from dataclasses import dataclass
@@ -173,7 +172,10 @@ from lerobot.datasets.dataset_tools import (
 )
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.utils.constants import HF_LEROBOT_HOME
+from lerobot.utils.robot_utils import get_logger
 from lerobot.utils.utils import init_logging
+
+logger = get_logger("lerobot_edit_dataset")
 
 
 @dataclass
@@ -294,7 +296,7 @@ def handle_delete_episodes(cfg: EditDatasetConfig) -> None:
     if output_dir == dataset.root:
         dataset.root = dataset.root.with_name(dataset.root.name + "_old")
 
-    logging.info(f"Deleting episodes {cfg.operation.episode_indices} from {cfg.repo_id}")
+    logger.info(f"Deleting episodes {cfg.operation.episode_indices} from {cfg.repo_id}")
     new_dataset = delete_episodes(
         dataset,
         episode_indices=cfg.operation.episode_indices,
@@ -302,11 +304,11 @@ def handle_delete_episodes(cfg: EditDatasetConfig) -> None:
         repo_id=output_repo_id,
     )
 
-    logging.info(f"Dataset saved to {output_dir}")
-    logging.info(f"Episodes: {new_dataset.meta.total_episodes}, Frames: {new_dataset.meta.total_frames}")
+    logger.info(f"Dataset saved to {output_dir}")
+    logger.info(f"Episodes: {new_dataset.meta.total_episodes}, Frames: {new_dataset.meta.total_frames}")
 
     if cfg.push_to_hub:
-        logging.info(f"Pushing to hub as {output_repo_id}")
+        logger.info(f"Pushing to hub as {output_repo_id}")
         LeRobotDataset(output_repo_id, root=output_dir).push_to_hub()
 
 
@@ -318,13 +320,13 @@ def handle_split(cfg: EditDatasetConfig) -> None:
         raise ValueError("splits dict must be specified with split names as keys and fractions/episode lists as values")
 
     if cfg.new_repo_id is not None:
-        logging.warning(
+        logger.warn(
             "split uses the original dataset identifier --repo_id to generate split names. The --new_repo_id parameter is ignored."
         )
 
     dataset = LeRobotDataset(cfg.repo_id, root=cfg.root)
 
-    logging.info(f"Splitting dataset {cfg.repo_id} with splits: {cfg.operation.splits}")
+    logger.info(f"Splitting dataset {cfg.repo_id} with splits: {cfg.operation.splits}")
     split_datasets = split_dataset(
         dataset,
         splits=cfg.operation.splits,
@@ -332,10 +334,10 @@ def handle_split(cfg: EditDatasetConfig) -> None:
     )
 
     for split_name, split_ds in split_datasets.items():
-        logging.info(f"{split_name}: {split_ds.meta.total_episodes} episodes, {split_ds.meta.total_frames} frames")
+        logger.info(f"{split_name}: {split_ds.meta.total_episodes} episodes, {split_ds.meta.total_frames} frames")
 
         if cfg.push_to_hub:
-            logging.info(f"Pushing {split_name} split to hub as {split_ds.repo_id}")
+            logger.info(f"Pushing {split_name} split to hub as {split_ds.repo_id}")
             LeRobotDataset(split_ds.repo_id, root=split_ds.root).push_to_hub()
 
 
@@ -347,36 +349,36 @@ def handle_merge(cfg: EditDatasetConfig) -> None:
         raise ValueError("repo_ids must be specified for merge operation")
 
     if cfg.repo_id is not None or cfg.root is not None:
-        logging.warning(
+        logger.warn(
             "merge uses --new_repo_id and --new_root for the merged dataset. The --repo_id and --root parameters are ignored."
         )
 
     if cfg.operation.roots:
         if len(cfg.operation.roots) != len(cfg.operation.repo_ids):
             raise ValueError("repo_ids and roots must have the same length for merge operation")
-        logging.info(f"Loading {len(cfg.operation.roots)} datasets to merge")
+        logger.info(f"Loading {len(cfg.operation.roots)} datasets to merge")
         datasets = [
             LeRobotDataset(repo_id=repo_id, root=root)
             for repo_id, root in zip(cfg.operation.repo_ids, cfg.operation.roots, strict=True)
         ]
     else:
-        logging.info(f"Loading {len(cfg.operation.repo_ids)} datasets to merge")
+        logger.info(f"Loading {len(cfg.operation.repo_ids)} datasets to merge")
         datasets = [LeRobotDataset(repo_id) for repo_id in cfg.operation.repo_ids]
 
     output_dir = Path(cfg.new_root) if cfg.new_root else HF_LEROBOT_HOME / cfg.new_repo_id
 
-    logging.info(f"Merging datasets into {cfg.new_repo_id}")
+    logger.info(f"Merging datasets into {cfg.new_repo_id}")
     merged_dataset = merge_datasets(
         datasets,
         output_repo_id=cfg.new_repo_id,
         output_dir=output_dir,
     )
 
-    logging.info(f"Merged dataset saved to {output_dir}")
-    logging.info(f"Episodes: {merged_dataset.meta.total_episodes}, Frames: {merged_dataset.meta.total_frames}")
+    logger.info(f"Merged dataset saved to {output_dir}")
+    logger.info(f"Episodes: {merged_dataset.meta.total_episodes}, Frames: {merged_dataset.meta.total_frames}")
 
     if cfg.push_to_hub:
-        logging.info(f"Pushing to hub as {cfg.new_repo_id}")
+        logger.info(f"Pushing to hub as {cfg.new_repo_id}")
         LeRobotDataset(merged_dataset.repo_id, root=output_dir).push_to_hub()
 
 
@@ -399,7 +401,7 @@ def handle_remove_feature(cfg: EditDatasetConfig) -> None:
     if output_dir == dataset.root:
         dataset.root = dataset.root.with_name(dataset.root.name + "_old")
 
-    logging.info(f"Removing features {cfg.operation.feature_names} from {cfg.repo_id}")
+    logger.info(f"Removing features {cfg.operation.feature_names} from {cfg.repo_id}")
     new_dataset = remove_feature(
         dataset,
         feature_names=cfg.operation.feature_names,
@@ -407,11 +409,11 @@ def handle_remove_feature(cfg: EditDatasetConfig) -> None:
         repo_id=output_repo_id,
     )
 
-    logging.info(f"Dataset saved to {output_dir}")
-    logging.info(f"Remaining features: {list(new_dataset.meta.features.keys())}")
+    logger.info(f"Dataset saved to {output_dir}")
+    logger.info(f"Remaining features: {list(new_dataset.meta.features.keys())}")
 
     if cfg.push_to_hub:
-        logging.info(f"Pushing to hub as {output_repo_id}")
+        logger.info(f"Pushing to hub as {output_repo_id}")
         LeRobotDataset(output_repo_id, root=output_dir).push_to_hub()
 
 
@@ -426,23 +428,21 @@ def handle_modify_tasks(cfg: EditDatasetConfig) -> None:
         raise ValueError("Must specify at least one of new_task or episode_tasks for modify_tasks operation")
 
     if cfg.new_repo_id is not None or cfg.new_root is not None:
-        logging.warning(
-            "modify_tasks modifies datasets in-place. The --new_repo_id and --new_root parameters are ignored."
-        )
+        logger.warn("modify_tasks modifies datasets in-place. The --new_repo_id and --new_root parameters are ignored.")
 
     dataset = LeRobotDataset(cfg.repo_id, root=cfg.root)
-    logging.warning(f"Modifying dataset in-place at {dataset.root}. Original data will be overwritten.")
+    logger.warn(f"Modifying dataset in-place at {dataset.root}. Original data will be overwritten.")
 
     # Convert episode_tasks keys from string to int if needed (CLI passes strings)
     episode_tasks: dict[int, str] | None = None
     if episode_tasks_raw is not None:
         episode_tasks = {int(k): v for k, v in episode_tasks_raw.items()}
 
-    logging.info(f"Modifying tasks in {cfg.repo_id}")
+    logger.info(f"Modifying tasks in {cfg.repo_id}")
     if new_task:
-        logging.info(f"  Default task: '{new_task}'")
+        logger.info(f"  Default task: '{new_task}'")
     if episode_tasks:
-        logging.info(f"  Episode-specific tasks: {episode_tasks}")
+        logger.info(f"  Episode-specific tasks: {episode_tasks}")
 
     modified_dataset = modify_tasks(
         dataset,
@@ -450,11 +450,11 @@ def handle_modify_tasks(cfg: EditDatasetConfig) -> None:
         episode_tasks=episode_tasks,
     )
 
-    logging.info(f"Dataset modified at {dataset.root}")
-    logging.info(f"Tasks: {list(modified_dataset.meta.tasks.index)}")
+    logger.info(f"Dataset modified at {dataset.root}")
+    logger.info(f"Tasks: {list(modified_dataset.meta.tasks.index)}")
 
     if cfg.push_to_hub:
-        logging.info(f"Pushing to hub as {cfg.repo_id}")
+        logger.info(f"Pushing to hub as {cfg.repo_id}")
         modified_dataset.push_to_hub()
 
 
@@ -467,7 +467,7 @@ def handle_convert_image_to_video(cfg: EditDatasetConfig) -> None:
     # Priority: 1) new_root, 2) new_repo_id, 3) operation.output_dir, 4) auto-generated name
     output_dir_config = getattr(cfg.operation, "output_dir", None)
     if output_dir_config:
-        logging.warning(
+        logger.warn(
             "--operation.output_dir is deprecated and will be removed in future versions. "
             "Please use --new_root instead."
         )
@@ -475,21 +475,21 @@ def handle_convert_image_to_video(cfg: EditDatasetConfig) -> None:
     if cfg.new_root:
         output_dir = Path(cfg.new_root)
         output_repo_id = cfg.new_repo_id or f"{cfg.repo_id}_video"
-        logging.info(f"Saving to new_root: {output_dir} as {output_repo_id}")
+        logger.info(f"Saving to new_root: {output_dir} as {output_repo_id}")
     elif cfg.new_repo_id:
         output_repo_id = cfg.new_repo_id
         output_dir = HF_LEROBOT_HOME / cfg.new_repo_id
-        logging.info(f"Saving to new dataset: {cfg.new_repo_id} at {output_dir}")
+        logger.info(f"Saving to new dataset: {cfg.new_repo_id} at {output_dir}")
     elif output_dir_config:
         output_dir = Path(output_dir_config)
         output_repo_id = output_dir.name
-        logging.info(f"Saving to local directory: {output_dir} as {output_repo_id}")
+        logger.info(f"Saving to local directory: {output_dir} as {output_repo_id}")
     else:
         output_repo_id = f"{cfg.repo_id}_video"
         output_dir = HF_LEROBOT_HOME / output_repo_id
-        logging.info(f"Saving to auto-generated location: {output_dir} as {output_repo_id}")
+        logger.info(f"Saving to auto-generated location: {output_dir} as {output_repo_id}")
 
-    logging.info(f"Converting dataset {cfg.repo_id} to video format")
+    logger.info(f"Converting dataset {cfg.repo_id} to video format")
 
     new_dataset = convert_image_to_video_dataset(
         dataset=dataset,
@@ -506,17 +506,17 @@ def handle_convert_image_to_video(cfg: EditDatasetConfig) -> None:
         max_frames_per_batch=getattr(cfg.operation, "max_frames_per_batch", None),
     )
 
-    logging.info("Video dataset created successfully!")
-    logging.info(f"Location: {output_dir}")
-    logging.info(f"Episodes: {new_dataset.meta.total_episodes}")
-    logging.info(f"Frames: {new_dataset.meta.total_frames}")
+    logger.info("Video dataset created successfully!")
+    logger.info(f"Location: {output_dir}")
+    logger.info(f"Episodes: {new_dataset.meta.total_episodes}")
+    logger.info(f"Frames: {new_dataset.meta.total_frames}")
 
     if cfg.push_to_hub:
-        logging.info(f"Pushing to hub as {output_repo_id}...")
+        logger.info(f"Pushing to hub as {output_repo_id}...")
         new_dataset.push_to_hub()
-        logging.info("✓ Successfully pushed to hub!")
+        logger.info("✓ Successfully pushed to hub!")
     else:
-        logging.info("Dataset saved locally (not pushed to hub)")
+        logger.info("Dataset saved locally (not pushed to hub)")
 
 
 def _get_dataset_size(repo_path):

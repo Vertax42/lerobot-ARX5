@@ -16,7 +16,6 @@
 Provides the RealSenseCamera class for capturing frames from Intel RealSense cameras.
 """
 
-import logging
 import time
 from threading import Event, Lock, Thread
 from typing import Any
@@ -25,20 +24,24 @@ import cv2  # type: ignore  # TODO: add type stubs for OpenCV
 import numpy as np  # type: ignore  # TODO: add type stubs for numpy
 from numpy.typing import NDArray  # type: ignore  # TODO: add type stubs for numpy.typing
 
-try:
-    import pyrealsense2 as rs  # type: ignore  # TODO: add type stubs for pyrealsense2
-except Exception as e:
-    logging.info(f"Could not import realsense: {e}")
-
 from lerobot.utils.decorators import check_if_already_connected, check_if_not_connected
 from lerobot.utils.errors import DeviceNotConnectedError
+from lerobot.utils.robot_utils import get_logger
 
 from ..camera import Camera
 from ..configs import ColorMode
 from ..utils import get_cv2_rotation
 from .configuration_realsense import RealSenseCameraConfig
 
-logger = logging.getLogger(__name__)
+logger = get_logger("RealSenseCamera")
+
+# Optional: the rest of the module is importable without it, so that a rig with
+# no RealSense attached can still load the camera registry. The guard sits below
+# the logger because it reports why the import failed.
+try:
+    import pyrealsense2 as rs  # type: ignore  # TODO: add type stubs for pyrealsense2
+except Exception as e:
+    logger.info(f"Could not import realsense: {e}")
 
 
 class RealSenseCamera(Camera):
@@ -332,7 +335,7 @@ class RealSenseCamera(Camera):
             RuntimeError: If reading frames from the pipeline fails or frames are invalid.
         """
         if timeout_ms:
-            logger.warning(f"{self} read() timeout_ms parameter is deprecated and will be removed in future versions.")
+            logger.warn(f"{self} read() timeout_ms parameter is deprecated and will be removed in future versions.")
 
         if not self.use_depth:
             raise RuntimeError(
@@ -386,10 +389,10 @@ class RealSenseCamera(Camera):
         start_time = time.perf_counter()
 
         if color_mode is not None:
-            logger.warning(f"{self} read() color_mode parameter is deprecated and will be removed in future versions.")
+            logger.warn(f"{self} read() color_mode parameter is deprecated and will be removed in future versions.")
 
         if timeout_ms:
-            logger.warning(f"{self} read() timeout_ms parameter is deprecated and will be removed in future versions.")
+            logger.warn(f"{self} read() timeout_ms parameter is deprecated and will be removed in future versions.")
 
         if self.thread is None or not self.thread.is_alive():
             raise RuntimeError(f"{self} read thread is not running.")
@@ -488,7 +491,7 @@ class RealSenseCamera(Camera):
             except Exception as e:
                 if failure_count <= 10:
                     failure_count += 1
-                    logger.warning(f"Error reading frame in background thread for {self}: {e}")
+                    logger.warn(f"Error reading frame in background thread for {self}: {e}")
                 else:
                     raise RuntimeError(f"{self} exceeded maximum consecutive read failures.") from e
 

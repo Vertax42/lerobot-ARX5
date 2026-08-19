@@ -17,8 +17,6 @@ images is discovered at training time. Verified on the bench against firmware
 an error — so "read_fisheye did not raise" is not enough to trust it.
 """
 
-import logging
-
 import numpy as np
 import pytest
 
@@ -30,14 +28,14 @@ from lerobot.cameras.xense.configuration_wrist import (
 
 
 def _cfg(**kw):
-    base = dict(
-        index_or_path="XCA_TEST",
-        fourcc="MJPG",
-        width=FISHEYE_CALIB_WIDTH,
-        height=FISHEYE_CALIB_HEIGHT,
-        fps=30,
-        warmup_s=0.0,
-    )
+    base = {
+        "index_or_path": "XCA_TEST",
+        "fourcc": "MJPG",
+        "width": FISHEYE_CALIB_WIDTH,
+        "height": FISHEYE_CALIB_HEIGHT,
+        "fps": 30,
+        "warmup_s": 0.0,
+    }
     return XenseWristCameraConfig(**{**base, **kw})
 
 
@@ -121,12 +119,31 @@ class _FakeSdkGripper:
         self.calibration = _FakeCalibrationComponent(calibration, is_reference, reason)
 
 
+class _SpdlogDouble:
+    """Only the methods spdlog's SinkLogger actually has.
+
+    A stdlib logger would answer to `.warning` too, so a driver that called it
+    would pass here and raise AttributeError on the rig.
+    """
+
+    def __init__(self):
+        self.records: list[tuple[str, str]] = []
+
+    def _record(self, level):
+        return lambda msg: self.records.append((level, str(msg)))
+
+    def __getattr__(self, name):
+        if name in ("trace", "debug", "info", "warn", "error", "critical"):
+            return self._record(name)
+        raise AttributeError(f"spdlog SinkLogger has no {name!r}")
+
+
 def _follower(**kw):
     from lerobot.grippers.taccap.taccap_follower import TaccapFollower
 
     f = object.__new__(TaccapFollower)
     f._side = "left"  # __str__ reads it; __init__ is bypassed
-    f.logger = logging.getLogger("test")
+    f.logger = _SpdlogDouble()
     f._gripper = _FakeSdkGripper(**kw)
     return f
 
@@ -147,7 +164,7 @@ def test_a_units_own_calibration_passes_straight_through():
     assert follower._gripper.calibration.calls == 1
 
 
-def test_the_reference_fallback_is_reported_and_warned_about(caplog):
+def test_the_reference_fallback_is_reported_and_warned_about():
     """Whatever the SDK decided must reach the caller, and be visible in the log.
 
     The reasons themselves — too-old firmware, never calibrated, an all-zero
@@ -163,20 +180,21 @@ def test_the_reference_fallback_is_reported_and_warned_about(caplog):
         reason="the wrist lens has never been calibrated",
     )
 
-    with caplog.at_level(logging.WARNING):
-        got, is_reference = follower.read_wrist_fisheye_calibration()
+    got, is_reference = follower.read_wrist_fisheye_calibration()
 
     assert is_reference is True
     assert got is FISHEYE_FALLBACK_CAL
-    assert "REFERENCE" in caplog.text
-    assert "never been calibrated" in caplog.text, "the SDK's reason must survive"
+    warnings = [msg for level, msg in follower.logger.records if level == "warn"]
+    assert len(warnings) == 1, f"expected exactly one warning, got {follower.logger.records}"
+    assert "REFERENCE" in warnings[0]
+    assert "never been calibrated" in warnings[0], "the SDK's reason must survive"
 
 
-def test_a_units_own_calibration_is_not_warned_about(caplog):
-    with caplog.at_level(logging.WARNING):
-        _follower(calibration=_cal(310.5, 311.2)).read_wrist_fisheye_calibration()
+def test_a_units_own_calibration_is_not_warned_about():
+    follower = _follower(calibration=_cal(310.5, 311.2))
+    follower.read_wrist_fisheye_calibration()
 
-    assert "REFERENCE" not in caplog.text
+    assert not [msg for level, msg in follower.logger.records if level == "warn"]
 
 
 def test_reading_from_a_disconnected_gripper_is_refused():
@@ -214,8 +232,10 @@ def _reference_remap(cal, balance):
     import cv2
     from xense.taccap import FisheyeUndistorter
 
-    K = np.asarray(cal.K, np.float64)
-    D = np.asarray(cal.D, np.float64).reshape(4, 1)
+    # K and D are the camera-matrix / distortion names OpenCV and every
+    # calibration document use; lowercasing them would obscure the reference.
+    K = np.asarray(cal.K, np.float64)  # noqa: N806
+    D = np.asarray(cal.D, np.float64).reshape(4, 1)  # noqa: N806
     scale = FisheyeUndistorter(cal, 640, 480, balance).focal_scale
     new_k = K.copy()
     new_k[0, 0] *= scale

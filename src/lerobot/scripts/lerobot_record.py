@@ -959,10 +959,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             try:
                 dataset.push_to_hub(tags=cfg.dataset.tags, private=cfg.dataset.private)
             except Exception as e:
-                logger.error(
-                    f"Recording is saved at {dataset.root}, but pushing it to the "
-                    f"Hub failed: {e!r}"
-                )
+                logger.error(f"Recording is saved at {dataset.root}, but pushing it to the Hub failed: {e!r}")
 
         log_say("Exiting", cfg.play_sounds)
     return dataset

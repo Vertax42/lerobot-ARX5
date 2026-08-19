@@ -29,10 +29,16 @@ from statistics import mean
 from typing import TYPE_CHECKING
 
 import numpy as np
+import spdlog
+
+from lerobot.utils.robot_utils import get_logger
 
 if TYPE_CHECKING:
     import torch
     from accelerate import Accelerator
+
+
+logger = get_logger("lerobot")
 
 
 def inside_slurm():
@@ -46,16 +52,16 @@ def auto_select_torch_device() -> torch.device:
     import torch
 
     if torch.cuda.is_available():
-        logging.info("Cuda backend detected, using cuda.")
+        logger.info("Cuda backend detected, using cuda.")
         return torch.device("cuda")
     elif torch.backends.mps.is_available():
-        logging.info("Metal backend detected, using mps.")
+        logger.info("Metal backend detected, using mps.")
         return torch.device("mps")
     elif torch.xpu.is_available():
-        logging.info("Intel XPU backend detected, using xpu.")
+        logger.info("Intel XPU backend detected, using xpu.")
         return torch.device("xpu")
     else:
-        logging.warning("No accelerated backend detected. Using default cpu, this will be slow.")
+        logger.warn("No accelerated backend detected. Using default cpu, this will be slow.")
         return torch.device("cpu")
 
 
@@ -77,11 +83,11 @@ def get_safe_torch_device(try_device: str, log: bool = False) -> torch.device:
     elif try_device == "cpu":
         device = torch.device("cpu")
         if log:
-            logging.warning("Using CPU, this will be slow.")
+            logger.warn("Using CPU, this will be slow.")
     else:
         device = torch.device(try_device)
         if log:
-            logging.warning(f"Using custom {try_device} device.")
+            logger.warn(f"Using custom {try_device} device.")
     return device
 
 
@@ -102,10 +108,10 @@ def get_safe_dtype(dtype: torch.dtype, device: str | torch.device):
             # The `has_fp64` flag is returned by `torch.xpu.get_device_capability()`
             # when available; if False, we fall back to float32 for compatibility.
             if not device_capability.get("has_fp64", False):
-                logging.warning(f"Device {device} does not support float64, using float32 instead.")
+                logger.warn(f"Device {device} does not support float64, using float32 instead.")
                 return torch.float32
         else:
-            logging.warning(
+            logger.warn(
                 f"Device {device} capability check failed. Assuming no support for float64, using float32 instead."
             )
             return torch.float32
@@ -168,11 +174,14 @@ def init_logging(
     formatter = logging.Formatter()
     formatter.format = custom_format
 
-    logger = logging.getLogger()
-    logger.setLevel(logging.NOTSET)
+    # `root_logger`, not `logger`: this configures the *stdlib* root, which is
+    # how third-party libraries' output reaches the console. The module-level
+    # `logger` above is spdlog and has none of these methods.
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.NOTSET)
 
     # Clear any existing handlers
-    logger.handlers.clear()
+    root_logger.handlers.clear()
 
     # Determine if this is a non-main process in distributed training
     is_main_process = accelerator.is_main_process if accelerator is not None else True
@@ -182,17 +191,17 @@ def init_logging(
         console_handler = logging.StreamHandler()
         console_handler.setFormatter(formatter)
         console_handler.setLevel(console_level.upper())
-        logger.addHandler(console_handler)
+        root_logger.addHandler(console_handler)
     else:
         # Suppress console output for non-main processes
-        logger.addHandler(logging.NullHandler())
-        logger.setLevel(logging.ERROR)
+        root_logger.addHandler(logging.NullHandler())
+        root_logger.setLevel(logging.ERROR)
 
     if log_file is not None:
         file_handler = logging.FileHandler(log_file)
         file_handler.setFormatter(formatter)
         file_handler.setLevel(file_level.upper())
-        logger.addHandler(file_handler)
+        root_logger.addHandler(file_handler)
 
     _quieten_vendor_loggers()
 
@@ -202,7 +211,10 @@ def init_logging(
 #: and a "loaded config" line per sensor — which buries the messages an operator
 #: is actually waiting for. Their warnings still come through, and the lines
 #: below are still in the session file at DEBUG.
-_VENDOR_LOGGERS = ("xensesdk",)
+_VENDOR_LOGGERS = (
+    "xensesdk",  # per-sensor device inventory and config-load lines on every connect
+    "datasets",  # "JAX version X available." and friends, at import
+)
 
 
 def _quieten_vendor_loggers(level: int = logging.WARNING) -> None:
@@ -251,7 +263,7 @@ def say(text: str, blocking: bool = False):
 
 
 def log_say(text: str, play_sounds: bool = True, blocking: bool = False):
-    logging.info(text)
+    logger.info(text)
 
     if play_sounds:
         say(text, blocking)
@@ -363,7 +375,7 @@ class TimerManager:
         self,
         label: str = "Elapsed-time",
         log: bool = True,
-        logger: logging.Logger | None = None,
+        logger: spdlog.Logger | None = None,
     ):
         self.label = label
         self.log = log
@@ -391,7 +403,7 @@ class TimerManager:
             if self.logger is not None:
                 self.logger.info(f"{self.label}: {elapsed:.6f} s")
             else:
-                logging.info(f"{self.label}: {elapsed:.6f} s")
+                logger.info(f"{self.label}: {elapsed:.6f} s")
         return elapsed
 
     def reset(self):

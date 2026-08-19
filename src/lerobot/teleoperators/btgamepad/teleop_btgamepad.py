@@ -18,9 +18,12 @@ from enum import IntEnum
 from typing import Any
 
 import numpy as np
-from scipy.spatial.transform import Rotation as R
+
+# `R` is the conventional spelling for a rotation in every formula below.
+from scipy.spatial.transform import Rotation as R  # noqa: N817
 
 from lerobot.utils.robot_utils import (
+    get_logger,
     normalize_quaternion,
     quaternion_to_matrix,
     rotation_6d_to_quaternion,
@@ -29,6 +32,8 @@ from lerobot.utils.robot_utils import (
 from ..teleoperator import Teleoperator
 from ..utils import TeleopEvents
 from .configuration_btgamepad import BtgamepadTeleopConfig
+
+logger = get_logger("BTGamepadTeleop")
 
 
 class GripperAction(IntEnum):
@@ -184,9 +189,7 @@ class BtgamepadTeleop(Teleoperator):
         # Reset edge detection state
         self._was_back_button_pressed = False
 
-        import logging
-
-        logging.info(f"[btgamepad] Reset target pose to: pos={pose_7d[:3]}, quat={pose_7d[3:7]}, gripper={gripper_pos}")
+        logger.info(f"[btgamepad] Reset target pose to: pos={pose_7d[:3]}, quat={pose_7d[3:7]}, gripper={gripper_pos}")
 
     def get_reset_button(self) -> bool:
         """Get the state of the reset button (BACK button) with edge detection.

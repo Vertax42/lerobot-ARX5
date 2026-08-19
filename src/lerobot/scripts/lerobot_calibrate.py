@@ -25,7 +25,6 @@ lerobot-calibrate \
 ```
 """
 
-import logging
 from dataclasses import asdict, dataclass
 from pprint import pformat
 
@@ -45,7 +44,10 @@ from lerobot.teleoperators import (  # noqa: F401
     mock_teleop,
 )
 from lerobot.utils.import_utils import register_third_party_plugins
+from lerobot.utils.robot_utils import get_logger
 from lerobot.utils.utils import init_logging
+
+logger = get_logger("lerobot_calibrate")
 
 
 @dataclass
@@ -63,7 +65,7 @@ class CalibrateConfig:
 @draccus.wrap()
 def calibrate(cfg: CalibrateConfig):
     init_logging()
-    logging.info(pformat(asdict(cfg)))
+    logger.info(pformat(asdict(cfg)))
 
     if isinstance(cfg.device, RobotConfig):
         device = make_robot_from_config(cfg.device)

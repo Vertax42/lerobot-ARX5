@@ -12,14 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 from pprint import pformat
 from typing import cast
 
 from lerobot.utils.import_utils import make_device_from_device_class
+from lerobot.utils.robot_utils import get_logger
 
 from .config import RobotConfig
 from .robot import Robot
+
+logger = get_logger("robots")
 
 
 def make_robot_from_config(config: RobotConfig) -> Robot:
@@ -103,7 +105,7 @@ def ensure_safe_goal_position(
             }
 
     if warnings_dict:
-        logging.warning(
+        logger.warn(
             f"Relative goal position magnitude had to be clamped to be safe.\n{pformat(warnings_dict, indent=4)}"
         )
 

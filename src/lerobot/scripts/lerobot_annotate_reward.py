@@ -81,7 +81,6 @@ Resume annotation from saved progress:
 
 import argparse
 import json
-import logging
 from pathlib import Path
 
 import cv2
@@ -92,7 +91,10 @@ from PIL import Image, ImageDraw, ImageFont
 from lerobot.datasets.dataset_tools import modify_features
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.utils.constants import HF_LEROBOT_HOME, REWARD
+from lerobot.utils.robot_utils import get_logger
 from lerobot.utils.utils import init_logging
+
+logger = get_logger("lerobot_annotate_reward")
 
 
 class RewardAnnotator:
@@ -143,7 +145,7 @@ class RewardAnnotator:
 
         # Check if dataset already has reward data
         if REWARD in self.dataset.meta.features:
-            logging.info("Loading existing reward annotations...")
+            logger.info("Loading existing reward annotations...")
             for idx in range(len(self.dataset)):
                 item = self.dataset[idx]
                 if REWARD in item:
@@ -152,7 +154,7 @@ class RewardAnnotator:
                         reward_val = reward_val.item()
                     rewards[idx] = reward_val
         else:
-            logging.info("No existing rewards found, starting with zeros")
+            logger.info("No existing rewards found, starting with zeros")
 
         return rewards
 
@@ -256,7 +258,7 @@ class RewardAnnotator:
         idx = 0
         for r in range(rows):
             row_images = []
-            for c in range(cols):
+            for _c in range(cols):
                 if idx < n:
                     row_images.append(resized[idx])
                     idx += 1
@@ -503,7 +505,7 @@ class RewardAnnotator:
             json.dump(annotations, f)
 
         self.has_unsaved_changes = False
-        logging.info(f"Saved annotations to {output_path}")
+        logger.info(f"Saved annotations to {output_path}")
 
     def load_annotations(self, input_path: Path) -> None:
         """Load annotations from a JSON file."""
@@ -519,7 +521,7 @@ class RewardAnnotator:
         self.current_global_idx = annotations.get("current_global_idx", 0)
         self.current_episode = annotations.get("current_episode", 0)
         self.original_rewards = self.rewards.copy()
-        logging.info(f"Loaded annotations from {input_path}")
+        logger.info(f"Loaded annotations from {input_path}")
 
     def apply_to_dataset(
         self,
@@ -534,7 +536,7 @@ class RewardAnnotator:
         if output_dir is None:
             output_dir = HF_LEROBOT_HOME / new_repo_id
 
-        logging.info(f"Applying reward annotations to create {new_repo_id}...")
+        logger.info(f"Applying reward annotations to create {new_repo_id}...")
 
         # Prepare reward feature info
         reward_info = {
@@ -562,13 +564,13 @@ class RewardAnnotator:
                 repo_id=new_repo_id,
             )
 
-        logging.info(f"Dataset saved to {output_dir}")
+        logger.info(f"Dataset saved to {output_dir}")
 
         # Push to HuggingFace Hub if requested
         if push_to_hub:
-            logging.info(f"Pushing dataset to HuggingFace Hub as {new_repo_id}...")
+            logger.info(f"Pushing dataset to HuggingFace Hub as {new_repo_id}...")
             new_dataset.push_to_hub()
-            logging.info(f"Dataset pushed to hub: https://huggingface.co/datasets/{new_repo_id}")
+            logger.info(f"Dataset pushed to hub: https://huggingface.co/datasets/{new_repo_id}")
 
         return new_dataset
 
@@ -601,7 +603,7 @@ class RewardAnnotator:
             title_bar_height = 35
             y = y - title_bar_height // 2
 
-            logging.info(
+            logger.info(
                 f"Centering window: screen={screen_width}x{screen_height}, "
                 f"window={win_width}x{win_height}, position=({x}, {y})"
             )
@@ -609,7 +611,7 @@ class RewardAnnotator:
             cv2.moveWindow(self.window_name, x, y)
         except Exception as e:
             # If tkinter is not available or any error, skip centering
-            logging.warning(f"Could not center window: {e}")
+            logger.warn(f"Could not center window: {e}")
 
     def run(self) -> bool:
         """Run the interactive annotation loop. Returns True if changes were saved."""
@@ -840,18 +842,18 @@ def main():
     try:
         window_width, window_height = map(int, args.window_size.lower().split("x"))
     except ValueError:
-        logging.warning(f"Invalid window size '{args.window_size}', using default 1600x900")
+        logger.warn(f"Invalid window size '{args.window_size}', using default 1600x900")
         window_width, window_height = 1600, 900
 
     init_logging()
 
     # Load dataset
-    logging.info(f"Loading dataset: {args.repo_id}")
+    logger.info(f"Loading dataset: {args.repo_id}")
     dataset = LeRobotDataset(
         repo_id=args.repo_id,
         root=args.root,
     )
-    logging.info(f"Loaded {dataset.meta.total_episodes} episodes, {dataset.meta.total_frames} frames")
+    logger.info(f"Loaded {dataset.meta.total_episodes} episodes, {dataset.meta.total_frames} frames")
 
     # Create annotator
     annotator = RewardAnnotator(
@@ -868,7 +870,7 @@ def main():
         # Try to auto-load from default path
         default_path = annotator._get_default_annotation_path()
         if default_path.exists():
-            logging.info(f"Found existing annotations at {default_path}")
+            logger.info(f"Found existing annotations at {default_path}")
             annotator.load_annotations(default_path)
 
     # Run interactive annotation
@@ -887,9 +889,8 @@ def main():
 
     except KeyboardInterrupt:
         print("\nInterrupted by user")
-        if annotator.has_unsaved_changes:
-            if input("Save progress before exit? [y/N]: ").lower() == "y":
-                annotator.save_annotations(args.save_progress)
+        if annotator.has_unsaved_changes and input("Save progress before exit? [y/N]: ").lower() == "y":
+            annotator.save_annotations(args.save_progress)
 
 
 if __name__ == "__main__":
