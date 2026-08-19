@@ -698,7 +698,12 @@ def elite_cs66_rt_record_loop(
     single_task: str | None = None,
     display_data: bool = False,
 ):
-    """Elite CS66 RT: reset comes from the keyboard or the driving device."""
+    """Elite CS66 RT: reset comes from the keyboard or the driving device.
+
+    Note this loop now runs under ``@safe_stop_image_writer`` — its own copy
+    never had the decorator, so an exception mid-episode left the writer
+    threads running. Sharing the body fixes that as a side effect.
+    """
     run_rt_record_loop(
         robot,
         EliteRecordPolicy(),
@@ -923,6 +928,13 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
                 dataset.save_episode()
                 recorded_episodes += 1
+    except KeyboardInterrupt:
+        # Ctrl+C is how an operator ends a session, not a failure. Logging it
+        # through the handler below would put an ERROR and a full traceback in
+        # the session log for the ordinary case, which is exactly the noise
+        # main() suppresses on the way out.
+        logger.info("Recording interrupted by user (Ctrl+C)")
+        raise
     except BaseException:
         # Say why the recording stopped. Without this the only trace is the
         # "Stop recording" line below, and a session that died one second in
