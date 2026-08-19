@@ -14,7 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Configuration for pure-serial Xense gripper (no ezros / xensesdk required)."""
+"""Configuration for the pure-serial Xense gripper.
+
+Importing this module needs no SDK at all — that is what lets an arm config parse
+on a bare host. The driver it configures needs ``xgripper`` (but not the ezros /
+xensesdk stack); see ``serial_gripper``.
+"""
 
 from dataclasses import dataclass
 from typing import ClassVar
