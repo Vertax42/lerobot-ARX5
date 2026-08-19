@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# The checks this fork actually runs. The inherited upstream workflows are
-# disarmed to workflow_dispatch — they publish to PyPI, host docs and triage
-# issues for the upstream project, none of which applies here.
+# The checks this fork actually runs, and the only workflow it has. The ones
+# inherited from upstream were deleted rather than kept dormant: they publish
+# to PyPI, host docs and triage issues for the upstream project, none of which
+# applies here, and git history holds them if one is ever wanted back.
 #
 # No vendor SDK is installed: xensesdk, xense.taccap, flexivrdk and elite_cs_sdk
 # are not on PyPI and need hardware to be worth having. The suite is written to
