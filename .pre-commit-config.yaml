@@ -83,10 +83,16 @@ repos:
       additional_dependencies: ["bandit[toml]"]
 
   # TODO(Steven): Uncomment when ready to use.
-  # Left off deliberately: it reports hundreds of pre-existing errors in
-  # inherited code (mostly `has-type` on attributes assigned in a base class),
-  # so as a blocking hook it fails on files a change merely touches. Turn it on
-  # once that backlog is paid down, or it will only ever be bypassed.
+  # Left off, but closer than it looks. Two blockers, measured 2026-08-20:
+  #   1. mypy reads `#       type: serial` — a YAML example inside a comment in
+  #      config_elite_cs66_rt.py and config_flexiv_rizon4_rt.py — as a PEP 484
+  #      type comment, fails to parse it, and stops checking the whole package.
+  #   2. Past that, 28 errors remain: 26 in cameras/xense/camera_xense.py, all
+  #      from output_types being declared `list[XenseOutputType] | list[str] |
+  #      None` while every use assumes a normalized enum list, plus 2 in a
+  #      vendored setup.py that belongs in the exclude.
+  # Note the hook checks one file at a time, so it also loses the cross-module
+  # context and invents `has-type` errors a full-package run does not report.
   ##### Static Analysis & Typing #####
   # - repo: https://github.com/pre-commit/mirrors-mypy
   #   rev: v1.19.1
