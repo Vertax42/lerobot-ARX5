@@ -118,8 +118,6 @@ hardware = [
     # Flexiv RT SDK (Real-Time): required for flexiv_rizon4_rt and bi_flexiv_rizon4_rt
     # Install from internal Flexiv RT SDK wheel
     "flexiv-rt",
-    # VR Tracker: required for vive_tracker teleoperator
-    "pysurvive",
     # 3D SpaceMouse: required for spacemouse teleoperator
     "pyspacemouse",
 ]

@@ -5,7 +5,7 @@ by XenseRobotics, used for Xense's multimodal tactile data acquisition system.
 This branch tracks **upstream lerobot v5.1**, with Xense-specific robots
 (Flexiv Rizon4 RT, Elite CS66 RT, and ARX5 — each single-arm and bimanual;
 plus TacCap tactile grippers), teleoperators (Pico4 VR,
-dual SpaceMouse, Vive tracker, TRLC leader, gamepad) and tactile cameras
+dual SpaceMouse, TRLC leader, gamepad) and tactile cameras
 layered on top. For generic lerobot usage (datasets, policies, training
 scripts) refer to the
 [upstream README](https://github.com/huggingface/lerobot#readme).
@@ -132,7 +132,6 @@ bash ./setup_env.sh --install --help
 | `--pico4`, `--bi_pico4` | `xensevr_pc_service_sdk` | `pico4`, `bi_pico4` teleop |
 | `--spacemouse` | `pyspacemouse` | `spacemouse` teleop |
 | `--dynamixel`, `--trlc` | `dynamixel-sdk` | `trlc_leader`, `bi_trlc` teleop |
-| `--vive`, `--vive_tracker` | `xense` (libsurvive via XGripper) | `vive_tracker` teleop |
 | `--all` | everything (explicit) | — |
 | `--core`, `--none` | nothing (core only) | — |
 | *(no selector)* | everything (default, backward compatible) | — |

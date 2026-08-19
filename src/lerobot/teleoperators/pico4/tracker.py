@@ -12,10 +12,10 @@
 Pico4 Ultra independent motion-tracker reader.
 
 This is a *thin* reader, not a full Teleoperator. It reads one motion
-tracker from the XenseVR PC Service and emits the same 9-D pose dict
-(``tcp.x/y/z`` + ``tcp.r1-r6`` in 6D rotation representation) that
-``ViveTrackerTeleop.get_action()`` produces — so a robot can swap a Vive
-reader for a Pico4 reader without changing its observation schema.
+tracker from the XenseVR PC Service and emits the standard 9-D pose dict
+(``tcp.x/y/z`` + ``tcp.r1-r6`` in 6D rotation representation) the arms
+consume — so a robot can swap in a different tracker reader without
+changing its observation schema.
 
 The XenseVR service exposes up to three independent trackers. We pin to
 one tracker by serial number; if no SN is given we take whichever one
@@ -216,8 +216,8 @@ class Pico4TrackerReader:
                 the first valid tracker pose and computes a rigid
                 alignment transform so all subsequent
                 ``get_pose_ee()`` / ``get_action()`` outputs are in the
-                same frame as this argument (mirrors vive_tracker's
-                UMI behaviour). When omitted, the raw
+                same frame as this argument (standard UMI
+                behaviour). When omitted, the raw
                 xrt-native frame is emitted (drop-in compatible with
                 pre-Phase-C callers).
 
@@ -412,9 +412,8 @@ class Pico4TrackerReader:
             t_world_ee = t_world_tracker @ self._tracker_to_ee_matrix
 
             # UMI alignment: snapshot the first valid pose so all
-            # subsequent reports are in the caller's frame. Matches
-            # vive_tracker.py:316-324 exactly:
-            #   T_align = T_ee_init @ inv(T_vive_init @ T_vive_to_ee)
+            # subsequent reports are in the caller's frame.
+            #   T_align = T_ee_init @ inv(T_tracker_init @ T_tracker_to_ee)
             #   T_world_ee_aligned = T_align @ T_world_ee_raw
             if self._ee_init_matrix is not None and self._align_matrix is None:
                 self._align_matrix = self._ee_init_matrix @ np.linalg.inv(t_world_ee)
@@ -511,8 +510,8 @@ class Pico4TrackerReader:
             return self._latest_ee_wxyz.copy()
 
     def get_action(self) -> dict[str, Any]:
-        """Return the same 9-field dict that ``ViveTrackerTeleop.get_action()``
-        produces (no gripper field — callers add it from their own source).
+        """Return the standard 9-field pose dict the arms consume
+        (no gripper field — callers add it from their own source).
 
         Keys: ``tcp.x``, ``tcp.y``, ``tcp.z``, ``tcp.r1``..``tcp.r6``.
 

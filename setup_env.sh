@@ -898,7 +898,6 @@ Per-hardware-family selectors (arms auto-include the xense gripper stack):
   --pico4,   --bi_pico4      Pico4 VR teleop
   --spacemouse               3D SpaceMouse teleop
   --dynamixel, --trlc        Dynamixel / TRLC leader teleop
-  --vive,    --vive_tracker  Vive tracker teleop (via xense/XGripper libsurvive)
 Examples:
   ./setup_env.sh --install --flexiv --taccap
   ./setup_env.sh --install --core
@@ -920,7 +919,6 @@ USAGE
                 --pico4|--bi_pico4)       add_key pico4 ;;
                 --spacemouse)             add_key spacemouse ;;
                 --dynamixel|--trlc)       add_key dynamixel ;;
-                --vive|--vive_tracker)    add_key xense ;;
                 --help|-h)                print_install_usage; exit 0 ;;
                 *) echo "[ERROR] Unknown --install selector: $_a"; echo; print_install_usage; exit 1 ;;
             esac

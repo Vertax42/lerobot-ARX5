@@ -118,7 +118,6 @@ from lerobot.teleoperators import (  # noqa: F401
     mock_teleop,
     pico4,
     spacemouse,
-    vive_tracker,
     trlc_leader,
 )
 from lerobot.utils.constants import ACTION, OBS_STR
@@ -235,100 +234,6 @@ RAW_PASSTHROUGH_RECORD_PAIRS = frozenset(
         ("bi_elite_cs66_rt", "bi_pico4"),
     }
 )
-
-
-def extract_joint_positions(obs):
-    """提取关节位置，排除摄像头数据"""
-    joint_positions = {}
-    for key, value in obs.items():
-        if (
-            key.endswith(".pos")
-            and not key.startswith("head")
-            and not key.startswith("left_wrist")
-            and not key.startswith("right_wrist")
-        ):
-            joint_positions[key] = value
-    return joint_positions
-
-
-def apply_velocity_limits(
-    current_action: dict, prev_action: dict, dt: float, robot=None
-) -> dict:
-    """Apply velocity limits to action to ensure consistency with inference-time clipping.
-
-    This ensures that recorded actions are physically executable during policy inference.
-
-    Args:
-        current_action: Current action dictionary with joint positions
-        prev_action: Previous action dictionary with joint positions
-        dt: Time step between actions (typically 1/fps)
-        robot: Robot instance to get velocity limits from robot_configs
-
-    Returns:
-        Velocity-limited action dictionary
-    """
-    if prev_action is None:
-        return current_action
-
-    # Get velocity limits from robot config to ensure consistency with C++ settings
-    if robot is not None and hasattr(robot, "robot_configs"):
-        # Read from robot config (same as C++ controller uses)
-        left_config = robot.robot_configs["left_config"]
-        joint_vel_limits = (
-            left_config.joint_vel_max.tolist()
-        )  # Convert numpy array to list
-        gripper_vel_limit = left_config.gripper_vel_max
-    else:
-        # Fallback to hardcoded values if robot config not available
-        # From config.h: [20.0, 20.0, 20.5, 20.5, 20.0, 20.0] rad/s, gripper: 0.3 m/s
-        joint_vel_limits = [20.0, 20.0, 20.5, 20.5, 20.0, 20.0]  # rad/s
-        gripper_vel_limit = 0.3  # m/s
-
-    limited_action = current_action.copy()
-    clip_count = 0
-
-    # Apply joint velocity limits
-    for i in range(6):
-        left_key = f"left_joint_{i+1}.pos"
-        right_key = f"right_joint_{i+1}.pos"
-
-        for key in [left_key, right_key]:
-            if key in current_action and key in prev_action:
-                current_pos = current_action[key]
-                prev_pos = prev_action[key]
-                delta_pos = current_pos - prev_pos
-                max_delta = joint_vel_limits[i] * dt
-
-                if abs(delta_pos) > max_delta:
-                    # Clip to maximum allowed change
-                    sign = 1 if delta_pos > 0 else -1
-                    limited_action[key] = prev_pos + sign * max_delta
-                    clip_count += 1
-                    logger.debug(
-                        f"Clipped {key}: {delta_pos:.3f} -> {sign * max_delta:.3f} rad"
-                    )
-
-    # Apply gripper velocity limits
-    for gripper_key in ["left_gripper.pos", "right_gripper.pos"]:
-        if gripper_key in current_action and gripper_key in prev_action:
-            current_pos = current_action[gripper_key]
-            prev_pos = prev_action[gripper_key]
-            delta_pos = current_pos - prev_pos
-            max_delta = gripper_vel_limit * dt
-
-            if abs(delta_pos) > max_delta:
-                # Clip to maximum allowed change
-                sign = 1 if delta_pos > 0 else -1
-                limited_action[gripper_key] = prev_pos + sign * max_delta
-                clip_count += 1
-                logger.debug(
-                    f"Clipped {gripper_key}: {delta_pos:.3f} -> {sign * max_delta:.3f} m"
-                )
-
-    if clip_count > 0:
-        logger.debug(f"Applied velocity limits: {clip_count} joints clipped")
-
-    return limited_action
 
 
 def _start_reset_in_background(robot, teleop, set_done):

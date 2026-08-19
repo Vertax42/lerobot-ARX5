@@ -136,7 +136,6 @@ from lerobot.teleoperators import (  # noqa: F401
     mock_teleop,
     pico4,
     spacemouse,
-    vive_tracker,
     trlc_leader,
 )
 from lerobot.utils.import_utils import register_third_party_plugins
@@ -197,6 +196,17 @@ def _cleanup(robot, teleop, display_data: bool) -> None:
             logger.warning(f"Error shutting down rerun: {e}")
     _safe_disconnect(teleop, teleop.__class__.__name__ if teleop else "teleop")
     _safe_disconnect(robot, robot.__class__.__name__ if robot else "robot")
+
+
+def _obs_ms(timing: dict, key: str) -> str:
+    """One field of a robot's ``_last_obs_timing`` breakdown, as milliseconds.
+
+    Looked up with ``.get`` rather than ``[]`` so a rig that publishes a
+    different set of sources degrades to a blank column instead of raising
+    inside the teleop loop.
+    """
+    value = timing.get(key)
+    return f"{value:.1f}" if isinstance(value, (int, float)) else "--"
 
 
 def _print_obs_state(obs: dict, display_len: int, status: str) -> None:
@@ -1512,15 +1522,17 @@ def bi_pico4_teleop_loop(
                 f"rerun={rerun_ms:4.1f}ms  sleep={sleep_ms:5.1f}ms  "
                 f"| total={loop_s*1e3:5.1f}ms ({1/loop_s:.0f}Hz)",
             ]
-            if hasattr(robot, "_last_obs_timing"):
-                t = robot._last_obs_timing
+            t = getattr(robot, "_last_obs_timing", None)
+            if isinstance(t, dict) and t:
                 lines.append(
-                    f"  l_arm={t['left_arm_ms']:.1f}  r_arm={t['right_arm_ms']:.1f}"
-                    f"  l_grip={t['left_grip_ms']:.1f}  r_grip={t['right_grip_ms']:.1f}"
-                    f"  cams={t['cameras_ms']:.1f}"
+                    f"  l_arm={_obs_ms(t, 'left_arm_ms')}  r_arm={_obs_ms(t, 'right_arm_ms')}"
+                    f"  l_grip={_obs_ms(t, 'left_grip_ms')}  r_grip={_obs_ms(t, 'right_grip_ms')}"
+                    f"  cams={_obs_ms(t, 'cameras_ms')}"
                 )
+                # Keys look like "cam[<name>]_ms" -> strip 4 leading and 4
+                # trailing chars to recover <name>.
                 cam_parts = "  ".join(
-                    f"{k[4:-3]}={v:.1f}" for k, v in t.items() if k.startswith("cam[")
+                    f"{k[4:-4]}={v:.1f}" for k, v in t.items() if k.startswith("cam[")
                 )
                 if cam_parts:
                     lines.append(f"  [{cam_parts}]")
@@ -1543,73 +1555,6 @@ def bi_pico4_teleop_loop(
                 end="",
                 flush=True,
             )
-
-        if duration is not None and time.perf_counter() - start >= duration:
-            return
-
-
-def vive_tracker_teleop_loop(
-    teleop: Teleoperator,
-    robot: Robot,
-    fps: int,
-    display_data: bool = False,
-    duration: float | None = None,
-    dryrun: bool = False,
-):
-    """
-    Teleop loop for Vive Tracker with Flexiv Rizon4 robot.
-
-    Control scheme:
-    - Vive Tracker provides absolute 6-DoF pose tracking
-    - No enable/disable control (always active after connect)
-    """
-    display_len = max(len(key) for key in robot.action_features)
-    start = time.perf_counter()
-
-    while True:
-        loop_start = time.perf_counter()
-
-        obs = robot.get_observation()
-
-        try:
-            raw_action = teleop.get_action()
-        except Exception as e:
-            logger.error(f"Error getting Vive Tracker action: {e}")
-            dt_s = time.perf_counter() - loop_start
-            precise_sleep(max(1 / fps - dt_s, 0))
-            continue
-
-        teleop_action = raw_action
-        robot_action_to_send = teleop_action
-
-        if not dryrun:
-            try:
-                _ = robot.send_action(robot_action_to_send)
-            except Exception as e:
-                logger.error(f"Error sending action to robot: {e}")
-
-        if display_data:
-            obs_transition = obs
-            log_rerun_data(observation=obs_transition, action=teleop_action)
-            print("\n" + "-" * (display_len + 10))
-            print(f"{'NAME':<{display_len}} | {'NORM':>7}")
-            for motor, value in robot_action_to_send.items():
-                print(f"{motor:<{display_len}} | {value:>7.4f}")
-            move_cursor_up(len(robot_action_to_send) + 5)
-
-        dt_s = time.perf_counter() - loop_start
-        precise_sleep(max(1 / fps - dt_s, 0))
-        loop_s = time.perf_counter() - loop_start
-
-        action_str = ", ".join(
-            [f"{k}={v:.4f}" for k, v in robot_action_to_send.items()]
-        )
-        dryrun_str = "[DRYRUN] | " if dryrun else ""
-        print(
-            f"\rtime: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz) | {dryrun_str}{action_str}",
-            end="",
-            flush=True,
-        )
 
         if duration is not None and time.perf_counter() - start >= duration:
             return
