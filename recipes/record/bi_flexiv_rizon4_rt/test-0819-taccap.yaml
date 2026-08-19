@@ -2,8 +2,9 @@
 # with TacCap follower grippers. A short smoke-test recording, not a task.
 #   lerobot-record --config_path=recipes/record/bi_flexiv_rizon4_rt/test-0819-taccap.yaml
 #
-# Same bench as assemble_box-{taccap,xgripper}.yaml (Rizon4s-062412/062881);
-# this one exists to exercise the record loop rather than to collect data.
+# Different pair from assemble_box-{taccap,xgripper}.yaml, which run
+# Rizon4s-062412/062881; this one exists to exercise the record loop rather
+# than to collect data.
 #
 # Self-contained: this file carries both the bench hardware and the run's tuning.
 # Anything not listed uses the dataclass default.
@@ -11,8 +12,8 @@
 # Gripper variant: taccap. The sibling assemble_box-xgripper.yaml is the same bench
 # with the other gripper family — the two differ only in `gripper:`.
 #
-# NOT yet run on this bench with TacCap followers — the arm block is inherited
-# from the assemble_box-xgripper.yaml recipe, the gripper block is the fleet default. Grip tuning
+# NOT yet run on this bench with TacCap followers — the arm block is this pair's
+# own start/home pose, the gripper block is the fleet default. Grip tuning
 # (feedforward_torque) is bench work; start gentle.
 
 robot:
