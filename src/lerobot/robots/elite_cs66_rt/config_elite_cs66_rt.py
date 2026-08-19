@@ -15,8 +15,8 @@ from enum import Enum
 from pathlib import Path
 
 from lerobot.cameras.configs import CameraConfig
-from lerobot.robots.config import RobotConfig
 from lerobot.grippers import GripperConfig
+from lerobot.robots.config import RobotConfig
 
 
 class EliteCS66RTControlMode(str, Enum):

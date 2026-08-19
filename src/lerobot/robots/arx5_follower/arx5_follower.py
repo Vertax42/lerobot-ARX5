@@ -22,7 +22,6 @@ from functools import cached_property
 from typing import Any
 
 import numpy as np
-import os
 
 from lerobot.cameras.utils import make_cameras_from_configs
 from lerobot.robots.arx5_follower.config_arx5_follower import ARX5ControlMode, ARX5FollowerConfig
@@ -275,8 +274,8 @@ class ARX5Follower(Robot):
             # Internally the ARX5 SDK still consumes Euler [x, y, z, roll, pitch, yaw],
             # but send_action()/get_observation() do the conversion so datasets and
             # teleop bridges all see the unified 6D representation.
-            features: dict[str, type] = {key: float for key in _CARTESIAN_TCP_KEYS}
-            features.update({key: float for key in _CARTESIAN_R6D_KEYS})
+            features: dict[str, type] = dict.fromkeys(_CARTESIAN_TCP_KEYS, float)
+            features.update(dict.fromkeys(_CARTESIAN_R6D_KEYS, float))
             features[_CARTESIAN_GRIPPER_KEY] = float
             return features
         else:

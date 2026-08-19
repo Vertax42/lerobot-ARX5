@@ -21,8 +21,8 @@ from dataclasses import dataclass, field, replace
 import flexiv_rt
 
 from lerobot.cameras.configs import CameraConfig
-from lerobot.robots.config import RobotConfig
 from lerobot.grippers import GripperConfig
+from lerobot.robots.config import RobotConfig
 
 ROBOT_TYPE = "bi_flexiv_rizon4_rt"
 

@@ -24,9 +24,9 @@ from enum import Enum
 from pathlib import Path
 
 from lerobot.cameras.configs import CameraConfig
+from lerobot.grippers import GripperConfig
 from lerobot.robots.config import RobotConfig
 from lerobot.robots.elite_cs66_rt.config_elite_cs66_rt import _validate_singularity_params
-from lerobot.grippers import GripperConfig
 
 ROBOT_TYPE = "bi_elite_cs66_rt"
 
@@ -367,7 +367,7 @@ class BiEliteCS66RTConfig(RobotConfig):
             ("left_driver_port_offset", self.left_driver_port_offset),
             ("right_driver_port_offset", self.right_driver_port_offset),
         ):
-            if not (0 <= 50001 + off and 50004 + off <= 65535):
+            if not (50001 + off >= 0 and 50004 + off <= 65535):
                 raise ValueError(
                     f"{name}={off} pushes EliteDriver ports outside the valid TCP range "
                     "(50001..50004 + offset must stay within 1024..65535)"

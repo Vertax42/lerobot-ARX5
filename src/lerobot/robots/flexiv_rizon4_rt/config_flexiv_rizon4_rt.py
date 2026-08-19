@@ -21,9 +21,8 @@ from dataclasses import dataclass, field
 import flexiv_rt
 
 from lerobot.cameras.configs import CameraConfig
-from lerobot.cameras.realsense import RealSenseCameraConfig
-from lerobot.robots.config import RobotConfig
 from lerobot.grippers import GripperConfig
+from lerobot.robots.config import RobotConfig
 
 
 @RobotConfig.register_subclass("flexiv_rizon4_rt")

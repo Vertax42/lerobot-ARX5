@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import logging
 import re
 from itertools import chain
 from pathlib import Path
@@ -26,7 +25,6 @@ from PIL import Image
 from safetensors.torch import load_file
 
 import lerobot  # noqa: F401
-from lerobot.configs.default import DatasetConfig
 from lerobot.datasets.image_writer import image_array_to_pil_image
 from lerobot.datasets.lerobot_dataset import (
     LeRobotDataset,
@@ -43,7 +41,7 @@ from lerobot.datasets.utils import (
     hw_to_dataset_features,
 )
 from lerobot.datasets.video_utils import VALID_VIDEO_CODECS
-from lerobot.utils.constants import ACTION, DONE, OBS_IMAGES, OBS_STATE, OBS_STR, REWARD
+from lerobot.utils.constants import ACTION, OBS_IMAGES, OBS_STATE, OBS_STR
 from tests.fixtures.constants import DUMMY_CHW, DUMMY_HWC, DUMMY_REPO_ID
 from tests.mocks.mock_robot import MockRobot, MockRobotConfig
 from tests.utils import require_x86_64_kernel

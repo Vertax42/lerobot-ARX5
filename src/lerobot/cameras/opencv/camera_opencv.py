@@ -183,7 +183,7 @@ class OpenCVCamera(Camera):
         v4l2-ctl prints, e.g. "XC000047".
         """
         val = self.index_or_path
-        if isinstance(val, str) and not val.startswith((("/", ".", os.sep))) and os.sep not in val:
+        if isinstance(val, str) and not val.startswith(("/", ".", os.sep)) and os.sep not in val:
             resolved = _resolve_v4l2_device_name(val)
             logger.info(f"{self} resolved device name '{val}' → '{resolved}'")
             return resolved

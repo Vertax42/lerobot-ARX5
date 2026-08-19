@@ -115,7 +115,7 @@ class MockRobot(Robot):
         if self.config.control_mode == MockRobotControlMode.JOINT_CONTROL:
             features: dict[str, type | tuple[int, int, int]] = {f"{motor}.pos": float for motor in self.motors}
         else:
-            features = {k: float for k in TCP_KEYS}
+            features = dict.fromkeys(TCP_KEYS, float)
 
         if self.config.use_gripper:
             features["gripper.pos"] = float
@@ -129,7 +129,7 @@ class MockRobot(Robot):
         if self.config.control_mode == MockRobotControlMode.JOINT_CONTROL:
             features = {f"{motor}.pos": float for motor in self.motors}
         else:
-            features = {k: float for k in TCP_KEYS}
+            features = dict.fromkeys(TCP_KEYS, float)
 
         if self.config.use_gripper:
             features["gripper.pos"] = float

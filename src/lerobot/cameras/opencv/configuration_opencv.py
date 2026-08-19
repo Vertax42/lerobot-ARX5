@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import platform
 from dataclasses import dataclass, field
 from pathlib import Path
-import platform
 
 from ..configs import CameraConfig, ColorMode, Cv2Backends, Cv2Rotation
 

@@ -108,7 +108,7 @@ def _print_summary(read_times: list[float], iterations: int):
     print("=" * 60)
     print(f"  Total iterations: {iterations}")
     if read_times:
-        print(f"  Read Latency:")
+        print("  Read Latency:")
         print(f"    avg:     {statistics.mean(read_times):.2f} ms")
         print(f"    max:     {max(read_times):.2f} ms")
         if len(read_times) > 1:

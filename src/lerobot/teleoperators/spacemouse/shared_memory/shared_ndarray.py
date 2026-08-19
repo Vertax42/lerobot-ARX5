@@ -20,7 +20,7 @@ import multiprocessing
 import multiprocessing.synchronize
 from multiprocessing.managers import SharedMemoryManager
 from multiprocessing.shared_memory import SharedMemory
-from typing import Generic, Optional, Tuple, TypeVar, Union
+from typing import Generic, TypeVar, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -88,9 +88,9 @@ class SharedNDArray(Generic[SharedT]):
     shm: SharedMemory
     # shape: Tuple[int, ...]  # is a property
     dtype: np.dtype
-    lock: Optional[multiprocessing.synchronize.Lock]
+    lock: multiprocessing.synchronize.Lock | None
 
-    def __init__(self, shm: SharedMemoryLike, shape: Tuple[int, ...], dtype: npt.DTypeLike):
+    def __init__(self, shm: SharedMemoryLike, shape: tuple[int, ...], dtype: npt.DTypeLike):
         """Initialize a SharedNDArray object from existing shared memory, object shape, and dtype.
         To initialize a SharedNDArray object from a memory manager and data or shape, use the `from_array()
         or `from_shape()` classmethods.
@@ -121,7 +121,7 @@ class SharedNDArray(Generic[SharedT]):
         assert shm.size >= (dtype.itemsize * np.prod(shape))
         self.shm = shm
         self.dtype = dtype
-        self._shape: Tuple[int, ...] = shape
+        self._shape: tuple[int, ...] = shape
 
     def __repr__(self):
         # Like numpy's ndarray repr
@@ -148,7 +148,7 @@ class SharedNDArray(Generic[SharedT]):
         return shared_arr
 
     @classmethod
-    def create_from_shape(cls, mem_mgr: SharedMemoryManager, shape: Tuple, dtype: npt.DTypeLike) -> SharedNDArray:
+    def create_from_shape(cls, mem_mgr: SharedMemoryManager, shape: tuple, dtype: npt.DTypeLike) -> SharedNDArray:
         """Create a SharedNDArray directly from a SharedMemoryManager
         Parameters
         ----------
@@ -165,7 +165,7 @@ class SharedNDArray(Generic[SharedT]):
         return cls(shm=shm, shape=shape, dtype=dtype)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return self._shape
 
     def get(self) -> npt.NDArray[SharedT]:

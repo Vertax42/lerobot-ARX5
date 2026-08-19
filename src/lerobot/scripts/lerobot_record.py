@@ -534,9 +534,7 @@ def flexiv_rizon4_rt_record_loop(
         if isinstance(teleop, Teleoperator):
             teleop_action = teleop.get_action()
 
-            if reset_triggered:
-                sent_action = teleop_action  # not sent, used only for display
-            elif robot_is_moving:
+            if reset_triggered or robot_is_moving:
                 sent_action = teleop_action  # not sent, used only for display
             else:
                 sent_action = robot.send_action(teleop_action)

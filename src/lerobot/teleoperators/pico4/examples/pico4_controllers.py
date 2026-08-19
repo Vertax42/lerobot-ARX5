@@ -1,6 +1,6 @@
+import statistics
 import sys
 import time
-import statistics
 
 import xensevr_pc_service_sdk as xrt
 
@@ -116,7 +116,7 @@ def run_tests():
                     if max_read_time > 50:
                         print(f"  ⚠️  WARNING: High SDK latency detected ({max_read_time:.1f}ms)")
                     else:
-                        print(f"  ✅  SDK latency OK")
+                        print("  ✅  SDK latency OK")
                 if jump_count > 0:
                     jump_rate = jump_count / (i + 1) * 100
                     if jump_rate > 1:
@@ -145,19 +145,19 @@ def run_tests():
 
                     last_zero_check_time = current_time
 
-                print(f"\n[Right Controller Pose]")
+                print("\n[Right Controller Pose]")
                 print(f"  Position:    x={right_pose[0]:8.4f}  y={right_pose[1]:8.4f}  z={right_pose[2]:8.4f}")
                 print(
                     f"  Quaternion: qx={right_pose[3]:8.4f} qy={right_pose[4]:8.4f} qz={right_pose[5]:8.4f} qw={right_pose[6]:8.4f}"
                 )
 
-                print(f"\n[Left Controller Pose]")
+                print("\n[Left Controller Pose]")
                 print(f"  Position:    x={left_pose[0]:8.4f}  y={left_pose[1]:8.4f}  z={left_pose[2]:8.4f}")
                 print(
                     f"  Quaternion: qx={left_pose[3]:8.4f} qy={left_pose[4]:8.4f} qz={left_pose[5]:8.4f} qw={left_pose[6]:8.4f}"
                 )
 
-                print(f"\n[Inputs]")
+                print("\n[Inputs]")
                 print(f"  Left  Trigger: {left_trigger:6.3f}    Grip: {left_grip:6.3f}    X Button: {x_button}")
                 print(f"  Right Trigger: {right_trigger:6.3f}    Grip: {right_grip:6.3f}    A Button: {a_button}")
 
@@ -173,12 +173,12 @@ def run_tests():
                         sn = tracker_serial_numbers[idx] if idx < len(tracker_serial_numbers) else "N/A"
                         print(f"  Tracker {idx + 1} (SN: {sn}): x={pose[0]:6.3f} y={pose[1]:6.3f} z={pose[2]:6.3f}")
                 else:
-                    print(f"\n[Motion Trackers]  No trackers available")
+                    print("\n[Motion Trackers]  No trackers available")
 
                 # Loop timing
                 loop_time_ms = (time.perf_counter() - loop_start) * 1000
                 target_hz = 100
-                print(f"\n[Loop Timing]")
+                print("\n[Loop Timing]")
                 print(f"  Loop time: {loop_time_ms:.2f}ms ({1000 / max(loop_time_ms, 0.1):.0f} Hz)")
 
                 print("\n" + "=" * 70)
@@ -201,12 +201,12 @@ def run_tests():
         print("=" * 70)
         if read_times:
             print(f"  Total iterations: {i}")
-            print(f"  SDK Read Latency:")
+            print("  SDK Read Latency:")
             print(f"    Average: {statistics.mean(read_times):.2f}ms")
             print(f"    Max:     {max_read_time:.2f}ms")
             print(f"    Std Dev: {statistics.stdev(read_times) if len(read_times) > 1 else 0:.2f}ms")
         if position_deltas:
-            print(f"  Position Continuity:")
+            print("  Position Continuity:")
             print(f"    Avg Delta: {statistics.mean(position_deltas) * 1000:.2f}mm")
             print(f"    Max Delta: {max_position_delta * 1000:.2f}mm")
             print(f"    Jump Count: {jump_count} (threshold: {jump_threshold * 1000:.0f}mm)")

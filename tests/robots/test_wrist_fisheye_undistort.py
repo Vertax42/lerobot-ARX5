@@ -212,7 +212,6 @@ def _reference_remap(cal, balance):
     one looks like a large disagreement and means nothing.
     """
     import cv2
-
     from xense.taccap import FisheyeUndistorter
 
     K = np.asarray(cal.K, np.float64)
@@ -235,7 +234,6 @@ RECTIFY_INTERPOLATION = "INTER_CUBIC"
 def test_rectification_matches_opencvs_own_fisheye_implementation(balance):
     """The strongest check available without a calibration target in frame."""
     import cv2
-
     from xense.taccap import FISHEYE_FALLBACK_CAL, FisheyeUndistorter
 
     img = np.random.default_rng(7).integers(0, 255, (480, 640, 3), dtype=np.uint8)
@@ -327,7 +325,6 @@ def test_rectification_resamples_with_cubic_not_bilinear():
     data.
     """
     import cv2
-
     from xense.taccap import FISHEYE_FALLBACK_CAL, FisheyeUndistorter
 
     rng = np.random.default_rng(1)

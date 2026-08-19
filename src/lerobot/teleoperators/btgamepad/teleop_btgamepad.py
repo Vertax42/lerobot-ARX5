@@ -18,19 +18,17 @@ from enum import IntEnum
 from typing import Any
 
 import numpy as np
+from scipy.spatial.transform import Rotation as R
+
+from lerobot.utils.robot_utils import (
+    normalize_quaternion,
+    quaternion_to_matrix,
+    rotation_6d_to_quaternion,
+)
 
 from ..teleoperator import Teleoperator
 from ..utils import TeleopEvents
 from .configuration_btgamepad import BtgamepadTeleopConfig
-from lerobot.utils.robot_utils import (
-    matrix_to_pose7d,
-    quaternion_to_euler,
-    rotation_6d_to_quaternion,
-    xyz_rpy_to_matrix,
-    normalize_quaternion,
-    quaternion_to_matrix,
-)
-from scipy.spatial.transform import Rotation as R
 
 
 class GripperAction(IntEnum):

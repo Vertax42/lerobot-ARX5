@@ -207,7 +207,7 @@ class Spacemouse:
 
         self._right_device = pyspacemouse.open(**right_kwargs)
 
-        print(f"Connected to dual SpaceMouse devices:")
+        print("Connected to dual SpaceMouse devices:")
         print(f"  Left (index {self.left_device_config.device_index}):  {self._left_device.name}")
         print(f"  Right (index {self.right_device_config.device_index}): {self._right_device.name}")
 
@@ -269,7 +269,7 @@ class Spacemouse:
         # Fallback: use first and second buttons
         self._left_button_idx = 0
         self._right_button_idx = 1 if len(button_names) > 1 else 0
-        print(f"  Button mapping (fallback): idx 0 and 1")
+        print("  Button mapping (fallback): idx 0 and 1")
 
     def disconnect(self):
         """Disconnect from SpaceMouse device(s)."""

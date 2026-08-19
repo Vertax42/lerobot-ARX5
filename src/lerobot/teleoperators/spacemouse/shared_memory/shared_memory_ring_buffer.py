@@ -17,7 +17,6 @@
 import numbers
 import time
 from multiprocessing.managers import SharedMemoryManager
-from typing import Dict, List, Union  #
 
 import numpy as np
 
@@ -38,7 +37,7 @@ class SharedMemoryRingBuffer:
     def __init__(
         self,
         shm_manager: SharedMemoryManager,
-        array_specs: List[ArraySpec],
+        array_specs: list[ArraySpec],
         get_max_k: int,
         get_time_budget: float,
         put_desired_frequency: float,
@@ -103,7 +102,7 @@ class SharedMemoryRingBuffer:
     def create_from_examples(
         cls,
         shm_manager: SharedMemoryManager,
-        examples: Dict[str, Union[np.ndarray, float]],
+        examples: dict[str, np.ndarray | float],
         get_max_k: int = 32,
         get_time_budget: float = 0.01,
         put_desired_frequency: float = 60,
@@ -139,7 +138,7 @@ class SharedMemoryRingBuffer:
     def clear(self):
         self.counter.store(0)
 
-    def put(self, data: Dict[str, Union[np.ndarray, float]], wait: bool = True):
+    def put(self, data: dict[str, np.ndarray | float], wait: bool = True):
         count = self.counter.load()
         next_idx = count % self.buffer_size
         # Make sure the next self.get_max_k elements in the ring buffer have at least
@@ -162,7 +161,7 @@ class SharedMemoryRingBuffer:
                 # throw an error
                 past_iters = self.buffer_size - self.get_max_k
                 hz = past_iters / deltat
-                raise TimeoutError("Put executed too fast {}items/{:.4f}s ~= {}Hz".format(past_iters, deltat, hz))
+                raise TimeoutError(f"Put executed too fast {past_iters}items/{deltat:.4f}s ~= {hz}Hz")
 
         # write to shared memory
         for key, value in data.items():
@@ -186,7 +185,7 @@ class SharedMemoryRingBuffer:
             result[spec.name] = np.empty(shape=shape, dtype=spec.dtype)
         return result
 
-    def get(self, out=None) -> Dict[str, Union[np.ndarray, float]]:
+    def get(self, out=None) -> dict[str, np.ndarray | float]:
         if out is None:
             out = self._allocate_empty()
         start_time = time.monotonic()
@@ -201,7 +200,7 @@ class SharedMemoryRingBuffer:
             raise TimeoutError(f"Get time out {dt} vs {self.get_time_budget}")
         return out
 
-    def get_last_k(self, k: int, out=None) -> Dict[str, np.ndarray]:
+    def get_last_k(self, k: int, out=None) -> dict[str, np.ndarray]:
         assert k <= self.get_max_k
         if out is None:
             out = self._allocate_empty(k)
@@ -233,6 +232,6 @@ class SharedMemoryRingBuffer:
             raise TimeoutError(f"Get time out {dt} vs {self.get_time_budget}")
         return out
 
-    def get_all(self) -> Dict[str, np.ndarray]:
+    def get_all(self) -> dict[str, np.ndarray]:
         k = min(self.count, self.get_max_k)
         return self.get_last_k(k=k)

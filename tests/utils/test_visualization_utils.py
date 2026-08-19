@@ -16,12 +16,11 @@
 
 import importlib
 import sys
+from enum import Enum
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
-
-from enum import Enum
 
 from lerobot.utils.constants import OBS_STATE
 

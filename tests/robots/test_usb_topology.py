@@ -31,9 +31,7 @@ from importlib.util import find_spec
 
 import pytest
 
-from lerobot.grippers import SerialGripperConfig, TaccapFollowerConfig
-
-from lerobot.grippers import usb_topology as topo
+from lerobot.grippers import SerialGripperConfig, TaccapFollowerConfig, usb_topology as topo
 
 HAS_FLEXIV = find_spec("flexiv_rt") is not None
 HAS_ELITE = find_spec("elite_cs_sdk") is not None

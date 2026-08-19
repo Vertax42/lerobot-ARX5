@@ -35,6 +35,13 @@ from typing import Any
 import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
+from lerobot.grippers import Gripper, make_gripper_from_config
+from lerobot.grippers.camera_injection import (
+    adopt_taccap_mcu_device,
+    attach_wrist_fisheye_calibration,
+    inject_serial_gripper_cameras,
+    inject_taccap_cameras,
+)
 from lerobot.robots.bi_elite_cs66_rt.config_bi_elite_cs66_rt import (
     BiEliteCS66RTConfig,
     BiEliteCS66RTControlMode,
@@ -59,13 +66,6 @@ from lerobot.robots.elite_cs66_rt.manipulability import (
     manipulability,
     pose_delta,
     tool_consistency,
-)
-from lerobot.grippers import Gripper, make_gripper_from_config
-from lerobot.grippers.camera_injection import (
-    adopt_taccap_mcu_device,
-    attach_wrist_fisheye_calibration,
-    inject_serial_gripper_cameras,
-    inject_taccap_cameras,
 )
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
@@ -116,36 +116,36 @@ class BiEliteCS66RT(Robot):
         self._is_connected = False
 
         # Per-arm SDK handles + servo state.
-        self._driver: dict[str, Any] = {s: None for s in _SIDES}
-        self._dashboard: dict[str, Any] = {s: None for s in _SIDES}
-        self._rtsi: dict[str, Any] = {s: None for s in _SIDES}
+        self._driver: dict[str, Any] = dict.fromkeys(_SIDES)
+        self._dashboard: dict[str, Any] = dict.fromkeys(_SIDES)
+        self._rtsi: dict[str, Any] = dict.fromkeys(_SIDES)
 
         self._gripper: dict[str, Gripper | None] = {
             "left": make_gripper_from_config(config.left_gripper),
             "right": make_gripper_from_config(config.right_gripper),
         }
 
-        self._last_tcp_command: dict[str, np.ndarray | None] = {s: None for s in _SIDES}
-        self._target_tcp_command: dict[str, np.ndarray | None] = {s: None for s in _SIDES}
-        self._servo_thread: dict[str, threading.Thread | None] = {s: None for s in _SIDES}
+        self._last_tcp_command: dict[str, np.ndarray | None] = dict.fromkeys(_SIDES)
+        self._target_tcp_command: dict[str, np.ndarray | None] = dict.fromkeys(_SIDES)
+        self._servo_thread: dict[str, threading.Thread | None] = dict.fromkeys(_SIDES)
         self._servo_stop_event: dict[str, threading.Event] = {s: threading.Event() for s in _SIDES}
         self._servo_lock: dict[str, threading.Lock] = {s: threading.Lock() for s in _SIDES}
-        self._servo_error: dict[str, BaseException | None] = {s: None for s in _SIDES}
-        self._last_action_time: dict[str, float] = {s: 0.0 for s in _SIDES}
-        self._start_tcp_pose: dict[str, np.ndarray | None] = {s: None for s in _SIDES}
-        self._reset_start_tcp_pose: dict[str, np.ndarray | None] = {s: None for s in _SIDES}
-        self._reset_target_tcp_pose: dict[str, np.ndarray | None] = {s: None for s in _SIDES}
-        self._reset_start_time: dict[str, float] = {s: 0.0 for s in _SIDES}
-        self._reset_end_time: dict[str, float] = {s: 0.0 for s in _SIDES}
-        self._reset_moving: dict[str, bool] = {s: False for s in _SIDES}
-        self._external_command_received: dict[str, bool] = {s: False for s in _SIDES}
-        self._reach_warn_time: dict[str, float] = {s: 0.0 for s in _SIDES}  # workspace-guard warn throttle
+        self._servo_error: dict[str, BaseException | None] = dict.fromkeys(_SIDES)
+        self._last_action_time: dict[str, float] = dict.fromkeys(_SIDES, 0.0)
+        self._start_tcp_pose: dict[str, np.ndarray | None] = dict.fromkeys(_SIDES)
+        self._reset_start_tcp_pose: dict[str, np.ndarray | None] = dict.fromkeys(_SIDES)
+        self._reset_target_tcp_pose: dict[str, np.ndarray | None] = dict.fromkeys(_SIDES)
+        self._reset_start_time: dict[str, float] = dict.fromkeys(_SIDES, 0.0)
+        self._reset_end_time: dict[str, float] = dict.fromkeys(_SIDES, 0.0)
+        self._reset_moving: dict[str, bool] = dict.fromkeys(_SIDES, False)
+        self._external_command_received: dict[str, bool] = dict.fromkeys(_SIDES, False)
+        self._reach_warn_time: dict[str, float] = dict.fromkeys(_SIDES, 0.0)  # workspace-guard warn throttle
         # Singularity damping, per arm (set up at connect; disabled unless DH + self-check pass).
-        self._dh: dict[str, tuple[list[float], list[float], list[float]] | None] = {s: None for s in _SIDES}
-        self._damping_enabled: dict[str, bool] = {s: False for s in _SIDES}
-        self._w_log_time: dict[str, float] = {s: 0.0 for s in _SIDES}
-        self._jv_log_time: dict[str, float] = {s: 0.0 for s in _SIDES}  # joint-vel guard log throttle
-        self._servoj_fail_log_time: dict[str, float] = {s: 0.0 for s in _SIDES}  # trip-diag throttle
+        self._dh: dict[str, tuple[list[float], list[float], list[float]] | None] = dict.fromkeys(_SIDES)
+        self._damping_enabled: dict[str, bool] = dict.fromkeys(_SIDES, False)
+        self._w_log_time: dict[str, float] = dict.fromkeys(_SIDES, 0.0)
+        self._jv_log_time: dict[str, float] = dict.fromkeys(_SIDES, 0.0)  # joint-vel guard log throttle
+        self._servoj_fail_log_time: dict[str, float] = dict.fromkeys(_SIDES, 0.0)  # trip-diag throttle
 
         # Prefixed key tuples (built once).
         self._tcp_pos_keys = {s: tuple(f"{s}_{k}" for k in TCP_POSITION_KEYS) for s in _SIDES}
@@ -745,9 +745,7 @@ class BiEliteCS66RT(Robot):
                     target, reset_active = self._get_servo_target_locked(side, now)
                     last_action_time = self._last_action_time[side]
 
-                if target is None:
-                    driver.writeIdle(self.config.command_timeout_ms)
-                elif not reset_active and not self._external_command_received[side]:
+                if target is None or not reset_active and not self._external_command_received[side]:
                     driver.writeIdle(self.config.command_timeout_ms)
                 else:
                     if not reset_active and now - last_action_time > self.config.command_stale_timeout_s:

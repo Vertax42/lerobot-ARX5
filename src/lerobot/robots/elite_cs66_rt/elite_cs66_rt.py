@@ -21,6 +21,7 @@ from typing import Any
 import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
+from lerobot.grippers import Gripper, make_gripper_from_config
 from lerobot.robots.elite_cs66_rt.config_elite_cs66_rt import (
     EliteCS66RTConfig,
     EliteCS66RTControlMode,
@@ -35,7 +36,6 @@ from lerobot.robots.elite_cs66_rt.manipulability import (
     pose_delta,
     tool_consistency,
 )
-from lerobot.grippers import Gripper, make_gripper_from_config
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import (

@@ -89,7 +89,7 @@ def main() -> None:
 
     print(f"Freedrive probe: {side} arm @ {ip}")
     print(f"  current R from (tilt={tilt:g}°, zrot={zrot:g}°, world_yaw={yaw:g}°)")
-    print(f"  world axes expressed in base (columns of R^T):")
+    print("  world axes expressed in base (columns of R^T):")
     print(f"    world +X in base = {_fmt(R_wb.T @ np.array([1.0, 0, 0]))}")
     print(f"    world +Y in base = {_fmt(R_wb.T @ np.array([0, 1.0, 0]))}")
     print(f"    world +Z in base = {_fmt(R_wb.T @ np.array([0, 0, 1.0]))}")

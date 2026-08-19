@@ -4,8 +4,8 @@ import re
 import shutil  # Added for shutil.rmtree
 import subprocess
 import sys
-from distutils.version import LooseVersion
 
+from distutils.version import LooseVersion
 from setuptools import Command, Extension, find_packages, setup  # Added Command
 from setuptools.command.build_ext import build_ext
 
@@ -51,7 +51,7 @@ class CMakeBuild(build_ext):
         build_args = ["--config", cfg]
 
         if platform.system() == "Windows":
-            cmake_args += ["-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{}={}".format(cfg.upper(), extdir)]
+            cmake_args += [f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{cfg.upper()}={extdir}"]
             if sys.maxsize > 2**32:
                 cmake_args += ["-A", "x64"]
             build_args += ["--", "/m"]

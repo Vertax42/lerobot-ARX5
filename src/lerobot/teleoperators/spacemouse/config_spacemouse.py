@@ -15,7 +15,6 @@
 # limitations under the License.
 
 from dataclasses import dataclass, field  # noqa: F401
-from typing import Tuple, Optional, Dict, Any
 
 from ..config import TeleoperatorConfig
 
@@ -24,7 +23,7 @@ from ..config import TeleoperatorConfig
 class DeviceConfig:
     """Configuration for a single SpaceMouse device."""
 
-    device_name: Optional[str] = None  # Specific device name, None for auto-detect
+    device_name: str | None = None  # Specific device name, None for auto-detect
     device_index: int = 0  # Device index when multiple same devices
     # SpaceMouse outputs Cartesian targets in the 6D-rotation schema
     # (tcp.x/y/z + tcp.r1..r6 + gripper.pos). Internally the integrator still
@@ -37,9 +36,9 @@ class DeviceConfig:
     # Axis inversion after coordinate transformation [x, y, z, roll, pitch, yaw]
     # x: True (SpaceMouse forward=-Y needs inversion to become Robot +X)
     # yaw: True (SpaceMouse yaw needs inversion)
-    invert_axes: Tuple[bool, bool, bool, bool, bool, bool] = (True, False, False, False, False, True)
+    invert_axes: tuple[bool, bool, bool, bool, bool, bool] = (True, False, False, False, False, True)
     swap_gripper_buttons: bool = False
-    enabled_axes: Tuple[bool, bool, bool, bool, bool, bool] = (True, True, True, True, True, True)  # Which axes to use
+    enabled_axes: tuple[bool, bool, bool, bool, bool, bool] = (True, True, True, True, True, True)  # Which axes to use
 
 
 @TeleoperatorConfig.register_subclass("spacemouse")
@@ -102,7 +101,7 @@ class SpacemouseConfig(TeleoperatorConfig):
     # Axis inversion after coordinate transformation [x, y, z, roll, pitch, yaw]
     # x: True (SpaceMouse forward=-Y needs inversion to become Robot +X)
     # yaw: True (SpaceMouse yaw needs inversion)
-    invert_axes: Tuple[bool, bool, bool, bool, bool, bool] = (
+    invert_axes: tuple[bool, bool, bool, bool, bool, bool] = (
         False,  # x: no inversion
         True,  # y: inversion
         False,  # z
