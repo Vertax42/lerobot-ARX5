@@ -1,7 +1,6 @@
 import sys
-from xensesdk import ExampleView
-from xensesdk import Sensor
-from xensesdk import call_service
+
+from xensesdk import ExampleView, Sensor, call_service
 
 
 def main():
@@ -9,7 +8,7 @@ def main():
     # find all sensors
     ret = call_service(MASTER_SERVICE, "scan_sensor_sn")
     if ret is None:
-        print(f"Failed to scan sensors")
+        print("Failed to scan sensors")
         sys.exit(1)
     else:
         print(f"Found sensors: {ret}, using the first one.")
@@ -19,7 +18,7 @@ def main():
     sensor_0 = Sensor.create(serial_number, mac_addr=MASTER_SERVICE.split("_")[-1], rectify_size=(200, 350))
     View = ExampleView(sensor_0)
     View2d = View.create2d(Sensor.OutputType.Difference, Sensor.OutputType.Rectify)
-    
+
     def callback():
         diff, rectify = sensor_0.selectSensorInfo(Sensor.OutputType.Difference, Sensor.OutputType.Rectify)
         View2d.setData(Sensor.OutputType.Difference, diff)

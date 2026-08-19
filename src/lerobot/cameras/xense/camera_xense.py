@@ -27,7 +27,7 @@ from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnected
 from lerobot.utils.robot_utils import get_logger
 
 from ..camera import Camera
-from .configuration_xense import XenseTactileCameraConfig, XenseOutputType
+from .configuration_xense import XenseOutputType, XenseTactileCameraConfig
 
 logger = get_logger("XenseCam")
 

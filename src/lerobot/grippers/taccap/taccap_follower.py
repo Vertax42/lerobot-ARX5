@@ -215,6 +215,48 @@ class TaccapFollower(Gripper):
                 self.logger.debug(f"Error disabling motor during rollback: {e}")
             self._gripper = None
 
+    def read_wrist_fisheye_calibration(self):
+        """Read the wrist lens' fisheye intrinsics out of this gripper's MCU flash.
+
+        Returns a ``xense.taccap.CameraFisheyeCal``. Raises when the firmware
+        holds no calibration or is too old to answer — the caller asked for
+        rectified frames, and silently handing back raw fisheye ones would only
+        surface at training time.
+        """
+        if self._gripper is None:
+            raise DeviceNotConnectedError(
+                f"{self} is not connected; cannot read the wrist fisheye calibration."
+            )
+        try:
+            cal = self._gripper.calibration.read_fisheye()
+        except Exception as e:
+            raise RuntimeError(
+                f"{self}: could not read the wrist fisheye calibration — the firmware "
+                f"is likely too old to answer (V2.0+ required). Calibrate the wrist lens "
+                f"with the PC tool, or turn undistort off on this wrist camera. "
+                f"Original error: {e!r}"
+            ) from e
+
+        # An uncalibrated MCU answers with a zero-filled record rather than an
+        # error, and FisheyeUndistorter accepts it and remaps every frame to
+        # black. Verified on the bench against firmware 1.1.1: K came back
+        # [[0,0,0],[0,0,0],[0,0,1]], D all zeros, and the rectified frame had
+        # mean 0. Refusing here is the whole point of the undistort switch
+        # failing loudly — a dataset of black wrist images is only noticed at
+        # training time.
+        import numpy as np
+
+        intrinsics = np.asarray(cal.K, dtype=float)
+        fx, fy = intrinsics[0, 0], intrinsics[1, 1]
+        if not (np.isfinite(fx) and np.isfinite(fy)) or fx <= 0 or fy <= 0:
+            raise RuntimeError(
+                f"{self}: the firmware holds no wrist fisheye calibration — it returned "
+                f"a degenerate intrinsic matrix (fx={fx}, fy={fy}). Rectifying with it "
+                f"would produce black frames. Calibrate the wrist lens with the PC tool, "
+                f"or turn undistort off on this wrist camera."
+            )
+        return cal
+
     def disconnect(self) -> None:
         """Stop the control loop, disable the motor, and release the device."""
         if not self._is_connected:

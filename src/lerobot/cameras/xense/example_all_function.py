@@ -1,6 +1,6 @@
 import sys
-from xensesdk import ExampleView
-from xensesdk import Sensor
+
+from xensesdk import ExampleView, Sensor
 
 
 def main():

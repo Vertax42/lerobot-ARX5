@@ -50,6 +50,7 @@ from lerobot.robots.bi_flexiv_rizon4_rt.config_bi_flexiv_rizon4_rt import BiFlex
 from lerobot.grippers import Gripper, make_gripper_from_config
 from lerobot.grippers.camera_injection import (
     adopt_taccap_mcu_device,
+    attach_wrist_fisheye_calibration,
     inject_serial_gripper_cameras,
     inject_taccap_cameras,
 )
@@ -405,6 +406,10 @@ class BiFlexivRizon4RT(Robot):
                 rg = ex.submit(_connect_gripper, self._right_gripper, self.config.right_use_gripper, "right")
                 lg.result()
                 rg.result()
+
+            # Read the wrist fisheye intrinsics off each gripper's MCU while it is
+            # open, before the cameras build their remap tables.
+            attach_wrist_fisheye_calibration(self.cameras, {"left": self._left_gripper, "right": self._right_gripper}, self.logger)
 
             if not self.cameras:
                 self.logger.info("No cameras configured; skipping camera connect.")
