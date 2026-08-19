@@ -92,16 +92,16 @@ jobs:
 
       # CPU wheels only: the GPU builds are several GB and nothing here runs on
       # a GPU, which on a 14 GB runner is the difference between fitting and not.
+      # A venv, not --system: the runner's /usr is externally managed.
       - name: Install lerobot with test extras
         env:
           UV_TORCH_BACKEND: cpu
-        run: uv pip install --system -e ".[test]"
+        run: |
+          uv venv
+          uv pip install -e ".[test]"
 
+      # -rs lists what was skipped and why, in the same run: a job that skipped
+      # far more than the SDK-dependent tests means the environment is wrong,
+      # not that the code is fine.
       - name: Run tests
-        run: python -m pytest tests/ -v --timeout=300 --durations=20
-
-      # A run that skipped far more than the SDK-dependent tests means the
-      # environment is wrong, not that the code is fine.
-      - name: Report what was skipped
-        if: always()
-        run: python -m pytest tests/ -q -rs 2>&1 | grep -E "^SKIPPED|passed|failed" || true
+        run: .venv/bin/python -m pytest tests/ -v -rs --timeout=300 --durations=20
