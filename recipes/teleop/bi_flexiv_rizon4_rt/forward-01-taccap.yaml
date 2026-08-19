@@ -43,16 +43,30 @@ robot:
   log_level: INFO
   enable_tactile_sensors: true
 
+  # ── Wrist fisheye rectification ── TacCap only; the XGripper family has no
+  # firmware calibration to read. Reaches the auto-discovered wrist cameras only
+  # (a wrist camera pinned by hand carries its own `undistort` field instead).
+  #
+  # Intrinsics come off each gripper's MCU flash. A unit whose firmware holds
+  # none falls back to the SDK's shared reference values and warns; those are
+  # close but not this unit's, so calibrate before measuring in pixels off a
+  # rectified frame. Needs the calibrated 640x480 — any other size is refused at
+  # connect rather than silently mis-rectified.
+  #
+  # Off here, as it has been on every bench so far. Uncomment to turn it on.
+  # undistort_wrist_cameras: false
+  # wrist_fisheye_balance: 0.0          # 0 = calibrated focal length; 1 = 0.70x, widest FOV
+
   # ── Gripper ── One block for both arms; `side` is stamped per arm at build time.
   # Both grippers -> xense.taccap FollowerGripper (matched pair, single switch).
   # auto_discover_cameras sniffs the wrist + GSPS tactile SNs off each gripper's
   # USB hub at connect, which is why only the head camera is pinned above.
   gripper:
     type: taccap_follower
-    kp: 8.0                 # MIT impedance stiffness (Nm/rad)
-    kd: 1.0                 # MIT impedance damping (Nm·s/rad)
-    feedforward_torque: 0.0     # Nm; negative = clamp harder. |ff| <= 3.5
-    control_hz: 200         # ControlLoop resubmit rate
+    kp: 8.0 # MIT impedance stiffness (Nm/rad)
+    kd: 1.0 # MIT impedance damping (Nm·s/rad)
+    feedforward_torque: 0.0 # Nm; negative = clamp harder. |ff| <= 3.5
+    control_hz: 200 # ControlLoop resubmit rate
     auto_discover_cameras: true
     require_calibrated: true
     init_open: true
