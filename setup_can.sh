@@ -17,14 +17,14 @@ if pgrep slcand >/dev/null 2>&1; then
     echo "slcand process found, stopping..."
     sudo pkill slcand
     sleep 1
-    
+
     # verify if the process has been stopped
     if pgrep slcand >/dev/null 2>&1; then
         echo "Warning: slcand process is still running, trying to force stop..."
         sudo pkill -9 slcand
         sleep 1
     fi
-    
+
     if ! pgrep slcand >/dev/null 2>&1; then
         echo "✓ slcand process has been successfully stopped"
     else
@@ -40,7 +40,7 @@ if pgrep -f "arx_can.*\.sh" >/dev/null 2>&1; then
     echo "arx_can script process found, stopping..."
     sudo pkill -f "arx_can.*\.sh"
     sleep 1
-    
+
     if ! pgrep -f "arx_can.*\.sh" >/dev/null 2>&1; then
         echo "✓ arx_can script process has been successfully stopped"
     else
@@ -59,15 +59,15 @@ echo "Using SLCAN method to configure CAN interface..."
 configure_slcan_interface() {
     local device=$1
     local interface=$2
-    
+
     echo "Configuring $interface interface (device: $device)..."
-    
+
     # check if the device exists
     if [ ! -e "$device" ]; then
         echo "  ✗ device $device does not exist, skipping"
         return 1
     fi
-    
+
     # use slcand command to create CAN interface
     echo "  creating $interface interface using slcand..."
     if sudo slcand -o -f -s8 "$device" "$interface" 2>/dev/null; then
@@ -76,10 +76,10 @@ configure_slcan_interface() {
         echo "  ✗ slcand created $interface failed"
         return 1
     fi
-    
+
     # wait for interface creation
     sleep 1
-    
+
     # start interface
     echo "  starting $interface..."
     if sudo ifconfig "$interface" up 2>/dev/null; then
@@ -88,7 +88,7 @@ configure_slcan_interface() {
         echo "  ✗ $interface started failed"
         return 1
     fi
-    
+
     # verify configuration
     if ip link show "$interface" >/dev/null 2>&1; then
         local current_state=$(ip -details link show "$interface" | grep -o "state [A-Z-]*" | cut -d' ' -f2)

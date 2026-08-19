@@ -62,7 +62,7 @@ if conda_prefix:
 └─────────────────┘               └─────────────────┘
 ```
 
-## default configurations X5 in ` include/app/config.h `
+## default configurations X5 in `include/app/config.h`
 
 ```cpp
 // joint_names: [0: joint1, 1: joint2, 2: joint3, 3: joint4, 4: joint5, 5: joint6]

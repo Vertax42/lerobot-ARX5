@@ -48,18 +48,15 @@ class SharedMemoryRingBuffer:
         shm_manager: Manages the life cycle of share memories
             across processes. Remember to run .start() before passing.
         array_specs: Name, shape and type of arrays for a single time step.
-        get_max_k: The maxmum number of items can be queried at once.
-        get_time_budget: The maxmum amount of time spent copying data from
+        get_max_k: The maximum number of items can be queried at once.
+        get_time_budget: The maximum amount of time spent copying data from
             shared memory to local memory. Increase this number for larger arrays.
         put_desired_frequency: The maximum frequency that .put() can be called.
             This influces the buffer size.
         """
 
         # create atomic counter
-        if use_atomic_counter:
-            counter = SharedAtomicCounter(shm_manager)
-        else:
-            counter = SharedCounter(shm_manager)
+        counter = SharedAtomicCounter(shm_manager) if use_atomic_counter else SharedCounter(shm_manager)
 
         # compute buffer size
         # At any given moment, the past get_max_k items should never
@@ -70,7 +67,7 @@ class SharedMemoryRingBuffer:
         buffer_size = int(np.ceil(put_desired_frequency * get_time_budget * safety_margin)) + get_max_k
 
         # allocate shared memory
-        shared_arrays = dict()
+        shared_arrays = {}
         for spec in array_specs:
             key = spec.name
             assert key not in shared_arrays
@@ -108,7 +105,7 @@ class SharedMemoryRingBuffer:
         put_desired_frequency: float = 60,
         use_atomic_counter: bool = True,
     ):
-        specs = list()
+        specs = []
         for key, value in examples.items():
             shape = None
             dtype = None
@@ -117,7 +114,7 @@ class SharedMemoryRingBuffer:
                 dtype = value.dtype
                 assert dtype != np.dtype("O")
             elif isinstance(value, numbers.Number):
-                shape = tuple()
+                shape = ()
                 dtype = np.dtype(type(value))
             else:
                 raise TypeError(f"Unsupported type {type(value)}")
@@ -177,7 +174,7 @@ class SharedMemoryRingBuffer:
         self.counter.add(1)
 
     def _allocate_empty(self, k=None):
-        result = dict()
+        result = {}
         for spec in self.array_specs:
             shape = spec.shape
             if k is not None:

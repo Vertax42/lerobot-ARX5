@@ -63,10 +63,10 @@ The gripper is one typed block, not a pile of flat knobs:
 ```yaml
 robot:
   gripper:
-    type: serial            # or taccap_follower
+    type: serial # or taccap_follower
     gripper_v_max: 100.0
     gripper_f_max: 30.0
-  left_use_gripper: true    # bimanual only — drop one side without deleting the block
+  left_use_gripper: true # bimanual only — drop one side without deleting the block
   right_use_gripper: true
 ```
 
@@ -135,7 +135,7 @@ that selects the robot / teleop class. Enums use their string value
 
 ## Why this over copy-pasting from a markdown file
 
-- **Single source of truth** — the recipe *is* the runnable artifact.
+- **Single source of truth** — the recipe _is_ the runnable artifact.
 - **Provenance for free** — recipes are committed, so `git log recipes/` shows
   exactly which parameters produced each dataset and when.
 - **No silent mistakes** — no forgetting `--resume=false` or pasting a wrong SN.

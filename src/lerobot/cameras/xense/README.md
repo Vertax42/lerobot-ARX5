@@ -5,6 +5,7 @@ This module integrates Xense tactile sensors into the LeRobot camera framework, 
 ## Overview
 
 The Xense tactile sensor provides rich tactile-visual information including:
+
 - **Force Distribution**: 3D force at each point (35×20×3)
 - **Force Resultant**: 6D force/torque vector (6,)
 - **Depth Maps**: Surface depth information (700×400)
@@ -16,6 +17,7 @@ The Xense tactile sensor provides rich tactile-visual information including:
 ### Prerequisites
 
 1. **Install xensesdk** (follow manufacturer instructions):
+
    ```bash
    conda activate lerobot-openpi
    uv pip install xensesdk
@@ -107,11 +109,13 @@ XenseOutputType.MESH_3D_FLOW  # shape=(35, 20, 3), deformation vector
 ## Testing
 
 ### Simple Test
+
 ```bash
 python test_xense_simple.py
 ```
 
 This will:
+
 1. Find available sensors
 2. Connect to the first sensor
 3. Test synchronous reading (5 frames)
@@ -119,11 +123,13 @@ This will:
 5. Measure FPS performance
 
 ### Full Test Suite
+
 ```bash
 python test_xense_camera.py
 ```
 
 Choose from:
+
 1. Synchronous reading test
 2. Asynchronous reading test
 3. Dual sensor test (bimanual)
@@ -177,6 +183,7 @@ cameras = {
 ## V4L2 High Load Handling
 
 Under high system load (multiple cameras, recording), V4L2 timeout warnings may occur:
+
 ```
 [ WARN:35@48.719] global cap_v4l.cpp:1049 tryIoctl VIDEOIO(V4L2:/dev/video22): select() timeout.
 ```
@@ -184,6 +191,7 @@ Under high system load (multiple cameras, recording), V4L2 timeout warnings may 
 ### Automatic Handling
 
 The camera automatically handles V4L2 timeouts:
+
 - **Retry Logic**: Automatically retries up to 3 times on timeout errors
 - **Smart Error Suppression**: Only logs warnings after 10 consecutive failures
 - **Exponential Backoff**: Adds delays between retries to reduce system load
@@ -192,6 +200,7 @@ The camera automatically handles V4L2 timeouts:
 ### Optimization Strategies
 
 #### 1. Reduce FPS (Most Effective)
+
 ```python
 # Lower FPS reduces V4L2 load significantly
 XenseTactileCameraConfig(
@@ -202,6 +211,7 @@ XenseTactileCameraConfig(
 ```
 
 #### 2. Reduce Resolution (High Impact)
+
 ```python
 # Reducing rectify_size improves performance by 4x
 XenseTactileCameraConfig(
@@ -214,6 +224,7 @@ XenseTactileCameraConfig(
 ```
 
 #### 3. Use Only Necessary Output Types
+
 ```python
 # Request only needed data types to reduce processing
 XenseTactileCameraConfig(
@@ -224,6 +235,7 @@ XenseTactileCameraConfig(
 ```
 
 #### 4. Increase Warmup Time
+
 ```python
 # Longer warmup helps stabilize sensor under load
 XenseTactileCameraConfig(
@@ -234,6 +246,7 @@ XenseTactileCameraConfig(
 ```
 
 #### 5. Recommended High-Load Configuration
+
 ```python
 # Optimized configuration for recording with multiple cameras
 XenseTactileCameraConfig(
@@ -248,11 +261,13 @@ XenseTactileCameraConfig(
 ### System-Level Optimizations
 
 1. **Grant Real-Time Priority** (for CAN communication):
+
    ```bash
    sudo setcap cap_sys_nice=ep $(readlink -f $(which python))
    ```
 
 2. **Reduce Other Camera FPS**: If using multiple cameras, reduce FPS across all:
+
    ```python
    # Reduce all camera FPS proportionally
    RealSenseCameraConfig(fps=30, ...)  # Instead of 60
@@ -264,22 +279,27 @@ XenseTactileCameraConfig(
 ## Troubleshooting
 
 ### Import Error: "No module named 'xensesdk'"
+
 ```bash
 uv pip install xensesdk
 ```
 
 ### Missing Dependencies
+
 Install all required packages:
+
 ```bash
 uv pip install cypack cryptography pyudev assimp_py==1.0.7 qtpy PyQt5 h5py lz4
 ```
 
 ### Sensor Not Found
+
 - Check USB connection
 - Run `Sensor.getXenseDeviceList()` to see available devices
 - Verify serial number matches your sensor
 
 ### Qt Platform Plugin Issues
+
 See xensesdk documentation for Qt-related troubleshooting.
 
 ## API Reference
@@ -289,6 +309,7 @@ See xensesdk documentation for Qt-related troubleshooting.
 Configuration class for Xense sensors.
 
 **Parameters**:
+
 - `serial_number` (str): Sensor serial number (e.g., "OG000344")
 - `fps` (int, optional): Target frame rate (default: 60)
 - `output_types` (list[XenseOutputType], optional): Data types to read
@@ -299,6 +320,7 @@ Configuration class for Xense sensors.
 Main camera class implementing the Camera interface.
 
 **Methods**:
+
 - `connect(warmup=True)`: Connect to sensor
 - `read()`: Synchronous read, returns dict of arrays
 - `async_read(timeout_ms=200)`: Asynchronous read with timeout
@@ -308,6 +330,7 @@ Main camera class implementing the Camera interface.
 ## Examples
 
 See the test scripts for complete examples:
+
 - `test_xense_simple.py`: Basic functionality test
 - `test_xense_camera.py`: Comprehensive test suite
 
@@ -316,4 +339,3 @@ See the test scripts for complete examples:
 For Xense SDK issues, contact: qjrobot9966 (WeChat)
 
 For LeRobot integration issues, see the main LeRobot documentation.
-

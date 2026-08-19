@@ -52,6 +52,7 @@ Run on the station with a hand on the e-stop:
 """
 
 import argparse
+import contextlib
 import math
 import time
 from pathlib import Path
@@ -264,13 +265,13 @@ def main() -> None:
 
     def _on_ctrl_exception(exc):
         parts = []
-        for attr in ("getErrorCode", "getSubErrorCode", "getErrorLevel", "getErrorSouce", "getMessage"):
+        for attr in ("getErrorCode", "getSubErrorCode", "getErrorLevel", "getErrorSource", "getMessage"):
             fn = getattr(exc, attr, None)
             if fn is not None:
-                try:
+                # Each accessor is optional and may itself throw; a field we
+                # cannot read just does not appear in the message.
+                with contextlib.suppress(Exception):
                     parts.append(f"{attr[3:]}={fn()}")
-                except Exception:
-                    pass
         msg = "  ".join(parts) or str(exc)
         ctrl_events.append(msg)
         print(f"[CTRL-EVENT] {msg}", flush=True)

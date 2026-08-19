@@ -217,7 +217,6 @@ where = ["src"]
 target-version = "py312"
 line-length = 120
 exclude = [
-    "tests/artifacts/**/*.safetensors",
     "*_pb2.py",
     "*_pb2_grpc.py",
     # Vendored SDKs. Formatting them produces a diff no submodule will ever
