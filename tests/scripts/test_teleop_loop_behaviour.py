@@ -208,3 +208,69 @@ def test_spacemouse_dryrun_reset_uses_its_stored_start_pose():
 
     assert teleop.names().count("reset_to_pose") == 1
     assert not [n for n in robot.names() if n.startswith("get_current_tcp_pose")]
+
+
+# --------------------------------------------------------------------------- #
+# SpaceMouse release-drift fix
+# --------------------------------------------------------------------------- #
+
+
+class IdleSpaceMouseTeleop(FakeSpaceMouseTeleop):
+    """A SpaceMouse whose stick is released from the start (``_enabled`` False)."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._enabled = False
+
+
+def test_a_released_spacemouse_stick_snaps_the_target_back_to_the_arm():
+    """The release-drift fix, which a refactor can silently drop.
+
+    The stick integrates deflection into an absolute pose accumulator. Push it
+    faster than the controller follows and the accumulator runs ahead of the arm;
+    let go, and the arm keeps drifting toward a target the operator abandoned.
+    After a short idle the loop must snap the accumulator to the arm's real pose.
+
+    Nothing else in this suite covers it — it was noticed missing only because
+    the behaviour was written down in a docstring.
+    """
+    case = CASES[2]  # elite_cs66_rt_spacemouse_teleop_loop
+    # fps=1000 with the 0.5s default means the snap lands well past 4 frames, so
+    # drive the idle threshold down instead of running thousands of iterations.
+    robot = case.robot()
+    teleop = IdleSpaceMouseTeleop()
+
+    from lerobot.scripts.teleop_device_loops import (
+        SpaceMousePolicy,
+        run_cartesian_teleop_loop,
+    )
+
+    run_loop(
+        run_cartesian_teleop_loop, iterations=ITERS,
+        teleop=teleop, robot=robot, fps=1000,
+        policy=SpaceMousePolicy(release_resync_idle_s=0.002),  # 2 frames at 1kHz
+        display_data=False,
+    )
+
+    assert teleop.names().count("reset_to_pose") >= 1, "released stick never re-synced"
+    assert "get_current_tcp_pose_euler" in robot.names()
+
+
+def test_an_active_spacemouse_stick_is_never_snapped():
+    """Snapping mid-push would fight the operator."""
+    case = CASES[2]
+    robot, teleop = case.robot(), case.teleop()  # _enabled True by default
+
+    from lerobot.scripts.teleop_device_loops import (
+        SpaceMousePolicy,
+        run_cartesian_teleop_loop,
+    )
+
+    run_loop(
+        run_cartesian_teleop_loop, iterations=ITERS,
+        teleop=teleop, robot=robot, fps=1000,
+        policy=SpaceMousePolicy(release_resync_idle_s=0.002),
+        display_data=False,
+    )
+
+    assert "reset_to_pose" not in teleop.names()
