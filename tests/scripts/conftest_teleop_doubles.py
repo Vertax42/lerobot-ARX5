@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from lerobot.teleoperators import Teleoperator
+
 
 class StopLoopError(Exception):
     """Raised by a double to end a loop after a set number of iterations."""
@@ -100,6 +102,16 @@ class FakeRobot:
         self.calls.append(("get_current_tcp_pose_quat",))
         one = np.array([0.1, 0.2, 0.3, 0.0, 0.0, 0.0, 1.0, 0.5])
         return (one, one.copy()) if self._bimanual else one
+
+    # spacemouse_teleop_loop (the Flexiv one) reaches for these three as well.
+    _spacemouse_arm_side = "left"
+
+    def get_start_eef_pose(self):
+        self.calls.append(("get_start_eef_pose",))
+        return np.zeros(7)
+
+    def smooth_go_start(self, *args, **kwargs) -> None:
+        self.calls.append(("smooth_go_start",))
 
     def get_current_tcp_pose_euler(self):
         self.calls.append(("get_current_tcp_pose_euler",))
@@ -209,3 +221,37 @@ class FakeBiPico4Teleop(FakeTeleop):
             float(left_grip),
             float(right_grip),
         ))
+
+
+class FakeDataset:
+    """Records what a record loop writes, without touching disk."""
+
+    def __init__(self, fps: int = 30, features=None):
+        self.fps = fps
+        self.features = features or {}
+        self.frames: list[dict] = []
+
+    def add_frame(self, frame: dict, task=None, **kwargs) -> None:
+        self.frames.append(dict(frame))
+
+    def action_keys(self) -> list[set]:
+        """Per frame, which action keys were written — the shape datasets carry."""
+        return [{k for k in f if k.startswith("action")} for f in self.frames]
+
+
+def fresh_events() -> dict:
+    """The event flags a record loop polls, all clear."""
+    return {
+        "exit_early": False,
+        "go_start": False,
+        "rerecord_episode": False,
+        "stop_recording": False,
+    }
+
+
+# The record loops branch on `isinstance(teleop, Teleoperator)` to tell a driven
+# session from an observation-only one. Registering as virtual subclasses makes
+# that check pass without inheriting Teleoperator.__init__, which would create
+# calibration directories on disk just to run a test.
+for _double in (FakeTeleop, FakeSpaceMouseTeleop, FakeBiPico4Teleop):
+    Teleoperator.register(_double)

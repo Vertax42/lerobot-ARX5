@@ -63,6 +63,9 @@ CASES = [
     Case("elite_cs66_rt_spacemouse_teleop_loop", FakeSpaceMouseTeleop,
          reset_kwarg="both_pressed_frames"),
     Case("bi_pico4_teleop_loop", FakeBiPico4Teleop, {"bimanual": True}),
+    # The Flexiv SpaceMouse loop gates on the robot name the same way.
+    Case("spacemouse_teleop_loop", FakeSpaceMouseTeleop, {"name": "flexiv_rizon4_rt"},
+         reset_kwarg="both_pressed_frames"),
 ]
 IDS = [c.loop for c in CASES]
 
@@ -144,6 +147,7 @@ def test_the_teleop_is_resynced_once_the_trajectory_ends(case):
         (CASES[1], "get_current_tcp_pose_quat"),
         (CASES[2], "get_current_tcp_pose_euler"),
         (CASES[3], "get_current_tcp_pose_quat"),
+        (CASES[4], "get_current_tcp_pose_euler"),
     ],
     ids=IDS,
 )
