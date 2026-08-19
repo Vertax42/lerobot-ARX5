@@ -110,7 +110,7 @@ scipy-dep = ["scipy>=1.14.0,<2.0.0"]
 # Xense SDK (tactile sensors + grippers). SDK 2.0 ships as a compiled wheel and
 # is the only supported line; the SDK1 source submodule under third_party is no
 # longer used at runtime.
-xense = ["xensesdk>=2.0.0"]
+xense = ["xensesdk>=2.1.2"]
 
 # Xense fork: hardware drivers not on PyPI (installed from local wheels or source)
 # List them here so tooling can document the requirements.
@@ -118,8 +118,6 @@ hardware = [
     # Flexiv RT SDK (Real-Time): required for flexiv_rizon4_rt and bi_flexiv_rizon4_rt
     # Install from internal Flexiv RT SDK wheel
     "flexiv-rt",
-    # VR Tracker: required for vive_tracker teleoperator
-    "pysurvive",
     # 3D SpaceMouse: required for spacemouse teleoperator
     "pyspacemouse",
 ]

@@ -23,7 +23,7 @@ grippers/
 | Control | position + force/velocity limits | MIT impedance (kp / kd / feed-forward) |
 | Side resolved by | board-SN parity (odd → left) | firmware-burned SN |
 | On its USB hub | wrist cam + 2 tactile | wrist cam + 2 GSPS |
-| SDK | `xensegripper` | `xense.taccap` |
+| SDK | `xgripper` | `xense.taccap` |
 
 Both SDKs are optional builds. `make_gripper_from_config` imports only the branch
 it selects, so this package stays importable on a host with neither installed;

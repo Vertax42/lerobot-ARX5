@@ -38,14 +38,15 @@ from dataclasses import dataclass, field
 from glob import glob
 from threading import Lock
 
-from xensegripper import read_board_sn
+from xgripper import read_board_sn
+
+from lerobot.utils.robot_utils import get_logger
 
 from ..usb_topology import (
     hub_of_serial_device,
     tactile_sns_by_hub,
     video_names_by_hub,
 )
-from lerobot.utils.robot_utils import get_logger
 
 logger = get_logger("SerialGripperDiscovery")
 
@@ -138,14 +139,27 @@ def find_port_by_side(side: str, baudrate: int = 115200, device_id: int = 1) -> 
         ValueError:   If ``side`` is not ``"left"`` / ``"right"``.
         RuntimeError: If no gripper (or more than one) matches ``side``'s parity.
     """
+    return _side_port_and_sn(_scan_port_sns(baudrate=baudrate, device_id=device_id), side)[0]
+
+
+def _side_port_and_sn(scanned: dict[str, str], side: str) -> tuple[str, str]:
+    """Resolve one side's ``(port, sn)`` out of an already-collected port scan.
+
+    Split out so a caller that needs several sides pays for one sweep of the bus
+    instead of one per side — each sweep opens and queries every candidate port,
+    which is the dominant cost of discovery.
+
+    Raises:
+        ValueError:   If ``side`` is not ``"left"`` / ``"right"``.
+        RuntimeError: If no gripper (or more than one) matches ``side``'s parity.
+    """
     if side not in _SIDES:
         raise ValueError(f"side must be 'left' or 'right', got {side!r}.")
-    ports = _scan_port_sns(baudrate=baudrate, device_id=device_id)
-    matches = {port: sn for port, sn in ports.items() if sn_side(sn) == side}
+    matches = {port: sn for port, sn in scanned.items() if sn_side(sn) == side}
     if not matches:
         raise RuntimeError(
             f"SerialGripper: no {side} gripper found (odd SN → left, even SN → right). "
-            f"Scanned SNs: {ports or '(none responded)'}. Check USB connection, "
+            f"Scanned SNs: {scanned or '(none responded)'}. Check USB connection, "
             "dialout permissions, and ModemManager not grabbing the serial ports."
         )
     if len(matches) > 1:
@@ -156,7 +170,7 @@ def find_port_by_side(side: str, baudrate: int = 115200, device_id: int = 1) -> 
         )
     port, sn = next(iter(matches.items()))
     logger.info(f"[{side}] gripper SN={sn} on {port} (parity discovery).")
-    return port
+    return port, sn
 
 
 def discover_serial_gripper_sides(
@@ -233,11 +247,13 @@ def discover_serial_gripper_cameras(
     """
     tactile_by_hub = tactile_sns_by_hub()
     video_by_hub = video_names_by_hub()
+    # One sweep of the serial bus for every side; resolving each side separately
+    # would re-open and re-query every port, twice per side.
+    scanned = _scan_port_sns(baudrate=baudrate, device_id=device_id)
 
     found: dict[str, SerialGripperCameras] = {}
     for side in sides:
-        port = find_port_by_side(side, baudrate=baudrate, device_id=device_id)
-        sn = _scan_port_sns(baudrate=baudrate, device_id=device_id).get(port, "")
+        port, sn = _side_port_and_sn(scanned, side)
         hub = hub_of_serial_device(port)
         if hub is None:
             raise RuntimeError(

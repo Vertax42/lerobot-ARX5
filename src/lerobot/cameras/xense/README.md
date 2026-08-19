@@ -25,7 +25,7 @@ The Xense tactile sensor provides rich tactile-visual information including:
    ```bash
     uv pip install scipy cypack cryptography pyudev assimp_py==1.0.7 qtpy PyQt5 h5py lz4 -i https://mirrors.huaweicloud.com/repository/pypi/simple
     uv pip install cyclonedds-nightly==2025.7.29 -i https://mirrors.huaweicloud.com/repository/pypi/simple
-    uv pip install xensesdk==1.6.3 -i https://mirrors.huaweicloud.com/repository/pypi/simple
+    uv pip install xensesdk==2.1.2 -i https://mirrors.huaweicloud.com/repository/pypi/simple
     conda install cuda-toolkit=12.9 -c nvidia
     conda install cudnn -c conda-forge -y
     uv pip install onnxruntime-gpu==1.19.2

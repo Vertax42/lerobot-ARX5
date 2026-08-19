@@ -269,3 +269,46 @@ def _config(robot_type: str):
     from lerobot.robots.bi_elite_cs66_rt.config_bi_elite_cs66_rt import BiEliteCS66RTConfig
 
     return BiEliteCS66RTConfig
+
+
+def test_discovery_sweeps_the_serial_bus_once_for_all_sides(monkeypatch):
+    """Resolving both sides must not re-scan the bus per side.
+
+    Each sweep opens and queries every candidate serial port, so it dominates
+    discovery time — two sides used to cost four sweeps (one inside
+    find_port_by_side plus one to recover the SN it had already read).
+    """
+    from lerobot.grippers.serial import discovery as sd
+
+    sweeps = 0
+
+    def _counting_scan(**kw):
+        nonlocal sweeps
+        sweeps += 1
+        return {"/dev/ttyUSB0": "000031", "/dev/ttyUSB1": "000032"}
+
+    # Two well-formed hubs, one per side: a wrist camera plus two tactile pads.
+    monkeypatch.setattr(sd, "_scan_port_sns", _counting_scan)
+    monkeypatch.setattr(
+        sd, "hub_of_serial_device", lambda dev: "3-1" if dev.endswith("0") else "3-2"
+    )
+    monkeypatch.setattr(sd, "tactile_sns_by_hub", lambda: {
+        "3-1": [("3-1.2", "TAC_A"), ("3-1.4", "TAC_B")],
+        "3-2": [("3-2.2", "TAC_C"), ("3-2.4", "TAC_D")],
+    })
+    monkeypatch.setattr(sd, "video_names_by_hub", lambda: {
+        "3-1": [("3-1.2", "TAC_A"), ("3-1.3", "WRIST_L"), ("3-1.4", "TAC_B")],
+        "3-2": [("3-2.2", "TAC_C"), ("3-2.3", "WRIST_R"), ("3-2.4", "TAC_D")],
+    })
+
+    got = sd.discover_serial_gripper_cameras(sides=("left", "right"))
+
+    assert sweeps == 1, f"expected one bus sweep for both sides, got {sweeps}"
+    assert set(got) == {"left", "right"}
+    # Odd SN -> left, even -> right; each side keeps its own port, hub and cameras.
+    assert (got["left"].gripper_sn, got["left"].usb_hub) == ("000031", "3-1")
+    assert (got["right"].gripper_sn, got["right"].usb_hub) == ("000032", "3-2")
+    assert got["left"].wrist_camera_name == "WRIST_L"
+    assert got["right"].wrist_camera_name == "WRIST_R"
+    assert got["left"].tactile_sns == ["TAC_A", "TAC_B"]
+    assert got["right"].tactile_sns == ["TAC_C", "TAC_D"]

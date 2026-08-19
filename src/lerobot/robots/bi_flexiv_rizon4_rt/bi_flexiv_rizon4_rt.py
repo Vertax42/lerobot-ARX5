@@ -45,16 +45,14 @@ from typing import Any
 import flexiv_rt as frt
 import numpy as np
 
-from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.cameras.utils import make_cameras_from_configs
-from lerobot.cameras.xense import (
-    XenseOutputType,
-    XenseTactileCameraConfig,
-    prewarm_tactile_config_cache,
-)
 from lerobot.robots.bi_flexiv_rizon4_rt.config_bi_flexiv_rizon4_rt import BiFlexivRizon4RTConfig
 from lerobot.grippers import Gripper, make_gripper_from_config
-from lerobot.grippers.taccap.discovery import discover_taccap_sides
+from lerobot.grippers.camera_injection import (
+    adopt_taccap_mcu_device,
+    inject_serial_gripper_cameras,
+    inject_taccap_cameras,
+)
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import (
@@ -156,104 +154,38 @@ class BiFlexivRizon4RT(Robot):
         np.set_printoptions(precision=6, suppress=True)
 
     def _inject_taccap_cameras(self) -> None:
-        """Auto-discover per-side wrist + GSPS tactile devices and add them to
-        config.cameras (keys match the station-driven wiring so datasets stay
-        compatible). Called only in taccap_follower auto-discover mode."""
-        sides = discover_taccap_sides()
-        for side in ("left", "right"):
-            dev = sides.get(side)
-            if dev is None:
-                raise DeviceNotConnectedError(
-                    f"taccap auto-discover: no {side} gripper/wrist camera found."
-                )
-            self.config.cameras[f"{side}_wrist"] = OpenCVCameraConfig(
-                index_or_path=dev.wrist_camera_name,
-                fourcc="MJPG",
-                width=640,
-                height=480,
-                fps=30,
-                warmup_s=1.0,
-            )
-            # This sweep already resolved the gripper MCU path. Hand it to the
-            # driver so its connect() skips a second find_left/find_right scan
-            # of the same bus.
-            self._adopt_taccap_mcu_device(side, dev.mcu_device)
-            if self.config.enable_tactile_sensors:
-                if len(dev.tactile_sns) < 2:
-                    raise DeviceNotConnectedError(
-                        f"taccap auto-discover: expected 2 GSPS tactile sensors for "
-                        f"{side}, found {dev.tactile_sns}."
-                    )
-                for i, sn in enumerate(dev.tactile_sns):
-                    self.config.cameras[f"{side}_tactile_{i}"] = XenseTactileCameraConfig(
-                        serial_number=sn,
-                        fps=30,
-                        output_types=[XenseOutputType.RECTIFY],
-                        warmup_s=0.05,
-                    )
-        self.logger.info(f"taccap auto-discovered cameras: {sorted(self.config.cameras)}")
-
-    def _adopt_taccap_mcu_device(self, side: str, mcu_device: str) -> None:
-        """Pin an already-discovered MCU path onto that side's follower driver.
-
-        No-op when the side has no gripper, or when the operator pinned
-        ``mcu_device`` explicitly in config — an explicit value always wins.
-        """
-        gripper = self._left_gripper if side == "left" else self._right_gripper
-        if gripper is None or getattr(gripper, "_mcu_device", None):
-            return
-        gripper._mcu_device = mcu_device
-        self.logger.debug(f"[{side}] taccap follower pinned to discovered {mcu_device}")
+        """Auto-discover per-side TacCap wrist + GSPS tactile devices into
+        ``config.cameras``. Called only in taccap_follower auto-discover mode."""
+        mcu_devices = inject_taccap_cameras(
+            self.config.cameras,
+            sides=("left", "right"),
+            enable_tactile=self.config.enable_tactile_sensors,
+            logger=self.logger,
+        )
+        # The sweep already resolved each gripper's MCU path; pin it so the
+        # driver's connect() skips a second scan of the same bus.
+        for side, mcu_device in mcu_devices.items():
+            gripper = self._left_gripper if side == "left" else self._right_gripper
+            adopt_taccap_mcu_device(gripper, side, mcu_device, self.logger)
 
     def _inject_serial_gripper_cameras(self) -> None:
         """Same as _inject_taccap_cameras for serial (parallel-jaw) grippers.
 
-        Each arm's gripper board, wrist camera and two tactile sensors share one
-        USB hub, so the gripper — already side-resolved by board-SN parity —
-        identifies the hub and the cameras on it follow. Keys and camera settings
-        match the station-driven wiring so datasets stay compatible either way.
+        Only asks about sides that actually have a gripper, so a bench running
+        one arm without one does not fail discovery for the other.
         """
-        from lerobot.grippers.serial.discovery import discover_serial_gripper_cameras
-
-        # Only ask about sides that actually have a gripper; a bench running one
-        # arm without one should not fail discovery for the other.
-        wanted = tuple(
-            side
-            for side, enabled in (("left", self.config.left_use_gripper),
-                                  ("right", self.config.right_use_gripper))
-            if enabled
-        )
-        sides = discover_serial_gripper_cameras(sides=wanted) if wanted else {}
-        for side in wanted:
-            dev = sides.get(side)
-            if dev is None:
-                raise DeviceNotConnectedError(
-                    f"serial gripper auto-discover: no {side} gripper found, so its "
-                    "wrist and tactile cameras could not be resolved."
+        inject_serial_gripper_cameras(
+            self.config.cameras,
+            sides=tuple(
+                side
+                for side, enabled in (
+                    ("left", self.config.left_use_gripper),
+                    ("right", self.config.right_use_gripper),
                 )
-            self.config.cameras[f"{side}_wrist"] = OpenCVCameraConfig(
-                index_or_path=dev.wrist_camera_name,
-                fourcc="MJPG",
-                width=640,
-                height=480,
-                fps=30,
-                warmup_s=1.0,
-            )
-            if self.config.enable_tactile_sensors:
-                if len(dev.tactile_sns) < 2:
-                    raise DeviceNotConnectedError(
-                        f"serial gripper auto-discover: expected 2 tactile sensors on "
-                        f"the {side} gripper's hub {dev.usb_hub}, found {dev.tactile_sns}."
-                    )
-                for i, sn in enumerate(dev.tactile_sns):
-                    self.config.cameras[f"{side}_tactile_{i}"] = XenseTactileCameraConfig(
-                        serial_number=sn,
-                        fps=30,
-                        output_types=[XenseOutputType.RECTIFY],
-                        warmup_s=0.05,
-                    )
-        self.logger.info(
-            f"serial gripper auto-discovered cameras: {sorted(self.config.cameras)}"
+                if enabled
+            ),
+            enable_tactile=self.config.enable_tactile_sensors,
+            logger=self.logger,
         )
 
     # =========================================================================
@@ -480,11 +412,6 @@ class BiFlexivRizon4RT(Robot):
                 self.logger.info(
                     f"Connecting {len(self.cameras)} camera(s): {', '.join(self.cameras.keys())}..."
                 )
-                # Pre-warm the per-serial config cache sequentially first so the
-                # parallel connect below never triggers a Sunplus flash read (device
-                # reset) mid-open; configs then come from the cache, no flash read.
-                # A single uncached sensor is enough to hang the whole batch.
-                prewarm_tactile_config_cache(self.config.cameras, self.logger)
             with ThreadPoolExecutor(max_workers=len(self.cameras) or 1) as ex:
                 cam_futs = [ex.submit(cam.connect) for cam in self.cameras.values()]
                 for f in cam_futs:

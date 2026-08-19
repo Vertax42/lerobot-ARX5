@@ -63,7 +63,7 @@ class SerialGripperConfig(GripperConfig):
     # ── Serial connection ──────────────────────────────────────────────────────
     # baudrate and device_id are fixed in practice, hence protocol_fixed_fields:
     #   - 115200 is the only rate the firmware speaks, and the protocol has no
-    #     command to change it (see Command in xensegripper.xense_gripper) — only
+    #     command to change it (see Command in xgripper.xense_gripper) — only
     #     a firmware reflash would.
     #   - device_id is the RS-485 address byte in each packet. The protocol carries
     #     it because a bus can hold several devices; our wiring gives every gripper
