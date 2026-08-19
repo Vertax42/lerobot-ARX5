@@ -33,8 +33,7 @@ configs, and the package root stays importable on a host with no camera stack.
 from collections.abc import Sequence
 from logging import Logger
 
-from lerobot.cameras.opencv import OpenCVCameraConfig
-from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig
+from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig, XenseWristCameraConfig
 from lerobot.utils.errors import DeviceNotConnectedError
 
 # Wrist camera: MJPG so the USB bus carries compressed frames.
@@ -50,9 +49,18 @@ TACTILE_WARMUP_S = 0.05
 TACTILE_PER_SIDE = 2
 
 
-def _wrist_camera_config(wrist_camera_name: str) -> OpenCVCameraConfig:
-    """The wrist camera config for a discovered V4L2 device name."""
-    return OpenCVCameraConfig(
+def _wrist_camera_config(
+    wrist_camera_name: str, *, undistort: bool = False, fisheye_balance: float = 0.0
+) -> XenseWristCameraConfig:
+    """The wrist camera config for a discovered V4L2 device name.
+
+    Always the Xense wrist type, even with rectification off: the type is what
+    carries the option, and a rig that turns it on later should not have to
+    change how its cameras are discovered.
+    """
+    return XenseWristCameraConfig(
+        undistort=undistort,
+        fisheye_balance=fisheye_balance,
         index_or_path=wrist_camera_name,
         fourcc=WRIST_FOURCC,
         width=WRIST_WIDTH,
@@ -80,6 +88,8 @@ def _add_side_cameras(
     *,
     enable_tactile: bool,
     too_few_tactile_msg: str,
+    undistort: bool = False,
+    fisheye_balance: float = 0.0,
 ) -> None:
     """Add one side's wrist (and optionally tactile) cameras under the shared key
     scheme ``<side>_wrist`` / ``<side>_tactile_<i>``.
@@ -91,7 +101,9 @@ def _add_side_cameras(
         DeviceNotConnectedError: If tactile sensors are enabled but the sweep
             found fewer than ``TACTILE_PER_SIDE`` of them on this side.
     """
-    cameras[f"{side}_wrist"] = _wrist_camera_config(wrist_camera_name)
+    cameras[f"{side}_wrist"] = _wrist_camera_config(
+        wrist_camera_name, undistort=undistort, fisheye_balance=fisheye_balance
+    )
 
     if not enable_tactile:
         return
@@ -109,6 +121,8 @@ def inject_taccap_cameras(
     sides: Sequence[str],
     enable_tactile: bool,
     logger: Logger,
+    undistort_wrist: bool = False,
+    fisheye_balance: float = 0.0,
 ) -> dict[str, str]:
     """Discover TacCap wrist + GSPS tactile devices and add them to ``cameras``.
 
@@ -145,6 +159,8 @@ def inject_taccap_cameras(
             dev.wrist_camera_name,
             dev.tactile_sns,
             enable_tactile=enable_tactile,
+            undistort=undistort_wrist,
+            fisheye_balance=fisheye_balance,
             too_few_tactile_msg=(
                 f"taccap auto-discover: expected {TACTILE_PER_SIDE} GSPS tactile "
                 f"sensors for {side}, found {list(dev.tactile_sns)}."
@@ -221,3 +237,32 @@ def adopt_taccap_mcu_device(gripper, side: str, mcu_device: str, logger: Logger)
         return
     gripper._mcu_device = mcu_device
     logger.debug(f"[{side}] taccap follower pinned to discovered {mcu_device}")
+
+
+def attach_wrist_fisheye_calibration(cameras: dict, grippers: dict, logger: Logger) -> None:
+    """Hand each undistort-enabled wrist camera the intrinsics from its gripper.
+
+    Called between connecting grippers and connecting cameras: the MCU has to be
+    open to be read, and the camera has to have the calibration before it builds
+    its remap tables.
+
+    Only wrist cameras that asked for it are touched, and only sides that have a
+    gripper able to answer. A camera with undistort on whose side has no such
+    gripper is left alone — it raises at its own connect(), where the message can
+    name the camera.
+
+    Args:
+        cameras: The arm's live camera objects, keyed ``<side>_wrist``.
+        grippers: ``{side: gripper}``; sides without one may map to None.
+        logger: The arm's logger.
+    """
+    for side, gripper in grippers.items():
+        cam = cameras.get(f"{side}_wrist")
+        if cam is None or not getattr(cam, "undistort", False):
+            continue
+        if gripper is None or not hasattr(gripper, "read_wrist_fisheye_calibration"):
+            continue
+        cal, is_reference = gripper.read_wrist_fisheye_calibration()
+        cam.set_fisheye_calibration(cal, is_reference=is_reference)
+        source = "the SDK's reference values" if is_reference else "the gripper MCU"
+        logger.info(f"[{side}] wrist fisheye calibration from {source}")

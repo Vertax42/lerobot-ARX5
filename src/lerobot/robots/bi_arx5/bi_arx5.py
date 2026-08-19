@@ -395,7 +395,7 @@ class BiARX5(Robot):
                 try:
                     fut.result()
                 except Exception as e:
-                    self.logger.warning(f"Camera '{name}' disconnect failed: {e}")
+                    self.logger.warn(f"Camera '{name}' disconnect failed: {e}")
 
     def connect(self, calibrate: bool = False, go_to_start: bool = True) -> None:
         if self._is_connected:

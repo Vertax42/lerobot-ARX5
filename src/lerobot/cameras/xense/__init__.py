@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from .camera_wrist import XenseWristCamera  # noqa: F401
 from .camera_xense import XenseTactileCamera
-from .configuration_xense import XenseTactileCameraConfig, XenseOutputType
+from .configuration_wrist import XenseWristCameraConfig  # noqa: F401
+from .configuration_xense import XenseOutputType, XenseTactileCameraConfig
 
 __all__ = [
     "XenseTactileCamera",

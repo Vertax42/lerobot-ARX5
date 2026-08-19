@@ -215,6 +215,34 @@ class TaccapFollower(Gripper):
                 self.logger.debug(f"Error disabling motor during rollback: {e}")
             self._gripper = None
 
+    def read_wrist_fisheye_calibration(self):
+        """The wrist lens' fisheye intrinsics for this gripper.
+
+        Straight passthrough to ``Calibration.resolve_fisheye()``: deciding what
+        to rectify with — this unit's stored calibration, or the SDK's reference
+        values when it has none — is the SDK's policy, and it applies the same
+        one internally when it owns the wrist UVC device. This layer used to
+        re-derive it, and the two copies had already drifted on why a read fails.
+
+        Returns:
+            ``(calibration, is_reference)`` — the second value is True when the
+            reference values stood in, so callers can label or refuse them.
+        """
+        if self._gripper is None:
+            raise DeviceNotConnectedError(
+                f"{self} is not connected; cannot read the wrist fisheye calibration."
+            )
+
+        calibration, is_reference, reason = self._gripper.calibration.resolve_fisheye()
+        if is_reference:
+            self.logger.warn(
+                f"{self}: using the SDK's REFERENCE wrist fisheye intrinsics because "
+                f"{reason}. Rectification will be approximate — lens placement varies "
+                f"per assembly, so the principal point drifts. Calibrate this unit's "
+                f"wrist lens with the PC tool for measurements taken off these frames."
+            )
+        return calibration, is_reference
+
     def disconnect(self) -> None:
         """Stop the control loop, disable the motor, and release the device."""
         if not self._is_connected:

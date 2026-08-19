@@ -90,6 +90,20 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     # Camera configurations (external cameras)
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
     enable_tactile_sensors: bool = True
+
+    # ── Wrist fisheye rectification ─────────────────────────────────────────────
+    # Only reaches auto-discovered wrist cameras; a wrist camera pinned by hand
+    # in the recipe carries its own `undistort` field instead. TacCap only — the
+    # serial (XGripper) family has no firmware calibration to read.
+    #
+    # Falls back to the SDK's reference intrinsics, with a warning, when this
+    # unit's firmware holds none. Those are shared across units, so the principal
+    # point drifts with lens placement: calibrate the unit before taking pixel
+    # measurements off a rectified frame.
+    undistort_wrist_cameras: bool = False
+    # 0.0 keeps the calibrated focal length (natural view); 1.0 uses 0.70x for the
+    # widest field of view, with more black border. Clamped to [0, 1].
+    wrist_fisheye_balance: float = 0.0
     # Head RealSense depth stream. Reserved but OFF by default: get_observation only
     # pulls (color, depth) when this is True; otherwise the head camera is color-only.
     head_camera_use_depth: bool = False

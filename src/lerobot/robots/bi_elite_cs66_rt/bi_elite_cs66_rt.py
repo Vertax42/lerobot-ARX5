@@ -63,6 +63,7 @@ from lerobot.robots.elite_cs66_rt.manipulability import (
 from lerobot.grippers import Gripper, make_gripper_from_config
 from lerobot.grippers.camera_injection import (
     adopt_taccap_mcu_device,
+    attach_wrist_fisheye_calibration,
     inject_serial_gripper_cameras,
     inject_taccap_cameras,
 )
@@ -181,6 +182,8 @@ class BiEliteCS66RT(Robot):
             sides=_SIDES,
             enable_tactile=self.config.enable_tactile_sensors,
             logger=self.logger,
+            undistort_wrist=self.config.undistort_wrist_cameras,
+            fisheye_balance=self.config.wrist_fisheye_balance,
         )
         # The sweep already resolved each gripper's MCU path; pin it so the
         # driver's connect() skips a second scan of the same bus.
@@ -454,6 +457,10 @@ class BiEliteCS66RT(Robot):
                     futs[side].result()
 
             # --- Connect bimanual cameras in parallel ---
+            # Read the wrist fisheye intrinsics off each gripper's MCU while it is
+            # open, before the cameras build their remap tables.
+            attach_wrist_fisheye_calibration(self.cameras, self._gripper, self.logger)
+
             if self.cameras:
                 self.logger.info(
                     f"Connecting {len(self.cameras)} camera(s): {', '.join(self.cameras.keys())}..."
