@@ -234,8 +234,8 @@ def _reference_remap(cal, balance):
 
     # K and D are the camera-matrix / distortion names OpenCV and every
     # calibration document use; lowercasing them would obscure the reference.
-    K = np.asarray(cal.K, np.float64)  # noqa: N806
-    D = np.asarray(cal.D, np.float64).reshape(4, 1)  # noqa: N806
+    K = np.asarray(cal.K, np.float64)
+    D = np.asarray(cal.D, np.float64).reshape(4, 1)
     scale = FisheyeUndistorter(cal, 640, 480, balance).focal_scale
     new_k = K.copy()
     new_k[0, 0] *= scale

@@ -60,7 +60,7 @@ class SharedMemoryQueue:
             read_counter = SharedCounter(shm_manager)
 
         # allocate shared memory
-        shared_arrays = dict()
+        shared_arrays = {}
         for spec in array_specs:
             key = spec.name
             assert key not in shared_arrays
@@ -85,7 +85,7 @@ class SharedMemoryQueue:
         buffer_size: int,
         use_atomic_counter: bool = True,
     ):
-        specs = list()
+        specs = []
         for key, value in examples.items():
             shape = None
             dtype = None
@@ -94,7 +94,7 @@ class SharedMemoryQueue:
                 dtype = value.dtype
                 assert dtype != np.dtype("O")
             elif isinstance(value, numbers.Number):
-                shape = tuple()
+                shape = ()
                 dtype = np.dtype(type(value))
             else:
                 raise TypeError(f"Unsupported type {type(value)}")
@@ -146,7 +146,7 @@ class SharedMemoryQueue:
 
     def put_list(self, data: dict[str, np.ndarray]):
         list_lens = []
-        for key, value in data.items():
+        for _key, value in data.items():
             assert isinstance(value, np.ndarray)
             list_lens.append(value.shape[0])
             assert value.shape[0] == list_lens[0], "Inconsistent list lengths"
@@ -193,7 +193,7 @@ class SharedMemoryQueue:
             raise Full()
 
         next_idx = write_count % self.buffer_size
-        out = dict()
+        out = {}
         for key, value in self.shared_arrays.items():
             arr = value.get()
             out[key] = arr[next_idx]
@@ -233,7 +233,7 @@ class SharedMemoryQueue:
             raise Empty()
 
         next_idx = read_count % self.buffer_size
-        data = dict()
+        data = {}
         for key, value in self.shared_arrays.items():
             arr = value.get()
             data[key] = arr[next_idx]
@@ -326,7 +326,7 @@ class SharedMemoryQueue:
                 arr[start:end] = value[data_start:data_end]
 
     def _allocate_empty(self, k=None):
-        result = dict()
+        result = {}
         for spec in self.array_specs:
             shape = spec.shape
             if k is not None:

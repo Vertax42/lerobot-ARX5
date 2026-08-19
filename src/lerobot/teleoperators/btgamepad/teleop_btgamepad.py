@@ -20,7 +20,7 @@ from typing import Any
 import numpy as np
 
 # `R` is the conventional spelling for a rotation in every formula below.
-from scipy.spatial.transform import Rotation as R  # noqa: N817
+from scipy.spatial.transform import Rotation as R
 
 from lerobot.utils.robot_utils import (
     get_logger,

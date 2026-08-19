@@ -14,12 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
+
 from .config_bi_arx5 import BiARX5Config  # noqa: F401
 
 # Guarded: the driver imports pyarx (re-raising ImportError when absent), so importing
 # the CLI on a host without the ARX5 SDK must not crash. The SDK-free config above stays
 # registered as an --robot.type choice regardless.
-try:
+with contextlib.suppress(ImportError):
     from .bi_arx5 import BiARX5  # noqa: F401
-except ImportError:
-    pass

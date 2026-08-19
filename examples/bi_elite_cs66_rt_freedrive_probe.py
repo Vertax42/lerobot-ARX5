@@ -46,6 +46,7 @@ from lerobot.robots.bi_elite_cs66_rt.bi_elite_cs66_rt import BiEliteCS66RT
 from lerobot.robots.bi_elite_cs66_rt.config_bi_elite_cs66_rt import BiEliteCS66RTConfig
 from lerobot.robots.elite_cs66_rt import EliteCS66RT, EliteCS66RTConfig
 from lerobot.robots.elite_cs66_rt.config_elite_cs66_rt import EliteCS66RTControlMode
+from lerobot.utils.robot_utils import best_effort
 from lerobot.utils.rotation import Rotation
 
 
@@ -115,7 +116,7 @@ def main() -> None:
         return
 
     log_path = args.log or f"freedrive_{side}_{int(time.time())}.csv"
-    log = open(log_path, "w")
+    log = open(log_path, "w")  # noqa: SIM115 — held for the whole run, closed in finally
     log.write(
         "seg,t_s,base_x,base_y,base_z,base_rx,base_ry,base_rz,world_x,world_y,world_z,world_rx,world_ry,world_rz\n"
     )
@@ -182,11 +183,9 @@ def main() -> None:
         print("\nStopping freedrive...")
     finally:
         log.close()
-        try:
+        with best_effort(robot.logger, "leaving freedrive"):
             driver.writeFreedrive(cs.FreedriveAction.FREEDRIVE_END, args.timeout_ms)
             driver.writeIdle(args.timeout_ms)
-        except Exception:
-            pass
         robot.disconnect()
     print(f"Done. CSV saved to {log_path}")
 

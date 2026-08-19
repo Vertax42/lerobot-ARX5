@@ -400,7 +400,9 @@ class BiPico4(Teleoperator):
         if self._is_connected:
             try:
                 self.disconnect()
-            except Exception:
+            # No logging: __del__ can run during interpreter shutdown, where the
+            # logger's sinks may already be gone.
+            except Exception:  # nosec B110
                 pass
             finally:
                 self._is_connected = False

@@ -191,7 +191,7 @@ def main() -> None:
                 break
             time.sleep(args.interval)
     finally:
-        for side, iface in rtsi.items():
+        for iface in rtsi.values():
             with suppress(Exception):
                 iface.disconnect()
 

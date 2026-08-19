@@ -20,11 +20,11 @@ class CMakeBuild(build_ext):
     def run(self):
         try:
             out = subprocess.check_output(["cmake", "--version"])
-        except OSError:
+        except OSError as err:
             raise RuntimeError(
                 "CMake must be installed to build the following extensions: "
                 + ", ".join(e.name for e in self.extensions)
-            )
+            ) from err
 
         if platform.system() == "Windows":
             cmake_version = LooseVersion(re.search(r"version\s*([\d.]+)", out.decode()).group(1))
@@ -133,11 +133,11 @@ setup(
     description="A Python binding for XenseVR PC Service SDK using pybind11 and CMake",
     long_description="",  # Optionally, load from a README.md file
     ext_modules=[CMakeExtension("xensevr_pc_service_sdk")],
-    cmdclass=dict(
-        build_ext=CMakeBuild,
-        clean=CleanCommand,  # Add clean command
-        uninstall=UninstallCommand,  # Add uninstall command
-    ),
+    cmdclass={
+        "build_ext": CMakeBuild,
+        "clean": CleanCommand,  # Add clean command
+        "uninstall": UninstallCommand,  # Add uninstall command
+    },
     zip_safe=False,
     python_requires=">=3.10",  # Specify your Python version requirement
     packages=find_packages(),  # If you have other Python packages in your project

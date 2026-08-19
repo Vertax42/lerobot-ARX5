@@ -584,10 +584,7 @@ class ARX5Follower(Robot):
         else:
             trajectory = list(target_joint_poses)
 
-        if isinstance(durations, (int, float)):
-            segment_durations = [float(durations)]
-        else:
-            segment_durations = [float(d) for d in durations]
+        segment_durations = [float(durations)] if isinstance(durations, (int, float)) else [float(d) for d in durations]
 
         if len(trajectory) != len(segment_durations):
             raise ValueError("target_joint_poses and durations must have the same length")
@@ -623,7 +620,7 @@ class ARX5Follower(Robot):
                 target = _parse_target(segment, current)
 
                 if duration <= 0:
-                    action = dict(zip(self._action_keys, target[:6].tolist()))
+                    action = dict(zip(self._action_keys, target[:6].tolist(), strict=True))
                     action[self._gripper_key] = float(target[6])
                     self.send_action(action)
                     current = target
@@ -640,7 +637,7 @@ class ARX5Follower(Robot):
                     ratio = _apply_easing(progress)
                     interp = current + (target - current) * ratio
 
-                    action = dict(zip(self._action_keys, interp[:6].tolist()))
+                    action = dict(zip(self._action_keys, interp[:6].tolist(), strict=True))
                     action[self._gripper_key] = float(interp[6])
 
                     self.send_action(action)
@@ -682,15 +679,9 @@ class ARX5Follower(Robot):
             raise ValueError("move_eef_trajectory requires CARTESIAN_CONTROL mode")
 
         # Normalize input to list of targets
-        if isinstance(target_eef_poses[0], (int, float)):
-            trajectory = [target_eef_poses]
-        else:
-            trajectory = list(target_eef_poses)
+        trajectory = [target_eef_poses] if isinstance(target_eef_poses[0], (int, float)) else list(target_eef_poses)
 
-        if isinstance(durations, (int, float)):
-            segment_durations = [float(durations)]
-        else:
-            segment_durations = [float(d) for d in durations]
+        segment_durations = [float(durations)] if isinstance(durations, (int, float)) else [float(d) for d in durations]
 
         if len(trajectory) != len(segment_durations):
             raise ValueError("target_eef_poses and durations must have the same length")
@@ -726,7 +717,7 @@ class ARX5Follower(Robot):
                 target = _parse_target(segment, current)
 
                 if duration <= 0:
-                    action = dict(zip(self._action_keys, target[:6].tolist()))
+                    action = dict(zip(self._action_keys, target[:6].tolist(), strict=True))
                     action[self._gripper_key] = float(target[6])
                     self.send_action(action)
                     current = target
@@ -743,7 +734,7 @@ class ARX5Follower(Robot):
                     ratio = _apply_easing(progress)
                     interp = current + (target - current) * ratio
 
-                    action = dict(zip(self._action_keys, interp[:6].tolist()))
+                    action = dict(zip(self._action_keys, interp[:6].tolist(), strict=True))
                     action[self._gripper_key] = float(interp[6])
 
                     self.send_action(action)

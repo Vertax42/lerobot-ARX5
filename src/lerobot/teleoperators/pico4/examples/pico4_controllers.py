@@ -177,7 +177,6 @@ def run_tests():
 
                 # Loop timing
                 loop_time_ms = (time.perf_counter() - loop_start) * 1000
-                target_hz = 100
                 print("\n[Loop Timing]")
                 print(f"  Loop time: {loop_time_ms:.2f}ms ({1000 / max(loop_time_ms, 0.1):.0f} Hz)")
 

@@ -25,6 +25,7 @@ tactile images come from separate XenseTactileCamera devices (already namespaced
 left_tactile_* / right_tactile_*), not the gripper.
 """
 
+import contextlib
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -70,6 +71,7 @@ from lerobot.robots.elite_cs66_rt.manipulability import (
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import (
+    best_effort,
     get_logger,
     quaternion_to_euler,
     quaternion_to_rotation_6d,
@@ -592,42 +594,30 @@ class BiEliteCS66RT(Robot):
         for side in _SIDES:
             # A servo loop may already be running if the other arm's bring-up
             # failed after this one handed off; stop it before tearing down.
-            try:
+            with contextlib.suppress(Exception):
                 self._stop_servo_loop(side)
-            except Exception:
-                pass
-            try:
+            with best_effort(self.logger, f"stopping control ({side})"):
                 if self._driver[side] is not None:
                     self._driver[side].stopControl(1000)
-            except Exception:
-                pass
-            try:
+            with best_effort(self.logger, f"closing the dashboard connection ({side})"):
                 if self._dashboard[side] is not None:
                     self._dashboard[side].disconnect()
-            except Exception:
-                pass
-            try:
+            with best_effort(self.logger, f"closing the RTSI connection ({side})"):
                 if self._rtsi[side] is not None:
                     self._rtsi[side].disconnect()
-            except Exception:
-                pass
             gripper = self._gripper[side]
             if gripper is not None:
-                try:
+                with best_effort(self.logger, f"releasing the gripper ({side})"):
                     if getattr(gripper, "_is_connected", False):
                         gripper.disconnect()
-                except Exception:
-                    pass
             self._driver[side] = None
             self._dashboard[side] = None
             self._rtsi[side] = None
 
-        for cam in self.cameras.values():
-            try:
+        for name, cam in self.cameras.items():
+            with best_effort(self.logger, f"releasing camera {name}"):
                 if cam.is_connected:
                     cam.disconnect()
-            except Exception:
-                pass
         self._is_connected = False
 
     def disconnect(self) -> None:
@@ -879,20 +869,16 @@ class BiEliteCS66RT(Robot):
             if result is not None and result != self._cs.TrajectoryMotionResult.SUCCESS:
                 raise RuntimeError(f"MoveJ ({side}) finished with non-success result: {result}")
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 driver.writeIdle(timeout_ms)
-            except Exception:
-                pass
             if servo_was_running:
-                try:
+                with best_effort(self.logger, f"resyncing servo targets to the actual TCP ({side})", level="warn"):
                     current_tcp = np.asarray(self._rtsi[side].getActualTCPPose(), dtype=np.float64)
                     with self._servo_lock[side]:
                         self._last_tcp_command[side] = current_tcp.copy()
                         self._target_tcp_command[side] = current_tcp.copy()
                         self._last_action_time[side] = time.monotonic()
                         self._external_command_received[side] = False
-                except Exception:
-                    pass
                 self._start_servo_loop(side)
 
     # =========================================================================

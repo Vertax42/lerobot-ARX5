@@ -104,7 +104,9 @@ lerobot-teleoperate \
 # in OpenCV, which is earlier than the import block below.
 try:  # noqa: SIM105
     import xense.taccap  # noqa: F401
-except Exception:
+# Silent by design: the SDK being absent is the ordinary case on a host that
+# does not use it, and there is no logger yet this early in the module.
+except Exception:  # nosec B110
     pass
 
 import contextlib

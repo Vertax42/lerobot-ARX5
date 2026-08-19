@@ -157,7 +157,7 @@ def assert_same_address(model_ctrl_table: dict[str, dict], motor_models: list[st
 
 # Not StrEnum: str(MotorNormMode.DEGREES) yields "MotorNormMode.DEGREES" here and
 # the bare value there, and calibration files on disk were written with one of them.
-class MotorNormMode(str, Enum):  # noqa: UP042
+class MotorNormMode(str, Enum):
     RANGE_0_100 = "range_0_100"
     RANGE_M100_100 = "range_m100_100"
     DEGREES = "degrees"

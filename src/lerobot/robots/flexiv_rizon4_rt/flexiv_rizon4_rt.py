@@ -56,6 +56,7 @@ Key Differences from NRT Driver (flexiv_rizon4):
 Reference: https://rdk.flexiv.com/api/
 """
 
+import contextlib
 import time
 from functools import cached_property
 from typing import Any
@@ -391,20 +392,15 @@ class FlexivRizon4RT(Robot):
             mode_desc = "RT_CARTESIAN_MOTION_FORCE"
             mode_desc += " (force enabled)" if self.config.use_force else " (motion only)"
 
-            if self._gripper is not None:
-                gripper_status = f"with {type(self._gripper).__name__}"
-            else:
-                gripper_status = "no gripper"
+            gripper_status = f"with {type(self._gripper).__name__}" if self._gripper is not None else "no gripper"
             self.logger.info(f"Flexiv Rizon4 RT connected and ready in {mode_desc} mode ({gripper_status}).")
 
         except Exception as e:
             self.logger.error(f"Failed to connect to Flexiv robot (RT): {e}")
             # Cleanup on failure
             if self._cc is not None:
-                try:
+                with contextlib.suppress(Exception):
                     self._cc.stop()
-                except Exception:
-                    pass
                 self._cc = None
             self._robot = None
             self._is_connected = False
@@ -467,10 +463,8 @@ class FlexivRizon4RT(Robot):
             self.logger.error(f"Error during disconnect: {e}")
         finally:
             if self._robot is not None:
-                try:
+                with contextlib.suppress(Exception):
                     self._robot.close()
-                except Exception:
-                    pass
             self._robot = None
             self._cc = None
             self._gripper = None
@@ -645,12 +639,10 @@ class FlexivRizon4RT(Robot):
                     f"MoveJ timeout after {timeout}s, fault={self._robot.fault()}, mode={self._robot.mode()}"
                 )
                 raise RuntimeError(f"MoveJ did not complete within {timeout}s")
-            try:
+            with contextlib.suppress(Exception):
                 pt_states = self._robot.primitive_states()
                 if pt_states.get("reachedTarget", 0) == 1:
                     break
-            except Exception:
-                pass
             time.sleep(0.1)
 
         self.logger.info("Robot at start position.")
@@ -680,12 +672,10 @@ class FlexivRizon4RT(Robot):
             if time.time() - start_time > timeout:
                 self.logger.error(f"ZeroFTSensor timeout after {timeout}s")
                 break
-            try:
+            with contextlib.suppress(Exception):
                 pt_states = self._robot.primitive_states()
                 if pt_states.get("terminated", 0) == 1:
                     break
-            except Exception:
-                pass
             time.sleep(0.1)
 
         self.logger.info("Force-torque sensor zeroed")
