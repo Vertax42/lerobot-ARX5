@@ -40,8 +40,14 @@ def is_package_available(
     if import_name is None:
         import_name = pkg_name
 
-    # Check if the module spec exists using the import name
-    package_exists = importlib.util.find_spec(import_name) is not None
+    # Check if the module spec exists using the import name.
+    # find_spec imports parent packages, so a dotted import_name whose parent is
+    # missing ("xense.taccap" with no "xense") raises instead of returning None —
+    # which is exactly the case a caller is asking about.
+    try:
+        package_exists = importlib.util.find_spec(import_name) is not None
+    except ModuleNotFoundError:
+        package_exists = False
     package_version = "N/A"
     if package_exists:
         try:
