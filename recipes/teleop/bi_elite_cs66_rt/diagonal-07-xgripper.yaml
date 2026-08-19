@@ -1,10 +1,17 @@
 # Teleop recipe — bimanual Elite CS66 RT (diagonal mount, bench 07) + Bi-Pico4.
 # Self-contained: this file carries both the bench hardware and the run's tuning.
-#   lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-07.yaml
+#   lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-07-taccap.yaml
 #
 # Anything not listed uses the dataclass default. diagonal-07 and diagonal-08 are
 # identical setups, so the guard params below are kept in lockstep with
-# diagonal-08.yaml — keep the two in sync.
+# diagonal-08-xgripper.yaml — keep the two in sync.
+#
+# Gripper variant: xgripper. The sibling diagonal-07-taccap.yaml is the same bench
+# with the other gripper family — the two differ only in `gripper:`.
+#
+# NOT yet run on this bench with serial grippers — the arm block is inherited
+# from the diagonal-07-taccap.yaml recipe, the gripper block is the fleet default.
+
 
 robot:
   type: bi_elite_cs66_rt
@@ -91,26 +98,22 @@ robot:
   payload_mass: 0.7           # kg
   payload_cog: [0.0, 0.0, 0.19] # m, relative to flange
   # ── Gripper ── One block for both arms; `side` is stamped per arm at build time.
-  # Both grippers -> xense.taccap FollowerGripper (matched pair, single switch).
-  # auto_discover_cameras sniffs the wrist + GSPS tactile SNs off each gripper's
-  # USB hub at connect, which is why only the head camera is pinned above.
+  # Both grippers -> XenseSerialGripper over USB serial (no IP / MAC / network).
+  # Neither port nor sn is pinned: parity discovery reads each board's SN and
+  # resolves the side from it, which then anchors the camera sniff above.
   gripper:
-    type: taccap_follower
-    kp: 8.0                 # MIT impedance stiffness (Nm/rad)
-    kd: 1.0                 # MIT impedance damping (Nm·s/rad)
-    # ⚠️ HIGH GRIP FORCE — constant closing feed-forward torque. NEGATIVE = clamp.
-    # -3.0 Nm is ~10x the SDK gentle-grasp abort (0.30 Nm) and near the motor's
-    # ceiling: it is a hard crush. Being a CONSTANT bias, the jaw also settles
-    # ~3/kp≈0.375 rad short of full open and holds the closed stop under load even
-    # empty (runs hot). Back off toward -0.3 if it stalls / can't open / overheats.
-    feedforward_torque: -3.0    # Nm, negative = closing
-    control_hz: 200         # ControlLoop resubmit rate
-    auto_discover_cameras: true
-    require_calibrated: true
+    type: serial
+    gripper_v_max: 100.0    # mm/s
+    gripper_f_max: 30.0     # N
+    gripper_min_pos: 0.0    # mm — fully closed
+    gripper_max_pos: 85.0   # mm — fully open
+    serial_timeout: 1.0
     init_open: true
+    auto_discover_cameras: true   # sniff wrist + tactile off this gripper's USB hub
     # Everything else worth tuning, at its default — uncomment to change.
-    # side: left                          # stamped automatically per arm — do not set here
-    # mcu_device: null                    # explicit MCU path; the arm fills this from discovery
+    # port: ""                            # explicit /dev path; overrides sn + side
+    # sn: null                            # board SN; scanned across ports when port unset
+    # side: null                          # stamped automatically per arm — do not set here
   left_use_gripper: true
   right_use_gripper: true
 

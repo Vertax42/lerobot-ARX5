@@ -22,13 +22,13 @@ copy-pasting a long command from this file. Both `lerobot-teleoperate` and
 
 ```bash
 # Teleoperate from a saved recipe
-lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-08.yaml
+lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-08-xgripper.yaml
 
 # Record from a saved recipe
-lerobot-record --config_path=recipes/record/bi_elite_cs66_rt/test.yaml
+lerobot-record --config_path=recipes/record/bi_elite_cs66_rt/test-xgripper.yaml
 
 # Override anything ad-hoc — CLI flags win over the YAML
-lerobot-record --config_path=recipes/record/bi_elite_cs66_rt/test.yaml \
+lerobot-record --config_path=recipes/record/bi_elite_cs66_rt/test-xgripper.yaml \
     --dataset.num_episodes=1 --resume=true
 ```
 
@@ -257,10 +257,10 @@ lerobot-record \
 ### Test record (smoke test: 2 short episodes, local only)
 
 Recommended form — run the saved recipe (see
-[`recipes/record/bi_elite_cs66_rt/test.yaml`](../../../recipes/record/bi_elite_cs66_rt/test.yaml)):
+[`recipes/record/bi_elite_cs66_rt/test-xgripper.yaml`](../../../recipes/record/bi_elite_cs66_rt/test-xgripper.yaml)):
 
 ```bash
-lerobot-record --config_path=recipes/record/bi_elite_cs66_rt/test.yaml
+lerobot-record --config_path=recipes/record/bi_elite_cs66_rt/test-xgripper.yaml
 ```
 
 Equivalent explicit command (for one-off runs / reference):

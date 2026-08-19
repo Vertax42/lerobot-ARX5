@@ -1,9 +1,14 @@
-# Teleop recipe — bimanual Elite CS66 RT (diagonal mount, bench 08) + Bi-Pico4.
-# Self-contained: this file carries both the bench hardware and the run's tuning.
-#   lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-08.yaml
+# Record recipe — bimanual Elite CS66 RT (diagonal mount, bench 08) + Bi-Pico4.
+# SMOKE TEST.
+#   lerobot-record --config_path=recipes/record/bi_elite_cs66_rt/test.yaml
 #
+# Self-contained: this file carries both the bench hardware and the run's tuning.
 # Anything not listed uses the dataclass default. The robot:/teleop: blocks mirror
-# recipes/record/bi_elite_cs66_rt/test.yaml (same bench) — keep them in sync.
+# recipes/teleop/bi_elite_cs66_rt/diagonal-08-xgripper.yaml (same bench) — keep in sync.
+#
+# Gripper variant: xgripper. The sibling test-taccap.yaml is the same bench
+# with the other gripper family — the two differ only in `gripper:`.
+
 
 robot:
   type: bi_elite_cs66_rt
@@ -70,16 +75,19 @@ robot:
   control_mode: cartesian_servo # cartesian_servo | joint_servo
   servoj_gain: 300 # [100, 2000]
   # ── Gripper ── One block for both arms; `side` is stamped per arm at build time.
+  # Both grippers -> XenseSerialGripper over USB serial (no IP / MAC / network).
+  # Neither port nor sn is pinned: parity discovery reads each board's SN and
+  # resolves the side from it, which then anchors the camera sniff above.
   gripper:
     type: serial
     gripper_v_max: 100.0    # mm/s
-    gripper_f_max: 30.0    # N
+    gripper_f_max: 30.0     # N
     gripper_min_pos: 0.0    # mm — fully closed
     gripper_max_pos: 85.0   # mm — fully open
     serial_timeout: 1.0
     init_open: true
+    auto_discover_cameras: true   # sniff wrist + tactile off this gripper's USB hub
     # Everything else worth tuning, at its default — uncomment to change.
-    # auto_discover_cameras: true        # sniff wrist + tactile off this gripper's USB hub
     # port: ""                            # explicit /dev path; overrides sn + side
     # sn: null                            # board SN; scanned across ports when port unset
     # side: null                          # stamped automatically per arm — do not set here
@@ -98,27 +106,6 @@ robot:
   # failed and the guard fail-safes off (resolve DH before relying on it).
   joint_vel_limits_rad_s: [2.618, 2.618, 3.142, 4.014, 4.014, 4.014]
   joint_vel_limit_margin: 0.8 # enforce at 80% of the limits; lower (e.g. 0.6) for more headroom
-  log_manipulability: true # DIAG: print per-tick w / sigma_min / s / s_jv (turn off in production)
-
-  # ── Manipulability (w-band) damping — THE fix for the "extend → IK refuses" trips ──
-  # Trip diagnosis (session 14:04, left): reaching out SLOWLY, w=|det(J)| fell 0.084→0.020 and the
-  # controller REFUSED the near-singular target (qdot_tgt=0 — NOT an overspeed; the joint-vel guard
-  # saw tiny velocities and stayed s_jv=1 the whole way down, so it structurally cannot catch this).
-  # This directional w-band slows the command as w drops so the operator feels resistance BEFORE the
-  # ~0.02 IK-refusal, while leaving retraction (escape / rising w) free. Thresholds from the live w
-  # trace (normal ~0.08, refuse ~0.02): raise singularity_w_low toward 0.035 if it still trips; lower
-  # singularity_w_high toward 0.04 if it damps legit reach too early. Watch "manipulability w=.. -> s=..".
-  singularity_directional: true
-  singularity_w_high: 0.055   # begin damping only just above the hold — narrowed from 0.065 because the
-                              # RIGHT arm's normal table work sits at w~0.045-0.06 and was being damped
-                              # 95% of the time ("not tracking the hand"). At 0.055 its w>0.055 moves run
-                              # free; only w in 0.05-0.055 ramps, w<=0.05 holds.
-  singularity_w_low: 0.05     # TRUE hold at/below this — ABOVE the highest observed refusal (w=0.047).
-  singularity_min_scale: 0.0  # 0 = full hold into the singularity (no creep-through); OK because
-                              # directional=true still lets any escape / retraction (rising w) run free.
-                              # NOTE: refusal-w varies 0.015-0.043 across configs and overlaps normal
-                              # working w (dips to ~0.058), so w_high=0.06 will damp some deep reaches —
-                              # accepted as the safety trade-off. Watch the now-per-tick w->s log.
   # Per-servo-tick velocity ceiling — smooths jumpy Pico4 wrist tracking at the source.
   max_lin_speed: 0.25 # m/s
   max_ang_speed: 1.0  # rad/s (matches the Bi-Pico4 max_rot_velocity default)
@@ -135,6 +122,17 @@ teleop:
   pos_sensitivity: 1.0
   ori_sensitivity: 1.0
 
-# ── Teleoperate loop (top level) ──
-fps: 30
+dataset:
+  repo_id: Xense/bi_elite_cs66_rt_test
+  single_task: "pick up the cube and place it in the box"
+  fps: 30 # must equal teleop fps
+  episode_time_s: 60
+  reset_time_s: 15
+  num_episodes: 2
+  video: true
+  push_to_hub: false
+  private: false
+
+# ── Record loop (top level) ──
 display_data: true
+resume: false

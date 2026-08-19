@@ -1,8 +1,8 @@
 # Teleop recipe — bimanual Flexiv Rizon4 RT (forward mount, bench 05) + Bi-Pico4.
-#   lerobot-teleoperate --config_path=recipes/teleop/bi_flexiv_rizon4_rt/forward-05.yaml
+#   lerobot-teleoperate --config_path=recipes/teleop/bi_flexiv_rizon4_rt/forward-05-xgripper.yaml
 #
 # ⚠️ NOT VERIFIED ON THIS BENCH. Created when stations/ was folded into recipes,
-# to preserve the hardware that stations/bi_flexiv_rizon4_rt/forward-05.yaml held —
+# to preserve the hardware that stations/bi_flexiv_rizon4_rt/forward-05-xgripper.yaml held —
 # that bench had no recipe of its own. The arm SNs, poses and camera SNs below are
 # exact (transcribed from the station file at 3b964bc6).
 #
@@ -10,11 +10,19 @@
 # which is what the old station file's camera list implied — but nothing confirms
 # what is actually bolted to this bench. If it has TacCap followers, this will
 # hang at connect scanning /dev/ttyACM* for serial gripper boards that aren't
-# there; switch to the taccap form (see forward-01-taccap.yaml / forward-04.yaml,
+# there; switch to the taccap form (see forward-01-taccap.yaml / forward-04-taccap.yaml,
 # where only `head` is pinned and the wrist + tactile cameras are auto-discovered).
 # Everything under "Control" is copied from forward-04 and unvalidated here.
 #
 # Self-contained: this file carries both the bench hardware and the run's tuning.
+#
+# Gripper variant: taccap. The sibling forward-05-xgripper.yaml is the same bench
+# with the other gripper family — the two differ only in `gripper:`.
+#
+# NOT yet run on this bench with TacCap followers — the arm block is inherited
+# from the forward-05-xgripper.yaml recipe, the gripper block is the fleet default. Grip tuning
+# (feedforward_torque) is bench work; start gentle.
+
 
 robot:
   type: bi_flexiv_rizon4_rt
@@ -52,19 +60,21 @@ robot:
   use_force: false
   log_level: INFO
   # ── Gripper ── One block for both arms; `side` is stamped per arm at build time.
+  # Both grippers -> xense.taccap FollowerGripper (matched pair, single switch).
+  # auto_discover_cameras sniffs the wrist + GSPS tactile SNs off each gripper's
+  # USB hub at connect, which is why only the head camera is pinned above.
   gripper:
-    type: serial
-    gripper_v_max: 100.0    # mm/s
-    gripper_f_max: 40.0    # N
-    gripper_min_pos: 0.0    # mm — fully closed
-    gripper_max_pos: 85.0   # mm — fully open
-    serial_timeout: 1.0
+    type: taccap_follower
+    kp: 8.0                 # MIT impedance stiffness (Nm/rad)
+    kd: 1.0                 # MIT impedance damping (Nm·s/rad)
+    feedforward_torque: 0.0     # Nm; negative = clamp harder. |ff| <= 3.5
+    control_hz: 200         # ControlLoop resubmit rate
+    auto_discover_cameras: true
+    require_calibrated: true
     init_open: true
     # Everything else worth tuning, at its default — uncomment to change.
-    # auto_discover_cameras: true        # sniff wrist + tactile off this gripper's USB hub
-    # port: ""                            # explicit /dev path; overrides sn + side
-    # sn: null                            # board SN; scanned across ports when port unset
-    # side: null                          # stamped automatically per arm — do not set here
+    # side: left                          # stamped automatically per arm — do not set here
+    # mcu_device: null                    # explicit MCU path; the arm fills this from discovery
   left_use_gripper: true
   right_use_gripper: true
   enable_tactile_sensors: true

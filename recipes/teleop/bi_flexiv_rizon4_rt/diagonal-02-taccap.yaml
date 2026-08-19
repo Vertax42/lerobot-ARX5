@@ -1,9 +1,13 @@
 # Teleop recipe — bimanual Flexiv Rizon4 RT (diagonal mount, bench 02) + Bi-Pico4,
 # with TacCap follower grippers (bi_taccap).
-#   lerobot-teleoperate --config_path=recipes/teleop/bi_flexiv_rizon4_rt/diagonal-02.yaml
+#   lerobot-teleoperate --config_path=recipes/teleop/bi_flexiv_rizon4_rt/diagonal-02-taccap.yaml
 #
 # Self-contained: this file carries both the bench hardware and the run's tuning.
 # Anything not listed uses the dataclass default.
+#
+# Gripper variant: taccap. The sibling diagonal-02-xgripper.yaml is the same bench
+# with the other gripper family — the two differ only in `gripper:`.
+
 
 robot:
   type: bi_flexiv_rizon4_rt

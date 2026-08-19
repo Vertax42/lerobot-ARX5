@@ -138,7 +138,7 @@ def _pose_err(req_pos, req_rot6, ach_pos, ach_rot6):
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--arm", choices=("left", "right"), default="left")
-    ap.add_argument("--recipe", default="recipes/teleop/bi_elite_cs66_rt/diagonal-08.yaml",
+    ap.add_argument("--recipe", default="recipes/teleop/bi_elite_cs66_rt/diagonal-08-xgripper.yaml",
                     help="recipe YAML supplying the bench hardware (IPs, poses, mount rotation)")
     ap.add_argument("--mode", choices=("wrist", "circle", "combo", "hold"), default="wrist",
                     help="hold = keep the start pose fixed so you can hand-push the TCP to feel compliance")
