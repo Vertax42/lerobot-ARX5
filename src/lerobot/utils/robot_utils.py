@@ -24,8 +24,8 @@ import spdlog
 SPDLOG_PATTERN = "[%D %T.%e] [%n] [%^%l%$] %v"
 FILE_LOG_PATTERN = "[%Y-%m-%d %H:%M:%S.%e] [%n] [%l] %v"
 
-# Global log directory — set via XENSE_LOG_DIR env var, defaults to ~/xenselogs.
-_LOG_DIR = Path(os.environ.get("XENSE_LOG_DIR", Path.home() / "xenselogs"))
+# Global log directory — set via XENSE_LOG_DIR env var, defaults to ~/.xenselogs.
+_LOG_DIR = Path(os.environ.get("XENSE_LOG_DIR", Path.home() / ".xenselogs"))
 _LOG_SESSION = datetime.now().strftime("%Y%m%d_%H%M%S")
 _MAX_LOG_FILES = 15
 
@@ -68,7 +68,7 @@ def get_logger(name: str, loglevel: str = "INFO") -> spdlog.Logger:
     """Create a spdlog logger with console + file output.
 
     Console shows ``loglevel`` and above with colors. The file sink captures
-    DEBUG+ to ``~/xenselogs/session_<timestamp>.log`` (override the directory
+    DEBUG+ to ``~/.xenselogs/session_<timestamp>.log`` (override the directory
     via the ``XENSE_LOG_DIR`` env var). Old log files in that directory are
     rotated; only the most recent :data:`_MAX_LOG_FILES` are kept.
 
