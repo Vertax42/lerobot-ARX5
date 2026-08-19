@@ -442,7 +442,7 @@ def record_loop(
         else:
             no_action_count += 1
             if no_action_count == 1 or no_action_count % 10 == 0:
-                logger.warning(
+                logger.warn(
                     "No teleoperator provided, skipping action generation. "
                     "This is likely to happen when resetting the environment without a teleop device. "
                     "The robot won't be at its rest position at the start of the next episode."
@@ -467,7 +467,7 @@ def record_loop(
 
         sleep_time_s: float = 1 / fps - dt_s
         if sleep_time_s < 0:
-            logger.warning(
+            logger.warn(
                 f"Record loop is running slower ({1 / dt_s:.1f} Hz) than the target FPS ({fps} Hz). Dataset frames might be dropped and robot control might be unstable. Common causes are: 1) Camera FPS not keeping up 2) CPU starvation"
             )
 

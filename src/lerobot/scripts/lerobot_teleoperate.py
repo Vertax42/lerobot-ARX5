@@ -193,7 +193,7 @@ def _cleanup(robot, teleop, display_data: bool) -> None:
         try:
             rr.rerun_shutdown()
         except Exception as e:
-            logger.warning(f"Error shutting down rerun: {e}")
+            logger.warn(f"Error shutting down rerun: {e}")
     _safe_disconnect(teleop, teleop.__class__.__name__ if teleop else "teleop")
     _safe_disconnect(robot, robot.__class__.__name__ if robot else "robot")
 
@@ -674,7 +674,7 @@ def arx5_trlc_leader_teleop_loop(
         }
         if len(filtered_action) != len(teleop_action) and not warned_unmapped_keys:
             dropped = sorted(set(teleop_action) - robot_action_keys)
-            logger.warning(
+            logger.warn(
                 f"TRLC action keys not present in ARX5 action schema, dropping: {dropped}"
             )
             warned_unmapped_keys = True
