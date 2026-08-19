@@ -52,9 +52,7 @@ class RandomSubsetApply(Transform):
         if p is None:
             p = [1] * len(transforms)
         elif len(p) != len(transforms):
-            raise ValueError(
-                f"Length of p doesn't match the number of transforms: {len(p)} != {len(transforms)}"
-            )
+            raise ValueError(f"Length of p doesn't match the number of transforms: {len(p)} != {len(transforms)}")
 
         if n_subset is None:
             n_subset = len(transforms)
@@ -87,12 +85,7 @@ class RandomSubsetApply(Transform):
         return outputs
 
     def extra_repr(self) -> str:
-        return (
-            f"transforms={self.transforms}, "
-            f"p={self.p}, "
-            f"n_subset={self.n_subset}, "
-            f"random_order={self.random_order}"
-        )
+        return f"transforms={self.transforms}, p={self.p}, n_subset={self.n_subset}, random_order={self.random_order}"
 
 
 class SharpnessJitter(Transform):
@@ -224,8 +217,7 @@ def make_transform_from_config(cfg: ImageTransformConfig):
         return transform_cls(**cfg.kwargs)
 
     raise ValueError(
-        f"Transform '{cfg.type}' is not valid. It must be a class in "
-        f"torchvision.transforms.v2 or 'SharpnessJitter'."
+        f"Transform '{cfg.type}' is not valid. It must be a class in torchvision.transforms.v2 or 'SharpnessJitter'."
     )
 
 

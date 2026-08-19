@@ -73,7 +73,7 @@ class SerialGripper(Gripper):
         cfg = SerialGripperConfig(port="/dev/ttyUSB0")
         g = SerialGripper(cfg)
         g.connect()
-        g.set_gripper_position(0.5)   # half-closed
+        g.set_gripper_position(0.5)  # half-closed
         print(g.get_gripper_position())
         g.disconnect()
     """
@@ -130,9 +130,7 @@ class SerialGripper(Gripper):
         if self._config.port:
             self._port = self._config.port
         elif self._config.sn:
-            self.logger.info(
-                f"Scanning serial ports for gripper SN={self._config.sn!r}..."
-            )
+            self.logger.info(f"Scanning serial ports for gripper SN={self._config.sn!r}...")
             self._port = find_port_by_sn(
                 self._config.sn,
                 baudrate=self._config.baudrate,
@@ -141,8 +139,7 @@ class SerialGripper(Gripper):
             self.logger.info(f"Found SN={self._config.sn!r} on {self._port}.")
         else:
             self.logger.info(
-                f"Auto-discovering {self._config.side} gripper by board-SN parity "
-                "(odd → left, even → right)..."
+                f"Auto-discovering {self._config.side} gripper by board-SN parity (odd → left, even → right)..."
             )
             self._port = find_port_by_side(
                 self._config.side,
@@ -152,8 +149,7 @@ class SerialGripper(Gripper):
             self.logger.info(f"Discovered {self._config.side} gripper on {self._port}.")
 
         self.logger.info(
-            f"Connecting serial gripper on {self._port} "
-            f"(baud={self._config.baudrate}, id={self._config.device_id})..."
+            f"Connecting serial gripper on {self._port} (baud={self._config.baudrate}, id={self._config.device_id})..."
         )
         try:
             self._gripper = XenseSerialGripper(
@@ -163,9 +159,7 @@ class SerialGripper(Gripper):
                 timeout=self._config.serial_timeout,
             )
         except Exception as e:
-            raise RuntimeError(
-                f"Failed to open serial gripper on {self._port}: {e}"
-            ) from e
+            raise RuntimeError(f"Failed to open serial gripper on {self._port}: {e}") from e
 
         self._is_connected = True
         self._cached_position = 1.0 if self._init_open else 0.0
@@ -221,9 +215,7 @@ class SerialGripper(Gripper):
                     time.sleep(_POLL_FAIL_SLEEP_S)
                     continue
 
-                raw_pos = max(
-                    self._gripper_min_pos, min(float(raw_pos), self._gripper_max_pos)
-                )
+                raw_pos = max(self._gripper_min_pos, min(float(raw_pos), self._gripper_max_pos))
                 self._cached_position = (raw_pos - self._gripper_min_pos) / span
             except Exception as e:
                 consecutive_failures += 1
@@ -263,9 +255,7 @@ class SerialGripper(Gripper):
                     fmax=self._gripper_f_max / 2,
                 )
             except Exception as e:
-                self.logger.warn(
-                    f"Gripper open before disconnect failed (non-fatal): {e}"
-                )
+                self.logger.warn(f"Gripper open before disconnect failed (non-fatal): {e}")
 
         self._poll_running = False
         if self._poll_thread is not None:
@@ -340,8 +330,7 @@ class SerialGripper(Gripper):
                 status = self._gripper.get_gripper_status(timeout=status_timeout)
             except Exception as e:
                 self.logger.warn(
-                    f"Gripper init status read failed on {self._port}; "
-                    f"falling back to non-blocking command: {e}"
+                    f"Gripper init status read failed on {self._port}; falling back to non-blocking command: {e}"
                 )
                 status = None
             raw_pos = None if status is None else status.get("position")
@@ -376,8 +365,7 @@ class SerialGripper(Gripper):
                 return
             except Exception as e:
                 self.logger.warn(
-                    f"Gripper init sync move failed on {self._port}; "
-                    f"falling back to non-blocking command: {e}"
+                    f"Gripper init sync move failed on {self._port}; falling back to non-blocking command: {e}"
                 )
 
         span = self._gripper_max_pos - self._gripper_min_pos
@@ -389,8 +377,7 @@ class SerialGripper(Gripper):
         )
         action = "open" if normalized_pos >= 0.999 else "close" if normalized_pos <= 0.001 else "position"
         self.logger.info(
-            f"Gripper init {action} command sent on {self._port} "
-            f"(non-blocking fallback, source={current_source})."
+            f"Gripper init {action} command sent on {self._port} (non-blocking fallback, source={current_source})."
         )
 
     def set_gripper_position(self, normalized_pos: float) -> None:

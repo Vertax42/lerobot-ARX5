@@ -71,10 +71,7 @@ class MockTeleop(Teleoperator):
         if self.config.random_values:
             return {f"{motor}.pos": random.uniform(-100, 100) for motor in self.motors}
         else:
-            return {
-                f"{motor}.pos": val
-                for motor, val in zip(self.motors, self.config.static_values, strict=True)
-            }
+            return {f"{motor}.pos": val for motor, val in zip(self.motors, self.config.static_values, strict=True)}
 
     @check_if_not_connected
     def send_feedback(self, feedback: dict[str, Any]) -> None: ...

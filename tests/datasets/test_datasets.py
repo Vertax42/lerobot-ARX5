@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import logging
 import re
 from itertools import chain
 from pathlib import Path
@@ -26,7 +25,6 @@ from PIL import Image
 from safetensors.torch import load_file
 
 import lerobot  # noqa: F401
-from lerobot.configs.default import DatasetConfig
 from lerobot.datasets.image_writer import image_array_to_pil_image
 from lerobot.datasets.lerobot_dataset import (
     LeRobotDataset,
@@ -43,7 +41,7 @@ from lerobot.datasets.utils import (
     hw_to_dataset_features,
 )
 from lerobot.datasets.video_utils import VALID_VIDEO_CODECS
-from lerobot.utils.constants import ACTION, DONE, OBS_IMAGES, OBS_STATE, OBS_STR, REWARD
+from lerobot.utils.constants import ACTION, OBS_IMAGES, OBS_STATE, OBS_STR
 from tests.fixtures.constants import DUMMY_CHW, DUMMY_HWC, DUMMY_REPO_ID
 from tests.mocks.mock_robot import MockRobot, MockRobotConfig
 from tests.utils import require_x86_64_kernel
@@ -79,9 +77,7 @@ def test_same_attributes_defined(tmp_path, lerobot_dataset_factory):
     obs_features = hw_to_dataset_features(robot.observation_features, OBS_STR, True)
     dataset_features = {**action_features, **obs_features}
     root_create = tmp_path / "create"
-    dataset_create = LeRobotDataset.create(
-        repo_id=DUMMY_REPO_ID, fps=30, features=dataset_features, root=root_create
-    )
+    dataset_create = LeRobotDataset.create(repo_id=DUMMY_REPO_ID, fps=30, features=dataset_features, root=root_create)
 
     root_init = tmp_path / "init"
     dataset_init = lerobot_dataset_factory(root=root_init, total_episodes=1, total_frames=1)
@@ -131,27 +127,21 @@ def test_dataset_feature_with_forward_slash_raises_error():
 def test_add_frame_missing_task(tmp_path, empty_lerobot_dataset_factory):
     features = {"state": {"dtype": "float32", "shape": (1,), "names": None}}
     dataset = empty_lerobot_dataset_factory(root=tmp_path / "test", features=features)
-    with pytest.raises(
-        ValueError, match="Feature mismatch in `frame` dictionary:\nMissing features: {'task'}\n"
-    ):
+    with pytest.raises(ValueError, match="Feature mismatch in `frame` dictionary:\nMissing features: {'task'}\n"):
         dataset.add_frame({"state": torch.randn(1)})
 
 
 def test_add_frame_missing_feature(tmp_path, empty_lerobot_dataset_factory):
     features = {"state": {"dtype": "float32", "shape": (1,), "names": None}}
     dataset = empty_lerobot_dataset_factory(root=tmp_path / "test", features=features)
-    with pytest.raises(
-        ValueError, match="Feature mismatch in `frame` dictionary:\nMissing features: {'state'}\n"
-    ):
+    with pytest.raises(ValueError, match="Feature mismatch in `frame` dictionary:\nMissing features: {'state'}\n"):
         dataset.add_frame({"task": "Dummy task"})
 
 
 def test_add_frame_extra_feature(tmp_path, empty_lerobot_dataset_factory):
     features = {"state": {"dtype": "float32", "shape": (1,), "names": None}}
     dataset = empty_lerobot_dataset_factory(root=tmp_path / "test", features=features)
-    with pytest.raises(
-        ValueError, match="Feature mismatch in `frame` dictionary:\nExtra features: {'extra'}\n"
-    ):
+    with pytest.raises(ValueError, match="Feature mismatch in `frame` dictionary:\nExtra features: {'extra'}\n"):
         dataset.add_frame({"state": torch.randn(1), "task": "Dummy task", "extra": "dummy_extra"})
 
 
@@ -354,9 +344,7 @@ def test_tmp_image_deletion(tmp_path, empty_lerobot_dataset_factory):
     """Verify temporary image directories are removed for image features after saving episode."""
     # Image feature: images should be deleted after saving episode
     image_key = "image"
-    features_image = {
-        image_key: {"dtype": "image", "shape": DUMMY_CHW, "names": ["channels", "height", "width"]}
-    }
+    features_image = {image_key: {"dtype": "image", "shape": DUMMY_CHW, "names": ["channels", "height", "width"]}}
     ds_img = empty_lerobot_dataset_factory(root=tmp_path / "img", features=features_image)
     ds_img.add_frame({"image": np.random.rand(*DUMMY_CHW), "task": "Dummy task"})
     ds_img.save_episode()
@@ -368,18 +356,14 @@ def test_tmp_video_deletion(tmp_path, empty_lerobot_dataset_factory):
     """Verify temporary image directories are removed for video encoding when `batch_encoding_size == 1`."""
     # Video feature: when batch_encoding_size == 1 temporary images should be deleted
     vid_key = "video"
-    features_video = {
-        vid_key: {"dtype": "video", "shape": DUMMY_CHW, "names": ["channels", "height", "width"]}
-    }
+    features_video = {vid_key: {"dtype": "video", "shape": DUMMY_CHW, "names": ["channels", "height", "width"]}}
 
     ds_vid = empty_lerobot_dataset_factory(root=tmp_path / "vid", features=features_video)
     ds_vid.batch_encoding_size = 1
     ds_vid.add_frame({vid_key: np.random.rand(*DUMMY_CHW), "task": "Dummy task"})
     ds_vid.save_episode()
     vid_img_dir = ds_vid._get_image_file_dir(0, vid_key)
-    assert not vid_img_dir.exists(), (
-        "Temporary image directory should be removed when batch_encoding_size == 1"
-    )
+    assert not vid_img_dir.exists(), "Temporary image directory should be removed when batch_encoding_size == 1"
 
 
 def test_tmp_mixed_deletion(tmp_path, empty_lerobot_dataset_factory):
@@ -520,9 +504,7 @@ def test_backward_compatibility(repo_id):
     load_and_compare(i + 1)
 
     # test 2 frames at the middle of first episode
-    i = int(
-        (dataset.meta.episodes[0]["dataset_to_index"] - dataset.meta.episodes[0]["dataset_from_index"]) / 2
-    )
+    i = int((dataset.meta.episodes[0]["dataset_to_index"] - dataset.meta.episodes[0]["dataset_from_index"]) / 2)
     load_and_compare(i)
     load_and_compare(i + 1)
 
@@ -576,9 +558,7 @@ def test_check_cached_episodes_sufficient(tmp_path, lerobot_dataset_factory):
     import datasets
 
     empty_features = get_hf_features_from_features(dataset.features)
-    dataset.hf_dataset = datasets.Dataset.from_dict(
-        {key: [] for key in empty_features}, features=empty_features
-    )
+    dataset.hf_dataset = datasets.Dataset.from_dict({key: [] for key in empty_features}, features=empty_features)
     dataset.hf_dataset.set_transform(hf_transform_to_torch)
     assert dataset._check_cached_episodes_sufficient() is False
 
@@ -634,9 +614,7 @@ def test_check_cached_episodes_sufficient(tmp_path, lerobot_dataset_factory):
         # Convert float32 image tensors back to uint8 numpy arrays for HuggingFace dataset
         if key in image_keys and len(filtered_values) > 0:
             # Convert torch tensors (float32, [0, 1], CHW) back to numpy arrays (uint8, [0, 255], HWC)
-            filtered_values = [
-                (val.permute(1, 2, 0).numpy() * 255).astype(np.uint8) for val in filtered_values
-            ]
+            filtered_values = [(val.permute(1, 2, 0).numpy() * 255).astype(np.uint8) for val in filtered_values]
 
         filtered_data[key] = filtered_values
 
@@ -750,9 +728,7 @@ def test_update_chunk_settings(tmp_path, empty_lerobot_dataset_factory):
 
     # Test calling with None values (should not change anything)
     settings_before_none = dataset.meta.get_chunk_settings()
-    dataset.meta.update_chunk_settings(
-        chunks_size=None, data_files_size_in_mb=None, video_files_size_in_mb=None
-    )
+    dataset.meta.update_chunk_settings(chunks_size=None, data_files_size_in_mb=None, video_files_size_in_mb=None)
     settings_after_none = dataset.meta.get_chunk_settings()
     assert settings_before_none == settings_after_none
 
@@ -820,9 +796,7 @@ def test_episode_index_distribution(tmp_path, empty_lerobot_dataset_factory):
         for frame_idx in [start_frame, middle_frame, end_frame]:
             frame_data = loaded_dataset[frame_idx]
             actual_ep_idx = frame_data["episode_index"].item()
-            assert actual_ep_idx == ep_idx, (
-                f"Frame {frame_idx} has episode_index {actual_ep_idx}, should be {ep_idx}"
-            )
+            assert actual_ep_idx == ep_idx, f"Frame {frame_idx} has episode_index {actual_ep_idx}, should be {ep_idx}"
 
         cumulative += ep_length
 
@@ -833,9 +807,7 @@ def test_episode_index_distribution(tmp_path, empty_lerobot_dataset_factory):
     distribution = Counter(all_episode_indices)
     expected_dist = {i: frames_per_episode[i] for i in range(num_episodes)}
 
-    assert dict(distribution) == expected_dist, (
-        f"Episode distribution {dict(distribution)} != expected {expected_dist}"
-    )
+    assert dict(distribution) == expected_dist, f"Episode distribution {dict(distribution)} != expected {expected_dist}"
 
 
 def test_multi_episode_metadata_consistency(tmp_path, empty_lerobot_dataset_factory):
@@ -907,9 +879,7 @@ def test_data_consistency_across_episodes(tmp_path, empty_lerobot_dataset_factor
         to_idx = episode_metadata["dataset_to_index"]
 
         # Check that episode starts exactly where previous ended
-        assert from_idx == cumulative_check, (
-            f"Episode {episode_idx} starts at {from_idx}, expected {cumulative_check}"
-        )
+        assert from_idx == cumulative_check, f"Episode {episode_idx} starts at {from_idx}, expected {cumulative_check}"
 
         # Check that episode length matches expected
         actual_length = to_idx - from_idx
@@ -1017,9 +987,7 @@ def test_episode_boundary_integrity(tmp_path, empty_lerobot_dataset_factory):
             if cumulative + i < len(loaded_dataset):
                 frame = loaded_dataset[cumulative + i]
                 assert frame["frame_index"].item() == i, f"Frame {cumulative + i} has wrong frame_index"
-                assert frame["episode_index"].item() == ep_idx, (
-                    f"Frame {cumulative + i} has wrong episode_index"
-                )
+                assert frame["episode_index"].item() == ep_idx, f"Frame {cumulative + i} has wrong episode_index"
 
         cumulative += ep_length
 
@@ -1172,9 +1140,7 @@ def test_dataset_resume_recording(tmp_path, empty_lerobot_dataset_factory):
         assert item["frame_index"].item() == expected_frame, (
             f"Frame {idx}: wrong frame_index. Expected {expected_frame}, got {item['frame_index'].item()}"
         )
-        assert item["index"].item() == idx, (
-            f"Frame {idx}: wrong index. Expected {idx}, got {item['index'].item()}"
-        )
+        assert item["index"].item() == idx, f"Frame {idx}: wrong index. Expected {idx}, got {item['index'].item()}"
 
         # Verify data integrity
         assert item["observation.state"][0].item() == float(expected_ep), (
@@ -1303,9 +1269,7 @@ def test_encode_video_worker_forwards_vcodec(tmp_path):
     episode_index = 0
     frame_index = 0
 
-    fpath = DEFAULT_IMAGE_PATH.format(
-        image_key=video_key, episode_index=episode_index, frame_index=frame_index
-    )
+    fpath = DEFAULT_IMAGE_PATH.format(image_key=video_key, episode_index=episode_index, frame_index=frame_index)
     img_dir = tmp_path / Path(fpath).parent
     img_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1341,9 +1305,7 @@ def test_encode_video_worker_default_vcodec(tmp_path):
     episode_index = 0
     frame_index = 0
 
-    fpath = DEFAULT_IMAGE_PATH.format(
-        image_key=video_key, episode_index=episode_index, frame_index=frame_index
-    )
+    fpath = DEFAULT_IMAGE_PATH.format(image_key=video_key, episode_index=episode_index, frame_index=frame_index)
     img_dir = tmp_path / Path(fpath).parent
     img_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1447,9 +1409,7 @@ def test_delta_timestamps_padding_at_episode_boundaries(tmp_path, empty_lerobot_
         "action": {"dtype": "float32", "shape": (2,), "names": ["vx", "vy"]},
     }
 
-    dataset = empty_lerobot_dataset_factory(
-        root=tmp_path / "test", features=features, use_videos=False, fps=10
-    )
+    dataset = empty_lerobot_dataset_factory(root=tmp_path / "test", features=features, use_videos=False, fps=10)
 
     # Create 3 episodes with 5 frames each
     frames_per_episode = 5
@@ -1502,9 +1462,7 @@ def test_delta_timestamps_multiple_episodes_filter(tmp_path, empty_lerobot_datas
         "observation.state": {"dtype": "float32", "shape": (2,), "names": ["x", "y"]},
     }
 
-    dataset = empty_lerobot_dataset_factory(
-        root=tmp_path / "test", features=features, use_videos=False, fps=10
-    )
+    dataset = empty_lerobot_dataset_factory(root=tmp_path / "test", features=features, use_videos=False, fps=10)
 
     # Create 5 episodes with 5 frames each
     frames_per_episode = 5
@@ -1547,9 +1505,7 @@ def test_delta_timestamps_query_returns_correct_values(tmp_path, empty_lerobot_d
         "observation.state": {"dtype": "float32", "shape": (1,), "names": ["x"]},
     }
 
-    dataset = empty_lerobot_dataset_factory(
-        root=tmp_path / "test", features=features, use_videos=False, fps=10
-    )
+    dataset = empty_lerobot_dataset_factory(root=tmp_path / "test", features=features, use_videos=False, fps=10)
 
     # Create 2 episodes with known values
     # Episode 0: frames with values 0, 1, 2, 3, 4

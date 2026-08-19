@@ -20,9 +20,7 @@ def main():
     dataset_id = "lerobot/svla_so101_pickplace"
     # This only downloads the metadata for the dataset, ~10s of MB even for large-scale datasets
     dataset_metadata = LeRobotDatasetMetadata(dataset_id)
-    preprocess, postprocess = make_pre_post_processors(
-        model.config, model_id, dataset_stats=dataset_metadata.stats
-    )
+    preprocess, postprocess = make_pre_post_processors(model.config, model_id, dataset_stats=dataset_metadata.stats)
 
     # # find ports using lerobot-find-port
     follower_port = ...  # something like "/dev/tty.usbmodem58760431631"
@@ -45,9 +43,7 @@ def main():
     for _ in range(MAX_EPISODES):
         for _ in range(MAX_STEPS_PER_EPISODE):
             obs = robot.get_observation()
-            obs_frame = build_inference_frame(
-                observation=obs, ds_features=dataset_metadata.features, device=device
-            )
+            obs_frame = build_inference_frame(observation=obs, ds_features=dataset_metadata.features, device=device)
 
             obs = preprocess(obs_frame)
 

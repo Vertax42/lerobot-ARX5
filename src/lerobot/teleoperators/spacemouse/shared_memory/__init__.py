@@ -14,6 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .shared_memory_ring_buffer import SharedMemoryRingBuffer  # noqa: F401
 from .shared_memory_queue import SharedMemoryQueue  # noqa: F401
+from .shared_memory_ring_buffer import SharedMemoryRingBuffer  # noqa: F401
 from .shared_ndarray import SharedNDArray  # noqa: F401

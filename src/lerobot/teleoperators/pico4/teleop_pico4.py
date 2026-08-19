@@ -115,9 +115,7 @@ class Pico4(Teleoperator):
 
         # Window filter queues for raw Pico4 data (before coordinate transformation)
         # Filter raw pose data from Pico4 SDK
-        self._raw_pos_queue: Queue = Queue(
-            self.config.filter_window_size
-        )  # Raw position [x, y, z] in Pico4 frame
+        self._raw_pos_queue: Queue = Queue(self.config.filter_window_size)  # Raw position [x, y, z] in Pico4 frame
         self._raw_quat_queue: Queue = Queue(
             self.config.filter_window_size
         )  # Raw quaternion [qx, qy, qz, qw] in Pico4 frame
@@ -330,9 +328,7 @@ class Pico4(Teleoperator):
         self._prev_target_quat = self._target_quat.copy()
         self._last_action_time = None
 
-        self.logger.info(
-            f"Reset target pose to: pos={pose_7d[:3]}, quat={pose_7d[3:7]}, gripper={gripper_pos}"
-        )
+        self.logger.info(f"Reset target pose to: pos={pose_7d[:3]}, quat={pose_7d[3:7]}, gripper={gripper_pos}")
 
     def _quaternion_multiply(self, q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
         """Multiply two quaternions q1 * q2. Both in [qw, qx, qy, qz] format."""
@@ -444,9 +440,7 @@ class Pico4(Teleoperator):
 
         return filtered_pos, filtered_quat
 
-    def _transform_pico_to_world_coordinate(
-        self, pos: np.ndarray, quat: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def _transform_pico_to_world_coordinate(self, pos: np.ndarray, quat: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Transform pose from the Pico4 controller frame into the WORLD frame.
 
         This is Step 2: Coordinate transformation after filtering.
@@ -743,7 +737,7 @@ class Pico4(Teleoperator):
                     delta_norm = np.linalg.norm(delta_pos)
                     if delta_norm > max_delta:
                         self.logger.warn(
-                            f"[RATE_LIMIT] Position velocity {delta_norm/dt:.2f} m/s "
+                            f"[RATE_LIMIT] Position velocity {delta_norm / dt:.2f} m/s "
                             f"exceeds limit {self.config.max_pos_velocity} m/s, clamping."
                         )
                         self._target_pos = self._prev_target_pos + delta_pos * (max_delta / delta_norm)
@@ -756,13 +750,11 @@ class Pico4(Teleoperator):
                     angle = 2.0 * np.arccos(dot)
                     if angle > max_angle:
                         self.logger.warn(
-                            f"[RATE_LIMIT] Rotation velocity {np.degrees(angle/dt):.1f} deg/s "
+                            f"[RATE_LIMIT] Rotation velocity {np.degrees(angle / dt):.1f} deg/s "
                             f"exceeds limit {np.degrees(self.config.max_rot_velocity):.1f} deg/s, clamping."
                         )
                         t = max_angle / angle
-                        self._target_quat = self._slerp_quaternion(
-                            self._prev_target_quat, self._target_quat, t
-                        )
+                        self._target_quat = self._slerp_quaternion(self._prev_target_quat, self._target_quat, t)
 
         self._prev_target_pos = self._target_pos.copy()
         self._prev_target_quat = self._target_quat.copy()

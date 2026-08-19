@@ -79,9 +79,7 @@ def test_a_recipe_gripper_block_parses_without_any_sdk(without_hardware_sdks):
     assert cfg.side == "left"
 
 
-@pytest.mark.parametrize(
-    "module", ["lerobot.grippers.serial", "lerobot.grippers.taccap"]
-)
+@pytest.mark.parametrize("module", ["lerobot.grippers.serial", "lerobot.grippers.taccap"])
 def test_backend_subpackages_import_without_any_sdk(without_hardware_sdks, module):
     """The half that keeps the laziness honest.
 

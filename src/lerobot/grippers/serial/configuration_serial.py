@@ -61,9 +61,9 @@ class SerialGripperConfig(GripperConfig):
     """
 
     # ── Identification ─────────────────────────────────────────────────────────
-    port: str = ""                 # explicit port path — highest priority
-    sn: str | None = None          # board SN — scanned/matched when port unset
-    side: str | None = None        # "left"/"right" — parity auto-discover when port+sn unset
+    port: str = ""  # explicit port path — highest priority
+    sn: str | None = None  # board SN — scanned/matched when port unset
+    side: str | None = None  # "left"/"right" — parity auto-discover when port+sn unset
 
     # ── Serial connection ──────────────────────────────────────────────────────
     # baudrate and device_id are fixed in practice, hence protocol_fixed_fields:
@@ -88,7 +88,7 @@ class SerialGripperConfig(GripperConfig):
     auto_discover_cameras: bool = True
 
     # ── Mechanical limits ──────────────────────────────────────────────────────
-    gripper_min_pos: float = 0.0   # mm — fully closed
+    gripper_min_pos: float = 0.0  # mm — fully closed
     gripper_max_pos: float = 85.0  # mm — fully open
 
     # ── Motion parameters ──────────────────────────────────────────────────────
@@ -104,9 +104,7 @@ class SerialGripperConfig(GripperConfig):
         # per side, so the block as written legitimately has no identity yet.
         # SerialGripper.connect() raises if it still cannot resolve a port.
         if self.side is not None and self.side not in ("left", "right"):
-            raise ValueError(
-                f"SerialGripperConfig: side must be 'left' or 'right', got {self.side!r}."
-            )
+            raise ValueError(f"SerialGripperConfig: side must be 'left' or 'right', got {self.side!r}.")
         if not self.baudrate > 0:
             raise ValueError(f"SerialGripperConfig: baudrate must be positive, got {self.baudrate}.")
         if not 0.0 <= self.gripper_min_pos < self.gripper_max_pos:
@@ -115,10 +113,6 @@ class SerialGripperConfig(GripperConfig):
                 f"< gripper_max_pos ({self.gripper_max_pos})."
             )
         if not 0.0 < self.gripper_v_max <= 350.0:
-            raise ValueError(
-                f"SerialGripperConfig: gripper_v_max {self.gripper_v_max} out of range (0, 350] mm/s."
-            )
+            raise ValueError(f"SerialGripperConfig: gripper_v_max {self.gripper_v_max} out of range (0, 350] mm/s.")
         if not 0.0 < self.gripper_f_max <= 60.0:
-            raise ValueError(
-                f"SerialGripperConfig: gripper_f_max {self.gripper_f_max} out of range (0, 60] N."
-            )
+            raise ValueError(f"SerialGripperConfig: gripper_f_max {self.gripper_f_max} out of range (0, 60] N.")

@@ -37,9 +37,7 @@ def pytest_collection_finish():
 def _check_component_availability(component_type, available_components, make_component):
     """Generic helper to check if a hardware component is available"""
     if component_type not in available_components:
-        raise ValueError(
-            f"The {component_type} type is not valid. Expected one of these '{available_components}'"
-        )
+        raise ValueError(f"The {component_type} type is not valid. Expected one of these '{available_components}'")
 
     try:
         component = make_component(component_type)

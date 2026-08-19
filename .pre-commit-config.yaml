@@ -15,8 +15,6 @@
 default_language_version:
     python: python3.12
 
-exclude: "tests/artifacts/.*\\.safetensors$"
-
 repos:
   ##### Meta #####
   - repo: meta
@@ -39,7 +37,7 @@ repos:
       - id: trailing-whitespace
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.1
+    rev: v0.16.3
     hooks:
       - id: ruff-format
       - id: ruff

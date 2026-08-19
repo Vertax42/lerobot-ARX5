@@ -52,9 +52,7 @@ class XenseWristCameraConfig(OpenCVCameraConfig):
         if not self.undistort:
             return
         if not 0.0 <= self.fisheye_balance <= 1.0:
-            raise ValueError(
-                f"fisheye_balance must be in [0, 1], got {self.fisheye_balance}."
-            )
+            raise ValueError(f"fisheye_balance must be in [0, 1], got {self.fisheye_balance}.")
         if (self.width, self.height) != (FISHEYE_CALIB_WIDTH, FISHEYE_CALIB_HEIGHT):
             raise ValueError(
                 f"undistort needs the calibrated resolution "

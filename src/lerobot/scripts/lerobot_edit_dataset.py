@@ -315,9 +315,7 @@ def handle_split(cfg: EditDatasetConfig) -> None:
         raise ValueError("Operation config must be SplitConfig")
 
     if not cfg.operation.splits:
-        raise ValueError(
-            "splits dict must be specified with split names as keys and fractions/episode lists as values"
-        )
+        raise ValueError("splits dict must be specified with split names as keys and fractions/episode lists as values")
 
     if cfg.new_repo_id is not None:
         logging.warning(
@@ -334,9 +332,7 @@ def handle_split(cfg: EditDatasetConfig) -> None:
     )
 
     for split_name, split_ds in split_datasets.items():
-        logging.info(
-            f"{split_name}: {split_ds.meta.total_episodes} episodes, {split_ds.meta.total_frames} frames"
-        )
+        logging.info(f"{split_name}: {split_ds.meta.total_episodes} episodes, {split_ds.meta.total_frames} frames")
 
         if cfg.push_to_hub:
             logging.info(f"Pushing {split_name} split to hub as {split_ds.repo_id}")
@@ -377,9 +373,7 @@ def handle_merge(cfg: EditDatasetConfig) -> None:
     )
 
     logging.info(f"Merged dataset saved to {output_dir}")
-    logging.info(
-        f"Episodes: {merged_dataset.meta.total_episodes}, Frames: {merged_dataset.meta.total_frames}"
-    )
+    logging.info(f"Episodes: {merged_dataset.meta.total_episodes}, Frames: {merged_dataset.meta.total_frames}")
 
     if cfg.push_to_hub:
         logging.info(f"Pushing to hub as {cfg.new_repo_id}")
@@ -548,9 +542,7 @@ def handle_info(cfg: EditDatasetConfig):
     sys.stdout.write(f"Total episode: {dataset.meta.total_episodes} \n")
     sys.stdout.write(f"Total task: {dataset.meta.total_tasks} \n")
     sys.stdout.write(f"Total frame(Actual Count): {dataset.meta.total_frames}({len(dataset)}) \n")
-    sys.stdout.write(
-        f"Average frame per episode: {dataset.meta.total_frames / dataset.meta.total_episodes:.1f}\n"
-    )
+    sys.stdout.write(f"Average frame per episode: {dataset.meta.total_frames / dataset.meta.total_episodes:.1f}\n")
     sys.stdout.write(
         f"Average episode time(sec): {(dataset.meta.total_frames / dataset.meta.total_episodes) / dataset.meta.fps:.1f}\n"
     )
@@ -574,9 +566,7 @@ def _validate_config(cfg: EditDatasetConfig) -> None:
             raise ValueError("--new_repo_id is required for merge operation (the merged dataset identifier)")
     else:
         if not cfg.repo_id:
-            raise ValueError(
-                f"--repo_id is required for {cfg.operation.type} operation (the input dataset identifier)"
-            )
+            raise ValueError(f"--repo_id is required for {cfg.operation.type} operation (the input dataset identifier)")
 
 
 @parser.wrap()

@@ -16,7 +16,6 @@
 
 from dataclasses import dataclass
 from multiprocessing.managers import SharedMemoryManager
-from typing import Tuple
 
 import numpy as np
 from atomics import UINT, MemoryOrder, atomicview
@@ -25,7 +24,7 @@ from atomics import UINT, MemoryOrder, atomicview
 @dataclass
 class ArraySpec:
     name: str
-    shape: Tuple[int]
+    shape: tuple[int]
     dtype: np.dtype
 
 

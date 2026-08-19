@@ -14,5 +14,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .config_bi_pico4 import BiPico4Config  # noqa: F401
 from .bi_pico4 import BiPico4  # noqa: F401
+from .config_bi_pico4 import BiPico4Config  # noqa: F401

@@ -35,9 +35,7 @@ DEPTH_RANGE_MM = (
 )
 
 
-def init_rerun(
-    session_name: str = "lerobot_control_loop", ip: str | None = None, port: int | None = None
-) -> None:
+def init_rerun(session_name: str = "lerobot_control_loop", ip: str | None = None, port: int | None = None) -> None:
     """
     Initializes the Rerun SDK for visualizing the control loop.
 

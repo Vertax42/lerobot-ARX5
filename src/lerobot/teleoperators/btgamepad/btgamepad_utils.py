@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from enum import Enum
 import logging
-import numpy as np
+from enum import Enum
+
 from ..utils import TeleopEvents
 
 
@@ -89,6 +89,7 @@ class InputController:
             return "open"
         elif self.close_gripper_command:
             return "close"
+
     # def gripper_command(self):
     #     if self.open_gripper_command:
     #         if self.close_gripper_command:
@@ -209,21 +210,40 @@ class BtgamepadController(InputController):
 
     class Button(Enum):
         """手柄按钮定义"""
-        A,B,X,Y,LB,RB,BACK,START,HOME,LS,RS,test1,test2,test3,test4,test5 = 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 # 北通键位1，Xbox键位
+
+        A, B, X, Y, LB, RB, BACK, START, HOME, LS, RS, test1, test2, test3, test4, test5 = (
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+        )  # 北通键位1，Xbox键位
         # A,B,tt1,X,Y,tt2,LB,RB,tt3,tt4,BACK,START,HOME,LS,RS,tt5 = 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 # 北通键位2
 
     class Axis(Enum):
         """手柄轴定义 (Xbox 标准)"""
+
         # # 若按下shift键，则左右摇杆改为十字方向键
-        # LX = 0  # 左摇杆左右, -1 为左,1 为右, 
-        # LY = 1  # 左摇杆上下, -1 为上,1 为下, 
+        # LX = 0  # 左摇杆左右, -1 为左,1 为右,
+        # LY = 1  # 左摇杆上下, -1 为上,1 为下,
         # RX = 2  # 右摇杆左右, -1 为左,1 为右,
-        # RY = 3  # 右摇杆上下, -1 为上,1 为下, 
+        # RY = 3  # 右摇杆上下, -1 为上,1 为下,
         # RT = 4  # RT，按下为1，松开为-1
         # LT = 5  # LT，按下为1，松开为-1
         # LX,LY,RX,RY,RT,LT = 0,1,2,3,4,5 # 北通键位1
         # LX,LY,RX,RY,RT,LT = 0,1,2,3,4,5 # 北通键位2
-        LX,LY,LT,RX,RY,RT = 0,1,2,3,4,5 # Xbox键位
+        LX, LY, LT, RX, RY, RT = 0, 1, 2, 3, 4, 5  # Xbox键位
 
     def __init__(self, x_step_size=1.0, y_step_size=1.0, z_step_size=1.0, deadzone=0.1):
         super().__init__(x_step_size, y_step_size, z_step_size)
@@ -278,18 +298,23 @@ class BtgamepadController(InputController):
                 # RB
                 elif event.button == self.Button.RB.value:
                     self.close_gripper_command = True
-                
+
                 elif event.button == self.Button.LB.value:
                     self.open_gripper_command = True
 
             # Reset episode status on button release
             elif event.type == pygame.JOYBUTTONUP:
-                if event.button in (self.Button.X.value, self.Button.B.value, self.Button.Y.value, self.Button.BACK.value):
+                if event.button in (
+                    self.Button.X.value,
+                    self.Button.B.value,
+                    self.Button.Y.value,
+                    self.Button.BACK.value,
+                ):
                     self.episode_end_status = None
 
                 elif event.button == self.Button.RB.value:
                     self.close_gripper_command = False
-                
+
                 elif event.button == self.Button.LB.value:
                     self.open_gripper_command = False
 
@@ -324,7 +349,7 @@ class BtgamepadController(InputController):
 
             delta_rx = 0
             # ry_input = np.pi # flexiv
-            delta_ry = 0 # franka
+            delta_ry = 0  # franka
             delta_rz = self.joystick.get_axis(self.Axis.RX.value)  # Rotation around Z
             # delta_rz = 0
 
@@ -333,4 +358,4 @@ class BtgamepadController(InputController):
         except pygame.error:
             logging.error("Error reading gamepad. Is it still connected?")
             # return 0.0, 0.0, 0.0, 0.0, np.pi , 0.0 # flexiv
-            return 0.0, 0.0, 0.0, 0.0, 0.0 , 0.0 # franka
+            return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  # franka

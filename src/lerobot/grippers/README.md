@@ -17,13 +17,13 @@ grippers/
 
 ## The two backends
 
-| | `serial` | `taccap_follower` |
-|---|---|---|
-| Hardware | parallel jaw, USB serial (XGripper) | centric TacCap gripper, FDCAN motor |
-| Control | position + force/velocity limits | MIT impedance (kp / kd / feed-forward) |
-| Side resolved by | board-SN parity (odd → left) | firmware-burned SN |
-| On its USB hub | wrist cam + 2 tactile | wrist cam + 2 GSPS |
-| SDK | `xgripper` | `xense.taccap` |
+|                  | `serial`                            | `taccap_follower`                      |
+| ---------------- | ----------------------------------- | -------------------------------------- |
+| Hardware         | parallel jaw, USB serial (XGripper) | centric TacCap gripper, FDCAN motor    |
+| Control          | position + force/velocity limits    | MIT impedance (kp / kd / feed-forward) |
+| Side resolved by | board-SN parity (odd → left)        | firmware-burned SN                     |
+| On its USB hub   | wrist cam + 2 tactile               | wrist cam + 2 GSPS                     |
+| SDK              | `xgripper`                          | `xense.taccap`                         |
 
 Both SDKs are optional builds. `make_gripper_from_config` imports only the branch
 it selects, so this package stays importable on a host with neither installed;
@@ -37,8 +37,8 @@ A robot takes a single typed `gripper:` block:
 robot:
   gripper:
     type: taccap_follower
-    kp: 8.0                  # MIT impedance stiffness (Nm/rad)
-    kd: 1.0                  # damping (Nm·s/rad)
+    kp: 8.0 # MIT impedance stiffness (Nm/rad)
+    kd: 1.0 # damping (Nm·s/rad)
     feedforward_torque: -3.0 # constant bias; NEGATIVE = clamp harder, |ff| <= 3.5
     control_hz: 200
     auto_discover_cameras: true
@@ -48,8 +48,8 @@ robot:
 robot:
   gripper:
     type: serial
-    gripper_v_max: 100.0     # mm/s
-    gripper_f_max: 30.0      # N
+    gripper_v_max: 100.0 # mm/s
+    gripper_f_max: 30.0 # N
     gripper_min_pos: 0.0
     gripper_max_pos: 85.0
 ```
@@ -60,7 +60,7 @@ what makes a wrong knob **fail loudly**:
 ```yaml
 gripper:
   type: serial
-  feedforward_torque: -3.0   # -> DecodingError: unknown field
+  feedforward_torque: -3.0 # -> DecodingError: unknown field
 ```
 
 Before this was a typed block the same line was accepted and silently ignored,
@@ -88,7 +88,7 @@ property of the backend. Both are the same shape of device — one USB hub carry
 the gripper board, its wrist camera and its two tactile sensors — so both default
 to **on**: the recipe pins only `head` and the robot sniffs the rest at connect.
 
-Finding the *gripper* is separate, always on, and not switchable: `serial` resolves
+Finding the _gripper_ is separate, always on, and not switchable: `serial` resolves
 its side from the board SN's parity (odd → left), `taccap_follower` from the
 firmware-burned SN. That is why no recipe pins a gripper SN.
 
@@ -96,9 +96,9 @@ When a gripper or its cameras do not show up, run the discovery by hand — it
 prints what it found and how it classified each side:
 
 ```python
-from lerobot.grippers.serial import discover_serial_gripper_sides   # port + board SN per side
-from lerobot.grippers.serial import discover_serial_gripper_cameras # + wrist/tactile on each hub
-from lerobot.grippers.taccap import discover_taccap_sides           # the TacCap equivalent
+from lerobot.grippers.serial import discover_serial_gripper_sides  # port + board SN per side
+from lerobot.grippers.serial import discover_serial_gripper_cameras  # + wrist/tactile on each hub
+from lerobot.grippers.taccap import discover_taccap_sides  # the TacCap equivalent
 ```
 
 Note that the gripper object itself never returns image or tactile data. Those

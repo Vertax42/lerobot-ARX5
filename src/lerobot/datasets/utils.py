@@ -382,9 +382,7 @@ def load_episodes(local_dir: Path) -> datasets.Dataset:
     return episodes
 
 
-def load_image_as_numpy(
-    fpath: str | Path, dtype: np.dtype = np.float32, channel_first: bool = True
-) -> np.ndarray:
+def load_image_as_numpy(fpath: str | Path, dtype: np.dtype = np.float32, channel_first: bool = True) -> np.ndarray:
     """Load an image from a file into a numpy array.
 
     Args:
@@ -521,9 +519,7 @@ def get_safe_version(repo_id: str, version: str | packaging.version.Version) -> 
         BackwardCompatibilityError: If only older major versions are available.
         ForwardCompatibilityError: If only newer major versions are available.
     """
-    target_version = (
-        packaging.version.parse(version) if not isinstance(version, packaging.version.Version) else version
-    )
+    target_version = packaging.version.parse(version) if not isinstance(version, packaging.version.Version) else version
     hub_versions = get_repo_versions(repo_id)
 
     if not hub_versions:
@@ -542,9 +538,7 @@ def get_safe_version(repo_id: str, version: str | packaging.version.Version) -> 
     if target_version in hub_versions:
         return f"v{target_version}"
 
-    compatibles = [
-        v for v in hub_versions if v.major == target_version.major and v.minor <= target_version.minor
-    ]
+    compatibles = [v for v in hub_versions if v.major == target_version.major and v.minor <= target_version.minor]
     if compatibles:
         return_version = max(compatibles)
         if return_version < target_version:
@@ -581,9 +575,7 @@ def get_hf_features_from_features(features: dict) -> datasets.Features:
         elif ft["shape"] == (1,):
             hf_features[key] = datasets.Value(dtype=ft["dtype"])
         elif len(ft["shape"]) == 1:
-            hf_features[key] = datasets.Sequence(
-                length=ft["shape"][0], feature=datasets.Value(dtype=ft["dtype"])
-            )
+            hf_features[key] = datasets.Sequence(length=ft["shape"][0], feature=datasets.Value(dtype=ft["dtype"]))
         elif len(ft["shape"]) == 2:
             hf_features[key] = datasets.Array2D(shape=ft["shape"], dtype=ft["dtype"])
         elif len(ft["shape"]) == 3:
@@ -664,9 +656,7 @@ def hw_to_dataset_features(
     return features
 
 
-def build_dataset_frame(
-    ds_features: dict[str, dict], values: dict[str, Any], prefix: str
-) -> dict[str, np.ndarray]:
+def build_dataset_frame(ds_features: dict[str, dict], values: dict[str, Any], prefix: str) -> dict[str, np.ndarray]:
     """Construct a single data frame from raw values based on dataset features.
 
     A "frame" is a dictionary containing all the data for a single timestep,
@@ -1027,9 +1017,7 @@ def validate_features_presence(actual_features: set[str], expected_features: set
     return error_message
 
 
-def validate_feature_dtype_and_shape(
-    name: str, feature: dict, value: np.ndarray | PILImage.Image | str
-) -> str:
+def validate_feature_dtype_and_shape(name: str, feature: dict, value: np.ndarray | PILImage.Image | str) -> str:
     """Validate the dtype and shape of a single feature's value.
 
     Args:
@@ -1055,9 +1043,7 @@ def validate_feature_dtype_and_shape(
         raise NotImplementedError(f"The feature dtype '{expected_dtype}' is not implemented yet.")
 
 
-def validate_feature_numpy_array(
-    name: str, expected_dtype: str, expected_shape: list[int], value: np.ndarray
-) -> str:
+def validate_feature_numpy_array(name: str, expected_dtype: str, expected_shape: list[int], value: np.ndarray) -> str:
     """Validate a feature that is expected to be a numpy array.
 
     Args:
@@ -1075,19 +1061,21 @@ def validate_feature_numpy_array(
         actual_shape = value.shape
 
         if actual_dtype != np.dtype(expected_dtype):
-            error_message += f"The feature '{name}' of dtype '{actual_dtype}' is not of the expected dtype '{expected_dtype}'.\n"
+            error_message += (
+                f"The feature '{name}' of dtype '{actual_dtype}' is not of the expected dtype '{expected_dtype}'.\n"
+            )
 
         if actual_shape != expected_shape:
-            error_message += f"The feature '{name}' of shape '{actual_shape}' does not have the expected shape '{expected_shape}'.\n"
+            error_message += (
+                f"The feature '{name}' of shape '{actual_shape}' does not have the expected shape '{expected_shape}'.\n"
+            )
     else:
         error_message += f"The feature '{name}' is not a 'np.ndarray'. Expected type is '{expected_dtype}', but type '{type(value)}' provided instead.\n"
 
     return error_message
 
 
-def validate_feature_image_or_video(
-    name: str, expected_shape: list[str], value: np.ndarray | PILImage.Image
-) -> str:
+def validate_feature_image_or_video(name: str, expected_shape: list[str], value: np.ndarray | PILImage.Image) -> str:
     """Validate a feature that is expected to be an image or video frame.
 
     Accepts `np.ndarray` (channel-first or channel-last) or `PIL.Image.Image`.
@@ -1170,9 +1158,7 @@ def validate_episode_buffer(episode_buffer: dict, total_episodes: int, features:
         )
 
 
-def to_parquet_with_hf_images(
-    df: pandas.DataFrame, path: Path, features: datasets.Features | None = None
-) -> None:
+def to_parquet_with_hf_images(df: pandas.DataFrame, path: Path, features: datasets.Features | None = None) -> None:
     """This function correctly writes to parquet a panda DataFrame that contains images encoded by HF dataset.
     This way, it can be loaded by HF dataset and correctly formatted images are returned.
 

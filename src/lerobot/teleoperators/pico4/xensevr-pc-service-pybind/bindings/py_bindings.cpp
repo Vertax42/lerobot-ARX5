@@ -157,7 +157,7 @@ void OnPXREAClientCallback(void* context, PXREAClientCallbackType type, int stat
                     auto& leftHand = value["Hand"]["leftHand"];
                     {
                         std::lock_guard<std::mutex> lock(leftHandMutex);
-                        
+
                         LeftHandScale = leftHand["scale"].get<double>();
                         LeftHandIsActive = leftHand["isActive"].get<int>();
                         for (int i = 0; i < 26; i++) {
@@ -181,39 +181,39 @@ void OnPXREAClientCallback(void* context, PXREAClientCallbackType type, int stat
                     auto& body = value["Body"];
                     {
                         std::lock_guard<std::mutex> lock(bodyMutex);
-                        
+
                         if (body.contains("timeStampNs")) {
                             BodyTimeStampNs = body["timeStampNs"].get<int64_t>();
                         }
-                        
+
                         if (body.contains("joints") && body["joints"].is_array()) {
                             auto joints = body["joints"];
                             int jointCount = std::min(static_cast<int>(joints.size()), 24);
-                            
+
                             for (int i = 0; i < jointCount; i++) {
                                 auto& joint = joints[i];
-                                
+
                                 // Parse pose (position and rotation)
                                 if (joint.contains("p")) {
                                     BodyJointsPose[i] = stringToPoseArray(joint["p"].get<std::string>());
                                 }
-                                
+
                                 // Parse velocity and angular velocity
                                 if (joint.contains("va")) {
                                     BodyJointsVelocity[i] = stringToVelocityArray(joint["va"].get<std::string>());
                                 }
-                                
+
                                 // Parse acceleration and angular acceleration
                                 if (joint.contains("wva")) {
                                     BodyJointsAcceleration[i] = stringToVelocityArray(joint["wva"].get<std::string>());
                                 }
-                                
+
                                 // Parse IMU timestamp
                                 if (joint.contains("t")) {
                                     BodyJointsTimestamp[i] = joint["t"].get<int64_t>();
                                 }
                             }
-                            
+
                             BodyDataAvailable = true;
                         }
                     }
@@ -498,7 +498,7 @@ PYBIND11_MODULE(xensevr_pc_service_sdk, m) {
     m.def("get_right_hand_tracking_state", &getRightHandTrackingState, "Get the right hand state.");
     m.def("get_left_hand_is_active", &getLeftHandIsActive, "Get the left hand tracking quality (0 = low, 1 = high).");
     m.def("get_right_hand_is_active", &getRightHandIsActive, "Get the right hand tracking quality (0 = low, 1 = high).");
-    
+
     // Body tracking functions
     m.def("is_body_data_available", &isBodyDataAvailable, "Check if body tracking data is available.");
     m.def("get_body_joints_pose", &getBodyJointsPose, "Get the body joints pose data (24 joints, 7 values each: x,y,z,qx,qy,qz,qw).");
@@ -514,6 +514,6 @@ PYBIND11_MODULE(xensevr_pc_service_sdk, m) {
     m.def("get_motion_tracker_acceleration", &getMotionTrackerAcceleration, "Get the motion tracker acceleration data (3 trackers, 6 values each: ax,ay,az,wax,way,waz).");
     m.def("get_motion_tracker_serial_numbers", &getMotionTrackerSerialNumbers, "Get the serial numbers of the motion trackers.");
     m.def("get_motion_timestamp_ns", &getMotionTimeStampNs, "Get the motion data timestamp in nanoseconds.");
-    
+
     m.doc() = "Python bindings for PXREARobot SDK using pybind11.";
 }

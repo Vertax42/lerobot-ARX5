@@ -31,9 +31,7 @@ class RobotConfig(draccus.ChoiceRegistry, abc.ABC):
             for _, config in self.cameras.items():
                 for attr in ["width", "height", "fps"]:
                     if getattr(config, attr) is None:
-                        raise ValueError(
-                            f"Specifying '{attr}' is required for the camera to be used in a robot"
-                        )
+                        raise ValueError(f"Specifying '{attr}' is required for the camera to be used in a robot")
 
     @property
     def type(self) -> str:

@@ -105,9 +105,7 @@ def main():
             )
 
             # Reset the environment if not stopping or re-recording
-            if not events["stop_recording"] and (
-                (recorded_episodes < NUM_EPISODES - 1) or events["rerecord_episode"]
-            ):
+            if not events["stop_recording"] and ((recorded_episodes < NUM_EPISODES - 1) or events["rerecord_episode"]):
                 log_say("Reset the environment")
                 record_loop(
                     robot=robot,

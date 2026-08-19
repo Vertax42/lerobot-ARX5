@@ -48,9 +48,7 @@ def image_array_to_pil_image(image_array: np.ndarray, range_check: bool = True) 
         image_array = image_array.transpose(1, 2, 0)
 
     elif image_array.shape[-1] != 3:
-        raise NotImplementedError(
-            f"The image has {image_array.shape[-1]} channels, but 3 is required for now."
-        )
+        raise NotImplementedError(f"The image has {image_array.shape[-1]} channels, but 3 is required for now.")
 
     if image_array.dtype != np.uint8:
         if range_check:
@@ -169,9 +167,7 @@ class AsyncImageWriter:
                 p.start()
                 self.processes.append(p)
 
-    def save_image(
-        self, image: torch.Tensor | np.ndarray | PIL.Image.Image, fpath: Path, compress_level: int = 1
-    ):
+    def save_image(self, image: torch.Tensor | np.ndarray | PIL.Image.Image, fpath: Path, compress_level: int = 1):
         if isinstance(image, torch.Tensor):
             # Convert tensor to numpy array to minimize main process time
             image = image.cpu().numpy()

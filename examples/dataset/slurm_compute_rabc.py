@@ -46,9 +46,7 @@ from datatrove.pipeline.base import PipelineStep
 class ComputeProgressShards(PipelineStep):
     """Each worker computes SARM progress for its assigned episodes."""
 
-    def __init__(
-        self, repo_id, reward_model_path, stride=1, head_mode="sparse", device="cpu", shard_dir="rabc_shards"
-    ):
+    def __init__(self, repo_id, reward_model_path, stride=1, head_mode="sparse", device="cpu", shard_dir="rabc_shards"):
         super().__init__()
         if stride < 1:
             raise ValueError(f"stride must be >= 1, got {stride}")
@@ -264,9 +262,7 @@ class AggregateProgress(PipelineStep):
         for col in ["progress_sparse", "progress_dense"]:
             if col in df.columns:
                 v = df[col].dropna()
-                logging.info(
-                    f"{col}: mean={v.mean():.4f} std={v.std():.4f} min={v.min():.4f} max={v.max():.4f}"
-                )
+                logging.info(f"{col}: mean={v.mean():.4f} std={v.std():.4f} min={v.min():.4f} max={v.max():.4f}")
 
         if self.push_to_hub:
             from huggingface_hub import HfApi

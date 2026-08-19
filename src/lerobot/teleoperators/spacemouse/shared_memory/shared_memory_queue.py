@@ -14,11 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, List, Union
 import numbers
-from queue import Empty, Full
 from multiprocessing.managers import SharedMemoryManager
+from queue import Empty, Full
+
 import numpy as np
+
 from .shared_memory_util import ArraySpec, SharedAtomicCounter, SharedCounter
 from .shared_ndarray import SharedNDArray
 
@@ -45,7 +46,7 @@ class SharedMemoryQueue:
     def __init__(
         self,
         shm_manager: SharedMemoryManager,
-        array_specs: List[ArraySpec],
+        array_specs: list[ArraySpec],
         buffer_size: int,
         use_atomic_counter: bool = True,
     ):
@@ -80,7 +81,7 @@ class SharedMemoryQueue:
     def create_from_examples(
         cls,
         shm_manager: SharedMemoryManager,
-        examples: Dict[str, Union[np.ndarray, float]],
+        examples: dict[str, np.ndarray | float],
         buffer_size: int,
         use_atomic_counter: bool = True,
     ):
@@ -122,7 +123,7 @@ class SharedMemoryQueue:
     def clear(self):
         self.read_counter.store(self.write_counter.load())
 
-    def put(self, data: Dict[str, Union[np.ndarray, float]]):
+    def put(self, data: dict[str, np.ndarray | float]):
         read_count = self.read_counter.load()
         write_count = self.write_counter.load()
         n_data = write_count - read_count
@@ -143,7 +144,7 @@ class SharedMemoryQueue:
         # update idx
         self.write_counter.add(1)
 
-    def put_list(self, data: Dict[str, np.ndarray]):
+    def put_list(self, data: dict[str, np.ndarray]):
         list_lens = []
         for key, value in data.items():
             assert isinstance(value, np.ndarray)
@@ -161,7 +162,7 @@ class SharedMemoryQueue:
         # update idx
         self.write_counter.add(list_len)
 
-    def get(self, out=None) -> Dict[str, np.ndarray]:
+    def get(self, out=None) -> dict[str, np.ndarray]:
         write_count = self.write_counter.load()
         read_count = self.read_counter.load()
         n_data = write_count - read_count
@@ -180,7 +181,7 @@ class SharedMemoryQueue:
         self.read_counter.add(1)
         return out
 
-    def get_next_view(self) -> Dict[str, np.ndarray]:
+    def get_next_view(self) -> dict[str, np.ndarray]:
         """
         Get reference to the next element to write
         for zero-copy writing
@@ -199,7 +200,7 @@ class SharedMemoryQueue:
 
         return out
 
-    def put_next_view(self, data: Dict[str, Union[np.ndarray, numbers.Number]]):
+    def put_next_view(self, data: dict[str, np.ndarray | numbers.Number]):
         """
         Used in conjunction with get_next_view
         for zero-copy writing
@@ -239,7 +240,7 @@ class SharedMemoryQueue:
 
         return self.CallbackGuard(callback=lambda: self.read_counter.add(1), data=data)
 
-    def get_k(self, k, out=None) -> Dict[str, np.ndarray]:
+    def get_k(self, k, out=None) -> dict[str, np.ndarray]:
         write_count = self.write_counter.load()
         read_count = self.read_counter.load()
         n_data = write_count - read_count
@@ -251,7 +252,7 @@ class SharedMemoryQueue:
         self.read_counter.add(k)
         return out
 
-    def get_all(self, out=None) -> Dict[str, np.ndarray]:
+    def get_all(self, out=None) -> dict[str, np.ndarray]:
         write_count = self.write_counter.load()
         read_count = self.read_counter.load()
         n_data = write_count - read_count
@@ -262,7 +263,7 @@ class SharedMemoryQueue:
         self.read_counter.add(n_data)
         return out
 
-    def peek_all(self, out=None) -> Dict[str, np.ndarray]:
+    def peek_all(self, out=None) -> dict[str, np.ndarray]:
         """Peek all data without updating the read counter"""
         write_count = self.write_counter.load()
         read_count = self.read_counter.load()
@@ -273,7 +274,7 @@ class SharedMemoryQueue:
         out = self._get_k_impl(n_data, read_count, out=out)
         return out
 
-    def _get_k_impl(self, k, read_count, out=None) -> Dict[str, np.ndarray]:
+    def _get_k_impl(self, k, read_count, out=None) -> dict[str, np.ndarray]:
         if out is None:
             out = self._allocate_empty(k)
 
@@ -299,9 +300,7 @@ class SharedMemoryQueue:
 
         return out
 
-    def _put_list_impl(
-        self, write_count: int, data: Dict[str, np.ndarray], list_len: int
-    ):
+    def _put_list_impl(self, write_count: int, data: dict[str, np.ndarray], list_len: int):
         curr_idx = write_count % self.buffer_size
         # write to shared memory
 
@@ -311,9 +310,7 @@ class SharedMemoryQueue:
         data_end = end - start
         for key, value in data.items():
             arr: np.ndarray = self.shared_arrays[key].get()
-            assert (
-                arr.dtype == value.dtype
-            ), f"Inconsistent data types: {arr.dtype} != {value.dtype}"
+            assert arr.dtype == value.dtype, f"Inconsistent data types: {arr.dtype} != {value.dtype}"
             arr[start:end] = value[data_start:data_end]
 
         remainder = list_len - (end - start)
@@ -325,9 +322,7 @@ class SharedMemoryQueue:
             data_end = list_len
             for key, value in data.items():
                 arr: np.ndarray = self.shared_arrays[key].get()
-                assert (
-                    arr.dtype == value.dtype
-                ), f"Inconsistent data types: {arr.dtype} != {value.dtype}"
+                assert arr.dtype == value.dtype, f"Inconsistent data types: {arr.dtype} != {value.dtype}"
                 arr[start:end] = value[data_start:data_end]
 
     def _allocate_empty(self, k=None):

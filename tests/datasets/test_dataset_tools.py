@@ -536,9 +536,7 @@ def test_remove_multiple_features(sample_dataset, tmp_path):
                 feature_info,
             )
 
-        dataset_with_features = add_features(
-            dataset, features=features, output_dir=tmp_path / "with_features"
-        )
+        dataset_with_features = add_features(dataset, features=features, output_dir=tmp_path / "with_features")
         dataset_clean = remove_feature(
             dataset_with_features, feature_names=["reward", "success"], output_dir=tmp_path / "clean"
         )

@@ -21,8 +21,8 @@ from dataclasses import dataclass, field, replace
 import flexiv_rt
 
 from lerobot.cameras.configs import CameraConfig
-from lerobot.robots.config import RobotConfig
 from lerobot.grippers import GripperConfig
+from lerobot.robots.config import RobotConfig
 
 ROBOT_TYPE = "bi_flexiv_rizon4_rt"
 
@@ -114,15 +114,9 @@ class BiFlexivRizon4RTConfig(RobotConfig):
 
     # Force control settings (shared for both arms)
     force_control_frame: flexiv_rt.CoordType = flexiv_rt.CoordType.WORLD
-    force_control_axis: list[bool] = field(
-        default_factory=lambda: [False, False, False, False, False, False]
-    )
-    max_contact_wrench: list[float] = field(
-        default_factory=lambda: [30.0, 30.0, 30.0, 5.0, 5.0, 5.0]
-    )
-    target_wrench: list[float] = field(
-        default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    )
+    force_control_axis: list[bool] = field(default_factory=lambda: [False, False, False, False, False, False])
+    max_contact_wrench: list[float] = field(default_factory=lambda: [30.0, 30.0, 30.0, 5.0, 5.0, 5.0])
+    target_wrench: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
     # Collision detection thresholds
     ext_force_threshold: float = 10.0  # N
@@ -184,37 +178,21 @@ class BiFlexivRizon4RTConfig(RobotConfig):
     def __post_init__(self):
         super().__post_init__()
 
-        if isinstance(self.inner_control_hz, bool) or not isinstance(
-            self.inner_control_hz, int
-        ):
-            raise TypeError(
-                "inner_control_hz must be an integer in [1, 1000], "
-                f"got {self.inner_control_hz!r}"
-            )
+        if isinstance(self.inner_control_hz, bool) or not isinstance(self.inner_control_hz, int):
+            raise TypeError(f"inner_control_hz must be an integer in [1, 1000], got {self.inner_control_hz!r}")
 
         if not 1 <= self.inner_control_hz <= 1000:
-            raise ValueError(
-                f"inner_control_hz must be between 1 and 1000, got {self.inner_control_hz}"
-            )
-
+            raise ValueError(f"inner_control_hz must be between 1 and 1000, got {self.inner_control_hz}")
 
         # Validate Cartesian/force parameters
         if len(self.force_control_axis) != 6:
-            raise ValueError(
-                f"force_control_axis must have 6 elements, got {len(self.force_control_axis)}"
-            )
+            raise ValueError(f"force_control_axis must have 6 elements, got {len(self.force_control_axis)}")
         if len(self.max_contact_wrench) != 6:
-            raise ValueError(
-                f"max_contact_wrench must have 6 elements, got {len(self.max_contact_wrench)}"
-            )
+            raise ValueError(f"max_contact_wrench must have 6 elements, got {len(self.max_contact_wrench)}")
         if len(self.target_wrench) != 6:
-            raise ValueError(
-                f"target_wrench must have 6 elements, got {len(self.target_wrench)}"
-            )
+            raise ValueError(f"target_wrench must have 6 elements, got {len(self.target_wrench)}")
         if len(self.damping_ratio) != 6:
-            raise ValueError(
-                f"damping_ratio must have 6 elements, got {len(self.damping_ratio)}"
-            )
+            raise ValueError(f"damping_ratio must have 6 elements, got {len(self.damping_ratio)}")
 
         # Validate start positions
         if len(self.left_start_position_degree) != 7:
@@ -226,9 +204,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 f"right_start_position_degree must have 7 elements, got {len(self.right_start_position_degree)}"
             )
         if not 1 <= self.start_vel_scale <= 100:
-            raise ValueError(
-                f"start_vel_scale must be between 1 and 100, got {self.start_vel_scale}"
-            )
+            raise ValueError(f"start_vel_scale must be between 1 and 100, got {self.start_vel_scale}")
         if len(self.left_home_position_degree) != 7:
             raise ValueError(
                 f"left_home_position_degree must have 7 elements, got {len(self.left_home_position_degree)}"
@@ -238,9 +214,7 @@ class BiFlexivRizon4RTConfig(RobotConfig):
                 f"right_home_position_degree must have 7 elements, got {len(self.right_home_position_degree)}"
             )
         if not 1 <= self.home_vel_scale <= 100:
-            raise ValueError(
-                f"home_vel_scale must be between 1 and 100, got {self.home_vel_scale}"
-            )
+            raise ValueError(f"home_vel_scale must be between 1 and 100, got {self.home_vel_scale}")
 
         # Build per-side gripper configs from the shared block.
         # ── Per-side gripper configs ── clone the shared block, stamping the side.

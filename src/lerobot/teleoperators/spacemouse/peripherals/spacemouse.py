@@ -68,9 +68,7 @@ class Spacemouse:
     ):
         """Initialize SpaceMouse wrapper."""
         if pyspacemouse is None:
-            raise ImportError(
-                "pyspacemouse is required. Install it with: pip install pyspacemouse"
-            )
+            raise ImportError("pyspacemouse is required. Install it with: pip install pyspacemouse")
 
         self.device_name = device_name
         self.device_index = device_index
@@ -103,10 +101,10 @@ class Spacemouse:
         # Pure axis remapping WITHOUT sign inversion (inversion handled by config.invert_axes)
         # SpaceMouse axes: Y=forward/back, X=left/right, Z=up/down
         # Robot axes: X=forward/back, Y=left/right, Z=up/down
-        # 
+        #
         # Mapping: new_x=old_y, new_y=old_x, new_z=old_z
         self.tx_pos = np.array([[0, 1, 0], [1, 0, 0], [0, 0, 1]], dtype=dtype)
-        
+
         # Rotation transformation matrix (SpaceMouse -> Robot coordinates)
         # Pure axis mapping: roll->roll, pitch->pitch, yaw->yaw (no remapping needed)
         # Sign inversion handled by config.invert_axes
@@ -171,7 +169,7 @@ class Spacemouse:
 
         self._device = pyspacemouse.open(**open_kwargs)
         print(f"Connected to SpaceMouse: {self._device.name}")
-        
+
         # Detect correct button indices for this device
         self._detect_button_indices(self._device)
 
@@ -183,9 +181,7 @@ class Spacemouse:
         # Get common device name
         connected = pyspacemouse.get_connected_devices()
         if len(connected) < 2:
-            raise RuntimeError(
-                f"Dual device mode requires 2 SpaceMouse devices, found {len(connected)}: {connected}"
-            )
+            raise RuntimeError(f"Dual device mode requires 2 SpaceMouse devices, found {len(connected)}: {connected}")
 
         device_name = self.device_name or connected[0]
 
@@ -211,69 +207,69 @@ class Spacemouse:
 
         self._right_device = pyspacemouse.open(**right_kwargs)
 
-        print(f"Connected to dual SpaceMouse devices:")
+        print("Connected to dual SpaceMouse devices:")
         print(f"  Left (index {self.left_device_config.device_index}):  {self._left_device.name}")
         print(f"  Right (index {self.right_device_config.device_index}): {self._right_device.name}")
-        
+
         # Detect correct button indices (use left device as reference)
         self._detect_button_indices(self._left_device)
 
     def _detect_button_indices(self, device):
         """Detect the correct button indices for physical left/right buttons.
-        
+
         Different SpaceMouse devices have different button layouts:
         - SpaceNavigator/Compact/Wireless: LEFT=0, RIGHT=1
         - Pro/Enterprise/UniversalReceiver: MENU=0 (physical left), FIT=last (physical right)
-        
+
         This method finds the correct indices based on button names.
         """
         button_names = device.info.button_names
-        
+
         if not button_names:
             # No buttons on this device
             self._left_button_idx = -1
             self._right_button_idx = -1
             print("  No buttons detected on device")
             return
-        
+
         # Try to find LEFT/RIGHT buttons first (SpaceNavigator style)
         left_idx = None
         right_idx = None
-        
+
         for i, name in enumerate(button_names):
             name_upper = name.upper()
             if name_upper == "LEFT":
                 left_idx = i
             elif name_upper == "RIGHT":
                 right_idx = i
-        
+
         if left_idx is not None and right_idx is not None:
             self._left_button_idx = left_idx
             self._right_button_idx = right_idx
             print(f"  Button mapping: LEFT={left_idx}, RIGHT={right_idx}")
             return
-        
+
         # For Pro-style devices, MENU is physical left, FIT is physical right
         menu_idx = None
         fit_idx = None
-        
+
         for i, name in enumerate(button_names):
             name_upper = name.upper()
             if name_upper == "MENU":
                 menu_idx = i
             elif name_upper == "FIT":
                 fit_idx = i
-        
+
         if menu_idx is not None and fit_idx is not None:
             self._left_button_idx = menu_idx
             self._right_button_idx = fit_idx
             print(f"  Button mapping: MENU(left)={menu_idx}, FIT(right)={fit_idx}")
             return
-        
+
         # Fallback: use first and second buttons
         self._left_button_idx = 0
         self._right_button_idx = 1 if len(button_names) > 1 else 0
-        print(f"  Button mapping (fallback): idx 0 and 1")
+        print("  Button mapping (fallback): idx 0 and 1")
 
     def disconnect(self):
         """Disconnect from SpaceMouse device(s)."""
@@ -305,8 +301,8 @@ class Spacemouse:
         This method should be called ONCE at the beginning of each control loop.
         All subsequent get_motion_state() and get_button_state() calls will use
         this cached data, ensuring synchronization.
-        
-        Note: SpaceMouse sends different HID reports for axes (channel 1/2) and 
+
+        Note: SpaceMouse sends different HID reports for axes (channel 1/2) and
         buttons (channel 3). In nonblocking mode, each read() only gets one report.
         We need to drain the buffer to ensure we have the latest state for all channels.
         """
@@ -316,7 +312,7 @@ class Spacemouse:
         if self.multi_device_mode:
             # Drain HID buffer for left device
             self._left_state = self._drain_device_buffer(self._left_device)
-            # Drain HID buffer for right device  
+            # Drain HID buffer for right device
             self._right_state = self._drain_device_buffer(self._right_device)
         else:
             # Drain HID buffer for single device
@@ -324,25 +320,25 @@ class Spacemouse:
 
     def _drain_device_buffer(self, device) -> "pyspacemouse.SpaceMouseState":
         """Read all pending HID reports from device buffer.
-        
+
         SpaceMouse sends separate HID reports for:
         - Channel 1/2: Axis data (motion)
         - Channel 3: Button data
-        
+
         In nonblocking mode, read() returns immediately with one report or None.
         We need to read repeatedly until buffer is empty to get the latest
         state for ALL channels (motion + buttons).
-        
+
         Args:
             device: SpaceMouseDevice instance
-            
+
         Returns:
             The device's accumulated state after processing all pending reports
         """
         # Keep reading until no more data in buffer
         # This ensures we process all pending HID reports (both motion and button)
         max_reads = 64  # Safety limit to prevent infinite loop
-        
+
         for _ in range(max_reads):
             # Read raw HID data directly (nonblocking returns None if empty)
             # Note: We access internal _device because pyspacemouse doesn't expose
@@ -353,7 +349,7 @@ class Spacemouse:
                 break
             # Process this HID report (updates device._state internally)
             device._process(raw_data)
-        
+
         return device._state
 
     def get_motion_state(self):
@@ -442,7 +438,7 @@ class Spacemouse:
             |   _
             |  (O) spacemouse
             *------>x (forward)
-            
+
         Position: SpaceMouse forward -> Robot +X, right -> +Y, up -> +Z
         Rotation: roll/pitch/yaw kept aligned (pitch negated to match forward)
 
@@ -504,7 +500,7 @@ class Spacemouse:
             bool: True if button is pressed
 
         Note: Call poll() first to update the cached state.
-        Note: For physical left/right buttons, use is_left_button_pressed() 
+        Note: For physical left/right buttons, use is_left_button_pressed()
               and is_right_button_pressed() which handle device differences.
         """
         button_state = self.get_button_state()
@@ -514,11 +510,11 @@ class Spacemouse:
 
     def is_left_button_pressed(self) -> bool:
         """Check if physical LEFT button is pressed.
-        
+
         This handles device differences automatically:
         - SpaceNavigator: LEFT button
         - Pro/Enterprise: MENU button (physical left position)
-        
+
         Returns:
             bool: True if left button is pressed
         """
@@ -528,11 +524,11 @@ class Spacemouse:
 
     def is_right_button_pressed(self) -> bool:
         """Check if physical RIGHT button is pressed.
-        
+
         This handles device differences automatically:
-        - SpaceNavigator: RIGHT button  
+        - SpaceNavigator: RIGHT button
         - Pro/Enterprise: FIT button (physical right position)
-        
+
         Returns:
             bool: True if right button is pressed
         """
@@ -580,7 +576,7 @@ def test():
         print("Press buttons to test button detection\n")
 
         last_button_state = [False, False]
-        
+
         try:
             for i in range(200000):
                 # Poll once per cycle (drains HID buffer)
@@ -588,7 +584,7 @@ def test():
 
                 # Get synchronized data
                 state = sm.get_motion_state_transformed()
-                
+
                 # Use device-aware button methods
                 button_left = sm.is_left_button_pressed()
                 button_right = sm.is_right_button_pressed()

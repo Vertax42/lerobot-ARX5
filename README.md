@@ -58,15 +58,15 @@ cd lerobot-xense
 
 This repository uses `third_party/` git submodules to manage hardware SDK dependencies:
 
-| Submodule | Installed package |
-|-----------|-------------------|
-| `third_party/ARX5_SDK` | `pyarx` |
-| `third_party/libpyflexiv` | `flexiv_rt` |
-| `third_party/XenseVR-PC-Service` | `xensevr_pc_service_sdk` |
-| `third_party/XGripper` | `xgripper` |
-| `third_party/elite-robots-cs-sdk` | Elite CS C++ SDK (builds `elite_cs_sdk`) |
-| `third_party/elite-robots-cs-sdk-python` | `elite_cs_sdk` (Elite CS Python bindings) |
-| `third_party/taccap-gripper` | `xense.taccap` (TacCap UMI tactile gripper SDK) |
+| Submodule                                | Installed package                               |
+| ---------------------------------------- | ----------------------------------------------- |
+| `third_party/ARX5_SDK`                   | `pyarx`                                         |
+| `third_party/libpyflexiv`                | `flexiv_rt`                                     |
+| `third_party/XenseVR-PC-Service`         | `xensevr_pc_service_sdk`                        |
+| `third_party/XGripper`                   | `xgripper`                                      |
+| `third_party/elite-robots-cs-sdk`        | Elite CS C++ SDK (builds `elite_cs_sdk`)        |
+| `third_party/elite-robots-cs-sdk-python` | `elite_cs_sdk` (Elite CS Python bindings)       |
+| `third_party/taccap-gripper`             | `xense.taccap` (TacCap UMI tactile gripper SDK) |
 
 > `xensesdk` is **not** a submodule — it is installed from PyPI (`xensesdk==2.1.2`,
 > the published cp312 manylinux wheel, which bundles the patched `libxense_c.so`
@@ -122,19 +122,19 @@ bash ./setup_env.sh --install --core
 bash ./setup_env.sh --install --help
 ```
 
-| Selector | Builds | Robots / teleoperators enabled |
-|---|---|---|
-| `--flexiv`, `--bi_flexiv` | `flexiv_rt` (+ `xense`) | `flexiv_rizon4_rt`, `bi_flexiv_rizon4_rt` |
-| `--elite`, `--bi_elite` | `elite_cs_sdk` (+ `xense`) | `elite_cs66_rt`, `bi_elite_cs66_rt` |
-| `--taccap`, `--bi_taccap` | `xense.taccap` (+ `xense`) | `taccap_follower` gripper (on any arm) |
-| `--xense` | `xensesdk` + `xgripper` (XGripper) | `serial` gripper + tactile sensors |
-| `--arx5`, `--bi_arx5` | `pyarx` | `arx5_follower`, `bi_arx5` |
-| `--pico4`, `--bi_pico4` | `xensevr_pc_service_sdk` | `pico4`, `bi_pico4` teleop |
-| `--spacemouse` | `pyspacemouse` | `spacemouse` teleop |
-| `--dynamixel`, `--trlc` | `dynamixel-sdk` | `trlc_leader`, `bi_trlc` teleop |
-| `--all` | everything (explicit) | — |
-| `--core`, `--none` | nothing (core only) | — |
-| *(no selector)* | everything (default, backward compatible) | — |
+| Selector                  | Builds                                    | Robots / teleoperators enabled            |
+| ------------------------- | ----------------------------------------- | ----------------------------------------- |
+| `--flexiv`, `--bi_flexiv` | `flexiv_rt` (+ `xense`)                   | `flexiv_rizon4_rt`, `bi_flexiv_rizon4_rt` |
+| `--elite`, `--bi_elite`   | `elite_cs_sdk` (+ `xense`)                | `elite_cs66_rt`, `bi_elite_cs66_rt`       |
+| `--taccap`, `--bi_taccap` | `xense.taccap` (+ `xense`)                | `taccap_follower` gripper (on any arm)    |
+| `--xense`                 | `xensesdk` + `xgripper` (XGripper)        | `serial` gripper + tactile sensors        |
+| `--arx5`, `--bi_arx5`     | `pyarx`                                   | `arx5_follower`, `bi_arx5`                |
+| `--pico4`, `--bi_pico4`   | `xensevr_pc_service_sdk`                  | `pico4`, `bi_pico4` teleop                |
+| `--spacemouse`            | `pyspacemouse`                            | `spacemouse` teleop                       |
+| `--dynamixel`, `--trlc`   | `dynamixel-sdk`                           | `trlc_leader`, `bi_trlc` teleop           |
+| `--all`                   | everything (explicit)                     | —                                         |
+| `--core`, `--none`        | nothing (core only)                       | —                                         |
+| _(no selector)_           | everything (default, backward compatible) | —                                         |
 
 Notes:
 
@@ -215,14 +215,14 @@ a matched pair). Two backends:
   connect, so no gripper SN is configured.
 - `taccap_follower` — `xense.taccap` FollowerGripper, the centric TacCap gripper
   (MIT impedance). Left/right resolved from the firmware-burned SN, and its wrist
-  + GSPS tactile cameras auto-discovered at connect.
+  - GSPS tactile cameras auto-discovered at connect.
 
 ```yaml
 robot:
   gripper:
     type: taccap_follower
     kp: 8.0
-    feedforward_torque: -3.0   # negative = clamp harder
+    feedforward_torque: -3.0 # negative = clamp harder
     auto_discover_cameras: true
 ```
 
@@ -274,7 +274,7 @@ The test script will display real-time position (x, y, z) and orientation (roll,
 ### Features
 
 - ✅ **Modern PySpaceMouse Integration**: Uses PySpaceMouse library for cross-platform SpaceMouse support
-- ✅ **No System Services Required**: Direct HID communication, no need for spacenavd daemon  
+- ✅ **No System Services Required**: Direct HID communication, no need for spacenavd daemon
 - ✅ **Single Device Mode**: Traditional 6-DoF control with one SpaceMouse
 - ✅ **Dual Device Mode**: Advanced left/right hand coordination for complex manipulation
 - ✅ **Flexible Axis Assignment**: Configure which device controls position vs orientation
@@ -287,10 +287,10 @@ from lerobot.teleoperators.spacemouse import SpacemouseConfig, SpacemouseTeleop
 
 # Standard single SpaceMouse setup (default)
 config = SpacemouseConfig(
-    pos_sensitivity=0.8,     # Position control sensitivity
-    ori_sensitivity=1.5,     # Orientation control sensitivity
-    deadzone=0.1,           # Deadzone threshold
-    frequency=200,          # Polling frequency (Hz)
+    pos_sensitivity=0.8,  # Position control sensitivity
+    ori_sensitivity=1.5,  # Orientation control sensitivity
+    deadzone=0.1,  # Deadzone threshold
+    frequency=200,  # Polling frequency (Hz)
 )
 
 teleop = SpacemouseTeleop(config)
@@ -313,11 +313,11 @@ config = SpacemouseConfig(
         ori_sensitivity=0.0,  # Disabled
     ),
     right_device=DeviceConfig(
-        device_index=1, 
+        device_index=1,
         enabled_axes=(False, False, False, True, True, True),  # Roll, pitch, yaw only
         pos_sensitivity=0.0,  # Disabled
         ori_sensitivity=1.5,
-    )
+    ),
 )
 
 teleop = SpacemouseTeleop(config)
@@ -326,8 +326,9 @@ teleop = SpacemouseTeleop(config)
 ### Example Configurations
 
 See [`examples/09_custom_config.py`](src/lerobot/teleoperators/spacemouse/examples/09_custom_config.py) and [`examples/03_multi_device.py`](src/lerobot/teleoperators/spacemouse/examples/03_multi_device.py) (under `src/lerobot/teleoperators/spacemouse/`) for complete configuration examples including:
+
 - Position/Orientation split control
-- Dual-arm robot control  
+- Dual-arm robot control
 - Fine/Coarse movement control
 
 ### Use Cases
@@ -345,6 +346,7 @@ See [`examples/09_custom_config.py`](src/lerobot/teleoperators/spacemouse/exampl
 ### Supported Devices
 
 All 3Dconnexion devices supported by PySpaceMouse:
+
 - SpaceNavigator
 - SpaceMouse Pro
 - SpaceMouse Wireless
@@ -357,12 +359,12 @@ All 3Dconnexion devices supported by PySpaceMouse:
 
 For `lerobot-record` with `--robot.type=bi_flexiv_rizon4_rt --teleop.type=bi_pico4`, the controller buttons are mapped as follows:
 
-| Controller button | Keyboard equivalent | Action |
-|---|---|---|
-| Right `A` | `go_start` | Reset both arms to start pose (RT non-blocking, recording continues) |
-| Left `X` | `rerecord_episode` | Discard current episode and re-record |
-| Left `Y` | `exit_early` | Finish current episode early |
-| Right `B` | `stop_recording` | Stop the recording session |
+| Controller button | Keyboard equivalent | Action                                                               |
+| ----------------- | ------------------- | -------------------------------------------------------------------- |
+| Right `A`         | `go_start`          | Reset both arms to start pose (RT non-blocking, recording continues) |
+| Left `X`          | `rerecord_episode`  | Discard current episode and re-record                                |
+| Left `Y`          | `exit_early`        | Finish current episode early                                         |
+| Right `B`         | `stop_recording`    | Stop the recording session                                           |
 
 Button state is refreshed via `BiPico4.poll_buttons()` at the top of each loop iteration, before event checks. Keyboard events and controller buttons are unified into the same `events[]` checks — both are equal-priority input sources.
 
@@ -392,11 +394,11 @@ while timestamp < control_time_s:
 
 ### State Variables
 
-| Variable | Role |
-|---|---|
-| `reset_triggered` | Per-frame flag. Set `True` the frame reset is triggered. Skips `send_action` and dataset write for that frame only. Resets to `False` at the start of every iteration. |
-| `prev_rt_moving` | Edge-detection flag. Set `True` while `robot.rt_moving` is `True`. Cleared to `False` when movement stops, triggering one call to `_sync_rt_teleop_to_robot_pose()`. |
-| `prev_observation_frame` | Holds the previous frame's observation. Used by shifted-frame logic to pair `obs[t-1]` with the robot's actual position at `obs[t]` as the action. |
+| Variable                 | Role                                                                                                                                                                   |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reset_triggered`        | Per-frame flag. Set `True` the frame reset is triggered. Skips `send_action` and dataset write for that frame only. Resets to `False` at the start of every iteration. |
+| `prev_rt_moving`         | Edge-detection flag. Set `True` while `robot.rt_moving` is `True`. Cleared to `False` when movement stops, triggering one call to `_sync_rt_teleop_to_robot_pose()`.   |
+| `prev_observation_frame` | Holds the previous frame's observation. Used by shifted-frame logic to pair `obs[t-1]` with the robot's actual position at `obs[t]` as the action.                     |
 
 ### Three Frame Modes
 
@@ -434,14 +436,14 @@ The action is extracted from the current observation using the same keys as `rob
 
 ### Per-Frame Decision Table
 
-| Frame | `reset_triggered` | `robot_is_moving` | `send_action` | Dataset write | `prev_obs` updated to |
-|---|---|---|---|---|---|
-| T-1 (normal teleop) | False | False | ✓ | `{obs[T-1], action[T-1]}` direct | obs[T-1] |
-| **T (reset triggered)** | **True** | **False** | **skipped** | **skipped** | **obs[T]** |
-| T+1 (RT moving) | False | True | skipped | `{obs[T], state_20d[T+1]}` shifted | obs[T+1] |
-| T+2 (RT moving) | False | True | skipped | `{obs[T+1], state_20d[T+2]}` shifted | obs[T+2] |
-| … | False | True | skipped | shifted | … |
-| N+1 (reset done, teleop synced) | False | False | ✓ | `{obs[N+1], action[N+1]}` direct | obs[N+1] |
+| Frame                           | `reset_triggered` | `robot_is_moving` | `send_action` | Dataset write                        | `prev_obs` updated to |
+| ------------------------------- | ----------------- | ----------------- | ------------- | ------------------------------------ | --------------------- |
+| T-1 (normal teleop)             | False             | False             | ✓             | `{obs[T-1], action[T-1]}` direct     | obs[T-1]              |
+| **T (reset triggered)**         | **True**          | **False**         | **skipped**   | **skipped**                          | **obs[T]**            |
+| T+1 (RT moving)                 | False             | True              | skipped       | `{obs[T], state_20d[T+1]}` shifted   | obs[T+1]              |
+| T+2 (RT moving)                 | False             | True              | skipped       | `{obs[T+1], state_20d[T+2]}` shifted | obs[T+2]              |
+| …                               | False             | True              | skipped       | shifted                              | …                     |
+| N+1 (reset done, teleop synced) | False             | False             | ✓             | `{obs[N+1], action[N+1]}` direct     | obs[N+1]              |
 
 `state_20d[t]` = `{k: obs[t][k] for k in robot.action_features}` — left/right TCP pose (9D each) + gripper (1D each), image keys excluded.
 
@@ -533,13 +535,15 @@ Dataset can be uploaded/downloaded from the HuggingFace hub seamlessly. To work 
 - **Hardware Independence**: Direct HID communication for better reliability
 
 **Breaking Changes:**
+
 - `spacenavd` service is no longer required
 - Configuration options have been expanded with new dual-device parameters
 - Old single-device configurations remain fully compatible
 
 **Migration Benefits:**
+
 - ✅ Easier setup (no system services to configure)
-- ✅ Better cross-platform compatibility  
+- ✅ Better cross-platform compatibility
 - ✅ More responsive input handling
 - ✅ Advanced dual-hand control capabilities
 - ✅ Future-proof with active library maintenance

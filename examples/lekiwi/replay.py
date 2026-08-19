@@ -52,10 +52,7 @@ def main():
             t0 = time.perf_counter()
 
             # Get recorded action from dataset
-            action = {
-                name: float(actions[idx][ACTION][i])
-                for i, name in enumerate(dataset.features[ACTION]["names"])
-            }
+            action = {name: float(actions[idx][ACTION][i]) for i, name in enumerate(dataset.features[ACTION]["names"])}
 
             # Send action to robot
             _ = robot.send_action(action)

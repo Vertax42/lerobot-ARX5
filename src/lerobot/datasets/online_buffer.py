@@ -44,9 +44,7 @@ def _make_memmap_safe(**kwargs) -> np.memmap:
         stats = os.statvfs(Path(kwargs["filename"]).parent)
         available_space = stats.f_bavail * stats.f_frsize  # bytes
         if required_space >= available_space * 0.8:
-            raise RuntimeError(
-                f"You're about to take up {required_space} of {available_space} bytes available."
-            )
+            raise RuntimeError(f"You're about to take up {required_space} of {available_space} bytes available.")
     return np.memmap(**kwargs)
 
 
@@ -134,9 +132,7 @@ class OnlineBuffer(torch.utils.data.Dataset):
     def _make_data_spec(self, data_spec: dict[str, Any], buffer_capacity: int) -> dict[str, dict[str, Any]]:
         """Makes the data spec for np.memmap."""
         if any(k.startswith("_") for k in data_spec):
-            raise ValueError(
-                "data_spec keys should not start with '_'. This prefix is reserved for internal logic."
-            )
+            raise ValueError("data_spec keys should not start with '_'. This prefix is reserved for internal logic.")
         preset_keys = {
             OnlineBuffer.INDEX_KEY,
             OnlineBuffer.FRAME_INDEX_KEY,
@@ -222,9 +218,7 @@ class OnlineBuffer(torch.utils.data.Dataset):
 
     @property
     def num_episodes(self) -> int:
-        return len(
-            np.unique(self._data[OnlineBuffer.EPISODE_INDEX_KEY][self._data[OnlineBuffer.OCCUPANCY_MASK_KEY]])
-        )
+        return len(np.unique(self._data[OnlineBuffer.EPISODE_INDEX_KEY][self._data[OnlineBuffer.OCCUPANCY_MASK_KEY]]))
 
     @property
     def num_frames(self) -> int:
@@ -277,9 +271,7 @@ class OnlineBuffer(torch.utils.data.Dataset):
             is_pad = min_ > self.tolerance_s
 
             # Check violated query timestamps are all outside the episode range.
-            assert (
-                (query_ts[is_pad] < episode_timestamps[0]) | (episode_timestamps[-1] < query_ts[is_pad])
-            ).all(), (
+            assert ((query_ts[is_pad] < episode_timestamps[0]) | (episode_timestamps[-1] < query_ts[is_pad])).all(), (
                 f"One or several timestamps unexpectedly violate the tolerance ({min_} > {self.tolerance_s=}"
                 ") inside the episode range."
             )
@@ -327,9 +319,7 @@ def compute_sampler_weights(
     if len(offline_dataset) == 0 and (online_dataset is None or len(online_dataset) == 0):
         raise ValueError("At least one of `offline_dataset` or `online_dataset` should be contain data.")
     if (online_dataset is None) ^ (online_sampling_ratio is None):
-        raise ValueError(
-            "`online_dataset` and `online_sampling_ratio` must be provided together or not at all."
-        )
+        raise ValueError("`online_dataset` and `online_sampling_ratio` must be provided together or not at all.")
     offline_sampling_ratio = 0 if online_sampling_ratio is None else 1 - online_sampling_ratio
 
     weights = []
@@ -359,9 +349,7 @@ def compute_sampler_weights(
             where_episode = torch.where(episode_indices == episode_idx)
             start_index = where_episode[0][0]
             end_index = where_episode[0][-1] + 1
-            online_data_mask_indices.extend(
-                range(start_index.item(), end_index.item() - online_drop_n_last_frames)
-            )
+            online_data_mask_indices.extend(range(start_index.item(), end_index.item() - online_drop_n_last_frames))
         online_data_mask = torch.zeros(len(online_dataset), dtype=torch.bool)
         online_data_mask[torch.tensor(online_data_mask_indices)] = True
         weights.append(

@@ -225,9 +225,7 @@ class ZMQCamera(Camera):
         start_time = time.perf_counter()
 
         if color_mode is not None:
-            logger.warning(
-                f"{self} read() color_mode parameter is deprecated and will be removed in future versions."
-            )
+            logger.warning(f"{self} read() color_mode parameter is deprecated and will be removed in future versions.")
 
         if self.thread is None or not self.thread.is_alive():
             raise RuntimeError(f"{self} read thread is not running.")
@@ -361,9 +359,7 @@ class ZMQCamera(Camera):
 
         age_ms = (time.perf_counter() - timestamp) * 1e3
         if age_ms > max_age_ms:
-            raise TimeoutError(
-                f"{self} latest frame is too old: {age_ms:.1f} ms (max allowed: {max_age_ms} ms)."
-            )
+            raise TimeoutError(f"{self} latest frame is too old: {age_ms:.1f} ms (max allowed: {max_age_ms} ms).")
 
         return frame
 

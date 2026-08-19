@@ -52,6 +52,7 @@ Run on the station with a hand on the e-stop:
 """
 
 import argparse
+import contextlib
 import math
 import time
 from pathlib import Path
@@ -138,13 +139,24 @@ def _pose_err(req_pos, req_rot6, ach_pos, ach_rot6):
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--arm", choices=("left", "right"), default="left")
-    ap.add_argument("--recipe", default="recipes/teleop/bi_elite_cs66_rt/diagonal-08-xgripper.yaml",
-                    help="recipe YAML supplying the bench hardware (IPs, poses, mount rotation)")
-    ap.add_argument("--mode", choices=("wrist", "circle", "combo", "hold"), default="wrist",
-                    help="hold = keep the start pose fixed so you can hand-push the TCP to feel compliance")
-    ap.add_argument("--servoj-gain", type=int, default=None,
-                    help="override servoj position-following gain [100-2000]; lower = softer/more compliant "
-                         "(recipe default 300). Try 150 to feel a softer arm.")
+    ap.add_argument(
+        "--recipe",
+        default="recipes/teleop/bi_elite_cs66_rt/diagonal-08-xgripper.yaml",
+        help="recipe YAML supplying the bench hardware (IPs, poses, mount rotation)",
+    )
+    ap.add_argument(
+        "--mode",
+        choices=("wrist", "circle", "combo", "hold"),
+        default="wrist",
+        help="hold = keep the start pose fixed so you can hand-push the TCP to feel compliance",
+    )
+    ap.add_argument(
+        "--servoj-gain",
+        type=int,
+        default=None,
+        help="override servoj position-following gain [100-2000]; lower = softer/more compliant "
+        "(recipe default 300). Try 150 to feel a softer arm.",
+    )
     ap.add_argument("--duration", type=float, default=20.0, help="total streaming seconds (snapped to whole periods)")
     ap.add_argument("--period", type=float, default=4.0, help="seconds per oscillation / circle revolution")
     ap.add_argument("--rate", type=float, default=50.0, help="send_action stream rate (Hz)")
@@ -157,8 +169,12 @@ def main() -> None:
     # guard A/B
     ap.add_argument("--joint-vel-guard", action="store_true", help="enable predicted joint-velocity limit scaling")
     ap.add_argument("--margin", type=float, default=0.8, help="joint_vel_limit_margin (fraction of datasheet limits)")
-    ap.add_argument("--jv-lambda", type=float, default=1e-2,
-                    help="joint_vel_dls_lambda; smaller -> predicts the near-singularity spike harder/earlier")
+    ap.add_argument(
+        "--jv-lambda",
+        type=float,
+        default=1e-2,
+        help="joint_vel_dls_lambda; smaller -> predicts the near-singularity spike harder/earlier",
+    )
     ap.add_argument("--jv-horizon", type=float, default=0.033, help="joint_vel_horizon_s (~1/fps); shorter -> tighter")
     # safety
     ap.add_argument("--warn-qdot", type=float, default=2.0, help="flag ticks whose max|qdot| exceeds this (rad/s)")
@@ -171,26 +187,39 @@ def main() -> None:
     n_periods = max(1, round(args.duration / args.period))
     duration = n_periods * args.period
     params = {
-        "period": args.period, "duration": duration, "radius": args.radius, "plane": args.plane,
-        "max_rot_deg": args.max_rot_deg, "wrist_axis": args.wrist_axis,
+        "period": args.period,
+        "duration": duration,
+        "radius": args.radius,
+        "plane": args.plane,
+        "max_rot_deg": args.max_rot_deg,
+        "wrist_axis": args.wrist_axis,
     }
 
     print("Continuous-TCP-trajectory IK test")
     print(f"  arm / mount   : {args.arm} / {args.mount_type}")
     print(f"  mode          : {args.mode}")
-    print(f"  servoj_gain   : {args.servoj_gain if args.servoj_gain is not None else '300 (recipe default)'}"
-          + ("   (lower = softer)" if args.servoj_gain is not None else ""))
+    print(
+        f"  servoj_gain   : {args.servoj_gain if args.servoj_gain is not None else '300 (recipe default)'}"
+        + ("   (lower = softer)" if args.servoj_gain is not None else "")
+    )
     if args.mode == "hold":
-        print("  >> HOLD: arm holds the start pose. Push the TCP by hand to feel compliance;\n"
-              "     the 'track' readout = how far it yields (mm / deg). Push GENTLY.")
+        print(
+            "  >> HOLD: arm holds the start pose. Push the TCP by hand to feel compliance;\n"
+            "     the 'track' readout = how far it yields (mm / deg). Push GENTLY."
+        )
     print(f"  timing        : {duration:.1f}s = {n_periods}×{args.period:.1f}s period, {args.rate:.0f} Hz")
     if args.mode in ("wrist", "combo"):
         print(f"  orientation   : swing ±{args.max_rot_deg:.0f}° about tool-{args.wrist_axis} (amplitude ramps up)")
     if args.mode in ("circle", "combo"):
         print(f"  position      : {args.radius * 100:.0f} cm circle in world {args.plane} plane")
-    print(f"  joint-vel guard: {'ON' if args.joint_vel_guard else 'OFF (baseline)'}"
-          + (f"  ×margin {args.margin}, λ={args.jv_lambda:g}, horizon={args.jv_horizon:g}s"
-             if args.joint_vel_guard else ""))
+    print(
+        f"  joint-vel guard: {'ON' if args.joint_vel_guard else 'OFF (baseline)'}"
+        + (
+            f"  ×margin {args.margin}, λ={args.jv_lambda:g}, horizon={args.jv_horizon:g}s"
+            if args.joint_vel_guard
+            else ""
+        )
+    )
 
     if args.dry_run:
         print("\n[dry-run] not connecting / not moving. Plan above.")
@@ -223,8 +252,10 @@ def main() -> None:
 
     side = args.arm
     robot = BiEliteCS66RT(cfg)
-    print("\nConnecting (powers on both arms; "
-          f"{'NOT moving to start' if args.no_go_to_start else 'MoveJ both to start'})...")
+    print(
+        "\nConnecting (powers on both arms; "
+        f"{'NOT moving to start' if args.no_go_to_start else 'MoveJ both to start'})..."
+    )
     robot.connect(go_to_start=not args.no_go_to_start)
 
     # Capture controller-side errors/warnings host-side (e.g. "External Control speed limit",
@@ -234,13 +265,13 @@ def main() -> None:
 
     def _on_ctrl_exception(exc):
         parts = []
-        for attr in ("getErrorCode", "getSubErrorCode", "getErrorLevel", "getErrorSouce", "getMessage"):
+        for attr in ("getErrorCode", "getSubErrorCode", "getErrorLevel", "getErrorSource", "getMessage"):
             fn = getattr(exc, attr, None)
             if fn is not None:
-                try:
+                # Each accessor is optional and may itself throw; a field we
+                # cannot read just does not appear in the message.
+                with contextlib.suppress(Exception):
                     parts.append(f"{attr[3:]}={fn()}")
-                except Exception:
-                    pass
         msg = "  ".join(parts) or str(exc)
         ctrl_events.append(msg)
         print(f"[CTRL-EVENT] {msg}", flush=True)
@@ -313,9 +344,11 @@ def main() -> None:
                 last_log = t
                 flag = "  <-- HIGH qdot" if max_qdot > args.warn_qdot else ""
                 wtxt = f"{w:7.4f}" if not math.isnan(w) else "   n/a "
-                print(f"t={t:5.2f}s q5={math.degrees(q[4]):+6.1f}°  w={wtxt}  "
-                      f"max|qdot|={max_qdot:5.2f} rad/s (J{j_hot})  "
-                      f"track=({track[0]:5.1f}mm,{track[1]:4.1f}°){flag}")
+                print(
+                    f"t={t:5.2f}s q5={math.degrees(q[4]):+6.1f}°  w={wtxt}  "
+                    f"max|qdot|={max_qdot:5.2f} rad/s (J{j_hot})  "
+                    f"track=({track[0]:5.1f}mm,{track[1]:4.1f}°){flag}"
+                )
 
             next_tick += dt
             sleep_s = next_tick - time.monotonic()
@@ -327,15 +360,21 @@ def main() -> None:
         print("\n===== summary =====")
         print(f"  mode / guard      : {args.mode} / {'ON' if args.joint_vel_guard else 'OFF'}")
         print(f"  tripped (hard)    : {'YES (controller dropped external control)' if tripped else 'no'}")
-        print(f"  controller events : {len(ctrl_events)}"
-              + ("   <-- pendant-style errors/warnings caught host-side!" if ctrl_events else " (none)"))
+        print(
+            f"  controller events : {len(ctrl_events)}"
+            + ("   <-- pendant-style errors/warnings caught host-side!" if ctrl_events else " (none)")
+        )
         for m in ctrl_events[:8]:
             print(f"      - {m}")
-        print(f"  max |qdot| seen   : {max_qdot_all:.2f} rad/s  "
-              f"(datasheet min limit {CS66_QDOT_LIMIT.min():.2f}, controller trip 30.0)")
+        print(
+            f"  max |qdot| seen   : {max_qdot_all:.2f} rad/s  "
+            f"(datasheet min limit {CS66_QDOT_LIMIT.min():.2f}, controller trip 30.0)"
+        )
         print(f"  min w (manip.)    : {'n/a' if math.isinf(min_w) else f'{min_w:.4f}'}")
-        print(f"  worst tracking err: {worst_track[0]:.1f} mm / {worst_track[1]:.1f}°"
-              + ("   (large err near low w = guard holding / IK struggling)" if worst_track[1] > 3 else ""))
+        print(
+            f"  worst tracking err: {worst_track[0]:.1f} mm / {worst_track[1]:.1f}°"
+            + ("   (large err near low w = guard holding / IK struggling)" if worst_track[1] > 3 else "")
+        )
     finally:
         print("\nReturning home / disconnecting...")
         robot.disconnect()

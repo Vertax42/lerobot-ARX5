@@ -41,9 +41,9 @@ class XenseWristCamera(OpenCVCamera):
         super().__init__(config)
         self.undistort = config.undistort
         self.fisheye_balance = config.fisheye_balance
-        self._calibration = None   # xense.taccap.CameraFisheyeCal
+        self._calibration = None  # xense.taccap.CameraFisheyeCal
         self._calibration_is_reference = False
-        self._undistorter = None   # xense.taccap.FisheyeUndistorter
+        self._undistorter = None  # xense.taccap.FisheyeUndistorter
 
     # -- calibration handed in from the gripper ------------------------------
     def set_fisheye_calibration(self, calibration, *, is_reference: bool = False) -> None:

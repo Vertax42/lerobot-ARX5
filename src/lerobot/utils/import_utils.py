@@ -141,9 +141,7 @@ def make_device_from_device_class(config: ChoiceRegistry) -> Any:
                 try:
                     return attr(config)
                 except TypeError as e:
-                    raise TypeError(
-                        f"Failed to instantiate '{attr_name}' from module '{candidate}': {e}"
-                    ) from e
+                    raise TypeError(f"Failed to instantiate '{attr_name}' from module '{candidate}': {e}") from e
 
         # 2) Remember the name-based fallback but keep searching other candidates
         # in case a later module declares config_class.
@@ -157,9 +155,7 @@ def make_device_from_device_class(config: ChoiceRegistry) -> Any:
         try:
             return cls(config)
         except TypeError as e:
-            raise TypeError(
-                f"Failed to instantiate '{cls.__name__}' from module '{candidate}': {e}"
-            ) from e
+            raise TypeError(f"Failed to instantiate '{cls.__name__}' from module '{candidate}': {e}") from e
 
     raise ImportError(
         f"Could not locate device class for config '{config_name}' (no class with "

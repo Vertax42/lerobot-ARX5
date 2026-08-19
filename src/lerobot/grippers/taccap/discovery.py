@@ -45,11 +45,11 @@ _WRIST_NAME_PREFIX = "XC"  # wrist V4L2 name = "XC" + gripper SN minus product c
 
 @dataclass
 class TaccapSideDevices:
-    side: str                      # "left" | "right"
-    firmware_sn: str               # gripper SN, e.g. "TCGU01A25Z0011s"
-    mcu_device: str                # e.g. "/dev/serial/by-id/usb-1a86_...-if02"
-    usb_hub: str                   # e.g. "1-3"
-    wrist_camera_name: str         # e.g. "XCA25Z0011s" (V4L2 device name)
+    side: str  # "left" | "right"
+    firmware_sn: str  # gripper SN, e.g. "TCGU01A25Z0011s"
+    mcu_device: str  # e.g. "/dev/serial/by-id/usb-1a86_...-if02"
+    usb_hub: str  # e.g. "1-3"
+    wrist_camera_name: str  # e.g. "XCA25Z0011s" (V4L2 device name)
     tactile_sns: list[str] = field(default_factory=list)  # ordered GSPS serials
 
 
@@ -89,7 +89,7 @@ def discover_taccap_sides() -> dict[str, TaccapSideDevices]:
             continue
         parsed = taccap.parse_serial(eps.firmware_sn)
         product = parsed.product or "TCGU01"
-        wrist_name = _WRIST_NAME_PREFIX + eps.firmware_sn[len(product):]
+        wrist_name = _WRIST_NAME_PREFIX + eps.firmware_sn[len(product) :]
         hub = hub_of_serial_device(eps.mcu_device)
         if hub is None:
             raise RuntimeError(

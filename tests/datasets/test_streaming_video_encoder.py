@@ -435,17 +435,13 @@ class TestStreamingVideoEncoder:
             with av.open(str(mp4_path)) as container:
                 stream = container.streams.video[0]
                 total_frames = sum(1 for _ in container.decode(stream))
-            assert total_frames == num_frames, (
-                f"Camera {key}: expected {num_frames} frames, got {total_frames}"
-            )
+            assert total_frames == num_frames, f"Camera {key}: expected {num_frames} frames, got {total_frames}"
 
         encoder.close()
 
     def test_encoder_threads_passed_to_thread(self, tmp_path):
         """Test that encoder_threads is stored and passed through to encoder threads."""
-        encoder = StreamingVideoEncoder(
-            fps=30, vcodec="libsvtav1", pix_fmt="yuv420p", g=2, crf=30, encoder_threads=2
-        )
+        encoder = StreamingVideoEncoder(fps=30, vcodec="libsvtav1", pix_fmt="yuv420p", g=2, crf=30, encoder_threads=2)
         assert encoder.encoder_threads == 2
 
         video_keys = [f"{OBS_IMAGES}.cam"]

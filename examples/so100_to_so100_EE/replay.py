@@ -85,8 +85,7 @@ def main():
 
             # Get recorded action from dataset
             ee_action = {
-                name: float(actions[idx][ACTION][i])
-                for i, name in enumerate(dataset.features[ACTION]["names"])
+                name: float(actions[idx][ACTION][i]) for i, name in enumerate(dataset.features[ACTION]["names"])
             }
 
             # Get robot observation

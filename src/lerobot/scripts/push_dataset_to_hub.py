@@ -58,6 +58,7 @@ def setup_logging():
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+
 def push_dataset_to_hub(
     dataset_path: Path,
     repo_id: str,
@@ -125,9 +126,7 @@ def push_dataset_to_hub(
         logging.info("  - Make sure you are logged in with: huggingface-cli login")
         raise
 
-    logging.info(
-        f"✅ Dataset successfully pushed to: https://huggingface.co/datasets/{repo_id}"
-    )
+    logging.info(f"✅ Dataset successfully pushed to: https://huggingface.co/datasets/{repo_id}")
 
 
 def main():

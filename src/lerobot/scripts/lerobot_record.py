@@ -175,11 +175,7 @@ def _format_slow_frame_obs_suffix(robot: Robot | None) -> str:
     cam_items = [
         (key[4:-4], float(value))
         for key, value in timing.items()
-        if (
-            key.startswith("cam[")
-            and key.endswith("]_ms")
-            and isinstance(value, (int, float))
-        )
+        if (key.startswith("cam[") and key.endswith("]_ms") and isinstance(value, (int, float)))
     ]
     cam_items.sort(key=lambda item: item[1], reverse=True)
 
@@ -189,9 +185,7 @@ def _format_slow_frame_obs_suffix(robot: Robot | None) -> str:
         visible_obs_items = [item for item in obs_part_items if item[1] >= 0.1]
         if not visible_obs_items:
             visible_obs_items = obs_part_items
-        top_parts = ", ".join(
-            f"{name}={value:.1f}ms" for name, value in visible_obs_items[:4]
-        )
+        top_parts = ", ".join(f"{name}={value:.1f}ms" for name, value in visible_obs_items[:4])
         parts.append(f"top_obs={top_parts}")
 
     return f" | {' '.join(parts)}" if parts else ""
@@ -215,9 +209,7 @@ def _record_loop_sleep(
 
     episode_t_s = time.perf_counter() - start_episode_t
     robot_name = (
-        getattr(robot, "name", None) or getattr(type(robot), "__name__", "record")
-        if robot is not None
-        else "record"
+        getattr(robot, "name", None) or getattr(type(robot), "__name__", "record") if robot is not None else "record"
     )
     logger.warn(
         f"[slow_frame] robot={robot_name} t={episode_t_s:.3f}s "
@@ -242,9 +234,7 @@ def _start_reset_in_background(robot, teleop, set_done):
     Calls set_done() in the finally block so the caller can clear any
     resetting flag regardless of success or failure.
     """
-    logger.info(
-        "Starting reset_to_initial_position in background (A button pressed)..."
-    )
+    logger.info("Starting reset_to_initial_position in background (A button pressed)...")
 
     def _thread():
         try:
@@ -298,9 +288,7 @@ def _use_raw_passthrough_record(robot_type: str, teleop_type: str | None) -> boo
     return (robot_type, teleop_type) in RAW_PASSTHROUGH_RECORD_PAIRS
 
 
-def _build_raw_passthrough_dataset_features(
-    robot: Robot, use_videos: bool
-) -> dict[str, dict]:
+def _build_raw_passthrough_dataset_features(robot: Robot, use_videos: bool) -> dict[str, dict]:
     return combine_feature_dicts(
         hw_to_dataset_features(robot.action_features, ACTION, use_videos),
         hw_to_dataset_features(robot.observation_features, OBS_STR, use_videos),
@@ -459,9 +447,7 @@ def record_loop(
             dataset.add_frame(frame)
 
         if display_data:
-            log_rerun_data(
-                observation=obs, action=action_values, compress_images=display_compressed_images
-            )
+            log_rerun_data(observation=obs, action=action_values, compress_images=display_compressed_images)
 
         dt_s = time.perf_counter() - start_loop_t
 
@@ -488,9 +474,7 @@ def flexiv_rizon4_rt_record_loop(
     display_data: bool = False,
 ):
     if dataset is not None and dataset.fps != fps:
-        raise ValueError(
-            f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
-        )
+        raise ValueError(f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps}).")
 
     if isinstance(teleop, list):
         raise ValueError("Multi-teleop mode is not supported in this version.")
@@ -522,9 +506,7 @@ def flexiv_rizon4_rt_record_loop(
             events["go_start"] = False
             if hasattr(robot, "reset_to_initial_position"):
                 try:
-                    logger.info(
-                        "Reset to initial position (keyboard or controller button)"
-                    )
+                    logger.info("Reset to initial position (keyboard or controller button)")
                     robot.reset_to_initial_position()
                     reset_triggered = True
                 except Exception as e:
@@ -534,9 +516,7 @@ def flexiv_rizon4_rt_record_loop(
         current_observation_frame = None
 
         if dataset is not None:
-            current_observation_frame = build_dataset_frame(
-                dataset.features, current_observation, prefix=OBS_STR
-            )
+            current_observation_frame = build_dataset_frame(dataset.features, current_observation, prefix=OBS_STR)
 
         robot_is_moving = hasattr(robot, "rt_moving") and robot.rt_moving
         if robot_is_moving:
@@ -554,9 +534,7 @@ def flexiv_rizon4_rt_record_loop(
         if isinstance(teleop, Teleoperator):
             teleop_action = teleop.get_action()
 
-            if reset_triggered:
-                sent_action = teleop_action  # not sent, used only for display
-            elif robot_is_moving:
+            if reset_triggered or robot_is_moving:
                 sent_action = teleop_action  # not sent, used only for display
             else:
                 sent_action = robot.send_action(teleop_action)
@@ -569,13 +547,9 @@ def flexiv_rizon4_rt_record_loop(
                     # left/right TCP pose 9D + gripper 1D = 20D). Images and other obs keys are
                     # excluded because we iterate over robot.action_features, not current_observation.
                     current_as_action = {
-                        k: current_observation[k]
-                        for k in robot.action_features
-                        if k in current_observation
+                        k: current_observation[k] for k in robot.action_features if k in current_observation
                     }
-                    action_frame = build_dataset_frame(
-                        dataset.features, current_as_action, prefix=ACTION
-                    )
+                    action_frame = build_dataset_frame(dataset.features, current_as_action, prefix=ACTION)
                     frame = {
                         **prev_observation_frame,
                         **action_frame,
@@ -584,9 +558,7 @@ def flexiv_rizon4_rt_record_loop(
                     dataset.add_frame(frame)
                 elif not robot_is_moving:
                     # Normal teleop: direct frame (obs[t], sent_action[t]).
-                    action_frame = build_dataset_frame(
-                        dataset.features, sent_action, prefix=ACTION
-                    )
+                    action_frame = build_dataset_frame(dataset.features, sent_action, prefix=ACTION)
                     frame = {
                         **current_observation_frame,
                         **action_frame,
@@ -648,9 +620,7 @@ def elite_cs66_rt_record_loop(
       the robot's current TCP so the next send_action doesn't jump.
     """
     if dataset is not None and dataset.fps != fps:
-        raise ValueError(
-            f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps})."
-        )
+        raise ValueError(f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps}).")
     if isinstance(teleop, list):
         raise ValueError("Multi-teleop mode is not supported for elite_cs66_rt.")
 
@@ -683,10 +653,7 @@ def elite_cs66_rt_record_loop(
         trigger_reset = bool(events["go_start"])
         if isinstance(teleop, Teleoperator):
             if teleop_name == "spacemouse":
-                both = (
-                    teleop._spacemouse.is_left_button_pressed()
-                    and teleop._spacemouse.is_right_button_pressed()
-                )
+                both = teleop._spacemouse.is_left_button_pressed() and teleop._spacemouse.is_right_button_pressed()
                 if both and not both_buttons_prev:
                     trigger_reset = True
                 both_buttons_prev = both
@@ -707,9 +674,7 @@ def elite_cs66_rt_record_loop(
         current_observation = robot.get_observation()
         current_observation_frame = None
         if dataset is not None:
-            current_observation_frame = build_dataset_frame(
-                dataset.features, current_observation, prefix=OBS_STR
-            )
+            current_observation_frame = build_dataset_frame(dataset.features, current_observation, prefix=OBS_STR)
 
         robot_is_moving = hasattr(robot, "rt_moving") and robot.rt_moving
         if robot_is_moving:
@@ -739,13 +704,9 @@ def elite_cs66_rt_record_loop(
                     # has something well-defined during the autonomous RT
                     # trajectory.
                     current_as_action = {
-                        k: current_observation[k]
-                        for k in robot.action_features
-                        if k in current_observation
+                        k: current_observation[k] for k in robot.action_features if k in current_observation
                     }
-                    action_frame = build_dataset_frame(
-                        dataset.features, current_as_action, prefix=ACTION
-                    )
+                    action_frame = build_dataset_frame(dataset.features, current_as_action, prefix=ACTION)
                     frame = {
                         **prev_observation_frame,
                         **action_frame,
@@ -753,9 +714,7 @@ def elite_cs66_rt_record_loop(
                     }
                     dataset.add_frame(frame)
                 elif not robot_is_moving:
-                    action_frame = build_dataset_frame(
-                        dataset.features, sent_action, prefix=ACTION
-                    )
+                    action_frame = build_dataset_frame(dataset.features, sent_action, prefix=ACTION)
                     frame = {
                         **current_observation_frame,
                         **action_frame,
@@ -895,9 +854,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             robot.connect(go_to_start=True)
             start_obs = robot.get_observation()
             tcp_keys = [k for k in start_obs if k.startswith("tcp.")]
-            logger.info(
-                "Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys)
-            )
+            logger.info("Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys))
         else:
             robot.connect()
 

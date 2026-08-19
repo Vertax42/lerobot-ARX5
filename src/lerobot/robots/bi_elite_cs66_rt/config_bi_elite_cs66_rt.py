@@ -24,9 +24,9 @@ from enum import Enum
 from pathlib import Path
 
 from lerobot.cameras.configs import CameraConfig
+from lerobot.grippers import GripperConfig
 from lerobot.robots.config import RobotConfig
 from lerobot.robots.elite_cs66_rt.config_elite_cs66_rt import _validate_singularity_params
-from lerobot.grippers import GripperConfig
 
 ROBOT_TYPE = "bi_elite_cs66_rt"
 
@@ -58,7 +58,7 @@ class BiEliteCS66RTConfig(RobotConfig):
     # ── Per-arm identity / connection ──
     left_robot_ip: str = ""
     right_robot_ip: str = ""
-    left_local_ip: str = ""   # "" lets the OS route; set to pin the host NIC for RTSI
+    left_local_ip: str = ""  # "" lets the OS route; set to pin the host NIC for RTSI
     right_local_ip: str = ""
 
     # ── Per-arm mounting → base↔world rotation ──
@@ -194,18 +194,10 @@ class BiEliteCS66RTConfig(RobotConfig):
     # Defaults are the single-arm candle pose; every real bench overrides all four
     # in its recipe (the arms are mounted at an angle, so the candle is not a
     # usable start there).
-    left_start_position_rad: list[float] = field(
-        default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
-    )
-    right_start_position_rad: list[float] = field(
-        default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
-    )
-    left_home_position_rad: list[float] = field(
-        default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
-    )
-    right_home_position_rad: list[float] = field(
-        default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
-    )
+    left_start_position_rad: list[float] = field(default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0])
+    right_start_position_rad: list[float] = field(default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0])
+    left_home_position_rad: list[float] = field(default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0])
+    right_home_position_rad: list[float] = field(default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0])
     start_move_duration_s: float = 3.0
     home_move_duration_s: float = 3.0
     # Controller-side reverse-socket recv budget for trajectory (MoveJ) commands.
@@ -322,20 +314,14 @@ class BiEliteCS66RTConfig(RobotConfig):
             if len(self.payload_cog) != 3:
                 raise ValueError(f"payload_cog must have 3 elements [x, y, z] (m), got {self.payload_cog}")
         if not 0.002 <= self.servoj_time <= 0.01:
-            raise ValueError(
-                "servoj_time must be in [0.002, 0.01] s (CS-series RT envelope), "
-                f"got {self.servoj_time}"
-            )
+            raise ValueError(f"servoj_time must be in [0.002, 0.01] s (CS-series RT envelope), got {self.servoj_time}")
         if not 0.03 <= self.servoj_lookahead_time <= 0.2:
             raise ValueError(
                 "servoj_lookahead_time must be in [0.03, 0.2] (Elite SDK requirement), "
                 f"got {self.servoj_lookahead_time}"
             )
         if not 100 <= self.servoj_gain <= 2000:
-            raise ValueError(
-                "servoj_gain must be in [100, 2000] (Elite SDK requirement), "
-                f"got {self.servoj_gain}"
-            )
+            raise ValueError(f"servoj_gain must be in [100, 2000] (Elite SDK requirement), got {self.servoj_gain}")
         for _name, _val in (
             ("max_lin_speed", self.max_lin_speed),
             ("max_ang_speed", self.max_ang_speed),
@@ -345,13 +331,9 @@ class BiEliteCS66RTConfig(RobotConfig):
                 raise ValueError(f"{_name} must be > 0 when set (None disables it), got {_val}")
         _validate_singularity_params(self)
         if self.command_timeout_ms < 5:
-            raise ValueError(
-                f"command_timeout_ms must be >= 5 (Elite SDK lower bound), got {self.command_timeout_ms}"
-            )
+            raise ValueError(f"command_timeout_ms must be >= 5 (Elite SDK lower bound), got {self.command_timeout_ms}")
         if self.command_stale_timeout_s <= 0:
-            raise ValueError(
-                f"command_stale_timeout_s must be > 0, got {self.command_stale_timeout_s}"
-            )
+            raise ValueError(f"command_stale_timeout_s must be > 0, got {self.command_stale_timeout_s}")
         if self.command_stale_timeout_s * 1000 < self.command_timeout_ms:
             raise ValueError(
                 "command_stale_timeout_s * 1000 must be >= command_timeout_ms "
@@ -366,27 +348,18 @@ class BiEliteCS66RTConfig(RobotConfig):
         if self.connect_timeout_s <= 0:
             raise ValueError(f"connect_timeout_s must be > 0, got {self.connect_timeout_s}")
         if self.start_move_duration_s <= 0:
-            raise ValueError(
-                f"start_move_duration_s must be > 0, got {self.start_move_duration_s}"
-            )
+            raise ValueError(f"start_move_duration_s must be > 0, got {self.start_move_duration_s}")
         if self.home_move_duration_s <= 0:
-            raise ValueError(
-                f"home_move_duration_s must be > 0, got {self.home_move_duration_s}"
-            )
+            raise ValueError(f"home_move_duration_s must be > 0, got {self.home_move_duration_s}")
         if self.move_j_timeout_ms < 5:
             raise ValueError(
                 f"move_j_timeout_ms must be >= 5 (Elite SDK lower bound; mirrors "
                 f"command_timeout_ms), got {self.move_j_timeout_ms}"
             )
         if self.external_control_settle_s < 0:
-            raise ValueError(
-                f"external_control_settle_s must be >= 0, got {self.external_control_settle_s}"
-            )
+            raise ValueError(f"external_control_settle_s must be >= 0, got {self.external_control_settle_s}")
         if self.servo_failure_tolerance_ticks < 1:
-            raise ValueError(
-                f"servo_failure_tolerance_ticks must be >= 1, "
-                f"got {self.servo_failure_tolerance_ticks}"
-            )
+            raise ValueError(f"servo_failure_tolerance_ticks must be >= 1, got {self.servo_failure_tolerance_ticks}")
         # Each arm uses a 4-port block based at SDK defaults 50001..50004 plus its
         # offset. The two blocks must not overlap (|Δoffset| >= 4) and must stay in
         # the unprivileged TCP range.
@@ -394,7 +367,7 @@ class BiEliteCS66RTConfig(RobotConfig):
             ("left_driver_port_offset", self.left_driver_port_offset),
             ("right_driver_port_offset", self.right_driver_port_offset),
         ):
-            if not (0 <= 50001 + off and 50004 + off <= 65535):
+            if not (50001 + off >= 0 and 50004 + off <= 65535):
                 raise ValueError(
                     f"{name}={off} pushes EliteDriver ports outside the valid TCP range "
                     "(50001..50004 + offset must stay within 1024..65535)"
@@ -406,10 +379,7 @@ class BiEliteCS66RTConfig(RobotConfig):
                 f"not overlap; got left={self.left_driver_port_offset}, "
                 f"right={self.right_driver_port_offset}"
             )
-        if (
-            self.use_background_servo_loop
-            and self.control_mode != BiEliteCS66RTControlMode.CARTESIAN_SERVO
-        ):
+        if self.use_background_servo_loop and self.control_mode != BiEliteCS66RTControlMode.CARTESIAN_SERVO:
             raise ValueError(
                 "use_background_servo_loop=True is only supported with control_mode=CARTESIAN_SERVO. "
                 "Set use_background_servo_loop=False for joint servo mode."

@@ -1,0 +1,31 @@
+# Words this project uses that the checker misreads. Everything here was looked
+# at in place — a blanket ignore would hide the real ones, and there were three.
+
+[default.extend-words]
+# Simple Open EtherCAT Master, the library ARX5 builds against
+# (conda-forge::soem). Appears as both the package and the project name.
+SOEM = "SOEM"
+soem = "soem"
+# Loop variable for an output type: `any(ot in image_outputs for ot in ...)`.
+ot = "ot"
+# Conventional short name for a pyserial handle: `ser: serial.Serial`.
+ser = "ser"
+# Ordinal inside a Dynamixel register name: "Feedforward_2nd_Gain".
+nd = "nd"
+# Shepperd's method — the quaternion-from-rotation-matrix algorithm, named
+# after its author.
+Shepperd = "Shepperd"
+# ROBOTIS, the company that makes Dynamixel servos.
+ROBOTIS = "ROBOTIS"
+# torchvision v2 transforms name their argument `inpt`; we match the API.
+inpt = "inpt"
+# "mis-indexed", split at the hyphen.
+mis = "mis"
+# "PNGs", split before the plural.
+PN = "PN"
+
+[default.extend-identifiers]
+# Elite's SDK spells FIFO scheduling this way. Listed as identifiers rather than
+# words because the checker splits them and flags the inner "Fo".
+getThreadFiFoMaxPriority = "getThreadFiFoMaxPriority"
+setCurrentThreadFiFoScheduling = "setCurrentThreadFiFoScheduling"

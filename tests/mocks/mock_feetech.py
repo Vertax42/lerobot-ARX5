@@ -160,9 +160,7 @@ class MockInstructionPacket(MockFeetechPacket):
         """
         params = [start_address, data_length, *scs_ids]
         length = len(scs_ids) + 4
-        return cls.build(
-            scs_id=scs.BROADCAST_ID, params=params, length=length, instruction=scs.INST_SYNC_READ
-        )
+        return cls.build(scs_id=scs.BROADCAST_ID, params=params, length=length, instruction=scs.INST_SYNC_READ)
 
     @classmethod
     def sync_write(
@@ -200,9 +198,7 @@ class MockInstructionPacket(MockFeetechPacket):
             data += [id_, *split_value]
         params = [start_address, data_length, *data]
         length = len(ids_values) * (1 + data_length) + 4
-        return cls.build(
-            scs_id=scs.BROADCAST_ID, params=params, length=length, instruction=scs.INST_SYNC_WRITE
-        )
+        return cls.build(scs_id=scs.BROADCAST_ID, params=params, length=length, instruction=scs.INST_SYNC_WRITE)
 
 
 class MockStatusPacket(MockFeetechPacket):
@@ -380,9 +376,7 @@ class MockMotors(MockSerial):
     ) -> str:
         sync_read_request = MockInstructionPacket.sync_read(list(ids_values), address, length)
         return_packets = (
-            b"".join(MockStatusPacket.read(id_, pos, length) for id_, pos in ids_values.items())
-            if reply
-            else b""
+            b"".join(MockStatusPacket.read(id_, pos, length) for id_, pos in ids_values.items()) if reply else b""
         )
         sync_read_response = self._build_send_fn(return_packets, num_invalid_try)
         stub_name = f"Sync_Read_{address}_{length}_" + "_".join([str(id_) for id_ in ids_values])

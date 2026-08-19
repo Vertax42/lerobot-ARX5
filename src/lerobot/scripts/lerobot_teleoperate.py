@@ -140,9 +140,9 @@ from lerobot.teleoperators import (  # noqa: F401
 )
 from lerobot.utils.import_utils import register_third_party_plugins
 from lerobot.utils.robot_utils import (
+    busy_wait,
     get_logger,
     precise_sleep,
-    busy_wait,
 )
 from lerobot.utils.utils import move_cursor_up
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
@@ -320,6 +320,7 @@ def teleop_loop(
 # Specialised teleop loops
 # ---------------------------------------------------------------------------
 
+
 def mock_robot_teleop_loop(
     teleop: Teleoperator,
     robot: Robot,
@@ -352,16 +353,12 @@ def mock_robot_teleop_loop(
         teleop_action = raw_action
 
         # Keep only keys known by mock robot action schema.
-        filtered_action = {
-            k: v for k, v in teleop_action.items() if k in robot_action_keys
-        }
+        filtered_action = {k: v for k, v in teleop_action.items() if k in robot_action_keys}
         if not filtered_action and teleop_action:
             filtered_action = teleop_action
         elif len(filtered_action) != len(teleop_action) and not warned_unmapped_keys:
             dropped = sorted(set(teleop_action) - robot_action_keys)
-            logger.warn(
-                f"Action keys not present in mock robot action schema, dropping: {dropped}"
-            )
+            logger.warn(f"Action keys not present in mock robot action schema, dropping: {dropped}")
             warned_unmapped_keys = True
 
         robot_action_to_send = filtered_action
@@ -377,32 +374,22 @@ def mock_robot_teleop_loop(
             obs_transition = obs
             log_rerun_data(observation=obs_transition, action=teleop_action)
 
-            ordered_keys = [
-                k for k in robot.action_features if k in robot_action_to_send
-            ]
-            ordered_keys.extend(
-                k for k in robot_action_to_send if k not in ordered_keys
-            )
+            ordered_keys = [k for k in robot.action_features if k in robot_action_to_send]
+            ordered_keys.extend(k for k in robot_action_to_send if k not in ordered_keys)
 
             panel_lines = []
             panel_lines.append("-" * (display_len + 38))
-            panel_lines.append(
-                f"{'NAME':<{display_len}} | {'CMD':>8} | {'OBS':>8} | {'ERR':>8}"
-            )
+            panel_lines.append(f"{'NAME':<{display_len}} | {'CMD':>8} | {'OBS':>8} | {'ERR':>8}")
             for motor in ordered_keys:
                 cmd = float(robot_action_to_send[motor])
                 obs_val = obs.get(motor, None)
                 if obs_val is None or isinstance(obs_val, np.ndarray):
-                    panel_lines.append(
-                        f"{motor:<{display_len}} | {cmd:>8.4f} | {'-':>8} | {'-':>8}"
-                    )
+                    panel_lines.append(f"{motor:<{display_len}} | {cmd:>8.4f} | {'-':>8} | {'-':>8}")
                     continue
 
                 obs_num = float(obs_val)
                 err = cmd - obs_num
-                panel_lines.append(
-                    f"{motor:<{display_len}} | {cmd:>8.4f} | {obs_num:>8.4f} | {err:>+8.4f}"
-                )
+                panel_lines.append(f"{motor:<{display_len}} | {cmd:>8.4f} | {obs_num:>8.4f} | {err:>+8.4f}")
 
             panel_lines.append(
                 f"{'timing':<{display_len}} | {'loop':>8} | {loop_s * 1e3:>6.2f}ms | {obs_dt_ms:>6.2f}ms"
@@ -419,9 +406,7 @@ def mock_robot_teleop_loop(
                 flush=True,
             )
         elif not display_data:
-            action_summary = " ".join(
-                f"{k}={float(v):+.3f}" for k, v in robot_action_to_send.items()
-            )
+            action_summary = " ".join(f"{k}={float(v):+.3f}" for k, v in robot_action_to_send.items())
             dryrun_tag = "[DRYRUN] " if dryrun else ""
             print(
                 f"\r\033[K{dryrun_tag}{loop_s * 1e3:5.1f}ms ({1 / loop_s:4.0f}Hz) | {action_summary}",
@@ -459,13 +444,9 @@ def arx5_teleop_loop(
     is_single_arm = hasattr(robot, "arm") and not is_bimanual
 
     if not is_bimanual and not is_single_arm:
-        raise ValueError(
-            "Robot must have either 'arm' (single) or 'left_arm'/'right_arm' (bimanual)"
-        )
+        raise ValueError("Robot must have either 'arm' (single) or 'left_arm'/'right_arm' (bimanual)")
 
-    camera_keys = [
-        key for key in robot.observation_features.keys() if not key.endswith(".pos")
-    ]
+    camera_keys = [key for key in robot.observation_features.keys() if not key.endswith(".pos")]
     for cam_key in camera_keys:
         timing_stats["camera_obs_times"][cam_key] = []
 
@@ -536,12 +517,8 @@ def arx5_teleop_loop(
 
             if not debug_timing:
                 if is_bimanual:
-                    left_motors = {
-                        k: v for k, v in raw_action.items() if k.startswith("left_")
-                    }
-                    right_motors = {
-                        k: v for k, v in raw_action.items() if k.startswith("right_")
-                    }
+                    left_motors = {k: v for k, v in raw_action.items() if k.startswith("left_")}
+                    right_motors = {k: v for k, v in raw_action.items() if k.startswith("right_")}
                     col_width = 25
                     print("\n" + "-" * (col_width * 2 + 3))
                     print(f"{'LEFT ARM':<{col_width}} | {'RIGHT ARM':<{col_width}}")
@@ -584,11 +561,7 @@ def arx5_teleop_loop(
             print()
             num_cameras = len(camera_times)
             for cam_key, cam_time_ms in camera_times.items():
-                speed = (
-                    "SLOW"
-                    if cam_time_ms > 10
-                    else ("MED " if cam_time_ms > 5 else "FAST")
-                )
+                speed = "SLOW" if cam_time_ms > 10 else ("MED " if cam_time_ms > 5 else "FAST")
                 print(f"  {speed} {cam_key:12}: {cam_time_ms:5.1f}ms")
             print()
             print(f"Total observation: {total_obs_time * 1000:.1f}ms")
@@ -601,9 +574,7 @@ def arx5_teleop_loop(
                 print(f"SLOW CAMERAS DETECTED! Total: {total_camera_time_ms:.1f}ms")
                 extra_warning_lines = 2
             print("=" * 50)
-            total_lines = (
-                1 + 1 + 1 + 2 + 1 + num_cameras + 1 + 4 + extra_warning_lines + 1
-            )
+            total_lines = 1 + 1 + 1 + 2 + 1 + num_cameras + 1 + 4 + extra_warning_lines + 1
             move_cursor_up(total_lines)
         else:
             if total_camera_time_ms > 20:
@@ -624,9 +595,7 @@ def arx5_teleop_loop(
                 print(f"Loop time - avg: {sum(all_loops) / len(all_loops):.2f}ms")
                 for cam_key, cam_times in timing_stats["camera_obs_times"].items():
                     if cam_times:
-                        print(
-                            f"{cam_key} - avg: {sum(cam_times) / len(cam_times):.2f}ms"
-                        )
+                        print(f"{cam_key} - avg: {sum(cam_times) / len(cam_times):.2f}ms")
             return
 
 
@@ -647,9 +616,7 @@ def arx5_trlc_leader_teleop_loop(
     """
     # ARX5 trlc leader loop currently supports single-arm follower only.
     if hasattr(robot, "left_arm") and hasattr(robot, "right_arm"):
-        raise ValueError(
-            "TRLC leader teleoperation currently supports arx5_follower only, not bi_arx5."
-        )
+        raise ValueError("TRLC leader teleoperation currently supports arx5_follower only, not bi_arx5.")
 
     display_len = max(len(key) for key in robot.action_features)
     start = time.perf_counter()
@@ -669,14 +636,10 @@ def arx5_trlc_leader_teleop_loop(
                 raw_action[k] = (1 - raw_action[k]) * 1.57
         teleop_action = raw_action
 
-        filtered_action = {
-            k: v for k, v in teleop_action.items() if k in robot_action_keys
-        }
+        filtered_action = {k: v for k, v in teleop_action.items() if k in robot_action_keys}
         if len(filtered_action) != len(teleop_action) and not warned_unmapped_keys:
             dropped = sorted(set(teleop_action) - robot_action_keys)
-            logger.warn(
-                f"TRLC action keys not present in ARX5 action schema, dropping: {dropped}"
-            )
+            logger.warn(f"TRLC action keys not present in ARX5 action schema, dropping: {dropped}")
             warned_unmapped_keys = True
 
         if not filtered_action:
@@ -698,32 +661,22 @@ def arx5_trlc_leader_teleop_loop(
             obs_transition = obs
             log_rerun_data(observation=obs_transition, action=teleop_action)
 
-            ordered_keys = [
-                k for k in robot.action_features if k in robot_action_to_send
-            ]
-            ordered_keys.extend(
-                k for k in robot_action_to_send if k not in ordered_keys
-            )
+            ordered_keys = [k for k in robot.action_features if k in robot_action_to_send]
+            ordered_keys.extend(k for k in robot_action_to_send if k not in ordered_keys)
 
             panel_lines = []
             panel_lines.append("-" * (display_len + 38))
-            panel_lines.append(
-                f"{'NAME':<{display_len}} | {'CMD':>8} | {'OBS':>8} | {'ERR':>8}"
-            )
+            panel_lines.append(f"{'NAME':<{display_len}} | {'CMD':>8} | {'OBS':>8} | {'ERR':>8}")
             for motor in ordered_keys:
                 cmd = float(robot_action_to_send[motor])
                 obs_val = obs.get(motor, None)
                 if obs_val is None or isinstance(obs_val, np.ndarray):
-                    panel_lines.append(
-                        f"{motor:<{display_len}} | {cmd:>8.4f} | {'-':>8} | {'-':>8}"
-                    )
+                    panel_lines.append(f"{motor:<{display_len}} | {cmd:>8.4f} | {'-':>8} | {'-':>8}")
                     continue
 
                 obs_num = float(obs_val)
                 err = cmd - obs_num
-                panel_lines.append(
-                    f"{motor:<{display_len}} | {cmd:>8.4f} | {obs_num:>8.4f} | {err:>+8.4f}"
-                )
+                panel_lines.append(f"{motor:<{display_len}} | {cmd:>8.4f} | {obs_num:>8.4f} | {err:>+8.4f}")
 
             panel_lines.append(
                 f"{'timing':<{display_len}} | {'loop':>8} | {loop_s * 1e3:>6.2f}ms | {obs_dt_ms:>6.2f}ms"
@@ -738,9 +691,7 @@ def arx5_trlc_leader_teleop_loop(
                 flush=True,
             )
         else:
-            action_summary = " ".join(
-                f"{k}={float(v):+.3f}" for k, v in robot_action_to_send.items()
-            )
+            action_summary = " ".join(f"{k}={float(v):+.3f}" for k, v in robot_action_to_send.items())
             dryrun_tag = "[DRYRUN] " if dryrun else ""
             print(
                 f"\r\033[K{dryrun_tag}{loop_s * 1e3:5.1f}ms ({1 / loop_s:4.0f}Hz) | {action_summary}",
@@ -780,8 +731,7 @@ def spacemouse_teleop_loop(
         else:
             bi_arx5_spacemouse_prefix = "right"
         logger.info(
-            f"bi_arx5 + SpaceMouse: driving {bi_arx5_spacemouse_prefix!r} arm "
-            "(set --robot.id=left/right to change)"
+            f"bi_arx5 + SpaceMouse: driving {bi_arx5_spacemouse_prefix!r} arm (set --robot.id=left/right to change)"
         )
 
     _prev_rt_moving = False
@@ -811,20 +761,10 @@ def spacemouse_teleop_loop(
                     "bi_arx5",
                 )
                 if dryrun:
-                    logger.info(
-                        "[DRYRUN] Reset to initial position triggered by both buttons"
-                    )
-                    if hasattr(teleop, "_start_pose_6d") and hasattr(
-                        teleop, "_start_gripper_pos"
-                    ):
-                        teleop.reset_to_pose(
-                            teleop._start_pose_6d, teleop._start_gripper_pos
-                        )
-                elif (
-                    is_arx5_family
-                    and hasattr(robot, "smooth_go_start")
-                    and both_buttons_rising
-                ):
+                    logger.info("[DRYRUN] Reset to initial position triggered by both buttons")
+                    if hasattr(teleop, "_start_pose_6d") and hasattr(teleop, "_start_gripper_pos"):
+                        teleop.reset_to_pose(teleop._start_pose_6d, teleop._start_gripper_pos)
+                elif is_arx5_family and hasattr(robot, "smooth_go_start") and both_buttons_rising:
                     try:
                         # Match connect(go_to_start=True): interpolated move, not a teleop target jump.
                         robot.smooth_go_start(duration=2.0)
@@ -832,30 +772,18 @@ def spacemouse_teleop_loop(
                         teleop.reset_to_pose(eef[:6], float(eef[6]))
                         teleop._start_pose_6d = eef[:6].copy()
                         teleop._start_gripper_pos = float(eef[6])
-                        logger.info(
-                            "SpaceMouse both buttons: smooth go-to-start (ARX5 / bi_arx5)"
-                        )
+                        logger.info("SpaceMouse both buttons: smooth go-to-start (ARX5 / bi_arx5)")
                     except Exception as e:
-                        logger.error(
-                            f"Smooth go-to-start failed: {e}\n{traceback.format_exc()}"
-                        )
+                        logger.error(f"Smooth go-to-start failed: {e}\n{traceback.format_exc()}")
                 elif is_flexiv_rt and hasattr(robot, "reset_to_initial_position"):
                     try:
                         robot.reset_to_initial_position()
                     except Exception as e:
-                        logger.error(
-                            f"Failed to reset robot position: {e}\n{traceback.format_exc()}"
-                        )
+                        logger.error(f"Failed to reset robot position: {e}\n{traceback.format_exc()}")
                 elif not (is_arx5_family and hasattr(robot, "smooth_go_start")):
-                    if hasattr(teleop, "_start_pose_6d") and hasattr(
-                        teleop, "_start_gripper_pos"
-                    ):
-                        teleop.reset_to_pose(
-                            teleop._start_pose_6d, teleop._start_gripper_pos
-                        )
-                        logger.info(
-                            "Reset to initial position triggered by both buttons"
-                        )
+                    if hasattr(teleop, "_start_pose_6d") and hasattr(teleop, "_start_gripper_pos"):
+                        teleop.reset_to_pose(teleop._start_pose_6d, teleop._start_gripper_pos)
+                        logger.info("Reset to initial position triggered by both buttons")
                 if display_data and obs is not None:
                     log_rerun_data(observation=obs)
                 if obs is not None:
@@ -894,9 +822,7 @@ def spacemouse_teleop_loop(
             # Remap unprefixed single-arm keys onto the selected arm so the
             # other arm holds (its keys are absent → bi_arx5.send_action keeps
             # its current buffer values).
-            robot_action_to_send = {
-                f"{bi_arx5_spacemouse_prefix}_{k}": v for k, v in raw_action.items()
-            }
+            robot_action_to_send = {f"{bi_arx5_spacemouse_prefix}_{k}": v for k, v in raw_action.items()}
 
         if not dryrun:
             _ = robot.send_action(robot_action_to_send)
@@ -1012,22 +938,14 @@ def elite_cs66_rt_spacemouse_teleop_loop(
         if both_buttons:
             if dryrun:
                 if both_buttons_rising:
-                    logger.info(
-                        "[DRYRUN] Reset to initial position triggered by both buttons"
-                    )
-                    teleop.reset_to_pose(
-                        teleop._start_pose_6d, teleop._start_gripper_pos
-                    )
+                    logger.info("[DRYRUN] Reset to initial position triggered by both buttons")
+                    teleop.reset_to_pose(teleop._start_pose_6d, teleop._start_gripper_pos)
             elif both_buttons_rising and hasattr(robot, "reset_to_initial_position"):
                 try:
                     robot.reset_to_initial_position()
-                    logger.info(
-                        "Elite CS66 reset to initial position triggered by both buttons"
-                    )
+                    logger.info("Elite CS66 reset to initial position triggered by both buttons")
                 except Exception as e:
-                    logger.error(
-                        f"Failed to reset robot position: {e}\n{traceback.format_exc()}"
-                    )
+                    logger.error(f"Failed to reset robot position: {e}\n{traceback.format_exc()}")
             idle_frame_count = 0
             if display_data and obs is not None:
                 log_rerun_data(observation=obs)
@@ -1086,19 +1004,16 @@ def elite_cs66_rt_spacemouse_teleop_loop(
                 try:
                     # Same rationale as the rt_moving sync above: snap to
                     # commanded pose, not RTSI's noisy current.
-                    pose_source = getattr(robot, "get_commanded_tcp_pose_euler", None) or robot.get_current_tcp_pose_euler
-                    current_pose_euler = pose_source()
-                    teleop.reset_to_pose(
-                        current_pose_euler[:6], current_pose_euler[6]
+                    pose_source = (
+                        getattr(robot, "get_commanded_tcp_pose_euler", None) or robot.get_current_tcp_pose_euler
                     )
+                    current_pose_euler = pose_source()
+                    teleop.reset_to_pose(current_pose_euler[:6], current_pose_euler[6])
                     # Refresh raw_action so the frame about to be sent already
                     # reflects the resync instead of one frame of stale target.
                     raw_action = teleop.get_action()
                     just_resynced = True
-                    logger.info(
-                        f"Idle for {release_resync_idle_s:.2f}s — snapped "
-                        "SpaceMouse target to robot TCP"
-                    )
+                    logger.info(f"Idle for {release_resync_idle_s:.2f}s — snapped SpaceMouse target to robot TCP")
                 except Exception as e:
                     logger.error(f"Idle resync failed: {e}")
 
@@ -1197,9 +1112,7 @@ def elite_cs66_rt_pico4_teleop_loop(
                     robot.reset_to_initial_position()
                     logger.info("Elite CS66 reset to initial position triggered by A button")
                 except Exception as e:
-                    logger.error(
-                        f"Failed to reset robot position: {e}\n{traceback.format_exc()}"
-                    )
+                    logger.error(f"Failed to reset robot position: {e}\n{traceback.format_exc()}")
             if display_data and obs is not None:
                 log_rerun_data(observation=obs)
             if obs is not None:
@@ -1260,13 +1173,9 @@ def elite_cs66_rt_pico4_teleop_loop(
             )
         elif not display_data:
             enable_str = "ENABLED" if getattr(teleop, "_enabled", False) else "DISABLED"
-            ori_str = (
-                "ORI:ON" if getattr(teleop, "_orientation_control_active", False) else "ORI:OFF"
-            )
+            ori_str = "ORI:ON" if getattr(teleop, "_orientation_control_active", False) else "ORI:OFF"
             grip_str = f"grip={getattr(teleop, '_last_grip', 0.0):.2f}"
-            gripper_pos_str = (
-                f"gripper={robot_action_to_send.get('gripper.pos', 0.0):.2f}"
-            )
+            gripper_pos_str = f"gripper={robot_action_to_send.get('gripper.pos', 0.0):.2f}"
             dryrun_str = "[DRYRUN] | " if dryrun else ""
             print(
                 f"\r\033[K{loop_s * 1e3:5.1f}ms ({1 / loop_s:3.0f}Hz) | "
@@ -1312,16 +1221,12 @@ def pico4_teleop_loop(
         if reset_button:
             try:
                 if dryrun:
-                    logger.info(
-                        "[DRYRUN] Reset to initial position (A button pressed) - robot movement skipped"
-                    )
+                    logger.info("[DRYRUN] Reset to initial position (A button pressed) - robot movement skipped")
                     current_pose_quat = robot.get_current_tcp_pose_quat()
                     teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
                 elif is_flexiv_rt and hasattr(robot, "reset_to_initial_position"):
                     robot.reset_to_initial_position()
-                    logger.info(
-                        "Reset to initial position (A button pressed) — RT non-blocking"
-                    )
+                    logger.info("Reset to initial position (A button pressed) — RT non-blocking")
                 else:
                     if hasattr(robot, "reset_to_initial_position"):
                         robot.reset_to_initial_position()
@@ -1329,9 +1234,7 @@ def pico4_teleop_loop(
                     current_pose_quat = robot.get_current_tcp_pose_quat()
                     teleop.reset_to_pose(current_pose_quat[:7], current_pose_quat[7])
             except Exception as e:
-                logger.error(
-                    f"Failed to reset robot position: {e}\n{traceback.format_exc()}"
-                )
+                logger.error(f"Failed to reset robot position: {e}\n{traceback.format_exc()}")
             if display_data:
                 log_rerun_data(observation=obs)
             if not _reset_display_cleared:
@@ -1383,9 +1286,7 @@ def pico4_teleop_loop(
             enable_str = "ENABLED" if teleop._enabled else "DISABLED"
             ori_str = "ORI:ON" if teleop._orientation_control_active else "ORI:OFF"
             grip_str = f"grip={teleop._last_grip:.2f}"
-            gripper_pos_str = (
-                f"gripper={robot_action_to_send.get('gripper.pos', 0.0):.2f}"
-            )
+            gripper_pos_str = f"gripper={robot_action_to_send.get('gripper.pos', 0.0):.2f}"
             dryrun_str = "[DRYRUN] | " if dryrun else ""
             print(
                 f"\r\033[Ktime: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz) | {dryrun_str}{enable_str} | {grip_str} | {gripper_pos_str} | {ori_str}",
@@ -1439,22 +1340,14 @@ def bi_pico4_teleop_loop(
         if reset_button:
             try:
                 if dryrun:
-                    logger.info(
-                        "[DRYRUN] Reset to initial position (A button) - robot movement skipped"
-                    )
+                    logger.info("[DRYRUN] Reset to initial position (A button) - robot movement skipped")
                     left_pose, right_pose = robot.get_current_tcp_pose_quat()
-                    teleop.reset_to_pose(
-                        left_pose[:7], right_pose[:7], left_pose[7], right_pose[7]
-                    )
+                    teleop.reset_to_pose(left_pose[:7], right_pose[:7], left_pose[7], right_pose[7])
                 elif hasattr(robot, "reset_to_initial_position"):
                     robot.reset_to_initial_position()
-                    logger.info(
-                        "Reset to initial position (A button) — RT non-blocking"
-                    )
+                    logger.info("Reset to initial position (A button) — RT non-blocking")
             except Exception as e:
-                logger.error(
-                    f"Failed to reset robot position: {e}\n{traceback.format_exc()}"
-                )
+                logger.error(f"Failed to reset robot position: {e}\n{traceback.format_exc()}")
 
             if display_data:
                 log_rerun_data(observation=obs)
@@ -1483,9 +1376,7 @@ def bi_pico4_teleop_loop(
             _reset_display_cleared = False
             try:
                 left_pose, right_pose = robot.get_current_tcp_pose_quat()
-                teleop.reset_to_pose(
-                    left_pose[:7], right_pose[:7], left_pose[7], right_pose[7]
-                )
+                teleop.reset_to_pose(left_pose[:7], right_pose[:7], left_pose[7], right_pose[7])
                 logger.info("BiPico4 synced to robot poses after reset complete")
             except Exception as e:
                 logger.error(f"Failed to sync teleop after reset: {e}")
@@ -1520,7 +1411,7 @@ def bi_pico4_teleop_loop(
             lines = [
                 f"obs={obs_ms:5.1f}ms  action={action_ms:4.1f}ms  send={send_ms:4.1f}ms  "
                 f"rerun={rerun_ms:4.1f}ms  sleep={sleep_ms:5.1f}ms  "
-                f"| total={loop_s*1e3:5.1f}ms ({1/loop_s:.0f}Hz)",
+                f"| total={loop_s * 1e3:5.1f}ms ({1 / loop_s:.0f}Hz)",
             ]
             t = getattr(robot, "_last_obs_timing", None)
             if isinstance(t, dict) and t:
@@ -1531,9 +1422,7 @@ def bi_pico4_teleop_loop(
                 )
                 # Keys look like "cam[<name>]_ms" -> strip 4 leading and 4
                 # trailing chars to recover <name>.
-                cam_parts = "  ".join(
-                    f"{k[4:-4]}={v:.1f}" for k, v in t.items() if k.startswith("cam[")
-                )
+                cam_parts = "  ".join(f"{k[4:-4]}={v:.1f}" for k, v in t.items() if k.startswith("cam["))
                 if cam_parts:
                     lines.append(f"  [{cam_parts}]")
 
@@ -1564,9 +1453,7 @@ def bi_pico4_teleop_loop(
 def teleoperate(cfg: TeleoperateConfig):
     logger.info(pformat(asdict(cfg)))
     if cfg.dryrun:
-        logger.warn(
-            "DRYRUN MODE ENABLED - Actions will be printed but NOT sent to robot"
-        )
+        logger.warn("DRYRUN MODE ENABLED - Actions will be printed but NOT sent to robot")
 
     if cfg.display_data:
         teleop_name = cfg.teleop.type if cfg.teleop else "none"
@@ -1575,11 +1462,7 @@ def teleoperate(cfg: TeleoperateConfig):
 
     display_compressed_images = (
         True
-        if (
-            cfg.display_data
-            and cfg.display_ip is not None
-            and cfg.display_port is not None
-        )
+        if (cfg.display_data and cfg.display_ip is not None and cfg.display_port is not None)
         else cfg.display_compressed_images
     )
 
@@ -1588,18 +1471,13 @@ def teleoperate(cfg: TeleoperateConfig):
 
     try:
         # --- arx5_follower / bi_arx5 + spacemouse ---
-        if (
-            cfg.robot.type in ("bi_arx5", "arx5_follower")
-            and cfg.teleop.type == "spacemouse"
-        ):
+        if cfg.robot.type in ("bi_arx5", "arx5_follower") and cfg.teleop.type == "spacemouse":
             mode = "bimanual" if cfg.robot.type == "bi_arx5" else "single-arm"
             logger.info(f"Detected ARX5 ({mode}) + SpaceMouse")
             robot = make_robot_from_config(cfg.robot)
             robot.connect()
             teleop = make_teleoperator_from_config(cfg.teleop)
-            logger.info(
-                f"Current TCP pose (euler+gripper): {robot.get_current_tcp_pose_euler()}"
-            )
+            logger.info(f"Current TCP pose (euler+gripper): {robot.get_current_tcp_pose_euler()}")
             teleop.connect(current_tcp_pose_euler=robot.get_current_tcp_pose_euler())
             try:
                 spacemouse_teleop_loop(
@@ -1658,9 +1536,7 @@ def teleoperate(cfg: TeleoperateConfig):
             robot.connect(go_to_start=True)
             start_obs = robot.get_observation()
             tcp_keys = [k for k in start_obs if k.startswith("tcp.")]
-            logger.info(
-                "Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys)
-            )
+            logger.info("Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys))
             teleop = make_teleoperator_from_config(cfg.teleop)
             teleop.connect(current_tcp_pose_euler=robot.get_current_tcp_pose_euler())
             try:
@@ -1683,9 +1559,7 @@ def teleoperate(cfg: TeleoperateConfig):
             robot.connect(go_to_start=True)
             start_obs = robot.get_observation()
             tcp_keys = [k for k in start_obs if k.startswith("tcp.")]
-            logger.info(
-                "Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys)
-            )
+            logger.info("Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys))
             teleop = make_teleoperator_from_config(cfg.teleop)
             teleop.connect(current_tcp_pose_euler=robot.get_current_tcp_pose_euler())
             try:
@@ -1708,9 +1582,7 @@ def teleoperate(cfg: TeleoperateConfig):
             robot.connect(go_to_start=True)
             start_obs = robot.get_observation()
             tcp_keys = [k for k in start_obs if k.startswith("tcp.")]
-            logger.info(
-                "Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys)
-            )
+            logger.info("Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys))
             teleop = make_teleoperator_from_config(cfg.teleop)
             teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
             try:
@@ -1733,9 +1605,7 @@ def teleoperate(cfg: TeleoperateConfig):
             robot.connect(go_to_start=True)
             start_obs = robot.get_observation()
             tcp_keys = [k for k in start_obs if k.startswith("tcp.")]
-            logger.info(
-                "Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys)
-            )
+            logger.info("Start pose: " + ", ".join(f"{k}={start_obs[k]:.6f}" for k in tcp_keys))
             teleop = make_teleoperator_from_config(cfg.teleop)
             teleop.connect(current_tcp_pose_quat=robot.get_current_tcp_pose_quat())
             try:
@@ -1804,8 +1674,7 @@ def teleoperate(cfg: TeleoperateConfig):
             if cfg.teleop.ori_sensitivity == 1.0:
                 cfg.teleop.ori_sensitivity = 0.3
                 logger.info(
-                    "BiElite: defaulting teleop ori_sensitivity to 0.3 "
-                    "(pass --teleop.ori_sensitivity to override)"
+                    "BiElite: defaulting teleop ori_sensitivity to 0.3 (pass --teleop.ori_sensitivity to override)"
                 )
             # The Pico4 leader's rotation rate limit defaults to the Flexiv-era 6.28 rad/s
             # (360 deg/s) — a value the 1 kHz Flexiv follower smooths away, but the 250 Hz

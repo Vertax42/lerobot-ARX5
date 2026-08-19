@@ -36,9 +36,7 @@ def move_transition_to_device(transition: Transition, device: str = "cpu") -> Tr
     non_blocking = device.type == "cuda"
 
     # Move state tensors to device
-    transition["state"] = {
-        key: val.to(device, non_blocking=non_blocking) for key, val in transition["state"].items()
-    }
+    transition["state"] = {key: val.to(device, non_blocking=non_blocking) for key, val in transition["state"].items()}
 
     # Move action to device
     transition[ACTION] = transition[ACTION].to(device, non_blocking=non_blocking)

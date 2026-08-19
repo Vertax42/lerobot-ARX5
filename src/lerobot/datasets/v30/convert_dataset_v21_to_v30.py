@@ -322,8 +322,7 @@ def convert_videos_of_camera(root: Path, new_root: Path, video_key: str, video_f
             # Size limit would be exceeded, save current accumulation WITHOUT this episode
             concatenate_video_files(
                 paths_to_cat,
-                new_root
-                / DEFAULT_VIDEO_PATH.format(video_key=video_key, chunk_index=chunk_idx, file_index=file_idx),
+                new_root / DEFAULT_VIDEO_PATH.format(video_key=video_key, chunk_index=chunk_idx, file_index=file_idx),
             )
 
             # Update episodes metadata for the file we just saved
@@ -358,8 +357,7 @@ def convert_videos_of_camera(root: Path, new_root: Path, video_key: str, video_f
     if paths_to_cat:
         concatenate_video_files(
             paths_to_cat,
-            new_root
-            / DEFAULT_VIDEO_PATH.format(video_key=video_key, chunk_index=chunk_idx, file_index=file_idx),
+            new_root / DEFAULT_VIDEO_PATH.format(video_key=video_key, chunk_index=chunk_idx, file_index=file_idx),
         )
 
         # Update episodes metadata for the final file
@@ -371,9 +369,7 @@ def convert_videos_of_camera(root: Path, new_root: Path, video_key: str, video_f
     return episodes_metadata
 
 
-def generate_episode_metadata_dict(
-    episodes_legacy_metadata, episodes_metadata, episodes_stats, episodes_videos=None
-):
+def generate_episode_metadata_dict(episodes_legacy_metadata, episodes_metadata, episodes_stats, episodes_videos=None):
     num_episodes = len(episodes_metadata)
     episodes_legacy_metadata_vals = list(episodes_legacy_metadata.values())
     episodes_stats_vals = list(episodes_stats.values())

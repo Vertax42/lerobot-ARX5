@@ -203,9 +203,7 @@ def test_delta_timestamps_outside_tolerance_outside_episode_range():
     item = buffer[2]
     data, is_pad = item["index"], item["index_is_pad"]
     assert torch.equal(data, torch.tensor([0, 0, 2, 4, 4])), "Data does not match expected values"
-    assert torch.equal(is_pad, torch.tensor([True, False, False, True, True])), (
-        "Padding does not match expected values"
-    )
+    assert torch.equal(is_pad, torch.tensor([True, False, False, True, True])), "Padding does not match expected values"
 
 
 # Arbitrarily set small dataset sizes, making sure to have uneven sizes.
@@ -222,9 +220,7 @@ def test_compute_sampler_weights_trivial(
     offline_dataset = lerobot_dataset_factory(tmp_path, total_episodes=1, total_frames=offline_dataset_size)
     online_dataset, _ = make_new_buffer()
     if online_dataset_size > 0:
-        online_dataset.add_data(
-            make_spoof_data_frames(n_episodes=2, n_frames_per_episode=online_dataset_size // 2)
-        )
+        online_dataset.add_data(make_spoof_data_frames(n_episodes=2, n_frames_per_episode=online_dataset_size // 2))
 
     weights = compute_sampler_weights(
         offline_dataset, online_dataset=online_dataset, online_sampling_ratio=online_sampling_ratio
@@ -248,9 +244,7 @@ def test_compute_sampler_weights_nontrivial_ratio(lerobot_dataset_factory, tmp_p
     weights = compute_sampler_weights(
         offline_dataset, online_dataset=online_dataset, online_sampling_ratio=online_sampling_ratio
     )
-    torch.testing.assert_close(
-        weights, torch.tensor([0.05, 0.05, 0.05, 0.05, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
-    )
+    torch.testing.assert_close(weights, torch.tensor([0.05, 0.05, 0.05, 0.05, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]))
 
 
 def test_compute_sampler_weights_nontrivial_ratio_and_drop_last_n(lerobot_dataset_factory, tmp_path):
@@ -261,9 +255,7 @@ def test_compute_sampler_weights_nontrivial_ratio_and_drop_last_n(lerobot_datase
     weights = compute_sampler_weights(
         offline_dataset, online_dataset=online_dataset, online_sampling_ratio=0.8, online_drop_n_last_frames=1
     )
-    torch.testing.assert_close(
-        weights, torch.tensor([0.05, 0.05, 0.05, 0.05, 0.2, 0.0, 0.2, 0.0, 0.2, 0.0, 0.2, 0.0])
-    )
+    torch.testing.assert_close(weights, torch.tensor([0.05, 0.05, 0.05, 0.05, 0.2, 0.0, 0.2, 0.0, 0.2, 0.0, 0.2, 0.0]))
 
 
 def test_compute_sampler_weights_drop_n_last_frames(lerobot_dataset_factory, tmp_path):

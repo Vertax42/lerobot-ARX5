@@ -73,9 +73,7 @@ def validate_all_metadata(all_metadata: list[LeRobotDatasetMetadata]):
                 f"Same robot_type is expected, but got robot_type={meta.robot_type} instead of {robot_type}."
             )
         if features != meta.features:
-            raise ValueError(
-                f"Same features is expected, but got features={meta.features} instead of {features}."
-            )
+            raise ValueError(f"Same features is expected, but got features={meta.features} instead of {features}.")
 
     return fps, robot_type, features
 
@@ -215,9 +213,7 @@ def update_meta_data(
             # Fallback to simple offset (for backward compatibility)
             df[orig_chunk_col] = video_idx["chunk"]
             df[orig_file_col] = video_idx["file"]
-            df[f"videos/{key}/from_timestamp"] = (
-                df[f"videos/{key}/from_timestamp"] + video_idx["latest_duration"]
-            )
+            df[f"videos/{key}/from_timestamp"] = df[f"videos/{key}/from_timestamp"] + video_idx["latest_duration"]
             df[f"videos/{key}/to_timestamp"] = df[f"videos/{key}/to_timestamp"] + video_idx["latest_duration"]
 
         # Clean up temporary columns
@@ -268,9 +264,7 @@ def aggregate_datasets(
     all_metadata = (
         [LeRobotDatasetMetadata(repo_id) for repo_id in repo_ids]
         if roots is None
-        else [
-            LeRobotDatasetMetadata(repo_id, root=root) for repo_id, root in zip(repo_ids, roots, strict=False)
-        ]
+        else [LeRobotDatasetMetadata(repo_id, root=root) for repo_id, root in zip(repo_ids, roots, strict=False)]
     )
     fps, robot_type, features = validate_all_metadata(all_metadata)
     video_keys = [key for key in features if features[key]["dtype"] == "video"]
@@ -289,15 +283,11 @@ def aggregate_datasets(
 
     logging.info("Find all tasks")
     unique_tasks = pd.concat([m.tasks for m in all_metadata]).index.unique()
-    dst_meta.tasks = pd.DataFrame(
-        {"task_index": range(len(unique_tasks))}, index=pd.Index(unique_tasks, name="task")
-    )
+    dst_meta.tasks = pd.DataFrame({"task_index": range(len(unique_tasks))}, index=pd.Index(unique_tasks, name="task"))
 
     meta_idx = {"chunk": 0, "file": 0}
     data_idx = {"chunk": 0, "file": 0}
-    videos_idx = {
-        key: {"chunk": 0, "file": 0, "latest_duration": 0, "episode_duration": 0} for key in video_keys
-    }
+    videos_idx = {key: {"chunk": 0, "file": 0, "latest_duration": 0, "episode_duration": 0} for key in video_keys}
 
     dst_meta.episodes = {}
 
@@ -449,9 +439,7 @@ def aggregate_data(src_meta, dst_meta, data_idx, data_files_size_in_mb, chunk_si
     """
     unique_chunk_file_ids = {
         (c, f)
-        for c, f in zip(
-            src_meta.episodes["data/chunk_index"], src_meta.episodes["data/file_index"], strict=False
-        )
+        for c, f in zip(src_meta.episodes["data/chunk_index"], src_meta.episodes["data/file_index"], strict=False)
     }
 
     unique_chunk_file_ids = sorted(unique_chunk_file_ids)
@@ -465,9 +453,7 @@ def aggregate_data(src_meta, dst_meta, data_idx, data_files_size_in_mb, chunk_si
     src_to_dst: dict[tuple[int, int], tuple[int, int]] = {}
 
     for src_chunk_idx, src_file_idx in unique_chunk_file_ids:
-        src_path = src_meta.root / DEFAULT_DATA_PATH.format(
-            chunk_index=src_chunk_idx, file_index=src_file_idx
-        )
+        src_path = src_meta.root / DEFAULT_DATA_PATH.format(chunk_index=src_chunk_idx, file_index=src_file_idx)
         if contains_images:
             # Use HuggingFace datasets to read source data to preserve image format
             src_ds = datasets.Dataset.from_parquet(str(src_path))

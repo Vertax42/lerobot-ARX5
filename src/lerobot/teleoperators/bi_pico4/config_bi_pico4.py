@@ -53,7 +53,7 @@ class BiPico4Config(TeleoperatorConfig):
     # rotate regardless of controller input. Lower these for arms with tighter
     # joint-velocity limits (e.g. Elite CS66) so VR jitter can't drive the
     # controller into a protective stop. 0 disables the cap.
-    max_pos_velocity: float = 1.0   # m/s
+    max_pos_velocity: float = 1.0  # m/s
     max_rot_velocity: float = 6.28  # rad/s
 
     left_gripper_width: float = 1.0

@@ -18,19 +18,18 @@ from enum import IntEnum
 from typing import Any
 
 import numpy as np
+from scipy.spatial.transform import Rotation as R
+
+from lerobot.utils.robot_utils import (
+    normalize_quaternion,
+    quaternion_to_matrix,
+    rotation_6d_to_quaternion,
+)
 
 from ..teleoperator import Teleoperator
 from ..utils import TeleopEvents
 from .configuration_btgamepad import BtgamepadTeleopConfig
-from lerobot.utils.robot_utils import (
-    matrix_to_pose7d,
-    quaternion_to_euler,
-    rotation_6d_to_quaternion,
-    xyz_rpy_to_matrix,
-    normalize_quaternion,
-    quaternion_to_matrix,
-)
-from scipy.spatial.transform import Rotation as R
+
 
 class GripperAction(IntEnum):
     CLOSE = 1
@@ -66,13 +65,34 @@ class BtgamepadTeleop(Teleoperator):
             return {
                 "dtype": "float32",
                 "shape": (10,),
-                "names": {"tcp.x": 0, "tcp.y": 1, "tcp.z": 2, "tcp.r1": 3,"tcp.r2": 4,"tcp.r3": 5,"tcp.r4": 6,"tcp.r5": 7,"tcp.r6": 8,"gripper.pos": 9},
+                "names": {
+                    "tcp.x": 0,
+                    "tcp.y": 1,
+                    "tcp.z": 2,
+                    "tcp.r1": 3,
+                    "tcp.r2": 4,
+                    "tcp.r3": 5,
+                    "tcp.r4": 6,
+                    "tcp.r5": 7,
+                    "tcp.r6": 8,
+                    "gripper.pos": 9,
+                },
             }
         else:
             return {
                 "dtype": "float32",
                 "shape": (9,),
-                "names": {"tcp.x": 0, "tcp.y": 1, "tcp.z": 2, "tcp.r1": 3,"tcp.r2": 4,"tcp.r3": 5,"tcp.r4": 6,"tcp.r5": 7,"tcp.r6": 8},
+                "names": {
+                    "tcp.x": 0,
+                    "tcp.y": 1,
+                    "tcp.z": 2,
+                    "tcp.r1": 3,
+                    "tcp.r2": 4,
+                    "tcp.r3": 5,
+                    "tcp.r4": 6,
+                    "tcp.r5": 7,
+                    "tcp.r6": 8,
+                },
             }
 
     @property
@@ -111,14 +131,14 @@ class BtgamepadTeleop(Teleoperator):
 
         # quaternion update
         rotation_delta = np.array([delta_rx, delta_ry, delta_rz]) * self.config.rot_sensitivity
-        rotation_delta = R.from_euler('xyz', rotation_delta).as_matrix()
+        rotation_delta = R.from_euler("xyz", rotation_delta).as_matrix()
         self._start_matrix = quaternion_to_matrix(
-            np.array([0,0,0,self._start_quat[0],self._start_quat[1],self._start_quat[2],self._start_quat[3]]),
-            input_format="wxyz"
-            )
+            np.array([0, 0, 0, self._start_quat[0], self._start_quat[1], self._start_quat[2], self._start_quat[3]]),
+            input_format="wxyz",
+        )
 
-        current_ee_matrix = rotation_delta @ self._start_matrix[:3, :3] #3x3
-        current_ee_quat9d = np.array(current_ee_matrix).T.flatten() # 9d
+        current_ee_matrix = rotation_delta @ self._start_matrix[:3, :3]  # 3x3
+        current_ee_quat9d = np.array(current_ee_matrix).T.flatten()  # 9d
         self._start_quat = rotation_6d_to_quaternion(current_ee_quat9d[:6])
 
         action_dict = {
@@ -165,9 +185,8 @@ class BtgamepadTeleop(Teleoperator):
         self._was_back_button_pressed = False
 
         import logging
-        logging.info(
-            f"[btgamepad] Reset target pose to: pos={pose_7d[:3]}, quat={pose_7d[3:7]}, gripper={gripper_pos}"
-        )
+
+        logging.info(f"[btgamepad] Reset target pose to: pos={pose_7d[:3]}, quat={pose_7d[3:7]}, gripper={gripper_pos}")
 
     def get_reset_button(self) -> bool:
         """Get the state of the reset button (BACK button) with edge detection.
@@ -181,10 +200,9 @@ class BtgamepadTeleop(Teleoperator):
             return False
 
         import pygame
+
         try:
-            current_pressed = self.gamepad.joystick.get_button(
-                self.gamepad.Button.BACK.value
-            )
+            current_pressed = self.gamepad.joystick.get_button(self.gamepad.Button.BACK.value)
         except pygame.error:
             return False
 

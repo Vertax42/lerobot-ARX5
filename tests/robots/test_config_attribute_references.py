@@ -92,6 +92,5 @@ def test_driver_only_reads_fields_the_config_has(pkg, mod, cls_name):
 
     assert not bad, (
         f"{cls_name} has no such field(s) — these reads would raise AttributeError "
-        f"the moment the line runs (often only once hardware is attached):\n  "
-        + "\n  ".join(bad)
+        f"the moment the line runs (often only once hardware is attached):\n  " + "\n  ".join(bad)
     )

@@ -160,9 +160,7 @@ def test__read_error(raise_on_error, mock_motors, dummy_motors):
     bus.connect(handshake=False)
 
     if raise_on_error:
-        with pytest.raises(
-            RuntimeError, match=re.escape("[RxPacketError] The data value exceeds the limit value!")
-        ):
+        with pytest.raises(RuntimeError, match=re.escape("[RxPacketError] The data value exceeds the limit value!")):
             bus._read(addr, length, id_, raise_on_error=raise_on_error)
     else:
         _, _, read_error = bus._read(addr, length, id_, raise_on_error=raise_on_error)
@@ -216,9 +214,7 @@ def test__write_error(raise_on_error, mock_motors, dummy_motors):
     bus.connect(handshake=False)
 
     if raise_on_error:
-        with pytest.raises(
-            RuntimeError, match=re.escape("[RxPacketError] The data value exceeds the limit value!")
-        ):
+        with pytest.raises(RuntimeError, match=re.escape("[RxPacketError] The data value exceeds the limit value!")):
             bus._write(addr, length, id_, value, raise_on_error=raise_on_error)
     else:
         _, write_error = bus._write(addr, length, id_, value, raise_on_error=raise_on_error)
@@ -331,9 +327,7 @@ def test_reset_calibration(mock_motors, dummy_motors):
     write_mins_stubs = []
     write_maxes_stubs = []
     for motor in dummy_motors.values():
-        write_homing_stubs.append(
-            mock_motors.build_write_stub(*X_SERIES_CONTROL_TABLE["Homing_Offset"], motor.id, 0)
-        )
+        write_homing_stubs.append(mock_motors.build_write_stub(*X_SERIES_CONTROL_TABLE["Homing_Offset"], motor.id, 0))
         write_mins_stubs.append(
             mock_motors.build_write_stub(*X_SERIES_CONTROL_TABLE["Min_Position_Limit"], motor.id, 0)
         )
@@ -366,9 +360,7 @@ def test_set_half_turn_homings(mock_motors, dummy_motors):
         2: 2005,  # 2047 - 42
         3: -1625,  # 2047 - 3672
     }
-    read_pos_stub = mock_motors.build_sync_read_stub(
-        *X_SERIES_CONTROL_TABLE["Present_Position"], current_positions
-    )
+    read_pos_stub = mock_motors.build_sync_read_stub(*X_SERIES_CONTROL_TABLE["Present_Position"], current_positions)
     write_homing_stubs = []
     for id_, homing in expected_homings.items():
         encoded_homing = encode_twos_complement(homing, 4)
@@ -402,9 +394,7 @@ def test_record_ranges_of_motion(mock_motors, dummy_motors):
         "dummy_2": 3600,
         "dummy_3": 4002,
     }
-    read_pos_stub = mock_motors.build_sequential_sync_read_stub(
-        *X_SERIES_CONTROL_TABLE["Present_Position"], positions
-    )
+    read_pos_stub = mock_motors.build_sequential_sync_read_stub(*X_SERIES_CONTROL_TABLE["Present_Position"], positions)
     with patch("lerobot.motors.motors_bus.enter_pressed", side_effect=[False, True]):
         bus = DynamixelMotorsBus(port=mock_motors.port, motors=dummy_motors)
         bus.connect(handshake=False)

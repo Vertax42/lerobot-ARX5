@@ -20,9 +20,9 @@ Field description
 | timeStampNs | int64      | Timestamp when the data was obtained, Unix (nanoseconds)                |
 | Input       | int        | Current input method, 0 head input, 1 controller input, 2 gesture input |
 
-* If the control panel does not enable tracking for the corresponding part, the corresponding key will not exist.
+- If the control panel does not enable tracking for the corresponding part, the corresponding key will not exist.
 
-* value is the actual data string. When using, please convert the string to JSON and remove "\\".
+- value is the actual data string. When using, please convert the string to JSON and remove "\\".
 
 ```json
 JsonData data = JsonMapper.ToObject(HeadJson);
@@ -32,15 +32,13 @@ JsonData valueJson = JsonMapper.ToObject(valueStr);
 
 **Pose**: A string representing seven float data for pose, separated by commas. The first three floats represent position (x, y, z), and the last four floats represent rotation (quaternion: x, y, z, w);
 
-**Coordinate System**: Right-handed coordinate system (X right, Y up, Z in), the origin is set as the head position when the application starts. The following figure marks the position and orientation of the Head point. 
+**Coordinate System**: Right-handed coordinate system (X right, Y up, Z in), the origin is set as the head position when the application starts. The following figure marks the position and orientation of the Head point.
 
 #### 1. **Headset Pose:**
 
 ```json
 {"pose":"0.0,0.0,0.0,0.0,-0.0,0.0,0.0","status":3,"timeStampNs":1732613222842776064,"handMode":0}"
 ```
-
-
 
 | key         | type                      | description                                                          |
 | ----------- | ------------------------- | -------------------------------------------------------------------- |
@@ -55,11 +53,11 @@ JsonData valueJson = JsonMapper.ToObject(valueStr);
 {"axisX":0.0,"axisY":0.0,"grip":0.0,"trigger":0.0,"primaryButton":false,"secondaryButton":false,"menuButton":false,"pose":"0.0,0.0,0.0,0.0,0.0,0.0"},"right":{"axisX":0.0,"axisY":0.0,"grip":0.0,"trigger":0.0,"primaryButton":false,"secondaryButton":false,"menuButton":false,"pose":"0.0,0.0,0.0,0.0,0.0,0.0,0.0"},"timeStampNs":1732613438765715200}"
 ```
 
-* left and right represent the left and right controllers respectively
+- left and right represent the left and right controllers respectively
 
-* pose: controller pose (left-handed, X right, Y up, Z in), with the same orientation system as the head pose. 
+- pose: controller pose (left-handed, X right, Y up, Z in), with the same orientation system as the head pose.
 
-* Controller buttons
+- Controller buttons
 
 | **Key**         | **Type** | **Left Controller**          | **Right Controller**     |
 | --------------- | -------- | ---------------------------- | ------------------------ |
@@ -78,7 +76,7 @@ JsonData valueJson = JsonMapper.ToObject(valueStr);
 "leftHand":{"isActive":0,"count":26,"scale":1.0,"timeStampNs":1732613438765715200,"HandJointLocations":[{"p":"0,0,0,0,0,0,0","s":0.0,"r":0.0}, ...]},"rightHand":{"isActive":0,"count":26,"scale":1.0,"HandJointLocations":[{"p":"0,0,0,0,0,0,0","s":0.0,"r":0.0}, ...]}
 ```
 
-* leftHand and rightHand represent left and right hand data respectively
+- leftHand and rightHand represent left and right hand data respectively
 
 | **key**            | **Type** | **Description**                                                        |
 | ------------------ | -------- | ---------------------------------------------------------------------- |
@@ -100,11 +98,9 @@ JsonData valueJson = JsonMapper.ToObject(valueStr);
 
 Below is the description of the 26 finger joints in the HandJointLocations array.
 
-
 The figure below shows finger joint locations in Unity coordinate system (x right, y up, z out). In the actual data, z-axis follows the z-in direction, same as controller pose and head pose.
 
 ![finger_joints](https://github.com/user-attachments/assets/47f1e10d-9e78-4297-a110-a0254b100908)
-
 
 |     |                     |                           |
 | --- | ------------------- | ------------------------- |
@@ -137,7 +133,6 @@ The figure below shows finger joint locations in Unity coordinate system (x righ
 
 #### 4. Full-body Motion Capture Tracking
 
-
 Full-body motion capture requires additional Pico Swift devices (at least two) and proper adaptation and calibration in the Pico headset.
 
 ![](images/image-25.png)
@@ -147,6 +142,7 @@ Full-body motion capture requires additional Pico Swift devices (at least two) a
 **Human Joint Reference**
 
 The full-body motion capture function of the PICO SDK supports tracking the 24 human joints shown in the figure below.
+
 <div align="center">
   <img src="https://github.com/user-attachments/assets/36636b6d-4a13-4bd5-980d-299169fb36c9" width="50%" alt="body_joints">
 </div>
@@ -209,7 +205,7 @@ JSON data description
 | joints      | Json     | Array, represents 24 bones                                 |
 | timeStampNs | int64    | Unix timestamp (nanoseconds)                               |
 | p           | string   | Current bone's Pose (position and rotation, seven values)  |
-| t           | long     | *IMU timestamp.*                                           |
+| t           | long     | _IMU timestamp._                                           |
 | va          | string   | Position velocity (x,y,z) angular velocity (x,y,z)         |
 | wva         | string   | Position acceleration (x,y,z) angular acceleration (x,y,z) |
 
@@ -223,15 +219,14 @@ JSON data description
 {"joints":[{"p":"0.0,-0.0,-0.0,0.0,0.0,-0.0,-0.0","va":"0.0,0.0,-0.0,0.0,0.0,0.0","wva":"0.0,0.0,-0.0,-0.0,0,0"},{"p":"-0.0,0.0,-0.0,-0.0,0.0,0.0,-0.0","va":"-0.0,0.0,0.0,0.0,-0.0,0.0","wva":"0.0,-0.0,-1.0,-0.0,-0.0,-0"}],"len":2,"timeStampNs":1733287634681455104,"sn":PC2310MLJ6050513G}
 ```
 
-| **key**     | **Type** | **Description**                                                                                   |
-| ----------- | -------- | ------------------------------------------------------------------------------------------------- |
-| joints      | Json     | Array, represents all Tracker data (currently supports up to 3)                                   |
-| timeStampNs | int64    | Unix timestamp (nanoseconds)                                                                      |
-| p           | string   | Current bone's Pose (position and rotation, seven values)                                         |
-| va          | string   | Position velocity (x,y,z) *Unit: millimeter*       Angular velocity (x,y,z) *Unit: meter*         |
-| wva         | string   | Position acceleration (x,y,z) *Unit: millimeter*       Angular acceleration (x,y,z) *Unit: meter* |
-| sn          | string   | Tracker serial number, used to distinguish different trackers                                     |
-
+| **key**     | **Type** | **Description**                                                                             |
+| ----------- | -------- | ------------------------------------------------------------------------------------------- |
+| joints      | Json     | Array, represents all Tracker data (currently supports up to 3)                             |
+| timeStampNs | int64    | Unix timestamp (nanoseconds)                                                                |
+| p           | string   | Current bone's Pose (position and rotation, seven values)                                   |
+| va          | string   | Position velocity (x,y,z) _Unit: millimeter_ Angular velocity (x,y,z) _Unit: meter_         |
+| wva         | string   | Position acceleration (x,y,z) _Unit: millimeter_ Angular acceleration (x,y,z) _Unit: meter_ |
+| sn          | string   | Tracker serial number, used to distinguish different trackers                               |
 
 ## Using the Python Bindings
 
@@ -283,6 +278,7 @@ xrt.close()
 ```
 
 **3. Get hand tracking state**
+
 ```python
 import xensevr_pc_service_sdk as xrt
 
@@ -308,6 +304,7 @@ xrt.close()
 ```
 
 **4. Get whole body motion tracking**
+
 ```python
 import xensevr_pc_service_sdk as xrt
 
@@ -318,23 +315,23 @@ if xrt.is_body_data_available():
     # Get body joint poses (24 joints, 7 values each: x,y,z,qx,qy,qz,qw)
     body_poses = xrt.get_body_joints_pose()
     print(f"Body joints pose data: {body_poses}")
-    
+
     # Get body joint velocities (24 joints, 6 values each: vx,vy,vz,wx,wy,wz)
     body_velocities = xrt.get_body_joints_velocity()
     print(f"Body joints velocity data: {body_velocities}")
-    
+
     # Get body joint accelerations (24 joints, 6 values each: ax,ay,az,wax,way,waz)
     body_accelerations = xrt.get_body_joints_acceleration()
     print(f"Body joints acceleration data: {body_accelerations}")
-    
+
     # Get IMU timestamps for each joint
     imu_timestamps = xrt.get_body_joints_timestamp()
     print(f"IMU timestamps: {imu_timestamps}")
-    
+
     # Get body data timestamp
     body_timestamp = xrt.get_body_timestamp_ns()
     print(f"Body data timestamp: {body_timestamp}")
-    
+
     # Example: Get specific joint data (Head joint is index 15)
     head_pose = body_poses[15]  # Head joint
     x, y, z, qx, qy, qz, qw = head_pose
@@ -349,6 +346,7 @@ xrt.close()
 ```
 
 **Body Joint Indices (24 joints total):**
+
 - 0: Pelvis, 1: Left Hip, 2: Right Hip, 3: Spine1, 4: Left Knee, 5: Right Knee
 - 6: Spine2, 7: Left Ankle, 8: Right Ankle, 9: Spine3, 10: Left Foot, 11: Right Foot
 - 12: Neck, 13: Left Collar, 14: Right Collar, 15: Head, 16: Left Shoulder, 17: Right Shoulder

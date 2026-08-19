@@ -110,9 +110,7 @@ def check_meta(dataset_root: Path, errors: list, warnings: list) -> dict:
 
     info = {}
     info_path = meta_dir / "info.json"
-    if not _check(
-        info_path.exists(), "info.json found", "info.json missing", errors, warnings
-    ):
+    if not _check(info_path.exists(), "info.json found", "info.json missing", errors, warnings):
         return info
     try:
         info = json.loads(info_path.read_text())
@@ -134,9 +132,7 @@ def check_meta(dataset_root: Path, errors: list, warnings: list) -> dict:
     return info
 
 
-def check_episodes_meta(
-    dataset_root: Path, info: dict, errors: list, warnings: list
-) -> pd.DataFrame:
+def check_episodes_meta(dataset_root: Path, info: dict, errors: list, warnings: list) -> pd.DataFrame:
     """Check episodes parquet files under meta/episodes/ and return merged DataFrame."""
     logger.info("\n[meta/episodes]")
     ep_dir = dataset_root / "meta" / "episodes"
@@ -204,9 +200,7 @@ def check_data(
         and v["shape"][0] > 1
     }
 
-    schema_checked = (
-        False  # report once for the first file; subsequent files would be identical
-    )
+    schema_checked = False  # report once for the first file; subsequent files would be identical
     frames: list[pd.DataFrame] = []
     for f in data_files:
         try:
@@ -291,13 +285,7 @@ def check_data(
     for col in ("action", "observation.state"):
         if col not in data.columns:
             continue
-        nan_count = (
-            data[col]
-            .apply(
-                lambda x: any(v != v for v in x) if hasattr(x, "__iter__") else (x != x)
-            )
-            .sum()
-        )
+        nan_count = data[col].apply(lambda x: any(v != v for v in x) if hasattr(x, "__iter__") else (x != x)).sum()
         _check(
             nan_count == 0,
             f"{col}: no NaN values",
@@ -333,14 +321,13 @@ def check_data_file_refs(
     if chunk_col not in eps_df.columns or file_col not in eps_df.columns:
         logger.info(
             "  %s %s / %s columns missing from episodes parquet — skipping",
-            WARN, chunk_col, file_col,
+            WARN,
+            chunk_col,
+            file_col,
         )
         return
 
-    unique_pairs = sorted({
-        (int(c), int(f))
-        for c, f in zip(eps_df[chunk_col], eps_df[file_col])
-    })
+    unique_pairs = sorted({(int(c), int(f)) for c, f in zip(eps_df[chunk_col], eps_df[file_col])})
 
     for chunk_idx, file_idx in unique_pairs:
         rel_path = f"data/chunk-{chunk_idx:03d}/file-{file_idx:03d}.parquet"
@@ -365,9 +352,7 @@ def check_videos(
 ) -> None:
     """Check video files: existence, frame count, fps, resolution."""
     logger.info("\n[videos]")
-    video_features = {
-        k: v for k, v in info.get("features", {}).items() if v.get("dtype") == "video"
-    }
+    video_features = {k: v for k, v in info.get("features", {}).items() if v.get("dtype") == "video"}
     if not video_features:
         logger.info("  %s No video features defined in info.json", WARN)
         return
@@ -381,9 +366,7 @@ def check_videos(
     # We derive from the data parquet directly to stay self-contained
     # Group data by (chunk, file) per video key using episodes meta if available
     ep_meta_dir = dataset_root / "meta" / "episodes"
-    ep_meta_files = (
-        sorted(ep_meta_dir.rglob("*.parquet")) if ep_meta_dir.exists() else []
-    )
+    ep_meta_files = sorted(ep_meta_dir.rglob("*.parquet")) if ep_meta_dir.exists() else []
 
     if ep_meta_files:
         ep_frames: list[pd.DataFrame] = []
@@ -486,9 +469,7 @@ def check_videos(
 
             # Frame count: always sum ALL episodes in this file (not just filtered ones)
             # because the video file contains all of them regardless of which are being checked
-            all_eps_in_file = eps.loc[
-                (eps[chunk_col] == chunk_idx) & (eps[file_col] == file_idx)
-            ]
+            all_eps_in_file = eps.loc[(eps[chunk_col] == chunk_idx) & (eps[file_col] == file_idx)]
             expected_frames_in_file = int(all_eps_in_file["length"].sum())
             nb_frames = int(stream.get("nb_frames", -1))
             ep_list = sorted(all_eps_in_file["episode_index"].tolist())

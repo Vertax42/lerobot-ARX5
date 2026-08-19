@@ -85,9 +85,7 @@ def _resolve_v4l2_device_name(name: str) -> str:
     devices = _parse_v4l2_devices()
     if name not in devices:
         available = list(devices.keys())
-        raise ValueError(
-            f"V4L2 device name '{name}' not found. Available devices: {available}"
-        )
+        raise ValueError(f"V4L2 device name '{name}' not found. Available devices: {available}")
     paths = devices[name]
     if not paths:
         raise ValueError(f"V4L2 device '{name}' has no /dev/video* paths.")
@@ -185,7 +183,7 @@ class OpenCVCamera(Camera):
         v4l2-ctl prints, e.g. "XC000047".
         """
         val = self.index_or_path
-        if isinstance(val, str) and not val.startswith((("/", ".", os.sep))) and os.sep not in val:
+        if isinstance(val, str) and not val.startswith(("/", ".", os.sep)) and os.sep not in val:
             resolved = _resolve_v4l2_device_name(val)
             logger.info(f"{self} resolved device name '{val}' → '{resolved}'")
             return resolved
@@ -227,9 +225,7 @@ class OpenCVCamera(Camera):
         if not self.videocapture.isOpened():
             self.videocapture.release()
             self.videocapture = None
-            raise ConnectionError(
-                f"Failed to open {self}.Run `lerobot-find-cameras opencv` to find available cameras."
-            )
+            raise ConnectionError(f"Failed to open {self}.Run `lerobot-find-cameras opencv` to find available cameras.")
 
         self._configure_capture_settings()
         self._start_read_thread()
@@ -326,9 +322,7 @@ class OpenCVCamera(Camera):
         # the format was successfully applied. Only warn when we can confirm a mismatch.
         fourcc_unreadable = actual_fourcc_code_int == 0 or actual_fourcc.strip() == ""
         if fourcc_unreadable:
-            logger.debug(
-                f"{self} set fourcc={self.config.fourcc} (backend cannot confirm via readback)."
-            )
+            logger.debug(f"{self} set fourcc={self.config.fourcc} (backend cannot confirm via readback).")
         elif actual_fourcc != self.config.fourcc:
             logger.warning(
                 f"{self} failed to set fourcc={self.config.fourcc} (actual={actual_fourcc}, success={success}). "
@@ -473,13 +467,15 @@ class OpenCVCamera(Camera):
                 primary = paths[0] if paths else None
                 if primary and primary not in opened_paths:
                     display_name = path_to_device_name.get(primary, dev_name)
-                    found_cameras_info.append({
-                        "name": f"OpenCV Camera '{display_name}' @ {primary} (unavailable)",
-                        "type": "OpenCV",
-                        "id": primary,
-                        "device_name": display_name,
-                        "available": False,
-                    })
+                    found_cameras_info.append(
+                        {
+                            "name": f"OpenCV Camera '{display_name}' @ {primary} (unavailable)",
+                            "type": "OpenCV",
+                            "id": primary,
+                            "device_name": display_name,
+                            "available": False,
+                        }
+                    )
 
         return found_cameras_info
 
@@ -517,9 +513,7 @@ class OpenCVCamera(Camera):
         start_time = time.perf_counter()
 
         if color_mode is not None:
-            logger.warning(
-                f"{self} read() color_mode parameter is deprecated and will be removed in future versions."
-            )
+            logger.warning(f"{self} read() color_mode parameter is deprecated and will be removed in future versions.")
 
         if self.thread is None or not self.thread.is_alive():
             raise RuntimeError(f"{self} read thread is not running.")
@@ -549,9 +543,7 @@ class OpenCVCamera(Camera):
         """
 
         if self.color_mode not in (ColorMode.RGB, ColorMode.BGR):
-            raise ValueError(
-                f"Invalid color mode '{self.color_mode}'. Expected {ColorMode.RGB} or {ColorMode.BGR}."
-            )
+            raise ValueError(f"Invalid color mode '{self.color_mode}'. Expected {ColorMode.RGB} or {ColorMode.BGR}.")
 
         h, w, c = image.shape
 
@@ -705,9 +697,7 @@ class OpenCVCamera(Camera):
 
         age_ms = (time.perf_counter() - timestamp) * 1e3
         if age_ms > max_age_ms:
-            raise TimeoutError(
-                f"{self} latest frame is too old: {age_ms:.1f} ms (max allowed: {max_age_ms} ms)."
-            )
+            raise TimeoutError(f"{self} latest frame is too old: {age_ms:.1f} ms (max allowed: {max_age_ms} ms).")
 
         return frame
 

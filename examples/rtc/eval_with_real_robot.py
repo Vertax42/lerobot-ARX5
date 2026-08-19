@@ -274,26 +274,18 @@ def get_actions(
                 # Apply robot observation processor
                 obs_processed = robot_observation_processor(obs)
 
-                obs_with_policy_features = build_dataset_frame(
-                    dataset_features, obs_processed, prefix="observation"
-                )
+                obs_with_policy_features = build_dataset_frame(dataset_features, obs_processed, prefix="observation")
 
                 for name in obs_with_policy_features:
                     obs_with_policy_features[name] = torch.from_numpy(obs_with_policy_features[name])
                     if "image" in name:
-                        obs_with_policy_features[name] = (
-                            obs_with_policy_features[name].type(torch.float32) / 255
-                        )
-                        obs_with_policy_features[name] = (
-                            obs_with_policy_features[name].permute(2, 0, 1).contiguous()
-                        )
+                        obs_with_policy_features[name] = obs_with_policy_features[name].type(torch.float32) / 255
+                        obs_with_policy_features[name] = obs_with_policy_features[name].permute(2, 0, 1).contiguous()
                     obs_with_policy_features[name] = obs_with_policy_features[name].unsqueeze(0)
                     obs_with_policy_features[name] = obs_with_policy_features[name].to(policy_device)
 
                 obs_with_policy_features["task"] = [cfg.task]  # Task should be a list, not a string!
-                obs_with_policy_features["robot_type"] = (
-                    robot.robot.name if hasattr(robot.robot, "name") else ""
-                )
+                obs_with_policy_features["robot_type"] = robot.robot.name if hasattr(robot.robot, "name") else ""
 
                 preproceseded_obs = preprocessor(obs_with_policy_features)
 
@@ -320,9 +312,7 @@ def get_actions(
                         "[GET_ACTIONS] cfg.action_queue_size_to_get_new_actions Too small, It should be higher than inference delay + execution horizon."
                     )
 
-                action_queue.merge(
-                    original_actions, postprocessed_actions, new_delay, action_index_before_inference
-                )
+                action_queue.merge(original_actions, postprocessed_actions, new_delay, action_index_before_inference)
             else:
                 # Small sleep to prevent busy waiting
                 time.sleep(0.1)

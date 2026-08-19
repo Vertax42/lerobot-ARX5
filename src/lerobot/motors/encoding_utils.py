@@ -46,9 +46,7 @@ def encode_twos_complement(value: int, n_bytes: int):
     max_val = (1 << (bit_width - 1)) - 1
 
     if not (min_val <= value <= max_val):
-        raise ValueError(
-            f"Value {value} out of range for {n_bytes}-byte two's complement: [{min_val}, {max_val}]"
-        )
+        raise ValueError(f"Value {value} out of range for {n_bytes}-byte two's complement: [{min_val}, {max_val}]")
 
     if value >= 0:
         return value

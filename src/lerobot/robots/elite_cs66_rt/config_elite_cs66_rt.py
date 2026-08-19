@@ -15,8 +15,8 @@ from enum import Enum
 from pathlib import Path
 
 from lerobot.cameras.configs import CameraConfig
-from lerobot.robots.config import RobotConfig
 from lerobot.grippers import GripperConfig
+from lerobot.robots.config import RobotConfig
 
 
 class EliteCS66RTControlMode(str, Enum):
@@ -39,9 +39,7 @@ def _validate_singularity_params(cfg) -> None:
     # observed creep-through, where a 0.05 floor let the arm crawl past the IK-refusal boundary.
     if cfg.singularity_directional:
         if not (0.0 <= cfg.singularity_min_scale <= 1.0):
-            raise ValueError(
-                f"singularity_min_scale must be in [0, 1], got {cfg.singularity_min_scale}"
-            )
+            raise ValueError(f"singularity_min_scale must be in [0, 1], got {cfg.singularity_min_scale}")
     elif not (0.0 < cfg.singularity_min_scale <= 1.0):
         raise ValueError(
             "singularity_min_scale must be in (0, 1] for a non-directional guard (0 would trap the "
@@ -59,9 +57,7 @@ def _validate_singularity_params(cfg) -> None:
                 f"limits (rad/s), got {cfg.joint_vel_limits_rad_s}"
             )
     if not (0.0 < cfg.joint_vel_limit_margin <= 1.0):
-        raise ValueError(
-            f"joint_vel_limit_margin must be in (0, 1], got {cfg.joint_vel_limit_margin}"
-        )
+        raise ValueError(f"joint_vel_limit_margin must be in (0, 1], got {cfg.joint_vel_limit_margin}")
     if cfg.joint_vel_horizon_s <= 0:
         raise ValueError(f"joint_vel_horizon_s must be > 0, got {cfg.joint_vel_horizon_s}")
     if cfg.joint_vel_dls_lambda <= 0:
@@ -143,12 +139,8 @@ class EliteCS66RTConfig(RobotConfig):
     # ready) need to differentiate. Override per station as needed.
     # The runtime ``connect(go_to_start=False)`` flag skips the start MoveJ
     # for crash-recovery / re-attach scenarios.
-    home_position_rad: list[float] = field(
-        default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
-    )
-    start_position_rad: list[float] = field(
-        default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0]
-    )
+    home_position_rad: list[float] = field(default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0])
+    start_position_rad: list[float] = field(default_factory=lambda: [0.0, -1.5708, -1.5708, -1.5708, 1.5708, 0.0])
     start_move_duration_s: float = 3.0
     home_move_duration_s: float = 3.0
     move_j_timeout_ms: int = 200
@@ -281,10 +273,7 @@ class EliteCS66RTConfig(RobotConfig):
             # 10 ms the script's per-tick extrapolation window grows large and
             # target updates feel laggy. Default 4 ms matches the SDK example
             # (250 Hz, the CS-series RT controller's native rate).
-            raise ValueError(
-                "servoj_time must be in [0.002, 0.01] s (CS-series RT envelope), "
-                f"got {self.servoj_time}"
-            )
+            raise ValueError(f"servoj_time must be in [0.002, 0.01] s (CS-series RT envelope), got {self.servoj_time}")
         if not 0.03 <= self.servoj_lookahead_time <= 0.2:
             # Elite SDK EliteDriver.hpp says lookahead time must lie in [0.03, 0.2];
             # values outside this range cause the external_control script to abort
@@ -299,10 +288,7 @@ class EliteCS66RTConfig(RobotConfig):
             # Outside the range the controller's IK behavior is unspecified
             # (very low: unable to track even slow targets; very high: IK
             # oscillation / velocity-limit trips).
-            raise ValueError(
-                "servoj_gain must be in [100, 2000] (Elite SDK requirement), "
-                f"got {self.servoj_gain}"
-            )
+            raise ValueError(f"servoj_gain must be in [100, 2000] (Elite SDK requirement), got {self.servoj_gain}")
         for _name, _val in (
             ("max_lin_speed", self.max_lin_speed),
             ("max_ang_speed", self.max_ang_speed),
@@ -312,13 +298,9 @@ class EliteCS66RTConfig(RobotConfig):
                 raise ValueError(f"{_name} must be > 0 when set (None disables it), got {_val}")
         _validate_singularity_params(self)
         if self.command_timeout_ms < 5:
-            raise ValueError(
-                f"command_timeout_ms must be >= 5 (Elite SDK lower bound), got {self.command_timeout_ms}"
-            )
+            raise ValueError(f"command_timeout_ms must be >= 5 (Elite SDK lower bound), got {self.command_timeout_ms}")
         if self.command_stale_timeout_s <= 0:
-            raise ValueError(
-                f"command_stale_timeout_s must be > 0, got {self.command_stale_timeout_s}"
-            )
+            raise ValueError(f"command_stale_timeout_s must be > 0, got {self.command_stale_timeout_s}")
         if self.command_stale_timeout_s * 1000 < self.command_timeout_ms:
             # The host-side stale gate must trip later than the controller's
             # own command timeout. Otherwise, during the window between
@@ -341,39 +323,23 @@ class EliteCS66RTConfig(RobotConfig):
         if self.connect_timeout_s <= 0:
             raise ValueError(f"connect_timeout_s must be > 0, got {self.connect_timeout_s}")
         if len(self.home_position_rad) != 6:
-            raise ValueError(
-                f"home_position_rad must have 6 elements (J1..J6), got {len(self.home_position_rad)}"
-            )
+            raise ValueError(f"home_position_rad must have 6 elements (J1..J6), got {len(self.home_position_rad)}")
         if len(self.start_position_rad) != 6:
-            raise ValueError(
-                f"start_position_rad must have 6 elements (J1..J6), got {len(self.start_position_rad)}"
-            )
+            raise ValueError(f"start_position_rad must have 6 elements (J1..J6), got {len(self.start_position_rad)}")
         if self.start_move_duration_s <= 0:
-            raise ValueError(
-                f"start_move_duration_s must be > 0, got {self.start_move_duration_s}"
-            )
+            raise ValueError(f"start_move_duration_s must be > 0, got {self.start_move_duration_s}")
         if self.home_move_duration_s <= 0:
-            raise ValueError(
-                f"home_move_duration_s must be > 0, got {self.home_move_duration_s}"
-            )
+            raise ValueError(f"home_move_duration_s must be > 0, got {self.home_move_duration_s}")
         if self.move_j_timeout_ms < 5:
             raise ValueError(
                 f"move_j_timeout_ms must be >= 5 (Elite SDK lower bound; mirrors "
                 f"command_timeout_ms), got {self.move_j_timeout_ms}"
             )
         if self.external_control_settle_s < 0:
-            raise ValueError(
-                f"external_control_settle_s must be >= 0, got {self.external_control_settle_s}"
-            )
+            raise ValueError(f"external_control_settle_s must be >= 0, got {self.external_control_settle_s}")
         if self.servo_failure_tolerance_ticks < 1:
-            raise ValueError(
-                f"servo_failure_tolerance_ticks must be >= 1, "
-                f"got {self.servo_failure_tolerance_ticks}"
-            )
-        if (
-            self.use_background_servo_loop
-            and self.control_mode != EliteCS66RTControlMode.CARTESIAN_SERVO
-        ):
+            raise ValueError(f"servo_failure_tolerance_ticks must be >= 1, got {self.servo_failure_tolerance_ticks}")
+        if self.use_background_servo_loop and self.control_mode != EliteCS66RTControlMode.CARTESIAN_SERVO:
             raise ValueError(
                 "use_background_servo_loop=True is only supported with control_mode=CARTESIAN_SERVO. "
                 "Set use_background_servo_loop=False for joint servo mode."

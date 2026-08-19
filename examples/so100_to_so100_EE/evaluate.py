@@ -89,11 +89,7 @@ def main():
 
     # Build pipeline to convert joints observation to EE observation
     robot_joints_to_ee_pose_processor = RobotProcessorPipeline[RobotObservation, RobotObservation](
-        steps=[
-            ForwardKinematicsJointsToEE(
-                kinematics=kinematics_solver, motor_names=list(robot.bus.motors.keys())
-            )
-        ],
+        steps=[ForwardKinematicsJointsToEE(kinematics=kinematics_solver, motor_names=list(robot.bus.motors.keys()))],
         to_transition=observation_to_transition,
         to_output=transition_to_observation,
     )
@@ -169,9 +165,7 @@ def main():
             )
 
             # Reset the environment if not stopping or re-recording
-            if not events["stop_recording"] and (
-                (episode_idx < NUM_EPISODES - 1) or events["rerecord_episode"]
-            ):
+            if not events["stop_recording"] and ((episode_idx < NUM_EPISODES - 1) or events["rerecord_episode"]):
                 log_say("Reset the environment")
                 record_loop(
                     robot=robot,

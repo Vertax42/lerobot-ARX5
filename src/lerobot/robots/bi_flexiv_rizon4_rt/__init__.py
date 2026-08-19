@@ -17,8 +17,8 @@
 try:
     import flexiv_rt
 
-    from .config_bi_flexiv_rizon4_rt import BiFlexivRizon4RTConfig  # noqa: F401
     from .bi_flexiv_rizon4_rt import BiFlexivRizon4RT  # noqa: F401
+    from .config_bi_flexiv_rizon4_rt import BiFlexivRizon4RTConfig  # noqa: F401
 
     # Export flexiv_rt types for direct access
     Mode = flexiv_rt.Mode  # noqa: F401

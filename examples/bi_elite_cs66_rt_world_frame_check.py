@@ -105,7 +105,9 @@ def _print_arm(side: str, cfg: BiEliteCS66RTConfig, R_wb: np.ndarray, base_pose:
     print(f"\n===== {side.upper()} arm  (tilt={tilt:g}°, zrot={zrot:g}°, world_yaw={yaw:g}°) =====")
     print(f"  base  pos [m]    = {_fmt(base_pose[:3])}")
     print(f"  base  rotvec     = {_fmt(base_pose[3:6])}")
-    print(f"  WORLD pos [m]    = {_fmt(world_pose[:3])}   (x={world_pose[0]:+.4f}  y={world_pose[1]:+.4f}  z={world_pose[2]:+.4f})")
+    print(
+        f"  WORLD pos [m]    = {_fmt(world_pose[:3])}   (x={world_pose[0]:+.4f}  y={world_pose[1]:+.4f}  z={world_pose[2]:+.4f})"
+    )
     print(f"  WORLD rotvec     = {_fmt(world_pose[3:6])}")
     print("  WORLD tool axes (columns of R_eef, expressed in world):")
     print(f"      tool +X      = {_fmt(R_eef_world[:, 0])}")
@@ -177,8 +179,10 @@ def main() -> None:
             for side in _SIDES:
                 base_pose = _read_tcp_pose(rtsi[side])
                 if np.linalg.norm(base_pose) < 1e-9:
-                    print(f"\n[{side}] WARNING: RTSI returned an all-zero TCP pose "
-                          "(stream not populated / recipe mismatch).")
+                    print(
+                        f"\n[{side}] WARNING: RTSI returned an all-zero TCP pose "
+                        "(stream not populated / recipe mismatch)."
+                    )
                     continue
                 world[side] = _print_arm(side, cfg, R_wb[side], base_pose)
             if "left" in world and "right" in world:

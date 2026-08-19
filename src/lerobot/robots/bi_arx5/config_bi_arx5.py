@@ -58,9 +58,7 @@ class BiARX5Config(RobotConfig):
 
     # Control parameters
     controller_dt: float = 0.005  # 200Hz low-level control frequency
-    interpolation_controller_dt: float = (
-        0.02  # 50Hz high-level interpolation control frequency
-    )
+    interpolation_controller_dt: float = 0.02  # 50Hz high-level interpolation control frequency
 
     # Control mode (default: joint control for teleoperation)
     control_mode: BiARX5ControlMode = BiARX5ControlMode.TEACH_MODE
@@ -79,13 +77,9 @@ class BiARX5Config(RobotConfig):
     enable_tactile_sensors: bool = True
 
     # Position settings (Joint space: 6 joints + gripper)
-    home_position: list[float] = field(
-        default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    )
+    home_position: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
-    start_position: list[float] = field(
-        default_factory=lambda: [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 1.57]
-    )
+    start_position: list[float] = field(default_factory=lambda: [0.0, 0.948, 0.858, -0.573, 0.0, 0.0, 1.57])
     # Camera configuration
     cameras: dict[str, CameraConfig] = field(default_factory=lambda: {})
 

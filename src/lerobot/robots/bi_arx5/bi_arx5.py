@@ -16,7 +16,6 @@
 
 import math
 import os
-import sys
 import time
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -103,10 +102,7 @@ def _tcp_6d_action_to_euler(
             float(quat_wxyz[3]),
         )
     elif any(k in action for k in r6d_keys):
-        raise ValueError(
-            f"Incomplete rotation-6D action for prefix {prefix!r}: expected all of "
-            f"{r6d_keys}."
-        )
+        raise ValueError(f"Incomplete rotation-6D action for prefix {prefix!r}: expected all of {r6d_keys}.")
     elif all(k in action for k in (f"{prefix}_roll", f"{prefix}_pitch", f"{prefix}_yaw")):
         roll = float(action[f"{prefix}_roll"])
         pitch = float(action[f"{prefix}_pitch"])
@@ -118,13 +114,12 @@ def _tcp_6d_action_to_euler(
 
     return x, y, z, float(roll), float(pitch), float(yaw)
 
+
 try:
     import pyarx as arx5
 except ImportError as e:
     raise ImportError(
-        "pyarx not found. Build and install it first:\n"
-        "  cd third_party/ARX5_SDK\n"
-        "  bash build_python.sh"
+        "pyarx not found. Build and install it first:\n  cd third_party/ARX5_SDK\n  bash build_python.sh"
     ) from e
 
 
@@ -163,9 +158,7 @@ class BiARX5(Robot):
             self.logger.info("Cartesian control mode: using SDK default preview_time (0.1s)")
         elif self.config.inference_mode:
             self.default_preview_time = self.config.preview_time
-            self.logger.info(
-                f"Joint control mode (inference): using preview_time {self.default_preview_time}s"
-            )
+            self.logger.info(f"Joint control mode (inference): using preview_time {self.default_preview_time}s")
         else:
             self.default_preview_time = 0.0
             self.logger.info(f"Joint control mode (teleop): using preview_time {self.default_preview_time}s")
@@ -226,7 +219,9 @@ class BiARX5(Robot):
 
         # Create solver for FK/IK calculations (both arms use same model)
         current_dir = os.path.dirname(__file__)
-        urdf_path = os.path.join(current_dir, "..", "..", "..", "..", "third_party", "ARX5_SDK", "models", f"{config.left_arm_model}.urdf")
+        urdf_path = os.path.join(
+            current_dir, "..", "..", "..", "..", "third_party", "ARX5_SDK", "models", f"{config.left_arm_model}.urdf"
+        )
         self._solver = arx5.Arx5Solver(
             urdf_path,
             self.robot_configs["left_config"].joint_dof,
@@ -258,9 +253,7 @@ class BiARX5(Robot):
         # Set gripper_open_readout for left and right arm
         self.robot_configs["left_config"].gripper_open_readout = config.gripper_open_readout[0]
         self.robot_configs["right_config"].gripper_open_readout = config.gripper_open_readout[1]
-        self.logger.info(
-            f"Set left gripper_open_readout to: {self.robot_configs['left_config'].gripper_open_readout}"
-        )
+        self.logger.info(f"Set left gripper_open_readout to: {self.robot_configs['left_config'].gripper_open_readout}")
         self.logger.info(
             f"Set right gripper_open_readout to: {self.robot_configs['right_config'].gripper_open_readout}"
         )
@@ -325,9 +318,7 @@ class BiARX5(Robot):
 
     @property
     def _cameras_ft(self) -> dict[str, tuple]:
-        return {
-            cam: (self.config.cameras[cam].height, self.config.cameras[cam].width, 3) for cam in self.cameras
-        }
+        return {cam: (self.config.cameras[cam].height, self.config.cameras[cam].width, 3) for cam in self.cameras}
 
     @cached_property
     def observation_features(self) -> dict[str, type | tuple]:
@@ -399,9 +390,7 @@ class BiARX5(Robot):
 
     def connect(self, calibrate: bool = False, go_to_start: bool = True) -> None:
         if self._is_connected:
-            raise DeviceAlreadyConnectedError(
-                f"{self} already connected, do not run `robot.connect()` twice."
-            )
+            raise DeviceAlreadyConnectedError(f"{self} already connected, do not run `robot.connect()` twice.")
 
         try:
             self.logger.info(f"Creating left arm controller (mode: {self.config.control_mode.value})...")
@@ -419,9 +408,7 @@ class BiARX5(Robot):
                 )
             time.sleep(0.5)
             self.logger.info(f"✅ Left arm controller created successfully ({type(self.left_arm).__name__})")
-            self.logger.info(
-                f"Left arm preview_time: {self.controller_configs['left_config'].default_preview_time}"
-            )
+            self.logger.info(f"Left arm preview_time: {self.controller_configs['left_config'].default_preview_time}")
 
             self.logger.info(f"Creating right arm controller (mode: {self.config.control_mode.value})...")
             if self.config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL:
@@ -437,12 +424,8 @@ class BiARX5(Robot):
                     self.config.right_arm_port,
                 )
             time.sleep(0.5)
-            self.logger.info(
-                f"✅ Right arm controller created successfully ({type(self.right_arm).__name__})"
-            )
-            self.logger.info(
-                f"Right arm preview_time: {self.controller_configs['right_config'].default_preview_time}"
-            )
+            self.logger.info(f"✅ Right arm controller created successfully ({type(self.right_arm).__name__})")
+            self.logger.info(f"Right arm preview_time: {self.controller_configs['right_config'].default_preview_time}")
 
             # Verify SDK is using the correct gripper_open_readout
             left_robot_config = self.left_arm.get_robot_config()
@@ -488,13 +471,9 @@ class BiARX5(Robot):
 
         # Log current gain
         gain = self.left_arm.get_gain()
-        self.logger.info(
-            f"Current left arm gain: {gain.kp()}, {gain.kd()}, {gain.gripper_kp}, {gain.gripper_kd}"
-        )
+        self.logger.info(f"Current left arm gain: {gain.kp()}, {gain.kd()}, {gain.gripper_kp}, {gain.gripper_kd}")
         gain = self.right_arm.get_gain()
-        self.logger.info(
-            f"Current right arm gain: {gain.kp()}, {gain.kd()}, {gain.gripper_kp}, {gain.gripper_kd}"
-        )
+        self.logger.info(f"Current right arm gain: {gain.kp()}, {gain.kd()}, {gain.gripper_kp}, {gain.gripper_kd}")
 
         if self.config.inference_mode:
             if self.config.control_mode == BiARX5ControlMode.CARTESIAN_CONTROL:
@@ -1094,9 +1073,7 @@ class BiARX5(Robot):
             self._is_cartesian_control_mode = True
             self._is_gravity_compensation_mode = False
 
-            self.logger.info(
-                "✅ Both arms switched from gravity compensation to normal cartesian control mode"
-            )
+            self.logger.info("✅ Both arms switched from gravity compensation to normal cartesian control mode")
         elif not self._is_gravity_compensation_mode and is_cartesian_mode:
             self.logger.info("Both arms are already in normal cartesian control mode")
             return
@@ -1205,9 +1182,7 @@ class BiARX5(Robot):
                 durations=duration,
                 easing=easing,
             )
-            self.logger.info(
-                f"✅ Successfully going to start position in {self.config.control_mode.value} mode"
-            )
+            self.logger.info(f"✅ Successfully going to start position in {self.config.control_mode.value} mode")
         else:
             # Joint mode: use joint trajectory interpolation
             self.logger.info("Joint mode: use joint trajectory interpolation.")
@@ -1238,9 +1213,7 @@ class BiARX5(Robot):
 
             # Execute smooth trajectory to start position
             self.move_joint_trajectory(target_joint_poses=start_poses, durations=duration, easing=easing)
-            self.logger.info(
-                f"✅ Successfully going to start position in {self.config.control_mode.value} mode"
-            )
+            self.logger.info(f"✅ Successfully going to start position in {self.config.control_mode.value} mode")
 
     def smooth_go_home(self, duration: float | None = None, easing: str = "ease_in_out_quad") -> None:
         """
@@ -1303,9 +1276,7 @@ class BiARX5(Robot):
                 durations=duration,
                 easing=easing,
             )
-            self.logger.info(
-                f"✅ Successfully returned to home position in {self.config.control_mode.value} mode"
-            )
+            self.logger.info(f"✅ Successfully returned to home position in {self.config.control_mode.value} mode")
         else:
             # Joint mode: use joint trajectory
             # First, set current position as target to avoid large position error
@@ -1338,6 +1309,4 @@ class BiARX5(Robot):
             # Switch back to gravity compensation mode
             self.set_to_gravity_compensation_mode()
 
-            self.logger.info(
-                "✅ Successfully returned to home position and switched to gravity compensation mode"
-            )
+            self.logger.info("✅ Successfully returned to home position and switched to gravity compensation mode")

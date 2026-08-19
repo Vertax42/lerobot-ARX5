@@ -68,8 +68,7 @@ _MOTOR_IDS = {
 
 def _make_motors() -> dict[str, Motor]:
     return {
-        name: Motor(_MOTOR_IDS[name], _MOTOR_MODELS[name], MotorNormMode.DEGREES)
-        for name in [*ARM_JOINTS, "gripper"]
+        name: Motor(_MOTOR_IDS[name], _MOTOR_MODELS[name], MotorNormMode.DEGREES) for name in [*ARM_JOINTS, "gripper"]
     }
 
 
@@ -209,27 +208,20 @@ class BiTRLC(Teleoperator):
         signs: list[int],
     ) -> list[float]:
         """Calibrate one arm and return its per-joint offsets."""
-        target_str = "  ".join(
-            f"joint_{i + 1}: {math.degrees(v):+.1f}°" for i, v in enumerate(target)
-        )
+        target_str = "  ".join(f"joint_{i + 1}: {math.degrees(v):+.1f}°" for i, v in enumerate(target))
         print(f"\n[BiTRLC Calibration] {side} arm — move to start pose:")
         print(f"  {target_str}")
         time.sleep(2)
 
         # Average 10 readings to reduce noise
-        readings = [
-            bus.sync_read(normalize=False, data_name="Present_Position")
-            for _ in range(10)
-        ]
+        readings = [bus.sync_read(normalize=False, data_name="Present_Position") for _ in range(10)]
 
         offsets = []
         for i, motor in enumerate(ARM_JOINTS):
             raw_rad = np.mean([r[motor] for r in readings]) / 4096 * 2 * math.pi
             offsets.append(raw_rad - signs[i] * target[i])
 
-        logger.info(
-            f"{self} {side} arm calibrated: offsets={[f'{o:.4f}' for o in offsets]}"
-        )
+        logger.info(f"{self} {side} arm calibrated: offsets={[f'{o:.4f}' for o in offsets]}")
         return offsets
 
     def setup_motors(self) -> None:
@@ -237,10 +229,7 @@ class BiTRLC(Teleoperator):
         for side, bus in [("left", self.left_bus), ("right", self.right_bus)]:
             print(f"\n[BiTRLC] Setting up {side} arm motors:")
             for motor in bus.motors:
-                input(
-                    f"  Connect the controller board to the '{motor}' motor "
-                    f"of the {side} arm only and press enter."
-                )
+                input(f"  Connect the controller board to the '{motor}' motor of the {side} arm only and press enter.")
                 bus.setup_motor(motor)
                 print(f"  '{motor}' ({side}) motor id set to {bus.motors[motor].id}")
 
@@ -258,8 +247,26 @@ class BiTRLC(Teleoperator):
         right_raw = self.right_bus.sync_read(normalize=False, data_name="Present_Position", num_retry=2)
 
         action: dict[str, float] = {}
-        action.update(self._decode_arm(left_raw, "left", self.config.left_joint_signs, self._left_joint_offsets, self.config.left_gripper_open_pos, self.config.left_gripper_closed_pos))
-        action.update(self._decode_arm(right_raw, "right", self.config.right_joint_signs, self._right_joint_offsets, self.config.right_gripper_open_pos, self.config.right_gripper_closed_pos))
+        action.update(
+            self._decode_arm(
+                left_raw,
+                "left",
+                self.config.left_joint_signs,
+                self._left_joint_offsets,
+                self.config.left_gripper_open_pos,
+                self.config.left_gripper_closed_pos,
+            )
+        )
+        action.update(
+            self._decode_arm(
+                right_raw,
+                "right",
+                self.config.right_joint_signs,
+                self._right_joint_offsets,
+                self.config.right_gripper_open_pos,
+                self.config.right_gripper_closed_pos,
+            )
+        )
 
         dt_ms = (time.perf_counter() - start) * 1e3
         logger.debug(f"{self} read action: {dt_ms:.1f}ms")

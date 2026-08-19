@@ -81,9 +81,7 @@ class RABCWeights:
         # Check if the requested head mode column exists
         if self.progress_column not in self.df.columns:
             available = [c for c in self.df.columns if c.startswith("progress")]
-            raise ValueError(
-                f"Column '{self.progress_column}' not found. Available progress columns: {available}"
-            )
+            raise ValueError(f"Column '{self.progress_column}' not found. Available progress columns: {available}")
 
         logging.info(f"Using progress column: {self.progress_column}")
 

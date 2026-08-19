@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .configuration_bi_trlc import BiTRLCConfig
 from .bi_trlc import BiTRLC
+from .configuration_bi_trlc import BiTRLCConfig
 
 __all__ = ["BiTRLCConfig", "BiTRLC"]

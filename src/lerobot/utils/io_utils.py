@@ -25,9 +25,7 @@ JsonLike = str | int | float | bool | None | list["JsonLike"] | dict[str, "JsonL
 def write_video(video_path, stacked_frames, fps):
     # Filter out DeprecationWarnings raised from pkg_resources
     with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore", "pkg_resources is deprecated as an API", category=DeprecationWarning
-        )
+        warnings.filterwarnings("ignore", "pkg_resources is deprecated as an API", category=DeprecationWarning)
         imageio.mimsave(video_path, stacked_frames, fps=fps)
 
 
@@ -55,9 +53,7 @@ def deserialize_json_into_object[T: JsonLike](fpath: Path, obj: T) -> T:
 
             # Check that they have exactly the same set of keys.
             if target.keys() != source.keys():
-                raise ValueError(
-                    f"Dictionary keys do not match.\nExpected: {target.keys()}, got: {source.keys()}"
-                )
+                raise ValueError(f"Dictionary keys do not match.\nExpected: {target.keys()}, got: {source.keys()}")
 
             # Recursively update each key.
             for k in target:

@@ -84,9 +84,7 @@ def main():
     print(f"New features: {list(dataset_with_features.meta.features.keys())}")
 
     print("\n4. Removing the success feature...")
-    dataset_cleaned = remove_feature(
-        dataset_with_features, feature_names="success", repo_id="lerobot/pusht_cleaned"
-    )
+    dataset_cleaned = remove_feature(dataset_with_features, feature_names="success", repo_id="lerobot/pusht_cleaned")
     print(f"Features after removal: {list(dataset_cleaned.meta.features.keys())}")
 
     print("\n5. Using modify_features to add and remove features simultaneously...")
@@ -112,9 +110,7 @@ def main():
     if len(dataset.meta.camera_keys) > 1:
         camera_to_remove = dataset.meta.camera_keys[0]
         print(f"Removing camera: {camera_to_remove}")
-        dataset_no_cam = remove_feature(
-            dataset, feature_names=camera_to_remove, repo_id="pusht_no_first_camera"
-        )
+        dataset_no_cam = remove_feature(dataset, feature_names=camera_to_remove, repo_id="pusht_no_first_camera")
         print(f"Remaining cameras: {dataset_no_cam.meta.camera_keys}")
 
     print("\nDone! Check ~/.cache/huggingface/lerobot/ for the created datasets.")

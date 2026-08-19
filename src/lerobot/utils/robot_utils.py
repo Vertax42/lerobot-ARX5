@@ -203,9 +203,7 @@ def quaternion_to_matrix(
     elif input_format == "wxyz":
         qw, qx, qy, qz = pose[3], pose[4], pose[5], pose[6]
     else:
-        raise ValueError(
-            f"Unknown input_format: {input_format}. Expected 'xyzw' or 'wxyz'."
-        )
+        raise ValueError(f"Unknown input_format: {input_format}. Expected 'xyzw' or 'wxyz'.")
 
     rot_matrix = np.array(
         [
@@ -288,9 +286,7 @@ def matrix_to_pose7d(matrix: np.ndarray, output_format: str = "wxyz") -> np.ndar
     elif output_format == "wxyz":
         return np.array([x, y, z, qw, qx, qy, qz])
     else:
-        raise ValueError(
-            f"Unknown output_format: {output_format}. Use 'xyzw' or 'wxyz'."
-        )
+        raise ValueError(f"Unknown output_format: {output_format}. Use 'xyzw' or 'wxyz'.")
 
 
 def euler_to_quaternion(roll: float, pitch: float, yaw: float) -> np.ndarray:
@@ -387,9 +383,7 @@ def quaternion_multiply(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
     )
 
 
-def slerp_quaternion(
-    q1: np.ndarray, q2: np.ndarray, t: float, input_format: str = "wxyz"
-) -> np.ndarray:
+def slerp_quaternion(q1: np.ndarray, q2: np.ndarray, t: float, input_format: str = "wxyz") -> np.ndarray:
     """Spherical Linear Interpolation (SLERP) between two quaternions.
 
     Args:
@@ -457,9 +451,7 @@ def normalize_quaternion(q: np.ndarray, input_format: str = "wxyz") -> np.ndarra
         elif input_format == "xyzw":
             return np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
         else:
-            raise ValueError(
-                f"Unknown input_format: {input_format}. Use 'wxyz' or 'xyzw'."
-            )
+            raise ValueError(f"Unknown input_format: {input_format}. Use 'wxyz' or 'xyzw'.")
 
     # Skip normalization if already unit quaternion (|norm - 1| < tolerance)
     if abs(norm - 1.0) > 1e-6:
@@ -521,9 +513,7 @@ def quaternion_to_rotation_6d(qw: float, qx: float, qy: float, qz: float) -> np.
     return np.array([r1, r2, r3, r4, r5, r6], dtype=np.float32)
 
 
-def rotation_6d_to_quaternion(
-    r6d: np.ndarray, ensure_positive_w: bool = True
-) -> np.ndarray:
+def rotation_6d_to_quaternion(r6d: np.ndarray, ensure_positive_w: bool = True) -> np.ndarray:
     """Convert 6D rotation representation to quaternion.
 
     Uses Gram-Schmidt orthogonalization to reconstruct the rotation matrix
@@ -623,18 +613,14 @@ def pose7d_to_pose9d(pose: np.ndarray, input_format: str = "wxyz") -> np.ndarray
     elif input_format == "xyzw":
         qx, qy, qz, qw = pose[3], pose[4], pose[5], pose[6]
     else:
-        raise ValueError(
-            f"Unknown input_format: {input_format}. Expected 'wxyz' or 'xyzw'."
-        )
+        raise ValueError(f"Unknown input_format: {input_format}. Expected 'wxyz' or 'xyzw'.")
 
     r6d = quaternion_to_rotation_6d(qw, qx, qy, qz)
 
     return np.concatenate([[x, y, z], r6d]).astype(np.float32)
 
 
-def pose9d_to_pose7d(
-    pose: np.ndarray, output_format: str = "wxyz", ensure_positive_w: bool = True
-) -> np.ndarray:
+def pose9d_to_pose7d(pose: np.ndarray, output_format: str = "wxyz", ensure_positive_w: bool = True) -> np.ndarray:
     """Convert 9D pose (position + 6D rotation) to 7D pose (position + quaternion).
 
     This is the inverse of pose7d_to_pose9d(), used to convert neural network
@@ -666,6 +652,4 @@ def pose9d_to_pose7d(
     elif output_format == "xyzw":
         return np.array([x, y, z, qx, qy, qz, qw], dtype=np.float32)
     else:
-        raise ValueError(
-            f"Unknown output_format: {output_format}. Expected 'wxyz' or 'xyzw'."
-        )
+        raise ValueError(f"Unknown output_format: {output_format}. Expected 'wxyz' or 'xyzw'.")

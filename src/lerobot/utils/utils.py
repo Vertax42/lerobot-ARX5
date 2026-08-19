@@ -309,10 +309,12 @@ class SuppressProgressBars:
 
     def __enter__(self):
         from datasets.utils.logging import disable_progress_bar
+
         disable_progress_bar()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         from datasets.utils.logging import enable_progress_bar
+
         enable_progress_bar()
 
 

@@ -65,9 +65,7 @@ def test_average_meter_str():
 
 
 def test_metrics_tracker_initialization(mock_metrics):
-    tracker = MetricsTracker(
-        batch_size=32, num_frames=1000, num_episodes=50, metrics=mock_metrics, initial_step=10
-    )
+    tracker = MetricsTracker(batch_size=32, num_frames=1000, num_episodes=50, metrics=mock_metrics, initial_step=10)
     assert tracker.steps == 10
     assert tracker.samples == 10 * 32
     assert tracker.episodes == tracker.samples / (1000 / 50)
@@ -77,9 +75,7 @@ def test_metrics_tracker_initialization(mock_metrics):
 
 
 def test_metrics_tracker_step(mock_metrics):
-    tracker = MetricsTracker(
-        batch_size=32, num_frames=1000, num_episodes=50, metrics=mock_metrics, initial_step=5
-    )
+    tracker = MetricsTracker(batch_size=32, num_frames=1000, num_episodes=50, metrics=mock_metrics, initial_step=5)
     tracker.step()
     assert tracker.steps == 6
     assert tracker.samples == 6 * 32
