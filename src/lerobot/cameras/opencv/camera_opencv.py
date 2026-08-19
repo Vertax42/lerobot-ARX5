@@ -185,7 +185,9 @@ class OpenCVCamera(Camera):
         val = self.index_or_path
         if isinstance(val, str) and not val.startswith(("/", ".", os.sep)) and os.sep not in val:
             resolved = _resolve_v4l2_device_name(val)
-            logger.info(f"{self} resolved device name '{val}' → '{resolved}'")
+            # Debug, not info: one line per camera at connect, and the name it
+            # resolved to only matters when the wrong device turns up.
+            logger.debug(f"{self} resolved device name '{val}' → '{resolved}'")
             return resolved
         return val if isinstance(val, int) else str(val)
 
@@ -296,10 +298,11 @@ class OpenCVCamera(Camera):
         if self.fps is None:
             raise ValueError(f"{self} FPS is not set")
 
-        success = self.videocapture.set(cv2.CAP_PROP_FPS, float(self.fps))
+        # The V4L2 backend may return False from set() even when the value is
+        # correctly applied, so the return value is dropped and only the actual
+        # readback is validated.
+        self.videocapture.set(cv2.CAP_PROP_FPS, float(self.fps))
         actual_fps = self.videocapture.get(cv2.CAP_PROP_FPS)
-        # Note: V4L2 backend may return False from set() even when the value is correctly applied,
-        # so we only validate the actual readback value, not the success flag.
         if not math.isclose(self.fps, actual_fps, rel_tol=1e-3):
             raise RuntimeError(f"{self} failed to set fps={self.fps} ({actual_fps=}).")
 
@@ -401,8 +404,10 @@ class OpenCVCamera(Camera):
                         for p, name in list(path_to_device_name.items()):
                             if name == old_name:
                                 path_to_device_name[p] = serial
-            except Exception:
-                pass
+            except Exception as e:
+                # Enriching a path with its RealSense serial is best-effort: a
+                # device that disappears mid-scan just keeps its v4l2 name.
+                logger.debug(f"RealSense serial lookup failed, keeping v4l2 names: {e}")
 
         for target in targets_to_scan:
             scan_backend = cv2.CAP_V4L2 if platform.system() == "Linux" else cv2.CAP_ANY

@@ -77,7 +77,7 @@ dataset:
   reset_time_s: 120
   num_episodes: 5
   video: true
-  push_to_hub: true
+  push_to_hub: false
 
 # ── Record loop (top level) ──
 display_data: false

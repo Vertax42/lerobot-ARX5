@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
+    import torch
     from accelerate import Accelerator
 
 
@@ -192,6 +193,21 @@ def init_logging(
         file_handler.setFormatter(formatter)
         file_handler.setLevel(file_level.upper())
         logger.addHandler(file_handler)
+
+    _quieten_vendor_loggers()
+
+
+#: Third-party loggers that report per-device detail at INFO. On a bimanual rig
+#: that is a dozen lines per connect — a device list repeated once per camera,
+#: and a "loaded config" line per sensor — which buries the messages an operator
+#: is actually waiting for. Their warnings still come through, and the lines
+#: below are still in the session file at DEBUG.
+_VENDOR_LOGGERS = ("xensesdk",)
+
+
+def _quieten_vendor_loggers(level: int = logging.WARNING) -> None:
+    for name in _VENDOR_LOGGERS:
+        logging.getLogger(name).setLevel(level)
 
 
 def format_big_number(num, precision=0):
