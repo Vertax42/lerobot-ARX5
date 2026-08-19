@@ -281,6 +281,9 @@ default.extend-ignore-identifiers-re = [
 python_version = "3.12"
 ignore_missing_imports = true
 follow_imports = "skip"
+# A vendored pybind build script. Its directory name has hyphens, so it is not
+# an importable package and the `lerobot.*` override below never matches it.
+exclude = ['xensevr-pc-service-pybind/setup\.py$']
 
 [[tool.mypy.overrides]]
 module = "lerobot.*"

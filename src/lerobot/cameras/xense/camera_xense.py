@@ -16,6 +16,7 @@
 Provides the XenseTactileCamera class for capturing tactile data from Xense sensors.
 """
 
+import contextlib
 import time
 from pathlib import Path
 from threading import Event, Lock, RLock, Thread
@@ -58,16 +59,15 @@ def _patch_ctypes_find_library_for_udev() -> None:
     orig_find_library = ctypes.util.find_library
 
     def _resolve_libudev_path() -> str | None:
-        # Prefer ldconfig (most robust on Linux)
-        try:
+        # Prefer ldconfig (most robust on Linux). Suppressed rather than logged:
+        # the hard-coded fallbacks below are the answer on any box without it.
+        with contextlib.suppress(Exception):
             out = subprocess.check_output(["/sbin/ldconfig", "-p"], text=True, stderr=subprocess.DEVNULL)
             for line in out.splitlines():
                 if "libudev.so.1" in line and "=>" in line:
                     candidate = line.split("=>", 1)[1].strip()
                     if os.path.exists(candidate):
                         return candidate
-        except Exception:
-            pass
 
         # Common fallbacks (Ubuntu/Debian)
         for candidate in (
@@ -140,14 +140,24 @@ class XenseTactileCamera(Camera):
 
         self.config = config
         self.serial_number = config.serial_number
-        self.output_types = config.output_types
+        # The config declares `| list[str] | None` because YAML and the CLI hand it
+        # strings; __post_init__ resolves those to enum members and fills the default.
+        # Narrow once here rather than at each of the dozen uses below — and check it,
+        # so a config that skipped __post_init__ fails at construction instead of
+        # somewhere inside a read().
+        if not config.output_types or not all(isinstance(ot, XenseOutputType) for ot in config.output_types):
+            raise TypeError(
+                f"{type(self).__name__} needs output_types normalized to XenseOutputType; "
+                f"got {config.output_types!r}. XenseTactileCameraConfig.__post_init__ does this."
+            )
+        self.output_types: list[XenseOutputType] = list(config.output_types)  # type: ignore[arg-type]
         self.warmup_s = config.warmup_s
         self.rectify_size = config.rectify_size
         self.raw_size = config.raw_size
         self.disable_infer = config.disable_infer
         self.infer_mode = config.infer_mode
         self.camera_properties = config.camera_properties
-        self.sensor = None
+        self.sensor: Any = None
 
         # Threading for async read
         self.thread: Thread | None = None
@@ -169,7 +179,7 @@ class XenseTactileCamera(Camera):
 
         # Pre-build sensor output types list for better performance
         # This avoids reconstructing the mapping on every read() call
-        self._sensor_output_types_cache = None
+        self._sensor_output_types_cache: list[Any] | None = None
         # Keep a key so changing output_types at runtime can invalidate cache
         self._sensor_output_types_cache_key: tuple[XenseOutputType, ...] | None = None
 
@@ -199,7 +209,7 @@ class XenseTactileCamera(Camera):
             # xensesdk>=2.0: `api`/`use_gpu` were removed; the SDK auto-selects the
             # camera backend and GPU. `disable_infer` skips the inference-engine load
             # for image-only outputs; `infer_mode` (None=SDK default) picks the variant.
-            create_kwargs = {
+            create_kwargs: dict[str, Any] = {
                 "rectify_size": self.rectify_size,
                 "raw_size": self.raw_size,
                 "disable_infer": self.disable_infer,
@@ -233,10 +243,10 @@ class XenseTactileCamera(Camera):
             # Do warmup reads to stabilize the sensor
             start_time = time.time()
             while time.time() - start_time < self.warmup_s:
-                try:
+                # Failures here are the point of warming up: the sensor is not
+                # streaming yet, and read() is what makes it start.
+                with contextlib.suppress(Exception):
                     self.read()
-                except Exception:
-                    pass  # Ignore errors during warmup
                 time.sleep(0.1)
             self._start_read_thread()
 
