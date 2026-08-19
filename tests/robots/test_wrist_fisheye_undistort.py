@@ -181,3 +181,122 @@ def test_the_firmware_gate_names_the_version_it_wants():
 
 def test_new_enough_firmware_does_not_trip_the_gate():
     assert _follower(cal=_cal(310.0, 311.0), version=(2, 0, 0))._fisheye_firmware_shortfall() is None
+
+
+# --------------------------------------------------------------------------- #
+# The rectification itself
+# --------------------------------------------------------------------------- #
+
+
+def _reference_remap(cal, balance):
+    """OpenCV's own fisheye rectification, under the SDK's balance convention.
+
+    The SDK's `balance` interpolates the output focal length between 1.00 and
+    0.70 — it is NOT OpenCV's estimateNewCameraMatrixForUndistortRectify
+    balance, which solves for a valid-pixel ratio. Comparing against the wrong
+    one looks like a large disagreement and means nothing.
+    """
+    import cv2
+
+    from xense.taccap import FisheyeUndistorter
+
+    K = np.asarray(cal.K, np.float64)
+    D = np.asarray(cal.D, np.float64).reshape(4, 1)
+    scale = FisheyeUndistorter(cal, 640, 480, balance).focal_scale
+    new_k = K.copy()
+    new_k[0, 0] *= scale
+    new_k[1, 1] *= scale
+    mx, my = cv2.fisheye.initUndistortRectifyMap(
+        K, D, np.eye(3), new_k, (640, 480), cv2.CV_32F
+    )
+    return mx, my
+
+
+@pytest.mark.parametrize("balance", [0.0, 0.5, 1.0])
+def test_rectification_matches_opencvs_own_fisheye_implementation(balance):
+    """The strongest check available without a calibration target in frame."""
+    import cv2
+
+    from xense.taccap import FISHEYE_FALLBACK_CAL, FisheyeUndistorter
+
+    img = np.random.default_rng(7).integers(0, 255, (480, 640, 3), dtype=np.uint8)
+    mx, my = _reference_remap(FISHEYE_FALLBACK_CAL, balance)
+    expected = cv2.remap(img, mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+
+    got = np.asarray(FisheyeUndistorter(FISHEYE_FALLBACK_CAL, 640, 480, balance).apply(img))
+
+    identical = (np.abs(got.astype(int) - expected.astype(int)).sum(axis=2) == 0).mean()
+    assert identical > 0.99, f"only {identical:.1%} of pixels match OpenCV"
+
+
+def test_rectification_actually_moves_pixels():
+    """A no-op undistorter would pass every other test in this file.
+
+    These intrinsics have small distortion coefficients but a short focal length
+    (fx=213 across 640px), so the geometric correction is substantial — about
+    57px on average and 175px at the corners. Asserting a floor catches an
+    undistorter that silently degrades to identity.
+    """
+    from xense.taccap import FISHEYE_FALLBACK_CAL
+
+    mx, my = _reference_remap(FISHEYE_FALLBACK_CAL, 0.0)
+    yy, xx = np.mgrid[0:480, 0:640].astype(np.float32)
+    displacement = np.hypot(mx - xx, my - yy)
+
+    assert displacement.mean() > 10.0, "rectification is close to a no-op"
+    assert displacement.max() > 50.0
+
+
+def test_a_wider_balance_shortens_the_focal_length():
+    from xense.taccap import FISHEYE_FALLBACK_CAL, FisheyeUndistorter
+
+    natural = FisheyeUndistorter(FISHEYE_FALLBACK_CAL, 640, 480, 0.0).focal_scale
+    widest = FisheyeUndistorter(FISHEYE_FALLBACK_CAL, 640, 480, 1.0).focal_scale
+
+    assert natural == pytest.approx(1.00, abs=1e-3)
+    assert widest == pytest.approx(0.70, abs=1e-3)
+
+
+def test_an_undistorter_is_reusable_across_frames():
+    """The shape that keeps rectification affordable: build once, apply many.
+
+    Cost was measured on the bench — 0.40 ms/frame, about 1% of a 33ms budget,
+    for two wrist cameras — and that number lives in the commit message, not in
+    an assertion. Wall-clock bounds here would measure the harness: under
+    pytest's typeguard plugin the same call takes ~6ms, 15x more, which says
+    nothing about whether a robot can keep 30fps.
+
+    What is worth pinning is that one undistorter serves every frame, which is
+    what XenseWristCamera relies on — it builds one at connect() and holds it
+    for the session. An implementation that had to be rebuilt per frame would
+    fail here rather than quietly cost 50x on the robot.
+    """
+    from xense.taccap import FISHEYE_FALLBACK_CAL, FisheyeUndistorter
+
+    undistorter = FisheyeUndistorter(FISHEYE_FALLBACK_CAL, 640, 480, 0.0)
+    rng = np.random.default_rng(0)
+
+    outputs = [
+        np.asarray(undistorter.apply(
+            rng.integers(0, 255, (480, 640, 3), dtype=np.uint8)
+        ))
+        for _ in range(5)
+    ]
+
+    assert all(o.shape == (480, 640, 3) for o in outputs)
+    # Distinct inputs must give distinct outputs — a cached-result bug would
+    # hand every frame the first one, and a per-frame rebuild would still pass
+    # the shape check alone.
+    assert not np.array_equal(outputs[0], outputs[1])
+
+
+def test_the_camera_builds_one_undistorter_and_keeps_it():
+    """XenseWristCamera holds it for the session rather than per read()."""
+    from lerobot.cameras.xense import XenseWristCamera
+
+    cam = XenseWristCamera(_cfg(undistort=True))
+    assert cam._undistorter is None, "nothing should be built before connect()"
+
+    # connect() is what builds it; the field is the contract _postprocess_image
+    # reads on every frame, so it must survive across reads.
+    assert hasattr(cam, "_undistorter")

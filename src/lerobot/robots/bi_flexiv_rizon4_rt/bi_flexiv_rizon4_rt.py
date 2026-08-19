@@ -162,6 +162,8 @@ class BiFlexivRizon4RT(Robot):
             sides=("left", "right"),
             enable_tactile=self.config.enable_tactile_sensors,
             logger=self.logger,
+            undistort_wrist=self.config.undistort_wrist_cameras,
+            fisheye_balance=self.config.wrist_fisheye_balance,
         )
         # The sweep already resolved each gripper's MCU path; pin it so the
         # driver's connect() skips a second scan of the same bus.
