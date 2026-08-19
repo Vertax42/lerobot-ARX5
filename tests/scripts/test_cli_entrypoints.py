@@ -35,6 +35,5 @@ def test_entrypoint_is_wrapped_for_the_cli(module, func_name):
     func = getattr(module, func_name)
     # parser.wrap() replaces the function, so the original is on __wrapped__.
     assert hasattr(func, "__wrapped__"), (
-        f"{module.__name__}.{func_name} lost its @parser.wrap() decorator — "
-        "the CLI would stop parsing arguments"
+        f"{module.__name__}.{func_name} lost its @parser.wrap() decorator — the CLI would stop parsing arguments"
     )

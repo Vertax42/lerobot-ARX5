@@ -42,8 +42,14 @@ class Case:
     def run(self, robot, teleop, dataset, events, **kwargs):
         try:
             getattr(record_mod, self.loop)(
-                robot=robot, events=events, fps=FPS, dataset=dataset, teleop=teleop,
-                single_task="task", control_time_s=1000, **kwargs,
+                robot=robot,
+                events=events,
+                fps=FPS,
+                dataset=dataset,
+                teleop=teleop,
+                single_task="task",
+                control_time_s=1000,
+                **kwargs,
             )
         except StopLoopError:
             return
@@ -52,8 +58,7 @@ class Case:
 
 CASES = [
     Case("flexiv_rizon4_rt_record_loop", FakeTeleop),
-    Case("elite_cs66_rt_record_loop", FakeSpaceMouseTeleop,
-         reset_kwarg="both_pressed_frames"),
+    Case("elite_cs66_rt_record_loop", FakeSpaceMouseTeleop, reset_kwarg="both_pressed_frames"),
 ]
 IDS = [c.loop for c in CASES]
 
@@ -116,8 +121,13 @@ def test_exit_early_stops_the_episode(case):
 
     # Ends on its own via the event rather than by exhausting the double.
     getattr(record_mod, case.loop)(
-        robot=robot, events=events, fps=FPS, dataset=dataset,
-        teleop=case.teleop(), single_task="task", control_time_s=1000,
+        robot=robot,
+        events=events,
+        fps=FPS,
+        dataset=dataset,
+        teleop=case.teleop(),
+        single_task="task",
+        control_time_s=1000,
     )
 
     assert len(dataset.frames) <= 1

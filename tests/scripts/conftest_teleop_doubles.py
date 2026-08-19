@@ -39,8 +39,7 @@ def run_loop(loop, *, iterations: int, **kwargs) -> None:
     except StopLoopError:
         return
     raise AssertionError(
-        f"{loop.__name__} returned on its own before {iterations} iterations — "
-        "the double should have stopped it"
+        f"{loop.__name__} returned on its own before {iterations} iterations — the double should have stopped it"
     )
 
 
@@ -62,9 +61,15 @@ class FakeRobot:
         # the "background trajectory owns the arm" branch deterministically.
         self._rt_moving_frames = set(rt_moving_frames)
         self.action_features = action_features or {
-            "tcp.x": float, "tcp.y": float, "tcp.z": float,
-            "tcp.r1": float, "tcp.r2": float, "tcp.r3": float,
-            "tcp.r4": float, "tcp.r5": float, "tcp.r6": float,
+            "tcp.x": float,
+            "tcp.y": float,
+            "tcp.z": float,
+            "tcp.r1": float,
+            "tcp.r2": float,
+            "tcp.r3": float,
+            "tcp.r4": float,
+            "tcp.r5": float,
+            "tcp.r6": float,
             "gripper.pos": float,
         }
         # `name` is not cosmetic: pico4_teleop_loop gates its whole rt_moving
@@ -149,9 +154,15 @@ class FakeTeleop:
         self._frame += 1
         self.calls.append(("get_action",))
         return {
-            "tcp.x": 0.11, "tcp.y": 0.22, "tcp.z": 0.33,
-            "tcp.r1": 1.0, "tcp.r2": 0.0, "tcp.r3": 0.0,
-            "tcp.r4": 0.0, "tcp.r5": 1.0, "tcp.r6": 0.0,
+            "tcp.x": 0.11,
+            "tcp.y": 0.22,
+            "tcp.z": 0.33,
+            "tcp.r1": 1.0,
+            "tcp.r2": 0.0,
+            "tcp.r3": 0.0,
+            "tcp.r4": 0.0,
+            "tcp.r5": 1.0,
+            "tcp.r6": 0.0,
             "gripper.pos": 0.75,
         }
 
@@ -214,13 +225,15 @@ class FakeBiPico4Teleop(FakeTeleop):
 
     def reset_to_pose(self, left_pose, right_pose, left_grip, right_grip) -> None:
         """Bimanual re-sync takes both sides at once, unlike the single-arm form."""
-        self.calls.append((
-            "reset_to_pose",
-            tuple(np.asarray(left_pose).tolist()),
-            tuple(np.asarray(right_pose).tolist()),
-            float(left_grip),
-            float(right_grip),
-        ))
+        self.calls.append(
+            (
+                "reset_to_pose",
+                tuple(np.asarray(left_pose).tolist()),
+                tuple(np.asarray(right_pose).tolist()),
+                float(left_grip),
+                float(right_grip),
+            )
+        )
 
 
 class FakeDataset:

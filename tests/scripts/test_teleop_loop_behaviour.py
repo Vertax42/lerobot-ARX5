@@ -51,8 +51,13 @@ class Case:
 
     def run(self, robot, teleop, **kwargs):
         run_loop(
-            getattr(teleop_mod, self.loop), iterations=ITERS,
-            teleop=teleop, robot=robot, fps=1000, display_data=False, **kwargs,
+            getattr(teleop_mod, self.loop),
+            iterations=ITERS,
+            teleop=teleop,
+            robot=robot,
+            fps=1000,
+            display_data=False,
+            **kwargs,
         )
 
 
@@ -60,12 +65,12 @@ CASES = [
     Case("elite_cs66_rt_pico4_teleop_loop", FakeTeleop),
     # pico4_teleop_loop gates its whole rt_moving branch on the robot's name.
     Case("pico4_teleop_loop", FakeTeleop, {"name": "flexiv_rizon4_rt"}),
-    Case("elite_cs66_rt_spacemouse_teleop_loop", FakeSpaceMouseTeleop,
-         reset_kwarg="both_pressed_frames"),
+    Case("elite_cs66_rt_spacemouse_teleop_loop", FakeSpaceMouseTeleop, reset_kwarg="both_pressed_frames"),
     Case("bi_pico4_teleop_loop", FakeBiPico4Teleop, {"bimanual": True}),
     # The Flexiv SpaceMouse loop gates on the robot name the same way.
-    Case("spacemouse_teleop_loop", FakeSpaceMouseTeleop, {"name": "flexiv_rizon4_rt"},
-         reset_kwarg="both_pressed_frames"),
+    Case(
+        "spacemouse_teleop_loop", FakeSpaceMouseTeleop, {"name": "flexiv_rizon4_rt"}, reset_kwarg="both_pressed_frames"
+    ),
 ]
 IDS = [c.loop for c in CASES]
 
@@ -246,8 +251,11 @@ def test_a_released_spacemouse_stick_snaps_the_target_back_to_the_arm():
     )
 
     run_loop(
-        run_cartesian_teleop_loop, iterations=ITERS,
-        teleop=teleop, robot=robot, fps=1000,
+        run_cartesian_teleop_loop,
+        iterations=ITERS,
+        teleop=teleop,
+        robot=robot,
+        fps=1000,
         policy=SpaceMousePolicy(release_resync_idle_s=0.002),  # 2 frames at 1kHz
         display_data=False,
     )
@@ -267,8 +275,11 @@ def test_an_active_spacemouse_stick_is_never_snapped():
     )
 
     run_loop(
-        run_cartesian_teleop_loop, iterations=ITERS,
-        teleop=teleop, robot=robot, fps=1000,
+        run_cartesian_teleop_loop,
+        iterations=ITERS,
+        teleop=teleop,
+        robot=robot,
+        fps=1000,
         policy=SpaceMousePolicy(release_resync_idle_s=0.002),
         display_data=False,
     )

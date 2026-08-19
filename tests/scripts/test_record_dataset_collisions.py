@@ -63,9 +63,7 @@ def test_teardown_does_not_push_a_dataset_that_was_never_created():
     """
     source = Path("src/lerobot/scripts/lerobot_record.py").read_text()
 
-    guard = re.search(
-        r"if cfg\.dataset\.push_to_hub and dataset is not None:", source
-    )
+    guard = re.search(r"if cfg\.dataset\.push_to_hub and dataset is not None:", source)
     assert guard, (
         "push_to_hub in record()'s finally block must be guarded against a "
         "dataset that was never created, the way finalize() above it is"
