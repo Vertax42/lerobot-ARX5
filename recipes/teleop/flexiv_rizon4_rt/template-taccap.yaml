@@ -1,0 +1,81 @@
+# Teleop recipe — single-arm Flexiv Rizon4 RT + Pico4, with a TacCap follower
+# gripper and wrist fisheye rectification on.
+#   lerobot-teleoperate --config_path=recipes/teleop/flexiv_rizon4_rt/template-taccap.yaml
+#
+# TEMPLATE — NOT A BENCH. Every `FILL-...` value below is bench hardware I do not
+# have: copy this file to <bench>-taccap.yaml, fill them from the arm and the
+# gripper in front of you, and delete this paragraph.
+#
+# The placeholders are deliberately the wrong *type*, not a plausible wrong
+# value, so this file is rejected while the config is still being parsed and
+# never reaches an arm. A template that half-works on the wrong bench — or that
+# ships a zeroed start pose a real arm would happily drive to — is worse than
+# one that refuses.
+#
+# NOT yet run on any bench. It exists because the single-arm wrist-fisheye path
+# had no recipe at all, so nothing exercised it end to end.
+#
+# Self-contained: this file carries both the bench hardware and the run's tuning.
+# Anything not listed uses the dataclass default.
+
+robot:
+  type: flexiv_rizon4_rt
+
+  # ── Bench hardware ──────────────────────────────────────────────────────────
+  robot_sn: "FILL-arm-serial" # e.g. Rizon4s-063458
+  # Joint angles in DEGREES (J1..J7), the units flexiv_rt takes.
+  start_position_degree: "FILL-seven-joint-angles-in-degrees"
+
+  # ── Cameras ─────────────────────────────────────────────────────────────────
+  # Only the scene camera is pinned: with auto_discover_cameras on (below) the
+  # arm sniffs the wrist + GSPS tactile cameras off the gripper's USB hub at
+  # connect and keys them after the gripper's own side — `left_wrist`,
+  # `left_tactile_0`, `left_tactile_1` for the block below.
+  cameras:
+    head:
+      type: intelrealsense
+      serial_number_or_name: "FILL-realsense-serial"
+      fps: 30
+      width: 640
+      height: 480
+      warmup_s: 1
+      use_depth: false
+
+  # ── Control ─────────────────────────────────────────────────────────────────
+  use_force: false
+  enable_tactile_sensors: true
+
+  # ── Wrist fisheye rectification ─────────────────────────────────────────────
+  # Reaches the auto-discovered wrist camera only. The intrinsics come off this
+  # gripper's MCU flash; an uncalibrated unit falls back to the SDK's shared
+  # reference values and says so in the log. Those are close but not this unit's,
+  # so calibrate before measuring anything in pixels off a rectified frame.
+  #
+  # Rectification needs the calibrated 640x480 — a wrist camera configured for
+  # any other size is refused at connect rather than silently mis-rectified.
+  undistort_wrist_cameras: true
+  wrist_fisheye_balance: 0.0 # 0 = calibrated focal length; 1 = 0.70x, widest FOV
+
+  # ── Gripper ── A single arm has no side of its own, so `side` here is what
+  # names the discovered camera keys. It must match the unit's firmware SN.
+  gripper:
+    type: taccap_follower
+    side: left
+    kp: 8.0 # MIT impedance stiffness (Nm/rad)
+    kd: 1.0 # MIT impedance damping (Nm·s/rad)
+    feedforward_torque: 0.0 # Nm; negative = clamp harder. |ff| <= 3.5
+    control_hz: 200 # ControlLoop resubmit rate
+    auto_discover_cameras: true
+    require_calibrated: true
+    init_open: true
+    # Everything else worth tuning, at its default — uncomment to change.
+    # mcu_device: null                    # explicit MCU path; the arm fills this from discovery
+
+teleop:
+  type: pico4
+  pos_sensitivity: 1.0
+  ori_sensitivity: 1.0
+
+# ── Teleoperate loop (top level) ──
+fps: 30
+display_data: true
