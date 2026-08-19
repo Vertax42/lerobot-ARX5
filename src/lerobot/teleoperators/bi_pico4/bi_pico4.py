@@ -397,7 +397,7 @@ class BiPico4(Teleoperator):
         try:
             self._xrt.close()
         except Exception as e:
-            self.logger.warning(f"Error closing XenseVR SDK: {e}")
+            self.logger.warn(f"Error closing XenseVR SDK: {e}")
         finally:
             self._is_connected = False
             self._xrt = None

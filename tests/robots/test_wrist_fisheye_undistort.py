@@ -17,6 +17,8 @@ images is discovered at training time. Verified on the bench against firmware
 an error — so "read_fisheye did not raise" is not enough to trust it.
 """
 
+import logging
+
 import numpy as np
 import pytest
 
@@ -92,43 +94,90 @@ def test_connect_refuses_when_no_calibration_was_supplied():
 # --------------------------------------------------------------------------- #
 
 
-class _FakeCal:
-    def __init__(self, fx, fy):
-        self.K = np.array([[fx, 0.0, 320.0], [0.0, fy, 240.0], [0.0, 0.0, 1.0]])
-        self.D = np.zeros(4)
+def _cal(fx, fy):
+    """A real CameraFisheyeCal — the SDK predicate only accepts its own type,
+    and using it here checks that contract too."""
+    from xense.taccap import CameraFisheyeCal
+
+    return CameraFisheyeCal(
+        fx=fx, fy=fy, cx=320.0, cy=240.0, k1=0.0, k2=0.0, k3=0.0, k4=0.0
+    )
+
+
+class _FakeVersion:
+    def __init__(self, major, minor, patch):
+        self.major, self.minor, self.patch = major, minor, patch
+        self.tuple = (major, minor, patch)
 
 
 class _FakeSdkGripper:
-    def __init__(self, cal):
-        self.calibration = type("C", (), {"read_fisheye": lambda _s: cal})()
+    def __init__(self, cal, version=(2, 0, 0), raises=None):
+        self.firmware_version = _FakeVersion(*version) if version else None
+        self.calibration = type(
+            "C", (), {"read_fisheye": lambda _s: (_ for _ in ()).throw(raises) if raises else cal}
+        )()
+
+
+def _follower(**kw):
+    from lerobot.grippers.taccap.taccap_follower import TaccapFollower
+
+    f = object.__new__(TaccapFollower)
+    f._side = "left"                      # __str__ reads it; __init__ is bypassed
+    f.logger = logging.getLogger("test")
+    f._gripper = _FakeSdkGripper(**kw)
+    return f
+
+
+# --------------------------------------------------------------------------- #
+# Falling back — never silently, and never to black frames
+# --------------------------------------------------------------------------- #
+
+
+def test_a_real_calibration_is_used_as_is():
+    cal = _cal(310.5, 311.2)
+    got, is_reference = _follower(cal=cal).read_wrist_fisheye_calibration()
+
+    assert got is cal
+    assert is_reference is False
 
 
 @pytest.mark.parametrize(
-    ("fx", "fy"),
-    [(0.0, 0.0), (0.0, 300.0), (300.0, 0.0), (-1.0, 300.0), (float("nan"), 300.0)],
+    ("case", "kwargs"),
+    [
+        ("firmware too old",   dict(cal=_cal(310.0, 311.0), version=(1, 1, 1))),
+        ("never calibrated",   dict(cal=None)),
+        ("empty record",       dict(cal=_cal(0.0, 0.0))),
+        ("no version reported", dict(cal=_cal(310.0, 311.0), version=None)),
+        ("read raises",        dict(cal=None, raises=RuntimeError("nack"))),
+    ],
 )
-def test_a_degenerate_intrinsic_matrix_is_refused(fx, fy):
-    """An uncalibrated MCU answers with zeros rather than an error.
+def test_the_reference_calibration_stands_in_and_says_so(case, kwargs, caplog):
+    """Each of these used to mean raw fisheye frames, or black ones.
 
-    Firmware 1.1.1 on the bench returned fx=fy=0 and the rectified frame came
-    back entirely black. Trusting "it did not raise" would have recorded that.
+    Firmware 1.1.1 on the bench answers an uncalibrated read with an all-zero
+    record rather than an error — remapping with fx = fy = 0 sends every pixel
+    outside the source image, so the frame came out entirely black.
     """
+    from xense.taccap import FISHEYE_FALLBACK_CAL, is_usable_fisheye_cal
+
+    with caplog.at_level(logging.WARNING):
+        got, is_reference = _follower(**kwargs).read_wrist_fisheye_calibration()
+
+    assert is_reference is True, case
+    assert got is FISHEYE_FALLBACK_CAL, case
+    assert is_usable_fisheye_cal(got), "the fallback itself must be usable"
+    assert "REFERENCE" in caplog.text, "falling back must be visible in the log"
+
+
+def test_the_firmware_gate_names_the_version_it_wants():
+    """A version error that does not say the required version is a riddle."""
     from lerobot.grippers.taccap.taccap_follower import TaccapFollower
 
-    follower = object.__new__(TaccapFollower)
-    follower._side = "left"      # __str__ reads it; __init__ is bypassed on purpose
-    follower._gripper = _FakeSdkGripper(_FakeCal(fx, fy))
+    reason = _follower(cal=None, version=(1, 1, 1))._fisheye_firmware_shortfall()
 
-    with pytest.raises(RuntimeError, match="degenerate intrinsic matrix"):
-        follower.read_wrist_fisheye_calibration()
+    assert "1.1.1" in reason
+    assert ".".join(str(p) for p in TaccapFollower.FISHEYE_MIN_FIRMWARE) in reason
 
 
-def test_a_real_intrinsic_matrix_is_accepted():
-    from lerobot.grippers.taccap.taccap_follower import TaccapFollower
-
-    follower = object.__new__(TaccapFollower)
-    follower._side = "left"
-    cal = _FakeCal(310.5, 311.2)
-    follower._gripper = _FakeSdkGripper(cal)
-
-    assert follower.read_wrist_fisheye_calibration() is cal
+def test_new_enough_firmware_does_not_trip_the_gate():
+    assert _follower(cal=_cal(310.0, 311.0), version=(2, 0, 0))._fisheye_firmware_shortfall() is None

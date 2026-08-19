@@ -42,17 +42,26 @@ class XenseWristCamera(OpenCVCamera):
         self.undistort = config.undistort
         self.fisheye_balance = config.fisheye_balance
         self._calibration = None   # xense.taccap.CameraFisheyeCal
+        self._calibration_is_reference = False
         self._undistorter = None   # xense.taccap.FisheyeUndistorter
 
     # -- calibration handed in from the gripper ------------------------------
-    def set_fisheye_calibration(self, calibration) -> None:
-        """Give the camera the intrinsics read off the gripper's MCU.
+    def set_fisheye_calibration(self, calibration, *, is_reference: bool = False) -> None:
+        """Give the camera the intrinsics to rectify with.
 
         Must be called before ``connect()`` when ``undistort`` is on. Building
         the remap tables is deferred to connect so a rig that never opens this
         camera does not pay for them.
+
+        Args:
+            calibration: A ``xense.taccap.CameraFisheyeCal``.
+            is_reference: True when these are the SDK's shared reference values
+                rather than this unit's own. Recorded so the connect line says
+                which was used — a dataset rectified with reference intrinsics is
+                otherwise indistinguishable from one rectified properly.
         """
         self._calibration = calibration
+        self._calibration_is_reference = is_reference
 
     def connect(self, warmup: bool = True) -> None:
         super().connect(warmup=warmup)
@@ -74,9 +83,10 @@ class XenseWristCamera(OpenCVCamera):
             height=self.capture_height,
             balance=self.fisheye_balance,
         )
+        source = "SDK reference" if self._calibration_is_reference else "this unit"
         logger.info(
-            f"{self} fisheye rectification on "
-            f"(balance={self.fisheye_balance}, {self.capture_width}x{self.capture_height})"
+            f"{self} fisheye rectification on (balance={self.fisheye_balance}, "
+            f"{self.capture_width}x{self.capture_height}, calibration={source})"
         )
 
     def disconnect(self) -> None:

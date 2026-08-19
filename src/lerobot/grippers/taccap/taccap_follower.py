@@ -215,47 +215,66 @@ class TaccapFollower(Gripper):
                 self.logger.debug(f"Error disabling motor during rollback: {e}")
             self._gripper = None
 
-    def read_wrist_fisheye_calibration(self):
-        """Read the wrist lens' fisheye intrinsics out of this gripper's MCU flash.
+    #: Command set that first carried the wrist fisheye record.
+    FISHEYE_MIN_FIRMWARE = (2, 0, 0)
 
-        Returns a ``xense.taccap.CameraFisheyeCal``. Raises when the firmware
-        holds no calibration or is too old to answer — the caller asked for
-        rectified frames, and silently handing back raw fisheye ones would only
-        surface at training time.
+    def read_wrist_fisheye_calibration(self):
+        """The wrist lens' fisheye intrinsics for this gripper.
+
+        Prefers what this unit's firmware holds. Falls back to the SDK's
+        reference calibration — with a warning — when the firmware is too old to
+        carry one, has never been calibrated, or answers with an empty record.
+        Every TC-GU-01 shares the lens and the 640x480 sensor, so the reference
+        numbers are much closer to correct than raw fisheye; they are not a
+        substitute for calibrating a unit, since lens placement varies per
+        assembly and the principal point drifts with it.
+
+        Returns:
+            ``(calibration, is_reference)`` — the second value is True when the
+            fallback was used, so callers can label or refuse it themselves.
         """
         if self._gripper is None:
             raise DeviceNotConnectedError(
                 f"{self} is not connected; cannot read the wrist fisheye calibration."
             )
-        try:
-            cal = self._gripper.calibration.read_fisheye()
-        except Exception as e:
-            raise RuntimeError(
-                f"{self}: could not read the wrist fisheye calibration — the firmware "
-                f"is likely too old to answer (V2.0+ required). Calibrate the wrist lens "
-                f"with the PC tool, or turn undistort off on this wrist camera. "
-                f"Original error: {e!r}"
-            ) from e
+        from xense.taccap import FISHEYE_FALLBACK_CAL, is_usable_fisheye_cal
 
-        # An uncalibrated MCU answers with a zero-filled record rather than an
-        # error, and FisheyeUndistorter accepts it and remaps every frame to
-        # black. Verified on the bench against firmware 1.1.1: K came back
-        # [[0,0,0],[0,0,0],[0,0,1]], D all zeros, and the rectified frame had
-        # mean 0. Refusing here is the whole point of the undistort switch
-        # failing loudly — a dataset of black wrist images is only noticed at
-        # training time.
-        import numpy as np
+        reason = self._fisheye_firmware_shortfall()
+        if reason is None:
+            try:
+                cal = self._gripper.calibration.read_fisheye()
+            except Exception as e:
+                reason = f"the firmware would not answer the fisheye read ({e!r})"
+            else:
+                if cal is None:
+                    reason = "the firmware has never been calibrated"
+                elif not is_usable_fisheye_cal(cal):
+                    # An uncalibrated unit answers with an all-zero record rather
+                    # than a NACK; remapping with fx = fy = 0 yields a black frame.
+                    reason = "the firmware answered with an empty calibration record"
+                else:
+                    return cal, False
 
-        intrinsics = np.asarray(cal.K, dtype=float)
-        fx, fy = intrinsics[0, 0], intrinsics[1, 1]
-        if not (np.isfinite(fx) and np.isfinite(fy)) or fx <= 0 or fy <= 0:
-            raise RuntimeError(
-                f"{self}: the firmware holds no wrist fisheye calibration — it returned "
-                f"a degenerate intrinsic matrix (fx={fx}, fy={fy}). Rectifying with it "
-                f"would produce black frames. Calibrate the wrist lens with the PC tool, "
-                f"or turn undistort off on this wrist camera."
+        self.logger.warn(
+            f"{self}: using the SDK's REFERENCE wrist fisheye intrinsics because "
+            f"{reason}. Rectification will be approximate — lens placement varies "
+            f"per assembly, so the principal point drifts. Calibrate this unit's "
+            f"wrist lens with the PC tool for measurements taken off these frames."
+        )
+        return FISHEYE_FALLBACK_CAL, True
+
+    def _fisheye_firmware_shortfall(self) -> str | None:
+        """Why this firmware cannot carry a fisheye record, or None if it can."""
+        version = getattr(self._gripper, "firmware_version", None)
+        if version is None:
+            return "the MCU did not report a firmware version"
+        needed = ".".join(str(p) for p in self.FISHEYE_MIN_FIRMWARE)
+        if tuple(version.tuple) < self.FISHEYE_MIN_FIRMWARE:
+            return (
+                f"its firmware is {version.major}.{version.minor}.{version.patch}, "
+                f"older than the {needed} that first carried the fisheye record"
             )
-        return cal
+        return None
 
     def disconnect(self) -> None:
         """Stop the control loop, disable the motor, and release the device."""

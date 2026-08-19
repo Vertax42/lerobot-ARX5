@@ -262,6 +262,7 @@ def attach_wrist_fisheye_calibration(cameras: dict, grippers: dict, logger: Logg
             continue
         if gripper is None or not hasattr(gripper, "read_wrist_fisheye_calibration"):
             continue
-        cal = gripper.read_wrist_fisheye_calibration()
-        cam.set_fisheye_calibration(cal)
-        logger.info(f"[{side}] wrist fisheye calibration read from the gripper MCU")
+        cal, is_reference = gripper.read_wrist_fisheye_calibration()
+        cam.set_fisheye_calibration(cal, is_reference=is_reference)
+        source = "the SDK's reference values" if is_reference else "the gripper MCU"
+        logger.info(f"[{side}] wrist fisheye calibration from {source}")
