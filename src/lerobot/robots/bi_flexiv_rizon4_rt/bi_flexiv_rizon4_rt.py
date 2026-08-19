@@ -46,9 +46,6 @@ import flexiv_rt as frt
 import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
-from lerobot.cameras.xense import (
-    prewarm_tactile_config_cache,
-)
 from lerobot.robots.bi_flexiv_rizon4_rt.config_bi_flexiv_rizon4_rt import BiFlexivRizon4RTConfig
 from lerobot.grippers import Gripper, make_gripper_from_config
 from lerobot.grippers.camera_injection import (
@@ -415,11 +412,6 @@ class BiFlexivRizon4RT(Robot):
                 self.logger.info(
                     f"Connecting {len(self.cameras)} camera(s): {', '.join(self.cameras.keys())}..."
                 )
-                # Pre-warm the per-serial config cache sequentially first so the
-                # parallel connect below never triggers a Sunplus flash read (device
-                # reset) mid-open; configs then come from the cache, no flash read.
-                # A single uncached sensor is enough to hang the whole batch.
-                prewarm_tactile_config_cache(self.config.cameras, self.logger)
             with ThreadPoolExecutor(max_workers=len(self.cameras) or 1) as ex:
                 cam_futs = [ex.submit(cam.connect) for cam in self.cameras.values()]
                 for f in cam_futs:

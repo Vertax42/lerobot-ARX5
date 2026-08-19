@@ -35,9 +35,6 @@ from typing import Any
 import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
-from lerobot.cameras.xense import (
-    prewarm_tactile_config_cache,
-)
 from lerobot.robots.bi_elite_cs66_rt.config_bi_elite_cs66_rt import (
     BiEliteCS66RTConfig,
     BiEliteCS66RTControlMode,
@@ -461,10 +458,6 @@ class BiEliteCS66RT(Robot):
                 self.logger.info(
                     f"Connecting {len(self.cameras)} camera(s): {', '.join(self.cameras.keys())}..."
                 )
-                # Pre-warm the per-serial config cache sequentially first so the
-                # parallel connect below never triggers a Sunplus flash read (device
-                # reset) mid-open; configs then come from the cache, no flash read.
-                prewarm_tactile_config_cache(self.config.cameras, self.logger)
                 with ThreadPoolExecutor(max_workers=len(self.cameras)) as ex:
                     cam_futs = [ex.submit(cam.connect) for cam in self.cameras.values()]
                     for f in cam_futs:
