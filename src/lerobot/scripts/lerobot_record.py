@@ -936,7 +936,11 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         if not is_headless() and listener:
             listener.stop()
 
-        if cfg.dataset.push_to_hub:
+        # Guarded like finalize() above: this runs in `finally`, so it also runs
+        # when the dataset was never created — and an unguarded call there
+        # raises AttributeError on None, replacing the real failure with one
+        # that points nowhere near it.
+        if cfg.dataset.push_to_hub and dataset is not None:
             dataset.push_to_hub(tags=cfg.dataset.tags, private=cfg.dataset.private)
 
         log_say("Exiting", cfg.play_sounds)

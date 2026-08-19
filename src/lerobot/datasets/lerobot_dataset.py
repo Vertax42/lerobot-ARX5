@@ -514,6 +514,22 @@ class LeRobotDatasetMetadata:
         obj.repo_id = repo_id
         obj.root = Path(root) if root is not None else HF_LEROBOT_HOME / repo_id
 
+        # exist_ok stays False — creating into a populated directory would mix
+        # two recordings — but say what to do about it. mkdir's own message is
+        # just the path, and the usual cause is a run that died during startup
+        # and left an empty directory that then blocks every later attempt.
+        if obj.root.exists():
+            empty = not any(obj.root.iterdir())
+            raise FileExistsError(
+                f"{obj.root} already exists, so creating this dataset would "
+                "overwrite it.\n"
+                + (
+                    "It is empty — most likely an earlier run failed during "
+                    "startup. Delete it and try again."
+                    if empty
+                    else "Resume into it, choose a different repo_id, or delete it."
+                )
+            )
         obj.root.mkdir(parents=True, exist_ok=False)
 
         features = {**features, **DEFAULT_FEATURES}
