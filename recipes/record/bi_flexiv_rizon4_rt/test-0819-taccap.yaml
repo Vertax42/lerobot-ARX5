@@ -1,0 +1,90 @@
+# Record recipe — bimanual Flexiv Rizon4 RT (forward mount, bench 06) + Bi-Pico4,
+# with TacCap follower grippers. A short smoke-test recording, not a task.
+#   lerobot-record --config_path=recipes/record/bi_flexiv_rizon4_rt/test-0819-taccap.yaml
+#
+# Same bench as assemble_box-{taccap,xgripper}.yaml (Rizon4s-062412/062881);
+# this one exists to exercise the record loop rather than to collect data.
+#
+# Self-contained: this file carries both the bench hardware and the run's tuning.
+# Anything not listed uses the dataclass default.
+#
+# Gripper variant: taccap. The sibling assemble_box-xgripper.yaml is the same bench
+# with the other gripper family — the two differ only in `gripper:`.
+#
+# NOT yet run on this bench with TacCap followers — the arm block is inherited
+# from the assemble_box-xgripper.yaml recipe, the gripper block is the fleet default. Grip tuning
+# (feedforward_torque) is bench work; start gentle.
+
+robot:
+  type: bi_flexiv_rizon4_rt
+
+  # ── Bench hardware (forward-06) ─────────────────────────────────────────────
+  # Joint angles are in DEGREES (J1..J7), the units flexiv_rt takes.
+  # Only the head is pinned: both gripper backends sniff their own wrist +
+  # tactile cameras off the gripper's USB hub at connect.
+  left_robot_sn: Rizon4s-062412
+  right_robot_sn: Rizon4s-062881
+  left_start_position_degree: [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24]
+  right_start_position_degree: [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.6]
+  left_home_position_degree: [88.79, 74.96, 22.75, 112.75, -0.39, 86.74, 1.24]
+  right_home_position_degree: [-24.41, 71.36, -4.67, 118.53, 3.91, 96.15, 3.6]
+  cameras:
+    head:
+      type: intelrealsense
+      serial_number_or_name: "254322071102"
+      fps: 30
+      width: 640
+      height: 480
+      warmup_s: 1
+      use_depth: false
+    # Wrist + tactile are discovered off each gripper's USB hub at connect
+    # (gripper.auto_discover_cameras). What this bench had when the pins were
+    # removed, for cross-checking the first discovery run:
+    #   left_tactile_0: OG001323
+    #   left_tactile_1: OG001324
+    #   left_wrist: XC000035
+    #   right_tactile_0: OG001325
+    #   right_tactile_1: OG001326
+    #   right_wrist: XC000036
+
+  # ── Control ─────────────────────────────────────────────────────────────────
+  use_force: false
+  log_level: INFO
+  # ── Gripper ── One block for both arms; `side` is stamped per arm at build time.
+  # Both grippers -> xense.taccap FollowerGripper (matched pair, single switch).
+  # auto_discover_cameras sniffs the wrist + GSPS tactile SNs off each gripper's
+  # USB hub at connect, which is why only the head camera is pinned above.
+  gripper:
+    type: taccap_follower
+    kp: 8.0 # MIT impedance stiffness (Nm/rad)
+    kd: 1.0 # MIT impedance damping (Nm·s/rad)
+    feedforward_torque: 0.0 # Nm; negative = clamp harder. |ff| <= 3.5
+    control_hz: 200 # ControlLoop resubmit rate
+    auto_discover_cameras: true
+    require_calibrated: true
+    init_open: true
+    # Everything else worth tuning, at its default — uncomment to change.
+    # side: left                          # stamped automatically per arm — do not set here
+    # mcu_device: null                    # explicit MCU path; the arm fills this from discovery
+  left_use_gripper: true
+  right_use_gripper: true
+  enable_tactile_sensors: true
+
+teleop:
+  type: bi_pico4
+  pos_sensitivity: 1.0
+  ori_sensitivity: 1.0
+
+dataset:
+  repo_id: Xense/bi_flexiv_rizon4_rt_test-0819
+  single_task: "test-0819"
+  fps: 30 # must equal teleop fps
+  episode_time_s: 600
+  reset_time_s: 120
+  num_episodes: 5
+  video: true
+  push_to_hub: true
+
+# ── Record loop (top level) ──
+display_data: false
+resume: false
