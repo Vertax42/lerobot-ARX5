@@ -17,9 +17,15 @@
 """Pure-serial Xense gripper driver (arm-agnostic, shared across robots).
 
 Uses XenseSerialGripper (from the XGripper submodule, import package
-``xgripper``) directly over a
-USB-serial port.  No ezros / xensesdk stack required. Identified by board SN
+``xgripper``) directly over a USB-serial port. Identified by board SN
 (auto-scan) or explicit serial port — no IP / MAC / network.
+
+No ezros / xensesdk stack required, which is a property worth stating because it
+is easy to lose: XGripper only regained it in 39c7aad, where a tactile-feedback
+controller needed by the TCP gripper was being imported at module scope and so
+made the SDK mandatory here too. The tactile sensors that share this gripper's
+USB hub are read by the *robot* as XenseTactileCamera entries, not by this
+driver.
 """
 
 import time
