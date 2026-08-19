@@ -22,9 +22,9 @@ import draccus
 from lerobot.motors.motors_bus import MotorCalibration
 from lerobot.utils.constants import HF_LEROBOT_CALIBRATION, TELEOPERATORS
 
-RobotAction = dict[str, Any]
-
 from .config import TeleoperatorConfig
+
+RobotAction = dict[str, Any]
 
 
 class Teleoperator(abc.ABC):

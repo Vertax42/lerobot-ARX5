@@ -20,16 +20,14 @@ import multiprocessing
 import multiprocessing.synchronize
 from multiprocessing.managers import SharedMemoryManager
 from multiprocessing.shared_memory import SharedMemory
-from typing import Generic, TypeVar, Union
 
 import numpy as np
 import numpy.typing as npt
 
-SharedMemoryLike = Union[str, SharedMemory]  # shared memory or name of shared memory
-SharedT = TypeVar("SharedT", bound=np.generic)
+SharedMemoryLike = str | SharedMemory  # shared memory or name of shared memory
 
 
-class SharedNDArray(Generic[SharedT]):
+class SharedNDArray[SharedT: np.generic]:
     """Class to keep track of and retrieve the data in a shared array
     Attributes
     ----------

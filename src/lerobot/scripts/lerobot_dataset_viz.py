@@ -61,7 +61,6 @@ local$ rerun rerun+http://IP:GRPC_PORT/proxy
 
 import argparse
 import gc
-import logging
 import time
 from pathlib import Path
 
@@ -73,7 +72,10 @@ import tqdm
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.utils.constants import ACTION, DONE, OBS_STATE, REWARD
+from lerobot.utils.robot_utils import get_logger
 from lerobot.utils.utils import init_logging
+
+logger = get_logger("lerobot_dataset_viz")
 
 
 def to_hwc_uint8_numpy(chw_float32_torch: torch.Tensor) -> np.ndarray:
@@ -105,14 +107,14 @@ def visualize_dataset(
 
     repo_id = dataset.repo_id
 
-    logging.info("Loading dataloader")
+    logger.info("Loading dataloader")
     dataloader = torch.utils.data.DataLoader(
         dataset,
         num_workers=num_workers,
         batch_size=batch_size,
     )
 
-    logging.info("Starting Rerun")
+    logger.info("Starting Rerun")
 
     if mode not in ["local", "distant"]:
         raise ValueError(mode)
@@ -127,10 +129,10 @@ def visualize_dataset(
 
     if mode == "distant":
         server_uri = rr.serve_grpc(grpc_port=grpc_port)
-        logging.info(f"Connect to a Rerun Server: rerun rerun+http://IP:{grpc_port}/proxy")
+        logger.info(f"Connect to a Rerun Server: rerun rerun+http://IP:{grpc_port}/proxy")
         rr.serve_web_viewer(open_browser=False, web_port=web_port, connect_to=server_uri)
 
-    logging.info("Logging to Rerun")
+    logger.info("Logging to Rerun")
 
     first_index = None
     for batch in tqdm.tqdm(dataloader, total=len(dataloader)):
@@ -286,14 +288,12 @@ def main():
     tolerance_s = kwargs.pop("tolerance_s")
 
     if kwargs["ws_port"] is not None:
-        logging.warning(
-            "--ws-port is deprecated and will be removed in future versions. Please use --grpc-port instead."
-        )
-        logging.warning("Setting grpc_port to ws_port value.")
+        logger.warn("--ws-port is deprecated and will be removed in future versions. Please use --grpc-port instead.")
+        logger.warn("Setting grpc_port to ws_port value.")
         kwargs["grpc_port"] = kwargs.pop("ws_port")
 
     init_logging()
-    logging.info("Loading dataset")
+    logger.info("Loading dataset")
     dataset = LeRobotDataset(repo_id, episodes=[args.episode_index], root=root, tolerance_s=tolerance_s)
 
     visualize_dataset(dataset, **vars(args))

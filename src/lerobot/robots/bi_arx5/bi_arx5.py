@@ -699,15 +699,9 @@ class BiARX5(Robot):
         if not self._is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
-        if isinstance(target_joint_poses, dict):
-            trajectory = [target_joint_poses]
-        else:
-            trajectory = list(target_joint_poses)
+        trajectory = [target_joint_poses] if isinstance(target_joint_poses, dict) else list(target_joint_poses)
 
-        if isinstance(durations, (int, float)):
-            segment_durations = [float(durations)]
-        else:
-            segment_durations = [float(d) for d in durations]
+        segment_durations = [float(durations)] if isinstance(durations, (int, float)) else [float(d) for d in durations]
 
         if len(trajectory) != len(segment_durations):
             raise ValueError("target_joint_poses and durations must have the same length")
@@ -829,10 +823,7 @@ class BiARX5(Robot):
 
         trajectory = [target_eef_poses] if isinstance(target_eef_poses, dict) else list(target_eef_poses)
 
-        if isinstance(durations, (int, float)):
-            segment_durations = [float(durations)]
-        else:
-            segment_durations = [float(d) for d in durations]
+        segment_durations = [float(durations)] if isinstance(durations, (int, float)) else [float(d) for d in durations]
 
         if len(trajectory) != len(segment_durations):
             raise ValueError("target_eef_poses and durations must have the same length")

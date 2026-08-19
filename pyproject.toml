@@ -78,6 +78,11 @@ dependencies = [
     "torchvision>=0.21.0,<0.26.0",
 
     "einops>=0.8.0,<0.9.0",
+    # Imported at module scope in src/: pillow by the dataset image paths,
+    # safetensors by utils/random_utils. Both arrived transitively until a
+    # clean CI install showed safetensors did not.
+    "pillow>=10.0.0",
+    "safetensors>=0.4.3",
     "opencv-python-headless==4.12.0.88",
     "opencv-python==4.12.0.88",
     "av>=15.0.0,<16.0.0",
@@ -169,6 +174,7 @@ test = [
     "pytest-timeout>=2.4.0,<3.0.0",
     "pytest-cov>=5.0.0,<8.0.0",
     "mock-serial>=0.0.1,<0.1.0 ; sys_platform != 'win32'",
+    "pyyaml>=6.0",  # tests read recipe YAML directly
 ]
 video_benchmark = ["scikit-image>=0.23.2,<0.26.0", "pandas>=2.2.2,<2.4.0"]
 
@@ -237,6 +243,37 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
 
+# N806 (non-lowercase local): rotation matrices, SVD factors and stiffness
+# gains. `R`, `U`, `Vt`, `R_wb`, `K_x_nom` are how these appear in the
+# kinematics they implement and in the vendor APIs they read from; lowercasing
+# them would hide the correspondence, which is the only thing making the maths
+# checkable against a reference.
+"src/lerobot/robots/bi_elite_cs66_rt/bi_elite_cs66_rt.py" = ["N806"]
+"src/lerobot/robots/bi_flexiv_rizon4_rt/bi_flexiv_rizon4_rt.py" = ["N806"]
+"src/lerobot/robots/flexiv_rizon4_rt/flexiv_rizon4_rt.py" = ["N806"]
+"tests/robots/test_wrist_fisheye_undistort.py" = ["N806"]
+# Demo scripts kept in the shape the xensesdk docs use, so they can be compared
+# against upstream's examples line by line.
+"src/lerobot/cameras/xense/example*.py" = ["N806", "E402", "T201"]
+# A stand-in for the Elite SDK, whose surface is camelCase — renaming the stub's
+# methods would stop it standing in for anything.
+"examples/elite_cs66_rt_spacemouse_dryrun.py" = ["N802"]
+# Rotation matrices again: R_wb, R_eef_world. Same reason as the drivers above.
+"examples/bi_elite_cs66_rt_freedrive_probe.py" = ["N803", "N806"]
+"examples/bi_elite_cs66_rt_world_frame_check.py" = ["N803", "N806"]
+
+# UP042 (prefer enum.StrEnum): deliberately not taken. `str(X.A)` is
+# "X.A" for a str-mixin enum and "a" for a StrEnum, so switching changes every
+# f-string and log line these appear in — and MotorNormMode's values are
+# written into calibration files on disk. json.dumps is unaffected either way;
+# it is str() and f-strings that differ.
+"src/lerobot/configs/types.py" = ["UP042"]
+"src/lerobot/cameras/configs.py" = ["UP042"]
+"src/lerobot/motors/motors_bus.py" = ["UP042"]
+"src/lerobot/robots/bi_elite_cs66_rt/config_bi_elite_cs66_rt.py" = ["UP042"]
+"src/lerobot/robots/mock_robot.py" = ["UP042"]
+"tests/utils/test_visualization_utils.py" = ["UP042"]
+
 [tool.ruff.lint.isort]
 combine-as-imports = true
 known-first-party = ["lerobot"]
@@ -257,7 +294,9 @@ exclude_dirs = [
     "benchmarks",
     "src/lerobot/datasets/push_dataset_to_hub",
 ]
-skips = ["B101", "B311", "B404", "B603", "B615"]
+# B603/B404/B607: this repo shells out to fixed tool names on PATH
+# (v4l2-ctl, ffprobe, nvidia-smi) with argument lists, never a shell string.
+skips = ["B101", "B311", "B404", "B603", "B607", "B615"]
 
 [tool.typos]
 default.extend-ignore-re = [
@@ -279,6 +318,9 @@ default.extend-ignore-identifiers-re = [
 python_version = "3.12"
 ignore_missing_imports = true
 follow_imports = "skip"
+# A vendored pybind build script. Its directory name has hyphens, so it is not
+# an importable package and the `lerobot.*` override below never matches it.
+exclude = ['xensevr-pc-service-pybind/setup\.py$']
 
 [[tool.mypy.overrides]]
 module = "lerobot.*"

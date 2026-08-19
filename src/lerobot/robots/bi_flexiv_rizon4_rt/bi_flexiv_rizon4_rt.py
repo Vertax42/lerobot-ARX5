@@ -37,6 +37,7 @@ Action / Observation key prefixes:
     Reference: "On the Continuity of Rotation Representations in Neural Networks"
 """
 
+import contextlib
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from functools import cached_property
@@ -567,10 +568,8 @@ class BiFlexivRizon4RT(Robot):
         """Clean up resources after a connection failure."""
         for cc in [self._left_cc, self._right_cc]:
             if cc is not None:
-                try:
+                with contextlib.suppress(Exception):
                     cc.stop()
-                except Exception:
-                    pass
 
         # Disconnect any grippers that were successfully connected during connect()
         for gripper, use_gripper in [
@@ -578,10 +577,8 @@ class BiFlexivRizon4RT(Robot):
             (self._right_gripper, self.config.right_use_gripper),
         ]:
             if gripper and use_gripper:
-                try:
+                with contextlib.suppress(Exception):
                     gripper.disconnect()
-                except Exception:
-                    pass
 
         self._cleanup_resources()
 
@@ -604,10 +601,8 @@ class BiFlexivRizon4RT(Robot):
 
         for robot in [left_robot, right_robot]:
             if robot is not None:
-                try:
+                with contextlib.suppress(Exception):
                     robot.close()
-                except Exception:
-                    pass
         del left_robot, right_robot
 
         import gc
@@ -764,12 +759,10 @@ class BiFlexivRizon4RT(Robot):
         while True:
             if time.time() - start_time > timeout:
                 raise RuntimeError(f"{side} arm: MoveJ did not complete within {timeout}s")
-            try:
+            with contextlib.suppress(Exception):
                 pt_states = robot.primitive_states()
                 if pt_states.get("reachedTarget", 0) == 1:
                     break
-            except Exception:
-                pass
             time.sleep(0.1)
 
         self.logger.info(f"{side} arm: at position.")
@@ -796,12 +789,10 @@ class BiFlexivRizon4RT(Robot):
             if time.time() - start_time > timeout:
                 self.logger.error(f"{side} arm: ZeroFTSensor timeout after {timeout}s")
                 break
-            try:
+            with contextlib.suppress(Exception):
                 pt_states = robot.primitive_states()
                 if pt_states.get("terminated", 0) == 1:
                     break
-            except Exception:
-                pass
             time.sleep(0.1)
 
         self.logger.info(f"{side} arm: FT sensor zeroed.")
@@ -1080,10 +1071,7 @@ class BiFlexivRizon4RT(Robot):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         def _read_arm_pose(cc, robot, gripper, use_gripper) -> np.ndarray:
-            if cc is not None and cc.is_running():
-                tcp_pose = cc.get_state().tcp_pose
-            else:
-                tcp_pose = robot.states().tcp_pose
+            tcp_pose = cc.get_state().tcp_pose if cc is not None and cc.is_running() else robot.states().tcp_pose
             gripper_pos = 0.0
             if gripper is not None and use_gripper:
                 try:

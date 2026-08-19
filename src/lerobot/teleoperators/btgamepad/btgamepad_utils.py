@@ -14,10 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 from enum import Enum
 
+from lerobot.utils.robot_utils import get_logger
+
 from ..utils import TeleopEvents
+
+logger = get_logger("BTGamepad")
 
 
 class InputController:
@@ -259,13 +262,13 @@ class BtgamepadController(InputController):
         pygame.joystick.init()
 
         if pygame.joystick.get_count() == 0:
-            logging.error("No gamepad detected. Please connect a gamepad and try again.")
+            logger.error("No gamepad detected. Please connect a gamepad and try again.")
             self.running = False
             return
 
         self.joystick = pygame.joystick.Joystick(0)
         self.joystick.init()
-        logging.info(f"Initialized gamepad: {self.joystick.get_name()}")
+        logger.info(f"Initialized gamepad: {self.joystick.get_name()}")
 
     def stop(self):
         """Clean up pygame resources."""
@@ -356,6 +359,6 @@ class BtgamepadController(InputController):
             return delta_x, delta_y, delta_z, delta_rx, delta_ry, delta_rz
 
         except pygame.error:
-            logging.error("Error reading gamepad. Is it still connected?")
+            logger.error("Error reading gamepad. Is it still connected?")
             # return 0.0, 0.0, 0.0, 0.0, np.pi , 0.0 # flexiv
             return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  # franka

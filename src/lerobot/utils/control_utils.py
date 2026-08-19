@@ -17,7 +17,6 @@
 ########################################################################################
 
 
-import logging
 import traceback
 from functools import cache
 from typing import Any
@@ -27,6 +26,9 @@ from deepdiff import DeepDiff
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.datasets.utils import DEFAULT_FEATURES
 from lerobot.robots import Robot
+from lerobot.utils.robot_utils import get_logger
+
+logger = get_logger("control_utils")
 
 
 @cache
@@ -92,12 +94,12 @@ def init_keyboard_listener(teleop: Any | None = None):
             if hasattr(teleop, "get_reset_button") and teleop.get_reset_button():
                 events["go_start"] = True
         except Exception as e:
-            logging.debug(f"Error refreshing teleop control events: {e}")
+            logger.debug(f"Error refreshing teleop control events: {e}")
 
     events["_refresh_events"] = refresh_events_from_teleop
 
     if is_headless():
-        logging.warning(
+        logger.warn(
             "Headless environment detected. On-screen cameras display and keyboard inputs will not be available."
         )
         listener = None

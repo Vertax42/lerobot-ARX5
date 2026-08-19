@@ -36,7 +36,6 @@ lerobot-check-dataset --repo-id Xense/assemble_box_with_phone_stand --episode-in
 
 import argparse
 import json
-import logging
 import subprocess
 import sys
 from pathlib import Path
@@ -46,11 +45,11 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from lerobot.utils.constants import HF_LEROBOT_HOME
+from lerobot.utils.robot_utils import get_logger
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-logger = logging.getLogger(__name__)
+logger = get_logger("lerobot_check_dataset")
 
-PASS = "[OK]"
+PASS = "[OK]"  # nosec B105 — a console marker, not a credential
 FAIL = "[FAIL]"
 WARN = "[WARN]"
 
@@ -69,11 +68,11 @@ def _check(
     warn: bool = False,
 ) -> bool:
     if cond:
-        logger.info("  %s %s", PASS, msg_ok)
+        logger.info(f"  {PASS} {msg_ok}")
         return True
     else:
         tag = WARN if warn else FAIL
-        logger.warning("  %s %s", tag, msg_fail)
+        logger.warn(f"  {tag} {msg_fail}")
         if warn:
             warnings.append(msg_fail)
         else:
@@ -114,10 +113,10 @@ def check_meta(dataset_root: Path, errors: list, warnings: list) -> dict:
         return info
     try:
         info = json.loads(info_path.read_text())
-        logger.info("  %s info.json valid JSON", PASS)
+        logger.info(f"  {PASS} info.json valid JSON")
     except json.JSONDecodeError as e:
         errors.append(f"info.json invalid JSON: {e}")
-        logger.warning("  %s info.json invalid JSON: %s", FAIL, e)
+        logger.warn(f"  {FAIL} info.json invalid JSON: {e}")
         return info
 
     for fname in ("stats.json", "tasks.parquet"):
@@ -152,7 +151,7 @@ def check_episodes_meta(dataset_root: Path, info: dict, errors: list, warnings: 
             frames.append(pq.read_table(f).to_pandas())
         except Exception as e:
             errors.append(f"Cannot read {f}: {e}")
-            logger.warning("  %s Cannot read %s: %s", FAIL, f, e)
+            logger.warn(f"  {FAIL} Cannot read {f}: {e}")
 
     if not frames:
         return pd.DataFrame()
@@ -208,7 +207,7 @@ def check_data(
             frames.append(table.to_pandas())
         except Exception as e:
             errors.append(f"Cannot read {f}: {e}")
-            logger.warning("  %s Cannot read %s: %s", FAIL, f, e)
+            logger.warn(f"  {FAIL} Cannot read {f}: {e}")
             continue
 
         if not schema_checked:
@@ -312,7 +311,7 @@ def check_data_file_refs(
     logger.info("\n[data file references]")
 
     if eps_df.empty:
-        logger.info("  %s Skipping — no episodes metadata", WARN)
+        logger.info(f"  {WARN} Skipping — no episodes metadata")
         return
 
     chunk_col = "data/chunk_index"
@@ -327,7 +326,7 @@ def check_data_file_refs(
         )
         return
 
-    unique_pairs = sorted({(int(c), int(f)) for c, f in zip(eps_df[chunk_col], eps_df[file_col])})
+    unique_pairs = sorted({(int(c), int(f)) for c, f in zip(eps_df[chunk_col], eps_df[file_col], strict=True)})
 
     for chunk_idx, file_idx in unique_pairs:
         rel_path = f"data/chunk-{chunk_idx:03d}/file-{file_idx:03d}.parquet"
@@ -354,7 +353,7 @@ def check_videos(
     logger.info("\n[videos]")
     video_features = {k: v for k, v in info.get("features", {}).items() if v.get("dtype") == "video"}
     if not video_features:
-        logger.info("  %s No video features defined in info.json", WARN)
+        logger.info(f"  {WARN} No video features defined in info.json")
         return
 
     video_path_template = info.get(
@@ -373,8 +372,8 @@ def check_videos(
         for f in ep_meta_files:
             try:
                 ep_frames.append(pq.read_table(f).to_pandas())
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warn(f"  {FAIL} Unreadable episode metadata {f}: {e}")
         eps = pd.concat(ep_frames, ignore_index=True) if ep_frames else pd.DataFrame()
     else:
         eps = pd.DataFrame()
@@ -388,7 +387,7 @@ def check_videos(
             video_dir = dataset_root / "videos" / video_key
             if not video_dir.exists():
                 errors.append(f"Video directory missing: {video_dir}")
-                logger.warning("  %s Video directory missing: %s", FAIL, video_dir)
+                logger.warn(f"  {FAIL} Video directory missing: {video_dir}")
                 continue
             mp4_files = sorted(video_dir.rglob("*.mp4"))
             logger.info(
@@ -400,10 +399,7 @@ def check_videos(
             continue
 
         # Determine which video files to check (based on filtered episodes)
-        if episode_indices is not None:
-            ep_rows = eps.loc[eps["episode_index"].isin(episode_indices)]
-        else:
-            ep_rows = eps
+        ep_rows = eps.loc[eps["episode_index"].isin(episode_indices)] if episode_indices is not None else eps
 
         # Group by (chunk_index, file_index) — one check per video file
         file_groups = ep_rows.groupby([chunk_col, file_col])
@@ -432,7 +428,7 @@ def check_videos(
             stream = _ffprobe_stream(full_path)
             if not stream:
                 warnings.append(f"ffprobe failed for {rel_path}")
-                logger.warning("  %s ffprobe failed: %s", WARN, rel_path)
+                logger.warn(f"  {WARN} ffprobe failed: {rel_path}")
                 continue
 
             expected_fps = info.get("fps", 0)
@@ -534,9 +530,9 @@ def main() -> None:
     root = args.root if args.root is not None else HF_LEROBOT_HOME
     dataset_root = root / args.repo_id
 
-    logger.info("Checking dataset: %s", dataset_root)
+    logger.info(f"Checking dataset: {dataset_root}")
     if not dataset_root.exists():
-        logger.error("%s Dataset root not found: %s", FAIL, dataset_root)
+        logger.error(f"{FAIL} Dataset root not found: {dataset_root}")
         sys.exit(1)
 
     errors: list[str] = []
@@ -551,20 +547,20 @@ def main() -> None:
 
     # Summary
     logger.info("\n" + "=" * 60)
-    logger.info("Summary: %d error(s), %d warning(s)", len(errors), len(warnings))
+    logger.info(f"Summary: {len(errors)} error(s), {len(warnings)} warning(s)")
     if errors:
         logger.info("\nErrors:")
         for e in errors:
-            logger.info("  %s %s", FAIL, e)
+            logger.info(f"  {FAIL} {e}")
     if warnings:
         logger.info("\nWarnings:")
         for w in warnings:
-            logger.info("  %s %s", WARN, w)
+            logger.info(f"  {WARN} {w}")
 
     if not errors:
-        logger.info("\n%s Dataset integrity check passed.", PASS)
+        logger.info(f"\n{PASS} Dataset integrity check passed.")
     else:
-        logger.info("\n%s Dataset integrity check FAILED.", FAIL)
+        logger.info(f"\n{FAIL} Dataset integrity check FAILED.")
         sys.exit(1)
 
 

@@ -22,7 +22,6 @@ Uses lerobot's OpenCVCamera for capture, encodes images to base64 and sends them
 import base64
 import contextlib
 import json
-import logging
 import threading
 import time
 from collections import deque
@@ -33,8 +32,9 @@ import zmq
 
 from lerobot.cameras.configs import ColorMode
 from lerobot.cameras.opencv import OpenCVCamera, OpenCVCameraConfig
+from lerobot.utils.robot_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger("ImageServer")
 
 
 def encode_image(image: np.ndarray, quality: int = 80) -> str:
@@ -79,7 +79,7 @@ class CameraCaptureThread:
                     self.latest_encoded = encoded
                     self.latest_timestamp = timestamp
             except Exception as e:
-                logger.warning(f"Camera {self.name} capture error: {e}")
+                logger.warn(f"Camera {self.name} capture error: {e}")
                 time.sleep(0.01)
 
     def get_latest(self) -> tuple[str | None, float]:
@@ -177,6 +177,5 @@ class ImageServer:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     config = {"fps": 30, "cameras": {"head_camera": {"device_id": 4, "shape": [480, 640]}}}
     ImageServer(config, port=5555).run()

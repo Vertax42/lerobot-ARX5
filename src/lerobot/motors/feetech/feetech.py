@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 from copy import deepcopy
 from enum import Enum
 from pprint import pformat
+
+from lerobot.utils.robot_utils import get_logger
 
 from ..encoding_utils import decode_sign_magnitude, encode_sign_magnitude
 from ..motors_bus import Motor, MotorCalibration, NameOrID, SerialMotorsBus, Value, get_address
@@ -38,7 +39,7 @@ DEFAULT_TIMEOUT_MS = 1000
 
 NORMALIZED_DATA = ["Goal_Position", "Present_Position"]
 
-logger = logging.getLogger(__name__)
+logger = get_logger("FeetechMotorsBus")
 
 
 class OperatingMode(Enum):

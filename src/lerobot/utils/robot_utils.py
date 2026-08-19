@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import os
 import platform
 import time
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 
@@ -97,6 +99,27 @@ def get_logger(name: str, loglevel: str = "INFO") -> spdlog.Logger:
     logger.set_level(spdlog.LogLevel.DEBUG)
 
     return logger
+
+
+@contextlib.contextmanager
+def best_effort(logger: spdlog.Logger, what: str, level: str = "debug") -> Iterator[None]:
+    """Run a step that must not abort the sequence around it — but say so if it fails.
+
+    Teardown has to try every handle regardless of what already went wrong, so
+    it cannot let one failure skip the rest. Swallowing them silently is how a
+    robot ends up still holding control with nobody aware; this keeps going and
+    leaves a line in the session log.
+
+    Args:
+        logger: spdlog logger to report on.
+        what: what was being attempted, e.g. "stopping control".
+        level: logger method to report at — "debug" for routine teardown,
+            "warn" where carrying on with the failure has consequences.
+    """
+    try:
+        yield
+    except Exception as e:
+        getattr(logger, level)(f"{what} failed: {e}")
 
 
 def busy_wait(seconds):

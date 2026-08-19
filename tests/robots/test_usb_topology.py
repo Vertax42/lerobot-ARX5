@@ -32,6 +32,7 @@ from importlib.util import find_spec
 import pytest
 
 from lerobot.grippers import SerialGripperConfig, TaccapFollowerConfig, usb_topology as topo
+from tests.utils import require_package
 
 HAS_FLEXIV = find_spec("flexiv_rt") is not None
 HAS_ELITE = find_spec("elite_cs_sdk") is not None
@@ -157,6 +158,7 @@ def test_wrist_inference_detects_missing_and_ambiguous(fake_topology):
     assert sorted(_infer_wrist("3-1", t, v)) == ["AN_EXTRA_CAM", "WRIST_L"]
 
 
+@require_package("xgripper")
 def test_discovery_refuses_when_not_exactly_one_candidate(monkeypatch, fake_topology):
     """A wrong-but-plausible camera is worse than a failure: it silently mislabels
     a dataset. Discovery must raise, naming what it found."""
@@ -170,6 +172,7 @@ def test_discovery_refuses_when_not_exactly_one_candidate(monkeypatch, fake_topo
         sd.discover_serial_gripper_cameras(sides=("left",))
 
 
+@require_package("xgripper")
 def test_discovery_resolves_a_well_formed_hub(monkeypatch, fake_topology):
     from lerobot.grippers.serial import discovery as sd
 
@@ -186,6 +189,7 @@ def test_discovery_resolves_a_well_formed_hub(monkeypatch, fake_topology):
     assert dev.gripper_sn == "000031"
 
 
+@require_package("xgripper")
 def test_discovery_fails_loudly_when_hub_unresolvable(monkeypatch, fake_topology):
     """A gripper plugged straight into the host has no hub to group by; that is a
     wiring problem the operator must know about, not something to work around."""
@@ -266,6 +270,7 @@ def _config(robot_type: str):
     return BiEliteCS66RTConfig
 
 
+@require_package("xgripper")
 def test_discovery_sweeps_the_serial_bus_once_for_all_sides(monkeypatch):
     """Resolving both sides must not re-scan the bus per side.
 
@@ -315,6 +320,7 @@ def test_discovery_sweeps_the_serial_bus_once_for_all_sides(monkeypatch):
     assert got["right"].tactile_sns == ["TAC_C", "TAC_D"]
 
 
+@require_package("xgripper")
 def test_scan_skips_ports_belonging_to_another_gripper_family(monkeypatch):
     """A TacCap's serial nodes must not be probed for a board SN.
 
@@ -345,6 +351,7 @@ def test_scan_skips_ports_belonging_to_another_gripper_family(monkeypatch):
     assert found == {"/dev/ttyUSB0": "000031"}
 
 
+@require_package("xgripper")
 def test_scan_still_probes_an_unrecognised_usb_serial_chip(monkeypatch):
     """The filter excludes known-other devices, it is not a whitelist.
 

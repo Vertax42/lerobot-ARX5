@@ -16,7 +16,6 @@
 Provides the OpenCVCamera class for capturing frames from cameras using OpenCV.
 """
 
-import logging
 import math
 import os
 import platform
@@ -35,6 +34,7 @@ import cv2  # type: ignore  # TODO: add type stubs for OpenCV
 
 from lerobot.utils.decorators import check_if_already_connected, check_if_not_connected
 from lerobot.utils.errors import DeviceNotConnectedError
+from lerobot.utils.robot_utils import get_logger
 
 from ..camera import Camera
 from ..utils import get_cv2_rotation
@@ -47,7 +47,7 @@ from .configuration_opencv import ColorMode, OpenCVCameraConfig
 # treat the same cameras as new devices. Thus we select a higher bound to search indices.
 MAX_OPENCV_INDEX = 60
 
-logger = logging.getLogger(__name__)
+logger = get_logger("OpenCVCamera")
 
 
 def _parse_v4l2_devices() -> dict[str, list[str]]:
@@ -185,7 +185,9 @@ class OpenCVCamera(Camera):
         val = self.index_or_path
         if isinstance(val, str) and not val.startswith(("/", ".", os.sep)) and os.sep not in val:
             resolved = _resolve_v4l2_device_name(val)
-            logger.info(f"{self} resolved device name '{val}' → '{resolved}'")
+            # Debug, not info: one line per camera at connect, and the name it
+            # resolved to only matters when the wrong device turns up.
+            logger.debug(f"{self} resolved device name '{val}' → '{resolved}'")
             return resolved
         return val if isinstance(val, int) else str(val)
 
@@ -296,10 +298,11 @@ class OpenCVCamera(Camera):
         if self.fps is None:
             raise ValueError(f"{self} FPS is not set")
 
-        success = self.videocapture.set(cv2.CAP_PROP_FPS, float(self.fps))
+        # The V4L2 backend may return False from set() even when the value is
+        # correctly applied, so the return value is dropped and only the actual
+        # readback is validated.
+        self.videocapture.set(cv2.CAP_PROP_FPS, float(self.fps))
         actual_fps = self.videocapture.get(cv2.CAP_PROP_FPS)
-        # Note: V4L2 backend may return False from set() even when the value is correctly applied,
-        # so we only validate the actual readback value, not the success flag.
         if not math.isclose(self.fps, actual_fps, rel_tol=1e-3):
             raise RuntimeError(f"{self} failed to set fps={self.fps} ({actual_fps=}).")
 
@@ -324,7 +327,7 @@ class OpenCVCamera(Camera):
         if fourcc_unreadable:
             logger.debug(f"{self} set fourcc={self.config.fourcc} (backend cannot confirm via readback).")
         elif actual_fourcc != self.config.fourcc:
-            logger.warning(
+            logger.warn(
                 f"{self} failed to set fourcc={self.config.fourcc} (actual={actual_fourcc}, success={success}). "
                 f"Continuing with default format."
             )
@@ -401,8 +404,10 @@ class OpenCVCamera(Camera):
                         for p, name in list(path_to_device_name.items()):
                             if name == old_name:
                                 path_to_device_name[p] = serial
-            except Exception:
-                pass
+            except Exception as e:
+                # Enriching a path with its RealSense serial is best-effort: a
+                # device that disappears mid-scan just keeps its v4l2 name.
+                logger.debug(f"RealSense serial lookup failed, keeping v4l2 names: {e}")
 
         for target in targets_to_scan:
             scan_backend = cv2.CAP_V4L2 if platform.system() == "Linux" else cv2.CAP_ANY
@@ -513,7 +518,7 @@ class OpenCVCamera(Camera):
         start_time = time.perf_counter()
 
         if color_mode is not None:
-            logger.warning(f"{self} read() color_mode parameter is deprecated and will be removed in future versions.")
+            logger.warn(f"{self} read() color_mode parameter is deprecated and will be removed in future versions.")
 
         if self.thread is None or not self.thread.is_alive():
             raise RuntimeError(f"{self} read thread is not running.")
@@ -596,7 +601,7 @@ class OpenCVCamera(Camera):
             except Exception as e:
                 if failure_count <= 10:
                     failure_count += 1
-                    logger.warning(f"Error reading frame in background thread for {self}: {e}")
+                    logger.warn(f"Error reading frame in background thread for {self}: {e}")
                 else:
                     raise RuntimeError(f"{self} exceeded maximum consecutive read failures.") from e
 

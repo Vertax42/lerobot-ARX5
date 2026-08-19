@@ -39,6 +39,7 @@ from lerobot.robots.elite_cs66_rt.manipulability import (
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import (
+    best_effort,
     get_logger,
     quaternion_to_euler,
     quaternion_to_rotation_6d,
@@ -497,36 +498,26 @@ class EliteCS66RT(Robot):
 
     def _cleanup_after_failed_connect(self) -> None:
         # Drop the driver / dashboard / RTSI handles first.
-        try:
+        with best_effort(self.logger, "stopping control"):
             if self._driver is not None:
                 self._driver.stopControl(1000)
-        except Exception:
-            pass
-        try:
+        with best_effort(self.logger, "closing the dashboard connection"):
             if self._dashboard is not None:
                 self._dashboard.disconnect()
-        except Exception:
-            pass
-        try:
+        with best_effort(self.logger, "closing the RTSI connection"):
             if self._rtsi is not None:
                 self._rtsi.disconnect()
-        except Exception:
-            pass
         # Also release any cameras that may have been opened in connect()'s
         # try-block before the failure point.
-        for cam in self.cameras.values():
-            try:
+        for name, cam in self.cameras.items():
+            with best_effort(self.logger, f"releasing camera {name}"):
                 if cam.is_connected:
                     cam.disconnect()
-            except Exception:
-                pass
         # And the gripper, if connect() got that far.
         if self._gripper is not None:
-            try:
+            with best_effort(self.logger, "releasing the gripper"):
                 if self._gripper.is_connected:
                     self._gripper.disconnect()
-            except Exception:
-                pass
         self._driver = None
         self._dashboard = None
         self._rtsi = None
@@ -600,14 +591,12 @@ class EliteCS66RT(Robot):
                 raise RuntimeError(f"MoveJ finished with non-success result: {result}")
         finally:
             # Restore servo loop ownership of the reverse socket.
-            try:
+            with suppress(Exception):
                 self._driver.writeIdle(timeout_ms)
-            except Exception:
-                pass
             if servo_was_running:
                 # Re-seed the servo target so the loop holds the current pose
                 # rather than replaying the pre-MoveJ snapshot.
-                try:
+                with best_effort(self.logger, "resyncing servo targets to the actual TCP", level="warn"):
                     current_tcp = np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64)
                     with self._servo_lock:
                         self._last_tcp_command = current_tcp.copy()
@@ -616,8 +605,6 @@ class EliteCS66RT(Robot):
                         # Reset the gate: outer loop must send a fresh action
                         # before we resume writeServoj.
                         self._external_command_received = False
-                except Exception:
-                    pass
                 self._start_servo_loop()
 
     @staticmethod

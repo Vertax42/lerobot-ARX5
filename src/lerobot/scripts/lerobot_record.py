@@ -85,6 +85,7 @@ lerobot-record \
 
 import threading
 import time
+import traceback
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -462,9 +463,62 @@ def record_loop(
         timestamp = time.perf_counter() - start_episode_t
 
 
+# --------------------------------------------------------------------------- #
+# What differs between the RT record loops
+# --------------------------------------------------------------------------- #
+
+
+class RtRecordPolicy:
+    """Keyboard-only reset, and the generic RT teleop re-sync."""
+
+    label = "Reset to initial position (keyboard or controller button)"
+    multi_teleop_error = "Multi-teleop mode is not supported in this version."
+
+    def reset_requested(self, events: dict, teleop) -> bool:
+        return bool(events["go_start"])
+
+    def resync(self, robot: Robot, teleop) -> None:
+        _sync_rt_teleop_to_robot_pose(robot, teleop)
+
+
+class EliteRecordPolicy(RtRecordPolicy):
+    """Elite CS66 also takes the reset from whichever device is driving.
+
+    The teleop loops let SpaceMouse's two buttons or Pico4's A button command a
+    reset; recording would be unusable if the operator had to reach for the
+    keyboard to do the same thing mid-episode.
+    """
+
+    label = "Elite CS66 reset to initial position"
+    multi_teleop_error = "Multi-teleop mode is not supported for elite_cs66_rt."
+
+    def __init__(self) -> None:
+        self._both_buttons_prev = False
+
+    def reset_requested(self, events: dict, teleop) -> bool:
+        if events["go_start"]:
+            return True
+        if not isinstance(teleop, Teleoperator):
+            return False
+
+        name = getattr(teleop, "name", None)
+        if name == "spacemouse":
+            both = teleop._spacemouse.is_left_button_pressed() and teleop._spacemouse.is_right_button_pressed()
+            rising = both and not self._both_buttons_prev
+            self._both_buttons_prev = both
+            return rising
+        if name == "pico4" and hasattr(teleop, "get_reset_button"):
+            return bool(teleop.get_reset_button())
+        return False
+
+    def resync(self, robot: Robot, teleop) -> None:
+        _sync_elite_teleop_to_robot_pose(robot, teleop)
+
+
 @safe_stop_image_writer
-def flexiv_rizon4_rt_record_loop(
+def run_rt_record_loop(
     robot: Robot,
+    policy: RtRecordPolicy,
     events: dict,
     fps: int,
     dataset: LeRobotDataset | None = None,
@@ -473,11 +527,22 @@ def flexiv_rizon4_rt_record_loop(
     single_task: str | None = None,
     display_data: bool = False,
 ):
+    """Record an episode from an arm that owns a background servo loop.
+
+    While ``robot.rt_moving`` the trajectory owns the arm, so no action is sent —
+    but the episode has to stay continuous, so frames keep being written with the
+    arm's current pose standing in as the action. Dropping the frame along with
+    the send would punch a hole in every recording taken across a reset, and that
+    surfaces at training time, not here.
+
+    ``policy`` supplies the two things that differ per rig: what counts as a
+    reset request, and how the teleoperator is re-synced afterwards.
+    """
     if dataset is not None and dataset.fps != fps:
         raise ValueError(f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps}).")
 
     if isinstance(teleop, list):
-        raise ValueError("Multi-teleop mode is not supported in this version.")
+        raise ValueError(policy.multi_teleop_error)
 
     timestamp = 0
     start_episode_t = time.perf_counter()
@@ -502,11 +567,11 @@ def flexiv_rizon4_rt_record_loop(
             logger.info("Exit early requested, exiting record loop early")
             break
 
-        if events["go_start"]:
+        if policy.reset_requested(events, teleop):
             events["go_start"] = False
             if hasattr(robot, "reset_to_initial_position"):
                 try:
-                    logger.info("Reset to initial position (keyboard or controller button)")
+                    logger.info(policy.label)
                     robot.reset_to_initial_position()
                     reset_triggered = True
                 except Exception as e:
@@ -522,19 +587,21 @@ def flexiv_rizon4_rt_record_loop(
         if robot_is_moving:
             prev_rt_moving = True
 
-        if prev_rt_moving:
-            if not robot_is_moving:
-                prev_rt_moving = False
-                try:
-                    _sync_rt_teleop_to_robot_pose(robot, teleop)
-                    logger.info("Synced teleop to robot pose after RT reset")
-                except Exception as e:
-                    logger.error(f"Failed to sync teleop after RT reset: {e}")
+        if prev_rt_moving and not robot_is_moving:
+            prev_rt_moving = False
+            try:
+                policy.resync(robot, teleop)
+                logger.info("Synced teleop to robot pose after RT reset")
+            except Exception as e:
+                logger.error(f"Failed to sync teleop after RT reset: {e}")
 
         if isinstance(teleop, Teleoperator):
             teleop_action = teleop.get_action()
 
-            if reset_triggered or robot_is_moving:
+            # Left as if/else on purpose: the branch decides whether the arm is
+            # commanded at all, and send_action's side effect should be visible
+            # as a statement rather than folded into an expression.
+            if reset_triggered or robot_is_moving:  # noqa: SIM108
                 sent_action = teleop_action  # not sent, used only for display
             else:
                 sent_action = robot.send_action(teleop_action)
@@ -597,6 +664,30 @@ def flexiv_rizon4_rt_record_loop(
         timestamp = time.perf_counter() - start_episode_t
 
 
+def flexiv_rizon4_rt_record_loop(
+    robot: Robot,
+    events: dict,
+    fps: int,
+    dataset: LeRobotDataset | None = None,
+    teleop: Teleoperator | list[Teleoperator] | None = None,
+    control_time_s: int | None = None,
+    single_task: str | None = None,
+    display_data: bool = False,
+):
+    """Flexiv Rizon4 RT: reset comes from the keyboard."""
+    run_rt_record_loop(
+        robot,
+        RtRecordPolicy(),
+        events,
+        fps,
+        dataset=dataset,
+        teleop=teleop,
+        control_time_s=control_time_s,
+        single_task=single_task,
+        display_data=display_data,
+    )
+
+
 def elite_cs66_rt_record_loop(
     robot: Robot,
     events: dict,
@@ -607,148 +698,23 @@ def elite_cs66_rt_record_loop(
     single_task: str | None = None,
     display_data: bool = False,
 ):
-    """Recording loop for Elite CS66 + SpaceMouse / Pico4.
+    """Elite CS66 RT: reset comes from the keyboard or the driving device.
 
-    Mirrors the elite_cs66_rt_*_teleop_loop semantics:
-    - Keyboard ``go_start`` or SpaceMouse both-buttons (rising edge) or Pico4
-      A-button trigger ``robot.reset_to_initial_position()``.
-    - While ``rt_moving`` is true the background servo trajectory owns the
-      arm; Python skips ``send_action`` and records a shifted frame
-      (previous observation + current-pose-as-action), matching the
-      convention used by ``flexiv_rizon4_rt_record_loop``.
-    - After the trajectory ends, the teleop's internal target is resynced to
-      the robot's current TCP so the next send_action doesn't jump.
+    Note this loop now runs under ``@safe_stop_image_writer`` — its own copy
+    never had the decorator, so an exception mid-episode left the writer
+    threads running. Sharing the body fixes that as a side effect.
     """
-    if dataset is not None and dataset.fps != fps:
-        raise ValueError(f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps}).")
-    if isinstance(teleop, list):
-        raise ValueError("Multi-teleop mode is not supported for elite_cs66_rt.")
-
-    teleop_name = teleop.name if isinstance(teleop, Teleoperator) else None
-
-    timestamp = 0
-    start_episode_t = time.perf_counter()
-    prev_rt_moving = False
-    prev_observation_frame = None
-    both_buttons_prev = False
-
-    while timestamp < control_time_s:
-        start_loop_t = time.perf_counter()
-        reset_triggered = False
-        refresh_listener_events(events)
-
-        if events["stop_recording"]:
-            logger.info("Stop recording requested, exiting record loop early")
-            break
-        if events["rerecord_episode"]:
-            logger.info("Re-record episode requested, exiting record loop early")
-            break
-        if events["exit_early"]:
-            events["exit_early"] = False
-            logger.info("Exit early requested, exiting record loop early")
-            break
-
-        # Reset trigger sources: keyboard go_start, SpaceMouse both-buttons
-        # rising edge, Pico4 A-button.
-        trigger_reset = bool(events["go_start"])
-        if isinstance(teleop, Teleoperator):
-            if teleop_name == "spacemouse":
-                both = teleop._spacemouse.is_left_button_pressed() and teleop._spacemouse.is_right_button_pressed()
-                if both and not both_buttons_prev:
-                    trigger_reset = True
-                both_buttons_prev = both
-            elif teleop_name == "pico4" and hasattr(teleop, "get_reset_button"):
-                if teleop.get_reset_button():
-                    trigger_reset = True
-
-        if trigger_reset:
-            events["go_start"] = False
-            if hasattr(robot, "reset_to_initial_position"):
-                try:
-                    logger.info("Elite CS66 reset to initial position")
-                    robot.reset_to_initial_position()
-                    reset_triggered = True
-                except Exception as e:
-                    logger.error(f"Error during reset_to_initial_position: {e}")
-
-        current_observation = robot.get_observation()
-        current_observation_frame = None
-        if dataset is not None:
-            current_observation_frame = build_dataset_frame(dataset.features, current_observation, prefix=OBS_STR)
-
-        robot_is_moving = hasattr(robot, "rt_moving") and robot.rt_moving
-        if robot_is_moving:
-            prev_rt_moving = True
-
-        if prev_rt_moving and not robot_is_moving:
-            prev_rt_moving = False
-            try:
-                _sync_elite_teleop_to_robot_pose(robot, teleop)
-                logger.info("Synced teleop target to robot pose after reset")
-            except Exception as e:
-                logger.error(f"Failed to sync teleop after reset: {e}")
-
-        if isinstance(teleop, Teleoperator):
-            # SpaceMouse / Pico4 / Elite CS66 all share the unified
-            # tcp.x/y/z + tcp.r1..r6 + gripper.pos schema — no conversion.
-            teleop_action = teleop.get_action()
-
-            if reset_triggered or robot_is_moving:
-                sent_action = teleop_action  # not sent; for display only
-            else:
-                sent_action = robot.send_action(teleop_action)
-
-            if dataset is not None and not reset_triggered:
-                if robot_is_moving and prev_observation_frame is not None:
-                    # Shifted-frame: action = current proprio so the dataset
-                    # has something well-defined during the autonomous RT
-                    # trajectory.
-                    current_as_action = {
-                        k: current_observation[k] for k in robot.action_features if k in current_observation
-                    }
-                    action_frame = build_dataset_frame(dataset.features, current_as_action, prefix=ACTION)
-                    frame = {
-                        **prev_observation_frame,
-                        **action_frame,
-                        "task": single_task,
-                    }
-                    dataset.add_frame(frame)
-                elif not robot_is_moving:
-                    action_frame = build_dataset_frame(dataset.features, sent_action, prefix=ACTION)
-                    frame = {
-                        **current_observation_frame,
-                        **action_frame,
-                        "task": single_task,
-                    }
-                    dataset.add_frame(frame)
-
-            prev_observation_frame = current_observation_frame
-            display_action = sent_action
-        else:
-            logger.info(
-                "No teleoperator provided; recording observations only. "
-                "The robot will stay at its current pose between episodes."
-            )
-            _record_loop_sleep(
-                start_loop_t=start_loop_t,
-                fps=fps,
-                start_episode_t=start_episode_t,
-                robot=robot,
-            )
-            timestamp = time.perf_counter() - start_episode_t
-            continue
-
-        if display_data:
-            log_rerun_data(observation=current_observation, action=display_action)
-
-        _record_loop_sleep(
-            start_loop_t=start_loop_t,
-            fps=fps,
-            start_episode_t=start_episode_t,
-            robot=robot,
-        )
-
-        timestamp = time.perf_counter() - start_episode_t
+    run_rt_record_loop(
+        robot,
+        EliteRecordPolicy(),
+        events,
+        fps,
+        dataset=dataset,
+        teleop=teleop,
+        control_time_s=control_time_s,
+        single_task=single_task,
+        display_data=display_data,
+    )
 
 
 @parser.wrap()
@@ -962,6 +928,20 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
                 dataset.save_episode()
                 recorded_episodes += 1
+    except KeyboardInterrupt:
+        # Ctrl+C is how an operator ends a session, not a failure. Logging it
+        # through the handler below would put an ERROR and a full traceback in
+        # the session log for the ordinary case, which is exactly the noise
+        # main() suppresses on the way out.
+        logger.info("Recording interrupted by user (Ctrl+C)")
+        raise
+    except BaseException:
+        # Say why the recording stopped. Without this the only trace is the
+        # "Stop recording" line below, and a session that died one second in
+        # looks exactly like one the operator ended — the log carried neither
+        # the exception nor a traceback.
+        logger.error(f"Recording stopped by an error:\n{traceback.format_exc()}")
+        raise
     finally:
         log_say("Stop recording", cfg.play_sounds, blocking=True)
 
@@ -976,8 +956,22 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         if not is_headless() and listener:
             listener.stop()
 
-        if cfg.dataset.push_to_hub:
-            dataset.push_to_hub(tags=cfg.dataset.tags, private=cfg.dataset.private)
+        # Guarded like finalize() above: this runs in `finally`, so it also runs
+        # when the dataset was never created — and an unguarded call there
+        # raises AttributeError on None, replacing the real failure with one
+        # that points nowhere near it.
+        #
+        # The upload is also not allowed to become the failure. It is the last
+        # step, it depends on a network the recording did not, and raising here
+        # discards whatever exception was already propagating — twice now the
+        # reported error came from this line while the real one was never
+        # printed. The episodes are on disk either way; `lerobot-record` can be
+        # re-run with push only, or the dataset pushed by hand.
+        if cfg.dataset.push_to_hub and dataset is not None:
+            try:
+                dataset.push_to_hub(tags=cfg.dataset.tags, private=cfg.dataset.private)
+            except Exception as e:
+                logger.error(f"Recording is saved at {dataset.root}, but pushing it to the Hub failed: {e!r}")
 
         log_say("Exiting", cfg.play_sounds)
     return dataset

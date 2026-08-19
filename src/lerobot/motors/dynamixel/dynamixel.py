@@ -18,9 +18,10 @@
 # https://emanual.robotis.com/docs/en/dxl/protocol2/#fast-sync-read-0x8a
 # -> Need to check compatibility across models
 
-import logging
 from copy import deepcopy
 from enum import Enum
+
+from lerobot.utils.robot_utils import get_logger
 
 from ..encoding_utils import decode_twos_complement, encode_twos_complement
 from ..motors_bus import (
@@ -46,7 +47,7 @@ DEFAULT_TIMEOUT_MS = 1000
 
 NORMALIZED_DATA = ["Goal_Position", "Present_Position"]
 
-logger = logging.getLogger(__name__)
+logger = get_logger("DynamixelMotorsBus")
 
 
 class OperatingMode(Enum):

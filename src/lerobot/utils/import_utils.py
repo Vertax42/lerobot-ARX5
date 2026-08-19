@@ -15,10 +15,14 @@
 # limitations under the License.
 import importlib
 import importlib.metadata
-import logging
+import traceback
 from typing import Any
 
 from draccus.choice_types import ChoiceRegistry
+
+from lerobot.utils.robot_utils import get_logger
+
+logger = get_logger("import_utils")
 
 
 def is_package_available(
@@ -36,8 +40,14 @@ def is_package_available(
     if import_name is None:
         import_name = pkg_name
 
-    # Check if the module spec exists using the import name
-    package_exists = importlib.util.find_spec(import_name) is not None
+    # Check if the module spec exists using the import name.
+    # find_spec imports parent packages, so a dotted import_name whose parent is
+    # missing ("xense.taccap" with no "xense") raises instead of returning None —
+    # which is exactly the case a caller is asking about.
+    try:
+        package_exists = importlib.util.find_spec(import_name) is not None
+    except ModuleNotFoundError:
+        package_exists = False
     package_version = "N/A"
     if package_exists:
         try:
@@ -62,7 +72,7 @@ def is_package_available(
             else:
                 # For packages other than "torch", don't attempt the fallback and set as not available
                 package_exists = False
-        logging.debug(f"Detected {pkg_name} version: {package_version}")
+        logger.debug(f"Detected {pkg_name} version: {package_version}")
     if return_version:
         return package_exists, package_version
     else:
@@ -181,9 +191,9 @@ def register_third_party_plugins() -> None:
         try:
             importlib.import_module(module_name)
             imported.append(module_name)
-            logging.info("Imported third-party plugin: %s", module_name)
+            logger.info(f"Imported third-party plugin: {module_name}")
         except Exception:
-            logging.exception("Could not import third-party plugin: %s", module_name)
+            logger.error(f"Could not import third-party plugin: {module_name}" + f"\n{traceback.format_exc()}")
             failed.append(module_name)
 
     for dist in importlib.metadata.distributions():
@@ -193,4 +203,4 @@ def register_third_party_plugins() -> None:
         if dist_name.startswith(prefixes):
             attempt_import(dist_name)
 
-    logging.debug("Third-party plugin import summary: imported=%s failed=%s", imported, failed)
+    logger.debug(f"Third-party plugin import summary: imported={imported} failed={failed}")

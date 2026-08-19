@@ -24,6 +24,7 @@ import pytest
 
 from lerobot.grippers import camera_injection as ci
 from lerobot.utils.errors import DeviceNotConnectedError
+from tests.utils import require_package
 
 LOGGER = getLogger("test_gripper_camera_injection")
 
@@ -88,6 +89,7 @@ def test_taccap_injects_wrist_and_tactile_keys(fake_taccap):
     ]
 
 
+@require_package("xgripper")
 def test_serial_injects_the_same_key_scheme_as_taccap(fake_taccap, fake_serial):
     """Both gripper families must land on identical keys, or a dataset recorded
     on one rig stops loading against a policy trained on the other."""
@@ -102,6 +104,7 @@ def test_serial_injects_the_same_key_scheme_as_taccap(fake_taccap, fake_serial):
     assert sorted(taccap_cameras) == sorted(serial_cameras)
 
 
+@require_package("xgripper")
 def test_tactile_sensors_are_skipped_when_disabled(fake_serial):
     fake_serial(_two_sides())
     cameras: dict = {}
@@ -146,6 +149,7 @@ def test_tactile_camera_settings_are_frozen(fake_taccap):
 # --------------------------------------------------------------------------- #
 
 
+@require_package("xgripper")
 def test_serial_one_armed_bench_does_not_touch_the_other_side(fake_serial):
     """A bench with a gripper on one arm only must not fail for the other."""
     fake_serial({"left": FakeDevice("XCA_LEFT", ["GSPS_L0", "GSPS_L1"])})
@@ -156,6 +160,7 @@ def test_serial_one_armed_bench_does_not_touch_the_other_side(fake_serial):
     assert sorted(cameras) == ["left_tactile_0", "left_tactile_1", "left_wrist"]
 
 
+@require_package("xgripper")
 def test_serial_no_gripper_at_all_is_a_no_op(fake_serial):
     fake_serial({})
     cameras: dict = {}
@@ -172,6 +177,7 @@ def test_missing_side_raises(fake_taccap):
         ci.inject_taccap_cameras({}, sides=("left", "right"), enable_tactile=True, logger=LOGGER)
 
 
+@require_package("xgripper")
 def test_too_few_tactile_sensors_raises(fake_serial):
     fake_serial({"left": FakeDevice("XCA_LEFT", ["GSPS_L0"], usb_hub="3-1")})
 
@@ -179,6 +185,7 @@ def test_too_few_tactile_sensors_raises(fake_serial):
         ci.inject_serial_gripper_cameras({}, sides=("left",), enable_tactile=True, logger=LOGGER)
 
 
+@require_package("xgripper")
 def test_too_few_tactile_sensors_is_ignored_when_tactile_disabled(fake_serial):
     fake_serial({"left": FakeDevice("XCA_LEFT", [])})
     cameras: dict = {}

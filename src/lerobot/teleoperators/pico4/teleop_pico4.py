@@ -422,10 +422,7 @@ class Pico4(Teleoperator):
             right_half = quat_list[mid:]
 
             # SLERP first half: from first to middle
-            if len(left_half) == 1:
-                left_mid = left_half[0]
-            else:
-                left_mid = self._slerp_quaternion(left_half[0], left_half[-1], 0.5)
+            left_mid = left_half[0] if len(left_half) == 1 else self._slerp_quaternion(left_half[0], left_half[-1], 0.5)
 
             # SLERP second half: from middle to last
             if len(right_half) == 1:
@@ -867,7 +864,9 @@ class Pico4(Teleoperator):
         if self._is_connected:
             try:
                 self.disconnect()
-            except Exception:
+            # No logging: __del__ can run during interpreter shutdown, where the
+            # logger's sinks may already be gone.
+            except Exception:  # nosec B110
                 pass
             finally:
                 self._is_connected = False

@@ -43,20 +43,17 @@ Examples:
 """
 
 import argparse
-import logging
 import sys
 from pathlib import Path
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
+from lerobot.utils.robot_utils import get_logger
+
+logger = get_logger("push_dataset_to_hub")
 
 
 def setup_logging():
     """Setup logging configuration."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s %(asctime)s %(filename)s:%(lineno)d %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
 
 
 def push_dataset_to_hub(
@@ -93,18 +90,18 @@ def push_dataset_to_hub(
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset path does not exist: {dataset_path}")
 
-    logging.info(f"Pushing dataset to: {repo_id}")
-    logging.info(f"Dataset path: {dataset_path}")
-    logging.info(f"Private: {private}")
-    logging.info(f"Push videos: {push_videos}")
-    logging.info(f"Upload large folder: {upload_large_folder}")
+    logger.info(f"Pushing dataset to: {repo_id}")
+    logger.info(f"Dataset path: {dataset_path}")
+    logger.info(f"Private: {private}")
+    logger.info(f"Push videos: {push_videos}")
+    logger.info(f"Upload large folder: {upload_large_folder}")
     if not push_videos:
-        logging.info("Skipping video files")
+        logger.info("Skipping video files")
 
-    logging.info("Loading local LeRobot dataset...")
+    logger.info("Loading local LeRobot dataset...")
     dataset = LeRobotDataset(repo_id=repo_id, root=dataset_path)
 
-    logging.info("Starting upload...")
+    logger.info("Starting upload...")
     try:
         dataset.push_to_hub(
             branch=branch,
@@ -118,15 +115,15 @@ def push_dataset_to_hub(
             **card_kwargs,
         )
     except Exception as e:
-        logging.error(f"Upload failed: {e}")
-        logging.info("Tips:")
-        logging.info("  - Try using --upload-large-folder for large datasets")
-        logging.info("  - Check your network connection")
-        logging.info("  - Make sure you have write access to the repository")
-        logging.info("  - Make sure you are logged in with: huggingface-cli login")
+        logger.error(f"Upload failed: {e}")
+        logger.info("Tips:")
+        logger.info("  - Try using --upload-large-folder for large datasets")
+        logger.info("  - Check your network connection")
+        logger.info("  - Make sure you have write access to the repository")
+        logger.info("  - Make sure you are logged in with: huggingface-cli login")
         raise
 
-    logging.info(f"✅ Dataset successfully pushed to: https://huggingface.co/datasets/{repo_id}")
+    logger.info(f"✅ Dataset successfully pushed to: https://huggingface.co/datasets/{repo_id}")
 
 
 def main():
@@ -205,10 +202,10 @@ def main():
             upload_large_folder=args.upload_large_folder,
         )
     except KeyboardInterrupt:
-        logging.info("\nUpload cancelled by user")
+        logger.info("\nUpload cancelled by user")
         sys.exit(1)
     except Exception as e:
-        logging.error(f"Failed to push dataset: {e}")
+        logger.error(f"Failed to push dataset: {e}")
         sys.exit(1)
 
 

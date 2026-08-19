@@ -14,9 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
+
+from lerobot.utils.robot_utils import get_logger
 
 from ..utils import TeleopEvents
+
+logger = get_logger("Gamepad")
 
 
 class InputController:
@@ -212,13 +215,13 @@ class GamepadController(InputController):
         pygame.joystick.init()
 
         if pygame.joystick.get_count() == 0:
-            logging.error("No gamepad detected. Please connect a gamepad and try again.")
+            logger.error("No gamepad detected. Please connect a gamepad and try again.")
             self.running = False
             return
 
         self.joystick = pygame.joystick.Joystick(0)
         self.joystick.init()
-        logging.info(f"Initialized gamepad: {self.joystick.get_name()}")
+        logger.info(f"Initialized gamepad: {self.joystick.get_name()}")
 
         print("Gamepad controls:")
         print("  Left analog stick: Move in X-Y plane")
@@ -304,7 +307,7 @@ class GamepadController(InputController):
             return delta_x, delta_y, delta_z
 
         except pygame.error:
-            logging.error("Error reading gamepad. Is it still connected?")
+            logger.error("Error reading gamepad. Is it still connected?")
             return 0.0, 0.0, 0.0
 
 
@@ -350,7 +353,7 @@ class GamepadControllerHID(InputController):
             if any(controller in device_name for controller in ["Logitech", "Xbox", "PS4", "PS5"]):
                 return device
 
-        logging.error("No gamepad found, check the connection and the product string in HID to add your gamepad")
+        logger.error("No gamepad found, check the connection and the product string in HID to add your gamepad")
         return None
 
     def start(self):
@@ -363,25 +366,25 @@ class GamepadControllerHID(InputController):
             return
 
         try:
-            logging.info(f"Connecting to gamepad at path: {self.device_info['path']}")
+            logger.info(f"Connecting to gamepad at path: {self.device_info['path']}")
             self.device = hid.device()
             self.device.open_path(self.device_info["path"])
             self.device.set_nonblocking(1)
 
             manufacturer = self.device.get_manufacturer_string()
             product = self.device.get_product_string()
-            logging.info(f"Connected to {manufacturer} {product}")
+            logger.info(f"Connected to {manufacturer} {product}")
 
-            logging.info("Gamepad controls (HID mode):")
-            logging.info("  Left analog stick: Move in X-Y plane")
-            logging.info("  Right analog stick: Move in Z axis (vertical)")
-            logging.info("  Button 1/B/Circle: Exit")
-            logging.info("  Button 2/A/Cross: End episode with SUCCESS")
-            logging.info("  Button 3/X/Square: End episode with FAILURE")
+            logger.info("Gamepad controls (HID mode):")
+            logger.info("  Left analog stick: Move in X-Y plane")
+            logger.info("  Right analog stick: Move in Z axis (vertical)")
+            logger.info("  Button 1/B/Circle: Exit")
+            logger.info("  Button 2/A/Cross: End episode with SUCCESS")
+            logger.info("  Button 3/X/Square: End episode with FAILURE")
 
         except OSError as e:
-            logging.error(f"Error opening gamepad: {e}")
-            logging.error("You might need to run this with sudo/admin privileges on some systems")
+            logger.error(f"Error opening gamepad: {e}")
+            logger.error("You might need to run this with sudo/admin privileges on some systems")
             self.running = False
 
     def stop(self):
@@ -446,7 +449,7 @@ class GamepadControllerHID(InputController):
                     self.episode_end_status = None
 
         except OSError as e:
-            logging.error(f"Error reading from gamepad: {e}")
+            logger.error(f"Error reading from gamepad: {e}")
 
     def get_deltas(self):
         """Get the current movement deltas from gamepad state."""

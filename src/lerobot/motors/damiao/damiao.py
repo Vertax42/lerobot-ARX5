@@ -16,12 +16,13 @@
 # Licensed under the MIT License; see `LICENSE` for the full text:
 # https://github.com/cmjang/DM_Control_Python
 
-import logging
 import time
 from contextlib import contextmanager
 from copy import deepcopy
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, TypedDict
+
+import spdlog
 
 from lerobot.utils.decorators import check_if_already_connected, check_if_not_connected
 from lerobot.utils.import_utils import _can_available
@@ -37,7 +38,7 @@ else:
 
 import numpy as np
 
-from lerobot.utils.robot_utils import precise_sleep
+from lerobot.utils.robot_utils import get_logger, precise_sleep
 from lerobot.utils.utils import enter_pressed, move_cursor_up
 
 from ..motors_bus import Motor, MotorCalibration, MotorsBusBase, NameOrID, Value
@@ -56,7 +57,7 @@ from .tables import (
     MotorType,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger("DamiaoMotorsBus")
 
 
 LONG_TIMEOUT_SEC = 0.1
@@ -259,7 +260,7 @@ class DamiaoMotorsBus(MotorsBusBase):
             try:
                 self.disable_torque()
             except Exception as e:
-                logger.warning(f"Failed to disable torque during disconnect: {e}")
+                logger.warn(f"Failed to disable torque during disconnect: {e}")
 
         if self.canbus:
             self.canbus.shutdown()
@@ -376,7 +377,7 @@ class DamiaoMotorsBus(MotorsBusBase):
                         return msg
                     logger.debug(f"Ignoring message from 0x{msg.arbitration_id:02X}, expected 0x{expected_recv_id:02X}")
 
-            if logger.isEnabledFor(logging.DEBUG):
+            if logger.should_log(spdlog.LogLevel.DEBUG):
                 if messages_seen:
                     logger.debug(
                         f"Received {len(messages_seen)} msgs from {set(messages_seen)}, expected 0x{expected_recv_id:02X}"
@@ -574,7 +575,7 @@ class DamiaoMotorsBus(MotorsBusBase):
                 "temp_rotor": float(t_rotor),
             }
         except Exception as e:
-            logger.warning(f"Failed to decode response from {motor}: {e}")
+            logger.warn(f"Failed to decode response from {motor}: {e}")
 
     @check_if_not_connected
     def read(self, data_name: str, motor: str) -> Value:
@@ -690,7 +691,7 @@ class DamiaoMotorsBus(MotorsBusBase):
             if msg:
                 self._process_response(motor, msg)
             else:
-                logger.warning(f"Packet drop: {motor} (ID: 0x{recv_id:02X}). Using last known state.")
+                logger.warn(f"Packet drop: {motor} (ID: 0x{recv_id:02X}). Using last known state.")
 
     @check_if_not_connected
     def sync_write(self, data_name: str, values: dict[str, Value]) -> None:

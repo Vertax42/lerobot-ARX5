@@ -16,7 +16,6 @@
 import contextlib
 import importlib.resources
 import json
-import logging
 from collections import deque
 from collections.abc import Iterable, Iterator
 from pathlib import Path
@@ -45,7 +44,10 @@ from lerobot.datasets.backward_compatibility import (
     ForwardCompatibilityError,
 )
 from lerobot.utils.constants import ACTION, OBS_ENV_STATE, OBS_STR
+from lerobot.utils.robot_utils import get_logger
 from lerobot.utils.utils import SuppressProgressBars, is_valid_numpy_dtype_string
+
+logger = get_logger("dataset_utils")
 
 DEFAULT_CHUNK_SIZE = 1000  # Max number of files per chunk
 DEFAULT_DATA_FILE_SIZE_IN_MB = 100  # Max size per file
@@ -478,7 +480,7 @@ def check_version_compatibility(
     if v_check.major < v_current.major and enforce_breaking_major:
         raise BackwardCompatibilityError(repo_id, v_check)
     elif v_check.minor < v_current.minor:
-        logging.warning(FUTURE_MESSAGE.format(repo_id=repo_id, version=v_check))
+        logger.warn(FUTURE_MESSAGE.format(repo_id=repo_id, version=v_check))
 
 
 def get_repo_versions(repo_id: str) -> list[packaging.version.Version]:
@@ -542,7 +544,7 @@ def get_safe_version(repo_id: str, version: str | packaging.version.Version) -> 
     if compatibles:
         return_version = max(compatibles)
         if return_version < target_version:
-            logging.warning(f"Revision {version} for {repo_id} not found, using version v{return_version}")
+            logger.warn(f"Revision {version} for {repo_id} not found, using version v{return_version}")
         return f"v{return_version}"
 
     lower_major = [v for v in hub_versions if v.major < target_version.major]

@@ -39,7 +39,6 @@ lerobot-replay \
 
 """
 
-import logging
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -58,11 +57,13 @@ from lerobot.robots import (  # noqa: F401
 )
 from lerobot.utils.constants import ACTION
 from lerobot.utils.import_utils import register_third_party_plugins
-from lerobot.utils.robot_utils import precise_sleep
+from lerobot.utils.robot_utils import get_logger, precise_sleep
 from lerobot.utils.utils import (
     init_logging,
     log_say,
 )
+
+logger = get_logger("lerobot_replay")
 
 
 @dataclass
@@ -88,7 +89,7 @@ class ReplayConfig:
 @parser.wrap()
 def replay(cfg: ReplayConfig):
     init_logging()
-    logging.info(pformat(asdict(cfg)))
+    logger.info(pformat(asdict(cfg)))
 
     robot = make_robot_from_config(cfg.robot)
     dataset = LeRobotDataset(cfg.dataset.repo_id, root=cfg.dataset.root, episodes=[cfg.dataset.episode])

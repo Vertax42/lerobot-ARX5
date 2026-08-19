@@ -18,9 +18,9 @@ from enum import IntEnum
 from typing import Any
 
 import numpy as np
-from scipy.spatial.transform import Rotation as R
 
 from lerobot.utils.robot_utils import (
+    get_logger,
     normalize_quaternion,
     quaternion_to_matrix,
     rotation_6d_to_quaternion,
@@ -29,6 +29,8 @@ from lerobot.utils.robot_utils import (
 from ..teleoperator import Teleoperator
 from ..utils import TeleopEvents
 from .configuration_btgamepad import BtgamepadTeleopConfig
+
+logger = get_logger("BTGamepadTeleop")
 
 
 class GripperAction(IntEnum):
@@ -131,7 +133,13 @@ class BtgamepadTeleop(Teleoperator):
 
         # quaternion update
         rotation_delta = np.array([delta_rx, delta_ry, delta_rz]) * self.config.rot_sensitivity
-        rotation_delta = R.from_euler("xyz", rotation_delta).as_matrix()
+        # Imported here, not at module scope: this is scipy's only use in the
+        # package, and lerobot-teleoperate imports every teleoperator — so a
+        # top-level import made a heavy optional dependency mandatory for
+        # anyone running the CLI, gamepad or not.
+        from scipy.spatial.transform import Rotation
+
+        rotation_delta = Rotation.from_euler("xyz", rotation_delta).as_matrix()
         self._start_matrix = quaternion_to_matrix(
             np.array([0, 0, 0, self._start_quat[0], self._start_quat[1], self._start_quat[2], self._start_quat[3]]),
             input_format="wxyz",
@@ -184,9 +192,7 @@ class BtgamepadTeleop(Teleoperator):
         # Reset edge detection state
         self._was_back_button_pressed = False
 
-        import logging
-
-        logging.info(f"[btgamepad] Reset target pose to: pos={pose_7d[:3]}, quat={pose_7d[3:7]}, gripper={gripper_pos}")
+        logger.info(f"[btgamepad] Reset target pose to: pos={pose_7d[:3]}, quat={pose_7d[3:7]}, gripper={gripper_pos}")
 
     def get_reset_button(self) -> bool:
         """Get the state of the reset button (BACK button) with edge detection.

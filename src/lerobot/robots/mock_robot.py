@@ -165,7 +165,8 @@ class MockRobot(Robot):
         if clipped != value:
             warnings.warn(
                 "Gripper action is out of range. Clipped "
-                f"{value} -> {clipped} in [{self.config.gripper_min_position}, {self.config.gripper_max_position}]"
+                f"{value} -> {clipped} in [{self.config.gripper_min_position}, {self.config.gripper_max_position}]",
+                stacklevel=2,
             )
         return clipped
 
@@ -173,7 +174,7 @@ class MockRobot(Robot):
         try:
             return float(value)
         except (TypeError, ValueError):
-            warnings.warn(f"Ignoring non-numeric action[{key}]={value!r}")
+            warnings.warn(f"Ignoring non-numeric action[{key}]={value!r}", stacklevel=2)
             return None
 
     def _extract_first_float(self, action: dict[str, Any], keys: tuple[str, ...]) -> float | None:
@@ -184,7 +185,8 @@ class MockRobot(Robot):
 
     def _apply_positional_fallback(self, action: dict[str, Any], keys: list[str]) -> dict[str, float]:
         warnings.warn(
-            "Action keys do not match mock_robot schema; falling back to positional mapping by action value order."
+            "Action keys do not match mock_robot schema; falling back to positional mapping by action value order.",
+            stacklevel=2,
         )
         applied: dict[str, float] = {}
         for key, value in zip(keys, action.values(), strict=False):
@@ -244,7 +246,7 @@ class MockRobot(Robot):
         if not has_any_euler:
             return {}
         if not all(k in action for k in euler_keys):
-            warnings.warn("Incomplete Euler action provided. Expected roll/pitch/yaw together.")
+            warnings.warn("Incomplete Euler action provided. Expected roll/pitch/yaw together.", stacklevel=2)
             return {}
 
         roll = self._parse_float(action["roll"], "roll")
@@ -261,7 +263,7 @@ class MockRobot(Robot):
         has_any_r6 = any(k in action for k in TCP_ROTATION_KEYS)
         if has_any_r6:
             if not all(k in action for k in TCP_ROTATION_KEYS):
-                warnings.warn("Incomplete TCP rotation action provided. Expected tcp.r1~tcp.r6 together.")
+                warnings.warn("Incomplete TCP rotation action provided. Expected tcp.r1~tcp.r6 together.", stacklevel=2)
                 return {}
             rot_values = {}
             for k in TCP_ROTATION_KEYS:

@@ -58,7 +58,6 @@ def main() -> int:
 
     # examples/resource recipes ship with the SDK and include actual_joint_positions
     # + actual_TCP_pose.
-    res = Path(cs.__file__).resolve().parent  # placeholder; overridden below
     sdk_examples = Path(__file__).resolve()
     # Prefer the SDK's own example recipes (known-good, include both fields).
     candidates = [

@@ -1,0 +1,108 @@
+# Copyright 2025 The XenseRobotics Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# The checks this fork actually runs, and the only workflow it has. The ones
+# inherited from upstream were deleted rather than kept dormant: they publish
+# to PyPI, host docs and triage issues for the upstream project, none of which
+# applies here, and git history holds them if one is ever wanted back.
+#
+# No vendor SDK is installed: xensesdk, xense.taccap, flexivrdk and elite_cs_sdk
+# are not on PyPI and need hardware to be worth having. The suite is written to
+# skip what needs them (11 tests as of this writing) and to run everything else,
+# so a green run here means the ~733 SDK-free tests pass. Anything touching a
+# robot still has to be verified on the bench.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Only the newest commit on a branch or PR is worth building.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  UV_VERSION: "0.8.0"
+
+jobs:
+  quality:
+    name: Lint and format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # Runs the same hook set as a local commit, over every file rather than
+      # only the staged ones — so drift in files nobody happens to touch is
+      # still caught.
+      - uses: pre-commit/action@v3.0.1 # zizmor: ignore[unpinned-uses]
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    env:
+      # Keep HF's caches off the runner's cramped /home.
+      HF_HOME: /mnt/cache/huggingface
+      HF_LEROBOT_HOME: /mnt/cache/huggingface/lerobot
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          lfs: true
+
+      - name: Make /mnt writable
+        run: sudo chown -R "$USER:$USER" /mnt
+
+      - name: Install apt dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential ffmpeg libegl1-mesa-dev libgeos-dev \
+            libglib2.0-0 libusb-1.0-0-dev portaudio19-dev speech-dispatcher
+
+      - name: Setup uv and Python
+        uses: astral-sh/setup-uv@v6 # zizmor: ignore[unpinned-uses]
+        with:
+          enable-cache: true
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # CPU wheels only: the GPU builds are several GB and nothing here runs on
+      # a GPU, which on a 14 GB runner is the difference between fitting and not.
+      # A venv, not --system: the runner's /usr is externally managed.
+      - name: Install lerobot with test extras
+        env:
+          UV_TORCH_BACKEND: cpu
+        run: |
+          uv venv
+          uv pip install -e ".[test]"
+
+      # -rs lists what was skipped and why, in the same run: a job that skipped
+      # far more than the SDK-dependent tests means the environment is wrong,
+      # not that the code is fine.
+      - name: Run tests
+        run: .venv/bin/python -m pytest tests/ -v -rs --timeout=300 --durations=20

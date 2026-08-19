@@ -25,7 +25,6 @@ following format:
 
 import base64
 import json
-import logging
 import time
 from threading import Event, Lock, Thread
 from typing import Any
@@ -36,12 +35,13 @@ from numpy.typing import NDArray
 
 from lerobot.utils.decorators import check_if_already_connected, check_if_not_connected
 from lerobot.utils.errors import DeviceNotConnectedError
+from lerobot.utils.robot_utils import get_logger
 
 from ..camera import Camera
 from ..configs import ColorMode
 from .configuration_zmq import ZMQCameraConfig
 
-logger = logging.getLogger(__name__)
+logger = get_logger("ZMQCamera")
 
 
 class ZMQCamera(Camera):
@@ -225,7 +225,7 @@ class ZMQCamera(Camera):
         start_time = time.perf_counter()
 
         if color_mode is not None:
-            logger.warning(f"{self} read() color_mode parameter is deprecated and will be removed in future versions.")
+            logger.warn(f"{self} read() color_mode parameter is deprecated and will be removed in future versions.")
 
         if self.thread is None or not self.thread.is_alive():
             raise RuntimeError(f"{self} read thread is not running.")
@@ -262,7 +262,7 @@ class ZMQCamera(Camera):
             except (TimeoutError, Exception) as e:
                 if failure_count <= 10:
                     failure_count += 1
-                    logger.warning(f"Read error: {e}")
+                    logger.warn(f"Read error: {e}")
                 else:
                     raise RuntimeError(f"{self} exceeded maximum consecutive read failures.") from e
 
