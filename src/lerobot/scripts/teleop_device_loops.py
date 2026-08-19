@@ -154,13 +154,9 @@ def run_cartesian_teleop_loop(
             elif hasattr(robot, "reset_to_initial_position"):
                 try:
                     robot.reset_to_initial_position()
-                    logger.info(
-                        f"Reset to initial position triggered by {policy.reset_source}"
-                    )
+                    logger.info(f"Reset to initial position triggered by {policy.reset_source}")
                 except Exception as e:
-                    logger.error(
-                        f"Failed to reset robot position: {e}\n{traceback.format_exc()}"
-                    )
+                    logger.error(f"Failed to reset robot position: {e}\n{traceback.format_exc()}")
             if display_data and obs is not None:
                 log_rerun_data(observation=obs)
             if obs is not None:
@@ -260,10 +256,7 @@ class Pico4Policy(_NoBeforeSend):
         grip = f"grip={getattr(teleop, '_last_grip', 0.0):.2f}"
         gripper_pos = f"gripper={action.get('gripper.pos', 0.0):.2f}"
         flag = "[DRYRUN] | " if dryrun else ""
-        return (
-            f"{loop_s * 1e3:5.1f}ms ({1 / loop_s:3.0f}Hz) | "
-            f"{flag}{enabled} | {grip} | {gripper_pos} | {ori}"
-        )
+        return f"{loop_s * 1e3:5.1f}ms ({1 / loop_s:3.0f}Hz) | {flag}{enabled} | {grip} | {gripper_pos} | {ori}"
 
 
 class BiPico4Policy(Pico4Policy):
@@ -304,10 +297,7 @@ class SpaceMousePolicy:
         self._just_resynced = False
 
     def reset_requested(self, teleop: Teleoperator) -> bool:
-        both = (
-            teleop._spacemouse.is_left_button_pressed()
-            and teleop._spacemouse.is_right_button_pressed()
-        )
+        both = teleop._spacemouse.is_left_button_pressed() and teleop._spacemouse.is_right_button_pressed()
         rising = both and not self._both_prev
         self._both_prev = both
         return rising
@@ -338,10 +328,7 @@ class SpaceMousePolicy:
         try:
             _resync_from_euler(robot, teleop)
             self._just_resynced = True
-            logger.info(
-                f"Idle for {self._release_resync_idle_s:.2f}s — "
-                "snapped SpaceMouse target to robot TCP"
-            )
+            logger.info(f"Idle for {self._release_resync_idle_s:.2f}s — snapped SpaceMouse target to robot TCP")
             return teleop.get_action()
         except Exception as e:
             logger.error(f"Idle resync failed: {e}")

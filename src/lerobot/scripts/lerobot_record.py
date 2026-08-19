@@ -502,10 +502,7 @@ class EliteRecordPolicy(RtRecordPolicy):
 
         name = getattr(teleop, "name", None)
         if name == "spacemouse":
-            both = (
-                teleop._spacemouse.is_left_button_pressed()
-                and teleop._spacemouse.is_right_button_pressed()
-            )
+            both = teleop._spacemouse.is_left_button_pressed() and teleop._spacemouse.is_right_button_pressed()
             rising = both and not self._both_buttons_prev
             self._both_buttons_prev = both
             return rising
@@ -589,19 +586,21 @@ def run_rt_record_loop(
         if robot_is_moving:
             prev_rt_moving = True
 
-        if prev_rt_moving:
-            if not robot_is_moving:
-                prev_rt_moving = False
-                try:
-                    policy.resync(robot, teleop)
-                    logger.info("Synced teleop to robot pose after RT reset")
-                except Exception as e:
-                    logger.error(f"Failed to sync teleop after RT reset: {e}")
+        if prev_rt_moving and not robot_is_moving:
+            prev_rt_moving = False
+            try:
+                policy.resync(robot, teleop)
+                logger.info("Synced teleop to robot pose after RT reset")
+            except Exception as e:
+                logger.error(f"Failed to sync teleop after RT reset: {e}")
 
         if isinstance(teleop, Teleoperator):
             teleop_action = teleop.get_action()
 
-            if reset_triggered or robot_is_moving:
+            # Left as if/else on purpose: the branch decides whether the arm is
+            # commanded at all, and send_action's side effect should be visible
+            # as a statement rather than folded into an expression.
+            if reset_triggered or robot_is_moving:  # noqa: SIM108
                 sent_action = teleop_action  # not sent, used only for display
             else:
                 sent_action = robot.send_action(teleop_action)
@@ -664,8 +663,6 @@ def run_rt_record_loop(
         timestamp = time.perf_counter() - start_episode_t
 
 
-
-
 def flexiv_rizon4_rt_record_loop(
     robot: Robot,
     events: dict,
@@ -678,8 +675,15 @@ def flexiv_rizon4_rt_record_loop(
 ):
     """Flexiv Rizon4 RT: reset comes from the keyboard."""
     run_rt_record_loop(
-        robot, RtRecordPolicy(), events, fps, dataset=dataset, teleop=teleop,
-        control_time_s=control_time_s, single_task=single_task, display_data=display_data,
+        robot,
+        RtRecordPolicy(),
+        events,
+        fps,
+        dataset=dataset,
+        teleop=teleop,
+        control_time_s=control_time_s,
+        single_task=single_task,
+        display_data=display_data,
     )
 
 
@@ -695,8 +699,15 @@ def elite_cs66_rt_record_loop(
 ):
     """Elite CS66 RT: reset comes from the keyboard or the driving device."""
     run_rt_record_loop(
-        robot, EliteRecordPolicy(), events, fps, dataset=dataset, teleop=teleop,
-        control_time_s=control_time_s, single_task=single_task, display_data=display_data,
+        robot,
+        EliteRecordPolicy(),
+        events,
+        fps,
+        dataset=dataset,
+        teleop=teleop,
+        control_time_s=control_time_s,
+        single_task=single_task,
+        display_data=display_data,
     )
 
 

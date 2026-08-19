@@ -100,11 +100,14 @@ lerobot-teleoperate \
 # claims the process-wide "libglib-2.0.so.0" slot, so we import xense.taccap
 # BEFORE OpenCV gets pulled in (via the camera/robot imports further down),
 # making the newer conda glib win. Guarded: a no-op when the SDK isn't present.
+# contextlib.suppress is not usable here: this has to run before anything pulls
+# in OpenCV, which is earlier than the import block below.
 try:  # noqa: SIM105
     import xense.taccap  # noqa: F401
 except Exception:
     pass
 
+import contextlib
 import time
 import traceback
 from dataclasses import asdict, dataclass
@@ -126,6 +129,12 @@ from lerobot.robots import (  # noqa: F401
     make_robot_from_config,
     mock_robot,
 )
+from lerobot.scripts.teleop_device_loops import (
+    BiPico4Policy,
+    Pico4Policy,
+    SpaceMousePolicy,
+    run_cartesian_teleop_loop,
+)
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
     TeleoperatorConfig,
@@ -145,12 +154,6 @@ from lerobot.utils.robot_utils import (
     precise_sleep,
 )
 from lerobot.utils.utils import move_cursor_up
-from lerobot.scripts.teleop_device_loops import (
-    BiPico4Policy,
-    Pico4Policy,
-    SpaceMousePolicy,
-    run_cartesian_teleop_loop,
-)
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
 logger = get_logger("Teleoperate")
@@ -452,7 +455,7 @@ def arx5_teleop_loop(
     if not is_bimanual and not is_single_arm:
         raise ValueError("Robot must have either 'arm' (single) or 'left_arm'/'right_arm' (bimanual)")
 
-    camera_keys = [key for key in robot.observation_features.keys() if not key.endswith(".pos")]
+    camera_keys = [key for key in robot.observation_features if not key.endswith(".pos")]
     for cam_key in camera_keys:
         timing_stats["camera_obs_times"][cam_key] = []
 
@@ -637,7 +640,7 @@ def arx5_trlc_leader_teleop_loop(
         obs_dt_ms = (time.perf_counter() - obs_start) * 1e3
 
         raw_action = teleop.get_action()
-        for k in raw_action.keys():
+        for k in raw_action:
             if "gripper" in k:
                 raw_action[k] = (1 - raw_action[k]) * 1.57
         teleop_action = raw_action
@@ -720,9 +723,14 @@ def spacemouse_teleop_loop(
 ):
     """Flexiv Rizon4 + SpaceMouse."""
     run_cartesian_teleop_loop(
-        teleop, robot, fps, SpaceMousePolicy(),
-        display_data=display_data, duration=duration,
-        dryrun=dryrun, debug_timing=debug_timing,
+        teleop,
+        robot,
+        fps,
+        SpaceMousePolicy(),
+        display_data=display_data,
+        duration=duration,
+        dryrun=dryrun,
+        debug_timing=debug_timing,
         honour_rt_moving=robot.name == "flexiv_rizon4_rt",
     )
 
@@ -744,9 +752,14 @@ def elite_cs66_rt_spacemouse_teleop_loop(
     been running its own trajectory, which covers the case that mattered.
     """
     run_cartesian_teleop_loop(
-        teleop, robot, fps, SpaceMousePolicy(),
-        display_data=display_data, duration=duration,
-        dryrun=dryrun, debug_timing=debug_timing,
+        teleop,
+        robot,
+        fps,
+        SpaceMousePolicy(),
+        display_data=display_data,
+        duration=duration,
+        dryrun=dryrun,
+        debug_timing=debug_timing,
     )
 
 
@@ -765,9 +778,14 @@ def elite_cs66_rt_pico4_teleop_loop(
     is converted here — the shared loop sends it through untouched.
     """
     run_cartesian_teleop_loop(
-        teleop, robot, fps, Pico4Policy(),
-        display_data=display_data, duration=duration,
-        dryrun=dryrun, debug_timing=debug_timing,
+        teleop,
+        robot,
+        fps,
+        Pico4Policy(),
+        display_data=display_data,
+        duration=duration,
+        dryrun=dryrun,
+        debug_timing=debug_timing,
     )
 
 
@@ -787,9 +805,14 @@ def pico4_teleop_loop(
     would stall every frame.
     """
     run_cartesian_teleop_loop(
-        teleop, robot, fps, Pico4Policy(),
-        display_data=display_data, duration=duration,
-        dryrun=dryrun, debug_timing=debug_timing,
+        teleop,
+        robot,
+        fps,
+        Pico4Policy(),
+        display_data=display_data,
+        duration=duration,
+        dryrun=dryrun,
+        debug_timing=debug_timing,
         honour_rt_moving=robot.name == "flexiv_rizon4_rt",
     )
 
@@ -805,9 +828,14 @@ def bi_pico4_teleop_loop(
 ):
     """Bimanual arm + dual Pico4 controllers."""
     run_cartesian_teleop_loop(
-        teleop, robot, fps, BiPico4Policy(),
-        display_data=display_data, duration=duration,
-        dryrun=dryrun, debug_timing=debug_timing,
+        teleop,
+        robot,
+        fps,
+        BiPico4Policy(),
+        display_data=display_data,
+        duration=duration,
+        dryrun=dryrun,
+        debug_timing=debug_timing,
     )
 
 
@@ -841,7 +869,7 @@ def teleoperate(cfg: TeleoperateConfig):
             teleop = make_teleoperator_from_config(cfg.teleop)
             logger.info(f"Current TCP pose (euler+gripper): {robot.get_current_tcp_pose_euler()}")
             teleop.connect(current_tcp_pose_euler=robot.get_current_tcp_pose_euler())
-            try:
+            with contextlib.suppress(KeyboardInterrupt):
                 spacemouse_teleop_loop(
                     teleop=teleop,
                     robot=robot,
@@ -851,8 +879,6 @@ def teleoperate(cfg: TeleoperateConfig):
                     dryrun=cfg.dryrun,
                     debug_timing=cfg.debug_timing,
                 )
-            except KeyboardInterrupt:
-                pass
 
         # --- arx5_follower + trlc_leader ---
         elif cfg.robot.type == "arx5_follower" and cfg.teleop.type == "trlc_leader":
@@ -861,7 +887,7 @@ def teleoperate(cfg: TeleoperateConfig):
             robot.connect()
             teleop = make_teleoperator_from_config(cfg.teleop)
             teleop.connect()
-            try:
+            with contextlib.suppress(KeyboardInterrupt):
                 arx5_trlc_leader_teleop_loop(
                     teleop=teleop,
                     robot=robot,
@@ -871,8 +897,6 @@ def teleoperate(cfg: TeleoperateConfig):
                     debug_timing=cfg.debug_timing,
                     dryrun=cfg.dryrun,
                 )
-            except KeyboardInterrupt:
-                pass
 
         # --- arx5_follower / bi_arx5 (other teleops) ---
         elif cfg.robot.type in ("bi_arx5", "arx5_follower"):
@@ -880,7 +904,7 @@ def teleoperate(cfg: TeleoperateConfig):
             logger.info(f"Detected ARX5 ({mode}), using ARX5 teleop loop")
             robot = make_robot_from_config(cfg.robot)
             robot.connect()
-            try:
+            with contextlib.suppress(KeyboardInterrupt):
                 arx5_teleop_loop(
                     robot=robot,
                     fps=cfg.fps,
@@ -888,8 +912,6 @@ def teleoperate(cfg: TeleoperateConfig):
                     duration=cfg.teleop_time_s,
                     debug_timing=cfg.debug_timing,
                 )
-            except KeyboardInterrupt:
-                pass
 
         # --- flexiv_rizon4_rt + spacemouse ---
         elif cfg.robot.type == "flexiv_rizon4_rt" and cfg.teleop.type == "spacemouse":
@@ -1091,7 +1113,7 @@ def teleoperate(cfg: TeleoperateConfig):
             robot.connect()
             teleop = make_teleoperator_from_config(cfg.teleop)
             teleop.connect()
-            try:
+            with contextlib.suppress(KeyboardInterrupt):
                 mock_robot_teleop_loop(
                     teleop=teleop,
                     robot=robot,
@@ -1101,8 +1123,6 @@ def teleoperate(cfg: TeleoperateConfig):
                     dryrun=cfg.dryrun,
                     debug_timing=cfg.debug_timing,
                 )
-            except KeyboardInterrupt:
-                pass
 
         # --- generic fallback ---
         else:
@@ -1110,7 +1130,7 @@ def teleoperate(cfg: TeleoperateConfig):
             robot = make_robot_from_config(cfg.robot)
             teleop.connect()
             robot.connect()
-            try:
+            with contextlib.suppress(KeyboardInterrupt):
                 teleop_loop(
                     teleop=teleop,
                     robot=robot,
@@ -1120,8 +1140,6 @@ def teleoperate(cfg: TeleoperateConfig):
                     display_compressed_images=display_compressed_images,
                     debug_timing=cfg.debug_timing,
                 )
-            except KeyboardInterrupt:
-                pass
 
     except Exception as e:
         logger.error(f"Error in teleoperation: {e}\n{traceback.format_exc()}")
