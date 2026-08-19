@@ -212,6 +212,12 @@ def _reference_remap(cal, balance):
     return mx, my
 
 
+#: The SDK resamples with INTER_CUBIC — the fisheye-to-pinhole mapping magnifies
+#: the periphery about 3.3x, and bilinear softens an image enlarged that much.
+#: Matches the PC calibration tool (camera-calibration, fisheye_calib/rectify.py).
+RECTIFY_INTERPOLATION = "INTER_CUBIC"
+
+
 @pytest.mark.parametrize("balance", [0.0, 0.5, 1.0])
 def test_rectification_matches_opencvs_own_fisheye_implementation(balance):
     """The strongest check available without a calibration target in frame."""
@@ -221,7 +227,7 @@ def test_rectification_matches_opencvs_own_fisheye_implementation(balance):
 
     img = np.random.default_rng(7).integers(0, 255, (480, 640, 3), dtype=np.uint8)
     mx, my = _reference_remap(FISHEYE_FALLBACK_CAL, balance)
-    expected = cv2.remap(img, mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+    expected = cv2.remap(img, mx, my, cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT)
 
     got = np.asarray(FisheyeUndistorter(FISHEYE_FALLBACK_CAL, 640, 480, balance).apply(img))
 
@@ -300,3 +306,35 @@ def test_the_camera_builds_one_undistorter_and_keeps_it():
     # connect() is what builds it; the field is the contract _postprocess_image
     # reads on every frame, so it must survive across reads.
     assert hasattr(cam, "_undistorter")
+
+
+def test_rectification_resamples_with_cubic_not_bilinear():
+    """Bilinear here is a quality regression that nothing else would catch.
+
+    Rectifying an equidistant fisheye into a pinhole view upsamples the
+    periphery — about 3.3x with this lens at f_new = f_src — and bilinear
+    visibly softens an image being magnified that much. Measured on a
+    structured frame: cubic carries ~1.36x the Laplacian variance. Every other
+    test in this file passes either way, and the difference lands in recorded
+    data.
+    """
+    import cv2
+
+    from xense.taccap import FISHEYE_FALLBACK_CAL, FisheyeUndistorter
+
+    rng = np.random.default_rng(1)
+    img = cv2.resize(
+        rng.integers(0, 255, (60, 80, 3), dtype=np.uint8),
+        (640, 480), interpolation=cv2.INTER_NEAREST,
+    )
+    mx, my = _reference_remap(FISHEYE_FALLBACK_CAL, 0.0)
+    cubic = cv2.remap(img, mx, my, cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT)
+    linear = cv2.remap(img, mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+
+    got = np.asarray(FisheyeUndistorter(FISHEYE_FALLBACK_CAL, 640, 480, 0.0).apply(img))
+
+    def agreement(a, b):
+        return (np.abs(a.astype(int) - b.astype(int)).sum(axis=2) == 0).mean()
+
+    assert agreement(got, cubic) > 0.99, "rectification is no longer cubic"
+    assert agreement(got, linear) < 0.99, "cubic and linear should differ here"
