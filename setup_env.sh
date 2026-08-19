@@ -563,7 +563,7 @@ install_xense() {
     echo " xensesdk (PyPI) + XGripper"
     echo "══════════════════════════════════════════"
 
-    local XENSESDK_VERSION="2.0.1"
+    local XENSESDK_VERSION="2.1.2"
     local GRIPPER_DIR="$PROJECT_ROOT/third_party/XGripper"
 
     # Check for pyproject.toml, not just the directory: a registered-but-not-
@@ -576,14 +576,6 @@ install_xense() {
     fi
 
     fix_udev_discovery
-
-    # XGripper bundles libsurvive which links against libhidapi-libusb.
-    # The conda cross-compiler uses its own sysroot and cannot find system hidapi,
-    # so hidapi must be present in the conda environment before building.
-    if ! compgen -G "${CONDA_PREFIX}/lib/libhidapi*.so*" > /dev/null 2>&1; then
-        echo "[xense] hidapi not found in conda env — installing via conda-forge..."
-        ${CONDA_CMD:-mamba} install -c conda-forge hidapi -y
-    fi
 
     # Install xensesdk runtime deps explicitly because xensesdk is installed
     # with --no-deps below (keeps the shared ARX5/Robostack env's numpy/opencv/
@@ -615,19 +607,12 @@ install_xense() {
     # loads), so no separate xense_xu / pyxensexu build is needed. --no-deps keeps
     # the env's numpy/cryptography pins (see block above).
     uv pip install --no-deps --upgrade "xensesdk==${XENSESDK_VERSION}"
-    # Install XGripper from local submodule (package name: xensegripper). It is
+    # Install XGripper from local submodule (import package: xgripper). It is
     # used by the serial / xense grippers and imports the xensesdk installed
     # above; --no-deps avoids PyPI wheels that are incomplete for Python 3.12.
-    # XGripper builds vendored libsurvive, which links -lhidapi-libusb. hidapi
-    # lives in $CONDA_PREFIX/lib (installed above), but this env's conda
-    # activation does NOT export LDFLAGS, and the conda cross-compiler does NOT
-    # search /usr/lib — so the link fails with "cannot find -lhidapi-libusb"
-    # (apt-installing hidapi does not help; the cross-compiler won't look there).
-    # Exporting LIBRARY_PATH gives gcc an extra -L that survives even uv's
-    # isolated build subprocess. --no-build-isolation additionally keeps the
-    # build on the env's cmake instead of a freshly fetched PyPI one.
-    LIBRARY_PATH="${CONDA_PREFIX}/lib${LIBRARY_PATH:+:$LIBRARY_PATH}" \
-        uv pip install -e "$GRIPPER_DIR" --no-deps --no-build-isolation
+    # Pure Python since the vendored libsurvive was retired — no compiler, no
+    # CMake, no hidapi, and no LIBRARY_PATH smuggled past the build isolation.
+    uv pip install -e "$GRIPPER_DIR" --no-deps
     # xensesdk requires a specific av version
     uv pip install av==15.1.0
 
@@ -1039,7 +1024,7 @@ USAGE
     if is_sel flexiv;    then _VERIFY_LINES+=$'\n''flexiv_rt|import importlib.metadata as M, flexiv_rt; print("v"+M.version("flexiv_rt"), "->", flexiv_rt.__file__)'; fi
     if is_sel pico4;     then _VERIFY_LINES+=$'\n''xensevr_pc_service_sdk|import importlib.metadata as M, xensevr_pc_service_sdk; print("v"+M.version("xensevr_pc_service_sdk"), "->", xensevr_pc_service_sdk.__file__)'; fi
     if is_sel xense;     then _VERIFY_LINES+=$'\n''xensesdk|import importlib.metadata as M, xensesdk; print("v"+M.version("xensesdk"), "->", xensesdk.__file__)'; fi
-    if is_sel xense;     then _VERIFY_LINES+=$'\n''xensegripper|import importlib.metadata as M, xensegripper; print("v"+M.version("xgripper"), "->", xensegripper.__file__)'; fi
+    if is_sel xense;     then _VERIFY_LINES+=$'\n''xgripper|import importlib.metadata as M, xgripper; print("v"+M.version("xgripper"), "->", xgripper.__file__)'; fi
     if is_sel xense;     then _VERIFY_LINES+=$'\n''xensesdk flash|from xensesdk.flash.linux_backend import LinuxFlashBackend; print("available" if LinuxFlashBackend().available else "NOT available")'; fi
     if is_sel taccap;    then _VERIFY_LINES+=$'\n''taccap-gripper|import importlib.metadata as M, xense.taccap; print("v"+M.version("taccap-gripper"), "->", xense.taccap.__file__)'; fi
     if is_sel elite;     then _VERIFY_LINES+=$'\n''elite_cs_sdk|import importlib.metadata as M, elite_cs_sdk; print("v"+M.version("elite_cs_sdk"), "->", elite_cs_sdk.__file__)'; fi

@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from glob import glob
 from threading import Lock
 
-from xensegripper import read_board_sn
+from xgripper import read_board_sn
 
 from ..usb_topology import (
     hub_of_serial_device,

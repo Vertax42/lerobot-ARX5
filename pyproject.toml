@@ -110,7 +110,7 @@ scipy-dep = ["scipy>=1.14.0,<2.0.0"]
 # Xense SDK (tactile sensors + grippers). SDK 2.0 ships as a compiled wheel and
 # is the only supported line; the SDK1 source submodule under third_party is no
 # longer used at runtime.
-xense = ["xensesdk>=2.0.0"]
+xense = ["xensesdk>=2.1.2"]
 
 # Xense fork: hardware drivers not on PyPI (installed from local wheels or source)
 # List them here so tooling can document the requirements.

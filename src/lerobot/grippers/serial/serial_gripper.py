@@ -16,7 +16,8 @@
 
 """Pure-serial Xense gripper driver (arm-agnostic, shared across robots).
 
-Uses XenseSerialGripper (from the XGripper submodule) directly over a
+Uses XenseSerialGripper (from the XGripper submodule, import package
+``xgripper``) directly over a
 USB-serial port.  No ezros / xensesdk stack required. Identified by board SN
 (auto-scan) or explicit serial port — no IP / MAC / network.
 """
@@ -24,7 +25,7 @@ USB-serial port.  No ezros / xensesdk stack required. Identified by board SN
 import time
 from threading import Thread
 
-from xensegripper import XenseSerialGripper
+from xgripper import XenseSerialGripper
 
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.utils.robot_utils import get_logger

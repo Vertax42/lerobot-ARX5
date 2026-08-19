@@ -63,12 +63,12 @@ This repository uses `third_party/` git submodules to manage hardware SDK depend
 | `third_party/ARX5_SDK` | `pyarx` |
 | `third_party/libpyflexiv` | `flexiv_rt` |
 | `third_party/XenseVR-PC-Service` | `xensevr_pc_service_sdk` |
-| `third_party/XGripper` | `xensegripper` |
+| `third_party/XGripper` | `xgripper` |
 | `third_party/elite-robots-cs-sdk` | Elite CS C++ SDK (builds `elite_cs_sdk`) |
 | `third_party/elite-robots-cs-sdk-python` | `elite_cs_sdk` (Elite CS Python bindings) |
 | `third_party/taccap-gripper` | `xense.taccap` (TacCap UMI tactile gripper SDK) |
 
-> `xensesdk` is **not** a submodule — it is installed from PyPI (`xensesdk==2.0.1`,
+> `xensesdk` is **not** a submodule — it is installed from PyPI (`xensesdk==2.1.2`,
 > the published cp312 manylinux wheel, which bundles the patched `libxense_c.so`
 > flash reader). The Elite Python SDK is built against the local
 > `third_party/elite-robots-cs-sdk` C++ submodule (no network fetch of the C++ source).
@@ -95,8 +95,8 @@ This step will:
 
 - Update the conda environment from `conda_environment.yaml`
 - Install the main package from `pyproject.toml`
-- Install `xensesdk` from PyPI (`xensesdk==2.0.1`)
-- Build and install all `third_party` SDK packages: `pyarx`, `flexiv_rt`, `xensevr_pc_service_sdk`, `xensegripper`, `elite_cs_sdk` (Elite CS — built from the C++ + Python submodules), and `xense.taccap` (TacCap UMI gripper)
+- Install `xensesdk` from PyPI (`xensesdk==2.1.2`)
+- Build and install all `third_party` SDK packages: `pyarx`, `flexiv_rt`, `xensevr_pc_service_sdk`, `xgripper`, `elite_cs_sdk` (Elite CS — built from the C++ + Python submodules), and `xense.taccap` (TacCap UMI gripper)
 - Configure SpaceMouse udev rules and HID permissions automatically
 
 > You will be prompted for `sudo` password during installation (for ARX5 real-time capability and udev rules).
@@ -127,7 +127,7 @@ bash ./setup_env.sh --install --help
 | `--flexiv`, `--bi_flexiv` | `flexiv_rt` (+ `xense`) | `flexiv_rizon4_rt`, `bi_flexiv_rizon4_rt` |
 | `--elite`, `--bi_elite` | `elite_cs_sdk` (+ `xense`) | `elite_cs66_rt`, `bi_elite_cs66_rt` |
 | `--taccap`, `--bi_taccap` | `xense.taccap` (+ `xense`) | `taccap_follower` gripper (on any arm) |
-| `--xense` | `xensesdk` + `xensegripper` (XGripper) | `serial` gripper + tactile sensors |
+| `--xense` | `xensesdk` + `xgripper` (XGripper) | `serial` gripper + tactile sensors |
 | `--arx5`, `--bi_arx5` | `pyarx` | `arx5_follower`, `bi_arx5` |
 | `--pico4`, `--bi_pico4` | `xensevr_pc_service_sdk` | `pico4`, `bi_pico4` teleop |
 | `--spacemouse` | `pyspacemouse` | `spacemouse` teleop |
@@ -155,7 +155,7 @@ python -c 'import pyarx; print("pyarx OK ->", pyarx.__file__)'
 python -c 'import flexiv_rt; print("flexiv_rt OK ->", flexiv_rt.__file__)'
 python -c 'import xensevr_pc_service_sdk; print("xensevr_pc_service_sdk OK ->", xensevr_pc_service_sdk.__file__)'
 python -c 'import xensesdk; print("xensesdk OK ->", xensesdk.__file__)'
-python -c 'import xensegripper; print("xensegripper OK ->", xensegripper.__file__)'
+python -c 'import xgripper; print("xgripper OK ->", xgripper.__file__)'
 python -c 'import elite_cs_sdk; print("elite_cs_sdk OK ->", elite_cs_sdk.__file__)'
 python -c 'import xense.taccap; print("xense.taccap OK ->", xense.taccap.__file__)'
 ```
