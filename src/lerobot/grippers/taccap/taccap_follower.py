@@ -215,75 +215,33 @@ class TaccapFollower(Gripper):
                 self.logger.debug(f"Error disabling motor during rollback: {e}")
             self._gripper = None
 
-    #: Follower firmware that first answered Cmd::CameraFisheyeCal (0x2B).
-    #:
-    #: The command belongs to command set V2.0, but command-set numbers and
-    #: firmware numbers are different sequences — follower 1.1.0 already carries
-    #: V2.1. Comparing a firmware version against "2.0.0" would call every
-    #: shipping unit too old, and point the reader at an upgrade that changes
-    #: nothing here. Verified on the bench: 1.1.1 answers the read.
-    FISHEYE_MIN_FIRMWARE = (1, 1, 0)
-
     def read_wrist_fisheye_calibration(self):
         """The wrist lens' fisheye intrinsics for this gripper.
 
-        Prefers what this unit's firmware holds. Falls back to the SDK's
-        reference calibration — with a warning — when the firmware is too old to
-        carry one, has never been calibrated, or answers with an empty record.
-        Every TC-GU-01 shares the lens and the 640x480 sensor, so the reference
-        numbers are much closer to correct than raw fisheye; they are not a
-        substitute for calibrating a unit, since lens placement varies per
-        assembly and the principal point drifts with it.
+        Straight passthrough to ``Calibration.resolve_fisheye()``: deciding what
+        to rectify with — this unit's stored calibration, or the SDK's reference
+        values when it has none — is the SDK's policy, and it applies the same
+        one internally when it owns the wrist UVC device. This layer used to
+        re-derive it, and the two copies had already drifted on why a read fails.
 
         Returns:
             ``(calibration, is_reference)`` — the second value is True when the
-            fallback was used, so callers can label or refuse it themselves.
+            reference values stood in, so callers can label or refuse them.
         """
         if self._gripper is None:
             raise DeviceNotConnectedError(
                 f"{self} is not connected; cannot read the wrist fisheye calibration."
             )
-        from xense.taccap import FISHEYE_FALLBACK_CAL, is_usable_fisheye_cal
 
-        reason = self._fisheye_firmware_shortfall()
-        if reason is None:
-            try:
-                cal = self._gripper.calibration.read_fisheye()
-            except Exception as e:
-                reason = f"the firmware would not answer the fisheye read ({e!r})"
-            else:
-                if cal is None:
-                    reason = "the firmware has never been calibrated"
-                elif not is_usable_fisheye_cal(cal):
-                    # An uncalibrated unit answers with an all-zero record rather
-                    # than a NACK; remapping with fx = fy = 0 yields a black frame.
-                    reason = (
-                        "the wrist lens has never been calibrated — the firmware "
-                        "answered the read with an empty record"
-                    )
-                else:
-                    return cal, False
-
-        self.logger.warn(
-            f"{self}: using the SDK's REFERENCE wrist fisheye intrinsics because "
-            f"{reason}. Rectification will be approximate — lens placement varies "
-            f"per assembly, so the principal point drifts. Calibrate this unit's "
-            f"wrist lens with the PC tool for measurements taken off these frames."
-        )
-        return FISHEYE_FALLBACK_CAL, True
-
-    def _fisheye_firmware_shortfall(self) -> str | None:
-        """Why this firmware cannot carry a fisheye record, or None if it can."""
-        version = getattr(self._gripper, "firmware_version", None)
-        if version is None:
-            return "the MCU did not report a firmware version"
-        needed = ".".join(str(p) for p in self.FISHEYE_MIN_FIRMWARE)
-        if tuple(version.tuple) < self.FISHEYE_MIN_FIRMWARE:
-            return (
-                f"its firmware is {version.major}.{version.minor}.{version.patch}, "
-                f"older than the {needed} that first answered the fisheye read"
+        calibration, is_reference, reason = self._gripper.calibration.resolve_fisheye()
+        if is_reference:
+            self.logger.warn(
+                f"{self}: using the SDK's REFERENCE wrist fisheye intrinsics because "
+                f"{reason}. Rectification will be approximate — lens placement varies "
+                f"per assembly, so the principal point drifts. Calibrate this unit's "
+                f"wrist lens with the PC tool for measurements taken off these frames."
             )
-        return None
+        return calibration, is_reference
 
     def disconnect(self) -> None:
         """Stop the control loop, disable the motor, and release the device."""

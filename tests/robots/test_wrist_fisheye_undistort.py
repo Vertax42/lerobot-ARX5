@@ -104,18 +104,21 @@ def _cal(fx, fy):
     )
 
 
-class _FakeVersion:
-    def __init__(self, major, minor, patch):
-        self.major, self.minor, self.patch = major, minor, patch
-        self.tuple = (major, minor, patch)
+class _FakeCalibrationComponent:
+    """Stands in for the SDK's Calibration, which owns the fallback policy now."""
+
+    def __init__(self, calibration, is_reference, reason):
+        self._answer = (calibration, is_reference, reason)
+        self.calls = 0
+
+    def resolve_fisheye(self, timeout_ms=200):
+        self.calls += 1
+        return self._answer
 
 
 class _FakeSdkGripper:
-    def __init__(self, cal, version=(2, 0, 0), raises=None):
-        self.firmware_version = _FakeVersion(*version) if version else None
-        self.calibration = type(
-            "C", (), {"read_fisheye": lambda _s: (_ for _ in ()).throw(raises) if raises else cal}
-        )()
+    def __init__(self, calibration, is_reference=False, reason=""):
+        self.calibration = _FakeCalibrationComponent(calibration, is_reference, reason)
 
 
 def _follower(**kw):
@@ -129,67 +132,70 @@ def _follower(**kw):
 
 
 # --------------------------------------------------------------------------- #
-# Falling back — never silently, and never to black frames
+# The driver is a passthrough — the policy lives in the SDK
 # --------------------------------------------------------------------------- #
 
 
-def test_a_real_calibration_is_used_as_is():
+def test_a_units_own_calibration_passes_straight_through():
     cal = _cal(310.5, 311.2)
-    got, is_reference = _follower(cal=cal).read_wrist_fisheye_calibration()
+    follower = _follower(calibration=cal)
+
+    got, is_reference = follower.read_wrist_fisheye_calibration()
 
     assert got is cal
     assert is_reference is False
+    assert follower._gripper.calibration.calls == 1
 
 
-@pytest.mark.parametrize(
-    ("case", "kwargs"),
-    [
-        ("firmware too old",   dict(cal=_cal(310.0, 311.0), version=(1, 0, 0))),
-        ("never calibrated",   dict(cal=None)),
-        ("empty record",       dict(cal=_cal(0.0, 0.0))),
-        ("no version reported", dict(cal=_cal(310.0, 311.0), version=None)),
-        ("read raises",        dict(cal=None, raises=RuntimeError("nack"))),
-    ],
-)
-def test_the_reference_calibration_stands_in_and_says_so(case, kwargs, caplog):
-    """Each of these used to mean raw fisheye frames, or black ones.
+def test_the_reference_fallback_is_reported_and_warned_about(caplog):
+    """Whatever the SDK decided must reach the caller, and be visible in the log.
 
-    Firmware 1.1.1 on the bench answers an uncalibrated read with an all-zero
-    record rather than an error — remapping with fx = fy = 0 sends every pixel
-    outside the source image, so the frame came out entirely black.
+    The reasons themselves — too-old firmware, never calibrated, an all-zero
+    record — are the SDK's to classify; Calibration::resolve_fisheye() applies
+    that policy for the path where the SDK owns the camera too, so re-deriving
+    it here is what let the two copies drift apart in the first place.
     """
-    from xense.taccap import FISHEYE_FALLBACK_CAL, is_usable_fisheye_cal
+    from xense.taccap import FISHEYE_FALLBACK_CAL
+
+    follower = _follower(
+        calibration=FISHEYE_FALLBACK_CAL,
+        is_reference=True,
+        reason="the wrist lens has never been calibrated",
+    )
 
     with caplog.at_level(logging.WARNING):
-        got, is_reference = _follower(**kwargs).read_wrist_fisheye_calibration()
+        got, is_reference = follower.read_wrist_fisheye_calibration()
 
-    assert is_reference is True, case
-    assert got is FISHEYE_FALLBACK_CAL, case
-    assert is_usable_fisheye_cal(got), "the fallback itself must be usable"
-    assert "REFERENCE" in caplog.text, "falling back must be visible in the log"
+    assert is_reference is True
+    assert got is FISHEYE_FALLBACK_CAL
+    assert "REFERENCE" in caplog.text
+    assert "never been calibrated" in caplog.text, "the SDK's reason must survive"
 
 
-def test_the_firmware_gate_names_the_version_it_wants():
-    """A version error that does not say the required version is a riddle."""
+def test_a_units_own_calibration_is_not_warned_about(caplog):
+    with caplog.at_level(logging.WARNING):
+        _follower(calibration=_cal(310.5, 311.2)).read_wrist_fisheye_calibration()
+
+    assert "REFERENCE" not in caplog.text
+
+
+def test_reading_from_a_disconnected_gripper_is_refused():
     from lerobot.grippers.taccap.taccap_follower import TaccapFollower
+    from lerobot.utils.errors import DeviceNotConnectedError
 
-    reason = _follower(cal=None, version=(1, 0, 0))._fisheye_firmware_shortfall()
+    follower = object.__new__(TaccapFollower)
+    follower._side = "left"
+    follower._gripper = None
 
-    assert "1.0.0" in reason
-    assert ".".join(str(p) for p in TaccapFollower.FISHEYE_MIN_FIRMWARE) in reason
+    with pytest.raises(DeviceNotConnectedError):
+        follower.read_wrist_fisheye_calibration()
 
 
-@pytest.mark.parametrize("version", [(1, 1, 0), (1, 1, 1), (1, 1, 2)])
-def test_shipping_firmware_does_not_trip_the_gate(version):
-    """Command-set numbers and firmware numbers are different sequences.
+def test_the_sdk_fallback_is_itself_usable():
+    """Guard the guard: a fallback that fails is_usable would rectify to black."""
+    from xense.taccap import FISHEYE_FALLBACK_CAL, is_usable_fisheye_cal
 
-    Cmd::CameraFisheyeCal belongs to command set V2.0, but follower 1.1.0
-    already carries V2.1 — so a gate written against "2.0.0" would call every
-    shipping unit too old and send the reader off to flash firmware that changes
-    nothing. Bench-checked: 1.1.1 answers the read; what it lacks is a stored
-    calibration, not the command.
-    """
-    assert _follower(cal=_cal(310.0, 311.0), version=version)._fisheye_firmware_shortfall() is None
+    assert is_usable_fisheye_cal(FISHEYE_FALLBACK_CAL)
 
 
 # --------------------------------------------------------------------------- #
