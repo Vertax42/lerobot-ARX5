@@ -15,8 +15,14 @@ choice registry at the top, one subpackage per backend underneath.
 
 Config classes are imported eagerly — they carry no hardware-SDK import, so arm
 configs and ``--robot.type`` registration keep working on a host without the
-Xense/TacCap SDKs. Driver classes are NOT imported here; get one through
+Xense/TacCap/XGripper SDKs. Driver classes are NOT imported here; get one through
 ``make_gripper_from_config``, which imports only the branch it needs.
+
+That promise reaches through each backend's ``__init__`` too, which is easy to
+break by adding one convenient re-export: importing a submodule runs its package
+first, so an eager driver import there would drag the SDK in for anyone who only
+parsed a config. ``tests/robots/test_gripper_optional_sdk_imports.py`` hides the
+SDKs at import time and fails if that happens again — it has happened twice.
 """
 
 from .configs import GripperConfig  # noqa: F401
