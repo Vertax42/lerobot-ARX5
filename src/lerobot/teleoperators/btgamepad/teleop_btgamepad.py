@@ -19,9 +19,6 @@ from typing import Any
 
 import numpy as np
 
-# `R` is the conventional spelling for a rotation in every formula below.
-from scipy.spatial.transform import Rotation as R
-
 from lerobot.utils.robot_utils import (
     get_logger,
     normalize_quaternion,
@@ -136,7 +133,13 @@ class BtgamepadTeleop(Teleoperator):
 
         # quaternion update
         rotation_delta = np.array([delta_rx, delta_ry, delta_rz]) * self.config.rot_sensitivity
-        rotation_delta = R.from_euler("xyz", rotation_delta).as_matrix()
+        # Imported here, not at module scope: this is scipy's only use in the
+        # package, and lerobot-teleoperate imports every teleoperator — so a
+        # top-level import made a heavy optional dependency mandatory for
+        # anyone running the CLI, gamepad or not.
+        from scipy.spatial.transform import Rotation
+
+        rotation_delta = Rotation.from_euler("xyz", rotation_delta).as_matrix()
         self._start_matrix = quaternion_to_matrix(
             np.array([0, 0, 0, self._start_quat[0], self._start_quat[1], self._start_quat[2], self._start_quat[3]]),
             input_format="wxyz",
