@@ -96,9 +96,9 @@ When a gripper or its cameras do not show up, run the discovery by hand — it
 prints what it found and how it classified each side:
 
 ```python
-from lerobot.grippers.serial import discover_serial_gripper_sides   # port + board SN per side
-from lerobot.grippers.serial import discover_serial_gripper_cameras # + wrist/tactile on each hub
-from lerobot.grippers.taccap import discover_taccap_sides           # the TacCap equivalent
+from lerobot.grippers.serial import discover_serial_gripper_sides  # port + board SN per side
+from lerobot.grippers.serial import discover_serial_gripper_cameras  # + wrist/tactile on each hub
+from lerobot.grippers.taccap import discover_taccap_sides  # the TacCap equivalent
 ```
 
 Note that the gripper object itself never returns image or tactile data. Those

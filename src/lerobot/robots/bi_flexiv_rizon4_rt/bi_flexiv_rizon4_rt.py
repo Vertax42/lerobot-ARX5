@@ -226,12 +226,8 @@ class BiFlexivRizon4RT(Robot):
         self._max_contact_wrench = self.config.max_contact_wrench
 
         if self.config.use_force:
-            self._left_wrench_keys = tuple(
-                f"left_tcp.{axis}" for axis in ["fx", "fy", "fz", "mx", "my", "mz"]
-            )
-            self._right_wrench_keys = tuple(
-                f"right_tcp.{axis}" for axis in ["fx", "fy", "fz", "mx", "my", "mz"]
-            )
+            self._left_wrench_keys = tuple(f"left_tcp.{axis}" for axis in ["fx", "fy", "fz", "mx", "my", "mz"])
+            self._right_wrench_keys = tuple(f"right_tcp.{axis}" for axis in ["fx", "fy", "fz", "mx", "my", "mz"])
 
     # =========================================================================
     # Feature descriptors
@@ -335,9 +331,7 @@ class BiFlexivRizon4RT(Robot):
             go_to_start: If True, move both arms to start positions before entering RT mode
         """
         if self.is_connected:
-            raise DeviceAlreadyConnectedError(
-                f"{self} already connected, do not run `robot.connect()` twice."
-            )
+            raise DeviceAlreadyConnectedError(f"{self} already connected, do not run `robot.connect()` twice.")
 
         try:
             # --- 1. Create robot interfaces (both arms in parallel) ---
@@ -375,9 +369,7 @@ class BiFlexivRizon4RT(Robot):
             timeout = 30
             start_time = time.time()
             last_log = start_time
-            self.logger.info(
-                f"Waiting for both arms to report operational (timeout {timeout}s)..."
-            )
+            self.logger.info(f"Waiting for both arms to report operational (timeout {timeout}s)...")
             while True:
                 elapsed = time.time() - start_time
                 if elapsed > timeout:
@@ -411,14 +403,14 @@ class BiFlexivRizon4RT(Robot):
 
             # Read the wrist fisheye intrinsics off each gripper's MCU while it is
             # open, before the cameras build their remap tables.
-            attach_wrist_fisheye_calibration(self.cameras, {"left": self._left_gripper, "right": self._right_gripper}, self.logger)
+            attach_wrist_fisheye_calibration(
+                self.cameras, {"left": self._left_gripper, "right": self._right_gripper}, self.logger
+            )
 
             if not self.cameras:
                 self.logger.info("No cameras configured; skipping camera connect.")
             else:
-                self.logger.info(
-                    f"Connecting {len(self.cameras)} camera(s): {', '.join(self.cameras.keys())}..."
-                )
+                self.logger.info(f"Connecting {len(self.cameras)} camera(s): {', '.join(self.cameras.keys())}...")
             with ThreadPoolExecutor(max_workers=len(self.cameras) or 1) as ex:
                 cam_futs = [ex.submit(cam.connect) for cam in self.cameras.values()]
                 for f in cam_futs:
@@ -619,6 +611,7 @@ class BiFlexivRizon4RT(Robot):
         del left_robot, right_robot
 
         import gc
+
         gc.collect()
 
         self._left_gripper = None
@@ -647,9 +640,7 @@ class BiFlexivRizon4RT(Robot):
             K_x_nom = robot_info.K_x_nom
             new_kx = list(np.multiply(K_x_nom, self.config.stiffness_ratio))
             robot.SetCartesianImpedance(new_kx, self.config.damping_ratio)
-            self.logger.info(
-                f"{side} arm: Cartesian stiffness (ratio={self.config.stiffness_ratio}): {new_kx}"
-            )
+            self.logger.info(f"{side} arm: Cartesian stiffness (ratio={self.config.stiffness_ratio}): {new_kx}")
         else:
             self.logger.info(f"{side} arm: Using nominal Cartesian stiffness: {robot_info.K_x_nom}")
 
@@ -699,8 +690,7 @@ class BiFlexivRizon4RT(Robot):
             time.sleep(0.1)
 
         raise RuntimeError(
-            f"{side} arm: mode switch failed: expected {target_mode}, got {robot.mode()}. "
-            f"Fault: {robot.fault()}"
+            f"{side} arm: mode switch failed: expected {target_mode}, got {robot.mode()}. Fault: {robot.fault()}"
         )
 
     def _go_to_start(self) -> None:
@@ -734,11 +724,7 @@ class BiFlexivRizon4RT(Robot):
 
     def _go_to_home_arm(self, robot: frt.Robot, side: str) -> None:
         """Move a single arm to home position via MoveJ."""
-        home_deg = (
-            self.config.left_home_position_degree
-            if side == "left"
-            else self.config.right_home_position_degree
-        )
+        home_deg = self.config.left_home_position_degree if side == "left" else self.config.right_home_position_degree
         self._move_arm_to_position(robot, None, side, home_deg, self.config.home_vel_scale)
 
     def _move_arm_to_position(
@@ -893,12 +879,12 @@ class BiFlexivRizon4RT(Robot):
         t5 = _t()
 
         self._last_obs_timing = {
-            "left_arm_ms":    (t1 - t0) * 1e3,
-            "right_arm_ms":   (t2 - t1) * 1e3,
-            "left_grip_ms":   (t3 - t2) * 1e3,
-            "right_grip_ms":  (t4 - t3) * 1e3,
-            "cameras_ms":     (t5 - t4) * 1e3,
-            "total_ms":       (t5 - t0) * 1e3,
+            "left_arm_ms": (t1 - t0) * 1e3,
+            "right_arm_ms": (t2 - t1) * 1e3,
+            "left_grip_ms": (t3 - t2) * 1e3,
+            "right_grip_ms": (t4 - t3) * 1e3,
+            "cameras_ms": (t5 - t4) * 1e3,
+            "total_ms": (t5 - t0) * 1e3,
             **{f"cam[{k}]_ms": v for k, v in cam_timings.items()},
         }
 
@@ -989,22 +975,22 @@ class BiFlexivRizon4RT(Robot):
         # --- Left arm ---
         if not self._left_cc.is_moving():
             self._send_arm_action(
-                action, self._left_cc, self._left_tcp_pose_keys,
+                action,
+                self._left_cc,
+                self._left_tcp_pose_keys,
                 wrench_keys=self._left_wrench_keys if self.config.use_force else None,
             )
-        self._send_gripper_action(
-            action, self._left_gripper, self.config.left_use_gripper, self._left_gripper_key
-        )
+        self._send_gripper_action(action, self._left_gripper, self.config.left_use_gripper, self._left_gripper_key)
 
         # --- Right arm ---
         if not self._right_cc.is_moving():
             self._send_arm_action(
-                action, self._right_cc, self._right_tcp_pose_keys,
+                action,
+                self._right_cc,
+                self._right_tcp_pose_keys,
                 wrench_keys=self._right_wrench_keys if self.config.use_force else None,
             )
-        self._send_gripper_action(
-            action, self._right_gripper, self.config.right_use_gripper, self._right_gripper_key
-        )
+        self._send_gripper_action(action, self._right_gripper, self.config.right_use_gripper, self._right_gripper_key)
 
         return action
 
@@ -1104,18 +1090,21 @@ class BiFlexivRizon4RT(Robot):
                     gripper_pos = gripper.get_gripper_position()
                 except Exception as e:
                     raise RuntimeError(
-                        "Current TCP pose unavailable because gripper status link is not responding. "
-                        f"{e}"
+                        f"Current TCP pose unavailable because gripper status link is not responding. {e}"
                     ) from e
             return np.array([*tcp_pose, gripper_pos], dtype=np.float32)
 
         left_pose = _read_arm_pose(
-            self._left_cc, self._left_robot,
-            self._left_gripper, self.config.left_use_gripper,
+            self._left_cc,
+            self._left_robot,
+            self._left_gripper,
+            self.config.left_use_gripper,
         )
         right_pose = _read_arm_pose(
-            self._right_cc, self._right_robot,
-            self._right_gripper, self.config.right_use_gripper,
+            self._right_cc,
+            self._right_robot,
+            self._right_gripper,
+            self.config.right_use_gripper,
         )
         return left_pose, right_pose
 
@@ -1176,9 +1165,7 @@ class BiFlexivRizon4RT(Robot):
                         else self.config.right_start_position_degree
                     )
                     gripper = self._left_gripper if side == "left" else self._right_gripper
-                    self._move_arm_to_position(
-                        robot, gripper, side, start_deg, self.config.start_vel_scale
-                    )
+                    self._move_arm_to_position(robot, gripper, side, start_deg, self.config.start_vel_scale)
                 else:
                     self._go_to_home_arm(robot, side)
 

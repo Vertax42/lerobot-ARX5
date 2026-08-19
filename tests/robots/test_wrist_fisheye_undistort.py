@@ -31,8 +31,12 @@ from lerobot.cameras.xense.configuration_wrist import (
 
 def _cfg(**kw):
     base = dict(
-        index_or_path="XCA_TEST", fourcc="MJPG",
-        width=FISHEYE_CALIB_WIDTH, height=FISHEYE_CALIB_HEIGHT, fps=30, warmup_s=0.0,
+        index_or_path="XCA_TEST",
+        fourcc="MJPG",
+        width=FISHEYE_CALIB_WIDTH,
+        height=FISHEYE_CALIB_HEIGHT,
+        fps=30,
+        warmup_s=0.0,
     )
     return XenseWristCameraConfig(**{**base, **kw})
 
@@ -84,9 +88,7 @@ def test_connect_refuses_when_no_calibration_was_supplied():
         # Reaching the check is enough; the OpenCV connect above it is what
         # would need a device, so drive the branch directly.
         if cam._calibration is None:
-            raise RuntimeError(
-                "has undistort enabled but no fisheye calibration was supplied"
-            )
+            raise RuntimeError("has undistort enabled but no fisheye calibration was supplied")
 
 
 # --------------------------------------------------------------------------- #
@@ -99,9 +101,7 @@ def _cal(fx, fy):
     and using it here checks that contract too."""
     from xense.taccap import CameraFisheyeCal
 
-    return CameraFisheyeCal(
-        fx=fx, fy=fy, cx=320.0, cy=240.0, k1=0.0, k2=0.0, k3=0.0, k4=0.0
-    )
+    return CameraFisheyeCal(fx=fx, fy=fy, cx=320.0, cy=240.0, k1=0.0, k2=0.0, k3=0.0, k4=0.0)
 
 
 class _FakeCalibrationComponent:
@@ -125,7 +125,7 @@ def _follower(**kw):
     from lerobot.grippers.taccap.taccap_follower import TaccapFollower
 
     f = object.__new__(TaccapFollower)
-    f._side = "left"                      # __str__ reads it; __init__ is bypassed
+    f._side = "left"  # __str__ reads it; __init__ is bypassed
     f.logger = logging.getLogger("test")
     f._gripper = _FakeSdkGripper(**kw)
     return f
@@ -221,9 +221,7 @@ def _reference_remap(cal, balance):
     new_k = K.copy()
     new_k[0, 0] *= scale
     new_k[1, 1] *= scale
-    mx, my = cv2.fisheye.initUndistortRectifyMap(
-        K, D, np.eye(3), new_k, (640, 480), cv2.CV_32F
-    )
+    mx, my = cv2.fisheye.initUndistortRectifyMap(K, D, np.eye(3), new_k, (640, 480), cv2.CV_32F)
     return mx, my
 
 
@@ -297,12 +295,7 @@ def test_an_undistorter_is_reusable_across_frames():
     undistorter = FisheyeUndistorter(FISHEYE_FALLBACK_CAL, 640, 480, 0.0)
     rng = np.random.default_rng(0)
 
-    outputs = [
-        np.asarray(undistorter.apply(
-            rng.integers(0, 255, (480, 640, 3), dtype=np.uint8)
-        ))
-        for _ in range(5)
-    ]
+    outputs = [np.asarray(undistorter.apply(rng.integers(0, 255, (480, 640, 3), dtype=np.uint8))) for _ in range(5)]
 
     assert all(o.shape == (480, 640, 3) for o in outputs)
     # Distinct inputs must give distinct outputs — a cached-result bug would
@@ -340,7 +333,8 @@ def test_rectification_resamples_with_cubic_not_bilinear():
     rng = np.random.default_rng(1)
     img = cv2.resize(
         rng.integers(0, 255, (60, 80, 3), dtype=np.uint8),
-        (640, 480), interpolation=cv2.INTER_NEAREST,
+        (640, 480),
+        interpolation=cv2.INTER_NEAREST,
     )
     mx, my = _reference_remap(FISHEYE_FALLBACK_CAL, 0.0)
     cubic = cv2.remap(img, mx, my, cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT)

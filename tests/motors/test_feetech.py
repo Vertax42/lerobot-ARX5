@@ -335,14 +335,10 @@ def test_is_calibrated(mock_motors, dummy_motors, dummy_calibration):
     mins_stubs, maxes_stubs, homings_stubs = [], [], []
     for cal in dummy_calibration.values():
         mins_stubs.append(
-            mock_motors.build_read_stub(
-                *STS_SMS_SERIES_CONTROL_TABLE["Min_Position_Limit"], cal.id, cal.range_min
-            )
+            mock_motors.build_read_stub(*STS_SMS_SERIES_CONTROL_TABLE["Min_Position_Limit"], cal.id, cal.range_min)
         )
         maxes_stubs.append(
-            mock_motors.build_read_stub(
-                *STS_SMS_SERIES_CONTROL_TABLE["Max_Position_Limit"], cal.id, cal.range_max
-            )
+            mock_motors.build_read_stub(*STS_SMS_SERIES_CONTROL_TABLE["Max_Position_Limit"], cal.id, cal.range_max)
         )
         homings_stubs.append(
             mock_motors.build_read_stub(
@@ -413,9 +409,7 @@ def test_set_half_turn_homings(mock_motors, dummy_motors):
     write_homing_stubs = []
     for id_, homing in expected_homings.items():
         encoded_homing = encode_sign_magnitude(homing, 11)
-        stub = mock_motors.build_write_stub(
-            *STS_SMS_SERIES_CONTROL_TABLE["Homing_Offset"], id_, encoded_homing
-        )
+        stub = mock_motors.build_write_stub(*STS_SMS_SERIES_CONTROL_TABLE["Homing_Offset"], id_, encoded_homing)
         write_homing_stubs.append(stub)
 
     bus = FeetechMotorsBus(port=mock_motors.port, motors=dummy_motors)
@@ -445,9 +439,7 @@ def test_record_ranges_of_motion(mock_motors, dummy_motors):
         "dummy_2": 3600,
         "dummy_3": 4002,
     }
-    stub = mock_motors.build_sequential_sync_read_stub(
-        *STS_SMS_SERIES_CONTROL_TABLE["Present_Position"], positions
-    )
+    stub = mock_motors.build_sequential_sync_read_stub(*STS_SMS_SERIES_CONTROL_TABLE["Present_Position"], positions)
     with patch("lerobot.motors.motors_bus.enter_pressed", side_effect=[False, True]):
         bus = FeetechMotorsBus(port=mock_motors.port, motors=dummy_motors)
         bus.connect(handshake=False)

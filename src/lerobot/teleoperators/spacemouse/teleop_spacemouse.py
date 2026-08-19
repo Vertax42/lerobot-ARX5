@@ -173,8 +173,7 @@ class SpacemouseTeleop(Teleoperator):
             from lerobot.teleoperators.spacemouse.peripherals import Spacemouse
         except ImportError as e:
             raise ImportError(
-                "pyspacemouse is required for Spacemouse teleoperator. "
-                "Install it with: pip install pyspacemouse"
+                "pyspacemouse is required for Spacemouse teleoperator. Install it with: pip install pyspacemouse"
             ) from e
 
         try:
@@ -202,11 +201,7 @@ class SpacemouseTeleop(Teleoperator):
 
         except Exception as e:
             err = str(e).lower()
-            hint = (
-                _SPACEMOUSE_HID_OPEN_HINTS
-                if ("open device" in err or "hid" in err or "easyhid" in err)
-                else ""
-            )
+            hint = _SPACEMOUSE_HID_OPEN_HINTS if ("open device" in err or "hid" in err or "easyhid" in err) else ""
             raise RuntimeError(f"❌ Failed to connect to 3D Spacemouse: {e}{hint}") from e
 
     def calibrate(self) -> None:
@@ -231,7 +226,7 @@ class SpacemouseTeleop(Teleoperator):
 
     def _get_filtered_state(self) -> np.ndarray:
         """Get filtered spacemouse state with moving average.
-        
+
         Note: This uses cached data from the last poll() call.
         """
         raw_state = self._spacemouse.get_motion_state_transformed()
@@ -240,12 +235,8 @@ class SpacemouseTeleop(Teleoperator):
         positive_idx = raw_state >= self.config.deadzone
         negative_idx = raw_state <= -self.config.deadzone
         filtered_state = np.zeros_like(raw_state)
-        filtered_state[positive_idx] = (raw_state[positive_idx] - self.config.deadzone) / (
-            1 - self.config.deadzone
-        )
-        filtered_state[negative_idx] = (raw_state[negative_idx] + self.config.deadzone) / (
-            1 - self.config.deadzone
-        )
+        filtered_state[positive_idx] = (raw_state[positive_idx] - self.config.deadzone) / (1 - self.config.deadzone)
+        filtered_state[negative_idx] = (raw_state[negative_idx] + self.config.deadzone) / (1 - self.config.deadzone)
 
         # Apply axis inversion
         invert = np.where(self.config.invert_axes, -1.0, 1.0)
@@ -309,9 +300,7 @@ class SpacemouseTeleop(Teleoperator):
                     self._target_pose_6d[i] += state[i] * self.config.left_device.ori_sensitivity * dt
                 elif self.config.right_device.enabled_axes[i]:
                     self._target_pose_6d[i] += state[i] * self.config.right_device.ori_sensitivity * dt
-            gripper_speed = max(
-                self.config.left_device.gripper_speed, self.config.right_device.gripper_speed
-            )
+            gripper_speed = max(self.config.left_device.gripper_speed, self.config.right_device.gripper_speed)
         else:
             self._target_pose_6d[:3] += state[:3] * self.config.pos_sensitivity * dt
             self._target_pose_6d[3:] += state[3:] * self.config.ori_sensitivity * dt
@@ -371,7 +360,7 @@ class SpacemouseTeleop(Teleoperator):
                 - terminate_episode: bool - Whether to terminate the current episode
                 - success: bool - Whether the episode was successful
                 - rerecord_episode: bool - Whether to rerecord the episode
-        
+
         Note: This uses cached button state from the last poll() call.
               Make sure to call get_action() first to ensure data is fresh.
         """

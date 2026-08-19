@@ -93,13 +93,9 @@ class Reachy2Camera(Camera):
     def is_connected(self) -> bool:
         """Checks if the camera is currently connected and opened."""
         if self.config.name == "teleop":
-            return bool(
-                self.cam_manager._grpc_connected and self.cam_manager.teleop if self.cam_manager else False
-            )
+            return bool(self.cam_manager._grpc_connected and self.cam_manager.teleop if self.cam_manager else False)
         elif self.config.name == "depth":
-            return bool(
-                self.cam_manager._grpc_connected and self.cam_manager.depth if self.cam_manager else False
-            )
+            return bool(self.cam_manager._grpc_connected and self.cam_manager.depth if self.cam_manager else False)
         else:
             raise ValueError(f"Invalid camera name '{self.config.name}'. Expected 'teleop' or 'depth'.")
 
@@ -142,9 +138,7 @@ class Reachy2Camera(Camera):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         if color_mode is not None:
-            logger.warning(
-                f"{self} read() color_mode parameter is deprecated and will be removed in future versions."
-            )
+            logger.warning(f"{self} read() color_mode parameter is deprecated and will be removed in future versions.")
 
         frame: NDArray[Any] = np.empty((0, 0, 3), dtype=np.uint8)
 
@@ -169,9 +163,7 @@ class Reachy2Camera(Camera):
             raise RuntimeError(f"Internal error: No frame available for {self}.")
 
         if self.color_mode not in (ColorMode.RGB, ColorMode.BGR):
-            raise ValueError(
-                f"Invalid color mode '{self.color_mode}'. Expected {ColorMode.RGB} or {ColorMode.BGR}."
-            )
+            raise ValueError(f"Invalid color mode '{self.color_mode}'. Expected {ColorMode.RGB} or {ColorMode.BGR}.")
         if self.color_mode == ColorMode.RGB:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
@@ -224,9 +216,7 @@ class Reachy2Camera(Camera):
 
         age_ms = (time.perf_counter() - self.latest_timestamp) * 1e3
         if age_ms > max_age_ms:
-            raise TimeoutError(
-                f"{self} latest frame is too old: {age_ms:.1f} ms (max allowed: {max_age_ms} ms)."
-            )
+            raise TimeoutError(f"{self} latest frame is too old: {age_ms:.1f} ms (max allowed: {max_age_ms} ms).")
 
         return self.latest_frame
 

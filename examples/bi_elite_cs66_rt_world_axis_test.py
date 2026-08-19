@@ -108,15 +108,19 @@ def _run_axis_leg(robot, side, axis, home_pos, rot6, distance, duration, pause, 
     reached, _ = _read_world_pose(robot, side)
     d = reached - home_pos
     print(f"    reached world pos= [{reached[0]:+.4f}, {reached[1]:+.4f}, {reached[2]:+.4f}]")
-    print(f"    achieved Δ (x,y,z)=[{d[0]:+.4f}, {d[1]:+.4f}, {d[2]:+.4f}]  "
-          f"(want only Δ{axis}=+{distance:.2f}, others ~0)")
+    print(
+        f"    achieved Δ (x,y,z)=[{d[0]:+.4f}, {d[1]:+.4f}, {d[2]:+.4f}]  "
+        f"(want only Δ{axis}=+{distance:.2f}, others ~0)"
+    )
 
     _ramp(robot, side, target, home_pos, rot6, duration, rate)
     time.sleep(pause)
     back, _ = _read_world_pose(robot, side)
     db = back - home_pos
-    print(f"    back    world pos= [{back[0]:+.4f}, {back[1]:+.4f}, {back[2]:+.4f}]  "
-          f"(residual |Δ|={np.linalg.norm(db) * 1000:.1f} mm)")
+    print(
+        f"    back    world pos= [{back[0]:+.4f}, {back[1]:+.4f}, {back[2]:+.4f}]  "
+        f"(residual |Δ|={np.linalg.norm(db) * 1000:.1f} mm)"
+    )
 
 
 def main() -> None:
@@ -145,16 +149,22 @@ def main() -> None:
     print("World-frame axis test")
     print(f"  arm           : {args.arm}")
     print(f"  axes          : {' -> '.join(_AXIS_DESC[a] for a in axes)}")
-    print(f"  distance      : {args.distance * 100:.0f} cm/leg, {args.leg_duration:.1f}s/leg "
-          f"(~{args.distance / args.leg_duration * 100:.1f} cm/s), pause {args.pause:.1f}s, {args.rate:.0f} Hz")
+    print(
+        f"  distance      : {args.distance * 100:.0f} cm/leg, {args.leg_duration:.1f}s/leg "
+        f"(~{args.distance / args.leg_duration * 100:.1f} cm/s), pause {args.pause:.1f}s, {args.rate:.0f} Hz"
+    )
     print(f"  IPs           : left={cfg.left_robot_ip}  right={cfg.right_robot_ip}")
-    print(f"  mount ({args.arm}): tilt={getattr(cfg, f'{args.arm}_mount_tilt_deg'):g}° "
-          f"zrot={getattr(cfg, f'{args.arm}_mount_zrot_deg'):g}° "
-          f"world_yaw={getattr(cfg, f'{args.arm}_mount_world_yaw_deg'):g}°")
+    print(
+        f"  mount ({args.arm}): tilt={getattr(cfg, f'{args.arm}_mount_tilt_deg'):g}° "
+        f"zrot={getattr(cfg, f'{args.arm}_mount_zrot_deg'):g}° "
+        f"world_yaw={getattr(cfg, f'{args.arm}_mount_world_yaw_deg'):g}°"
+    )
 
     if args.dry_run:
-        print("\n[dry-run] not connecting / not moving. Plan above. "
-              "Each leg: home -> home+axis -> home, orientation locked.")
+        print(
+            "\n[dry-run] not connecting / not moving. Plan above. "
+            "Each leg: home -> home+axis -> home, orientation locked."
+        )
         return
 
     if not args.yes:
@@ -164,8 +174,10 @@ def main() -> None:
             return
 
     robot = BiEliteCS66RT(cfg)
-    print("\nConnecting (powers on both arms; "
-          f"{'NOT moving to start' if args.no_go_to_start else 'MoveJ both to start'})...")
+    print(
+        "\nConnecting (powers on both arms; "
+        f"{'NOT moving to start' if args.no_go_to_start else 'MoveJ both to start'})..."
+    )
     robot.connect(go_to_start=not args.no_go_to_start)
     try:
         assert robot.is_connected, "BiEliteCS66RT failed to connect"
@@ -176,8 +188,15 @@ def main() -> None:
 
         for axis in axes:
             _run_axis_leg(
-                robot, args.arm, axis, home_pos, rot6,
-                args.distance, args.leg_duration, args.pause, args.rate,
+                robot,
+                args.arm,
+                axis,
+                home_pos,
+                rot6,
+                args.distance,
+                args.leg_duration,
+                args.pause,
+                args.rate,
             )
 
         print("\nAll legs done. Returning home / disconnecting...")

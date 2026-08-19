@@ -259,9 +259,7 @@ class RealSenseCamera(Camera):
 
         if not found_devices:
             available_names = [cam["name"] for cam in camera_infos]
-            raise ValueError(
-                f"No RealSense camera found with name '{name}'. Available camera names: {available_names}"
-            )
+            raise ValueError(f"No RealSense camera found with name '{name}'. Available camera names: {available_names}")
 
         if len(found_devices) > 1:
             serial_numbers = [dev["serial_number"] for dev in found_devices]
@@ -278,9 +276,7 @@ class RealSenseCamera(Camera):
         rs.config.enable_device(rs_config, self.serial_number)
 
         if self.width and self.height and self.fps:
-            rs_config.enable_stream(
-                rs.stream.color, self.capture_width, self.capture_height, rs.format.rgb8, self.fps
-            )
+            rs_config.enable_stream(rs.stream.color, self.capture_width, self.capture_height, rs.format.rgb8, self.fps)
             if self.use_depth:
                 rs_config.enable_stream(
                     rs.stream.depth, self.capture_width, self.capture_height, rs.format.z16, self.fps
@@ -336,9 +332,7 @@ class RealSenseCamera(Camera):
             RuntimeError: If reading frames from the pipeline fails or frames are invalid.
         """
         if timeout_ms:
-            logger.warning(
-                f"{self} read() timeout_ms parameter is deprecated and will be removed in future versions."
-            )
+            logger.warning(f"{self} read() timeout_ms parameter is deprecated and will be removed in future versions.")
 
         if not self.use_depth:
             raise RuntimeError(
@@ -392,14 +386,10 @@ class RealSenseCamera(Camera):
         start_time = time.perf_counter()
 
         if color_mode is not None:
-            logger.warning(
-                f"{self} read() color_mode parameter is deprecated and will be removed in future versions."
-            )
+            logger.warning(f"{self} read() color_mode parameter is deprecated and will be removed in future versions.")
 
         if timeout_ms:
-            logger.warning(
-                f"{self} read() timeout_ms parameter is deprecated and will be removed in future versions."
-            )
+            logger.warning(f"{self} read() timeout_ms parameter is deprecated and will be removed in future versions.")
 
         if self.thread is None or not self.thread.is_alive():
             raise RuntimeError(f"{self} read thread is not running.")
@@ -562,8 +552,7 @@ class RealSenseCamera(Camera):
 
         if return_depth and not self.use_depth:
             raise RuntimeError(
-                f"Cannot return depth from '.async_read(return_depth=True)'. "
-                f"Depth stream is not enabled for {self}."
+                f"Cannot return depth from '.async_read(return_depth=True)'. Depth stream is not enabled for {self}."
             )
 
         if self.thread is None or not self.thread.is_alive():
@@ -620,9 +609,7 @@ class RealSenseCamera(Camera):
 
         age_ms = (time.perf_counter() - timestamp) * 1e3
         if age_ms > max_age_ms:
-            raise TimeoutError(
-                f"{self} latest frame is too old: {age_ms:.1f} ms (max allowed: {max_age_ms} ms)."
-            )
+            raise TimeoutError(f"{self} latest frame is too old: {age_ms:.1f} ms (max allowed: {max_age_ms} ms).")
 
         return frame
 
@@ -637,9 +624,7 @@ class RealSenseCamera(Camera):
         """
 
         if not self.is_connected and self.thread is None:
-            raise DeviceNotConnectedError(
-                f"Attempted to disconnect {self}, but it appears already disconnected."
-            )
+            raise DeviceNotConnectedError(f"Attempted to disconnect {self}, but it appears already disconnected.")
 
         if self.thread is not None:
             self._stop_read_thread()

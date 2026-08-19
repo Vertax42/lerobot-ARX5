@@ -19,7 +19,6 @@ sudo setcap cap_sys_nice+ep $(readlink -f $(which python))
 /home/vertax/miniconda3/envs/${CONDA_PREFIX}/lib/${python_version}/site-packages/sitecustomize.py
 
 ```python
-
 """
 Sitecustomize for conda environment.
 
@@ -27,12 +26,13 @@ This file is automatically executed when Python starts.
 It preloads the conda environment's libstdc++.so.6 to ensure C++ extensions
 compiled with GCC 14.3.0 can find the required CXXABI_1.3.15 symbols.
 """
+
 import os
 import ctypes
 
-conda_prefix = os.environ.get('CONDA_PREFIX')
+conda_prefix = os.environ.get("CONDA_PREFIX")
 if conda_prefix:
-    libstdcxx_path = os.path.join(conda_prefix, 'lib', 'libstdc++.so.6')
+    libstdcxx_path = os.path.join(conda_prefix, "lib", "libstdc++.so.6")
     if os.path.exists(libstdcxx_path):
         try:
             # Preload with RTLD_GLOBAL so all subsequently loaded modules can use it

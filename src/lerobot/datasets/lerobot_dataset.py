@@ -137,9 +137,7 @@ class LeRobotDatasetMetadata:
         if not self.writer:
             path = Path(self.root / DEFAULT_EPISODES_PATH.format(chunk_index=chunk_idx, file_index=file_idx))
             path.parent.mkdir(parents=True, exist_ok=True)
-            self.writer = pq.ParquetWriter(
-                path, schema=table.schema, compression="snappy", use_dictionary=True
-            )
+            self.writer = pq.ParquetWriter(path, schema=table.schema, compression="snappy", use_dictionary=True)
 
         self.writer.write_table(table)
 
@@ -557,9 +555,7 @@ def _encode_video_worker(
     temp_path = Path(tempfile.mkdtemp(dir=root)) / f"{video_key}_{episode_index:03d}.mp4"
     fpath = DEFAULT_IMAGE_PATH.format(image_key=video_key, episode_index=episode_index, frame_index=0)
     img_dir = (root / fpath).parent
-    encode_video_frames(
-        img_dir, temp_path, fps, vcodec=vcodec, overwrite=True, encoder_threads=encoder_threads
-    )
+    encode_video_frames(img_dir, temp_path, fps, vcodec=vcodec, overwrite=True, encoder_threads=encoder_threads)
     shutil.rmtree(img_dir)
     return temp_path
 
@@ -731,9 +727,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         self.root.mkdir(exist_ok=True, parents=True)
 
         # Load metadata
-        self.meta = LeRobotDatasetMetadata(
-            self.repo_id, self.root, self.revision, force_cache_sync=force_cache_sync
-        )
+        self.meta = LeRobotDatasetMetadata(self.repo_id, self.root, self.revision, force_cache_sync=force_cache_sync)
 
         # Track dataset state for efficient incremental writing
         self._lazy_loading = False
@@ -970,9 +964,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         else:
             return get_hf_features_from_features(self.features)
 
-    def _get_query_indices(
-        self, abs_idx: int, ep_idx: int
-    ) -> tuple[dict[str, list[int]], dict[str, torch.Tensor]]:
+    def _get_query_indices(self, abs_idx: int, ep_idx: int) -> tuple[dict[str, list[int]], dict[str, torch.Tensor]]:
         """Compute query indices for delta timestamps.
 
         Args:
@@ -1151,10 +1143,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
     def _get_video_frame_shapes(self) -> dict[str, tuple[int, int, int]]:
         """Declared (H, W, C) shape for each video key, used to warm up encoders."""
-        return {
-            video_key: tuple(self.features[video_key]["shape"])
-            for video_key in self.meta.video_keys
-        }
+        return {video_key: tuple(self.features[video_key]["shape"]) for video_key in self.meta.video_keys}
 
     def prepare_episode_recording(self) -> None:
         """Prepare the episode buffer and warm up streaming encoders before recording.
@@ -1181,9 +1170,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
     # TODO(Steven): consider move this to utils
     def _get_image_file_path(self, episode_index: int, image_key: str, frame_index: int) -> Path:
-        fpath = DEFAULT_IMAGE_PATH.format(
-            image_key=image_key, episode_index=episode_index, frame_index=frame_index
-        )
+        fpath = DEFAULT_IMAGE_PATH.format(image_key=image_key, episode_index=episode_index, frame_index=frame_index)
         return self.root / fpath
 
     def _get_image_file_dir(self, episode_index: int, image_key: str) -> Path:
@@ -1224,11 +1211,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
         # Defensive fallback: if the caller didn't pre-start the encoder via
         # prepare_episode_recording(), start it now (incurs first-frame overrun).
-        if (
-            frame_index == 0
-            and self._streaming_encoder is not None
-            and not self._streaming_encoder._episode_active
-        ):
+        if frame_index == 0 and self._streaming_encoder is not None and not self._streaming_encoder._episode_active:
             self._streaming_encoder.start_episode(
                 video_keys=list(self.meta.video_keys),
                 temp_dir=self.root,
@@ -1314,9 +1297,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         if use_streaming:
             # Compute stats for non-video features only (video stats come from encoder)
             non_video_buffer = {
-                k: v
-                for k, v in episode_buffer.items()
-                if self.features.get(k, {}).get("dtype") not in ("video",)
+                k: v for k, v in episode_buffer.items() if self.features.get(k, {}).get("dtype") not in ("video",)
             }
             non_video_features = {k: v for k, v in self.features.items() if v["dtype"] != "video"}
             ep_stats = compute_episode_stats(non_video_buffer, non_video_features)
@@ -1368,9 +1349,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
                 for video_key in self.meta.video_keys:
                     temp_path = results[video_key]
-                    ep_metadata.update(
-                        self._save_episode_video(video_key, episode_index, temp_path=temp_path)
-                    )
+                    ep_metadata.update(self._save_episode_video(video_key, episode_index, temp_path=temp_path))
             else:
                 for video_key in self.meta.video_keys:
                     ep_metadata.update(self._save_episode_video(video_key, episode_index))
@@ -1426,9 +1405,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 # Load new episode dataframe
                 chunk_idx = self.meta.episodes[ep_idx]["data/chunk_index"]
                 file_idx = self.meta.episodes[ep_idx]["data/file_index"]
-                episode_df_path = self.root / DEFAULT_EPISODES_PATH.format(
-                    chunk_index=chunk_idx, file_index=file_idx
-                )
+                episode_df_path = self.root / DEFAULT_EPISODES_PATH.format(chunk_index=chunk_idx, file_index=file_idx)
                 episode_df = pd.read_parquet(episode_df_path)
 
             # Save the current episode's video metadata to the dataframe
@@ -1491,9 +1468,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
             latest_size_in_mb = get_file_size_in_mb(latest_path)
 
             frames_in_current_file = global_frame_index - self._current_file_start_frame
-            av_size_per_frame = (
-                latest_size_in_mb / frames_in_current_file if frames_in_current_file > 0 else 0
-            )
+            av_size_per_frame = latest_size_in_mb / frames_in_current_file if frames_in_current_file > 0 else 0
 
             # Determine if a new parquet file is needed
             if (
@@ -1515,9 +1490,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
         table = ep_dataset.with_format("arrow")[:]
         if not self.writer:
-            self.writer = pq.ParquetWriter(
-                path, schema=table.schema, compression="snappy", use_dictionary=True
-            )
+            self.writer = pq.ParquetWriter(path, schema=table.schema, compression="snappy", use_dictionary=True)
         self.writer.write_table(table)
 
         metadata = {
@@ -1565,9 +1538,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 # Update the indices to avoid overwriting the latest episode
                 old_chunk_idx = self.meta.episodes[-1][f"videos/{video_key}/chunk_index"]
                 old_file_idx = self.meta.episodes[-1][f"videos/{video_key}/file_index"]
-                chunk_idx, file_idx = update_chunk_file_indices(
-                    old_chunk_idx, old_file_idx, self.meta.chunks_size
-                )
+                chunk_idx, file_idx = update_chunk_file_indices(old_chunk_idx, old_file_idx, self.meta.chunks_size)
             latest_duration_in_s = 0.0
             new_path = self.root / self.meta.video_path.format(
                 video_key=video_key, chunk_index=chunk_idx, file_index=file_idx
@@ -1671,9 +1642,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         Note: `encode_video_frames` is a blocking call. Making it asynchronous shouldn't speedup encoding,
         since video encoding with ffmpeg is already using multithreading.
         """
-        return _encode_video_worker(
-            video_key, episode_index, self.root, self.fps, self.vcodec, self._encoder_threads
-        )
+        return _encode_video_worker(video_key, episode_index, self.root, self.fps, self.vcodec, self._encoder_threads)
 
     @classmethod
     def create(
@@ -1810,8 +1779,7 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
             extra_keys = set(ds.features).difference(intersection_features)
             if extra_keys:
                 logging.warning(
-                    f"keys {extra_keys} of {repo_id} were disabled as they are not contained in all the "
-                    "other datasets."
+                    f"keys {extra_keys} of {repo_id} were disabled as they are not contained in all the other datasets."
                 )
                 self.disabled_features.update(extra_keys)
 

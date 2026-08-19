@@ -90,24 +90,16 @@ class FlexivRizon4RTConfig(RobotConfig):
 
     # Force control settings
     force_control_frame: flexiv_rt.CoordType = flexiv_rt.CoordType.WORLD
-    force_control_axis: list[bool] = field(
-        default_factory=lambda: [False, False, False, False, False, False]
-    )
-    max_contact_wrench: list[float] = field(
-        default_factory=lambda: [30.0, 30.0, 30.0, 5.0, 5.0, 5.0]
-    )
-    target_wrench: list[float] = field(
-        default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    )
+    force_control_axis: list[bool] = field(default_factory=lambda: [False, False, False, False, False, False])
+    max_contact_wrench: list[float] = field(default_factory=lambda: [30.0, 30.0, 30.0, 5.0, 5.0, 5.0])
+    target_wrench: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
     # Collision detection thresholds
     ext_force_threshold: float = 10.0  # N
     ext_torque_threshold: float = 5.0  # Nm
 
     # Start position parameters
-    start_position_degree: list[float] = field(
-        default_factory=lambda: [-1.70, 4.48, 1.54, 136.22, 0.12, 41.74, -0.18]
-    )
+    start_position_degree: list[float] = field(default_factory=lambda: [-1.70, 4.48, 1.54, 136.22, 0.12, 41.74, -0.18])
     start_vel_scale: int = 30
 
     # FT sensor zeroing
@@ -138,43 +130,26 @@ class FlexivRizon4RTConfig(RobotConfig):
         super().__post_init__()
 
         if isinstance(self.inner_control_hz, bool) or not isinstance(self.inner_control_hz, int):
-            raise TypeError(
-                "inner_control_hz must be an integer in [1, 1000], "
-                f"got {self.inner_control_hz!r}"
-            )
+            raise TypeError(f"inner_control_hz must be an integer in [1, 1000], got {self.inner_control_hz!r}")
 
         if not 1 <= self.inner_control_hz <= 1000:
-            raise ValueError(
-                f"inner_control_hz must be between 1 and 1000, got {self.inner_control_hz}"
-            )
+            raise ValueError(f"inner_control_hz must be between 1 and 1000, got {self.inner_control_hz}")
 
         # Validate Cartesian/force parameters
         if len(self.force_control_axis) != 6:
-            raise ValueError(
-                f"force_control_axis must have 6 elements, got {len(self.force_control_axis)}"
-            )
+            raise ValueError(f"force_control_axis must have 6 elements, got {len(self.force_control_axis)}")
         if len(self.max_contact_wrench) != 6:
-            raise ValueError(
-                f"max_contact_wrench must have 6 elements, got {len(self.max_contact_wrench)}"
-            )
+            raise ValueError(f"max_contact_wrench must have 6 elements, got {len(self.max_contact_wrench)}")
         if len(self.target_wrench) != 6:
-            raise ValueError(
-                f"target_wrench must have 6 elements, got {len(self.target_wrench)}"
-            )
+            raise ValueError(f"target_wrench must have 6 elements, got {len(self.target_wrench)}")
         if len(self.damping_ratio) != 6:
-            raise ValueError(
-                f"damping_ratio must have 6 elements, got {len(self.damping_ratio)}"
-            )
+            raise ValueError(f"damping_ratio must have 6 elements, got {len(self.damping_ratio)}")
 
         # Validate start position
         if len(self.start_position_degree) != 7:
-            raise ValueError(
-                f"start_position_degree must have 7 elements, got {len(self.start_position_degree)}"
-            )
+            raise ValueError(f"start_position_degree must have 7 elements, got {len(self.start_position_degree)}")
         if not 1 <= self.start_vel_scale <= 100:
-            raise ValueError(
-                f"start_vel_scale must be between 1 and 100, got {self.start_vel_scale}"
-            )
+            raise ValueError(f"start_vel_scale must be between 1 and 100, got {self.start_vel_scale}")
 
         # # Camera configuration for realsense cameras
         # self.cameras = {

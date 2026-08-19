@@ -23,6 +23,7 @@ from ..config import TeleoperatorConfig
 @dataclass
 class DeviceConfig:
     """Configuration for a single SpaceMouse device."""
+
     device_name: Optional[str] = None  # Specific device name, None for auto-detect
     device_index: int = 0  # Device index when multiple same devices
     # SpaceMouse outputs Cartesian targets in the 6D-rotation schema
@@ -71,18 +72,22 @@ class SpacemouseConfig(TeleoperatorConfig):
 
     # Multi-device configuration
     multi_device_mode: bool = False
-    left_device: DeviceConfig = field(default_factory=lambda: DeviceConfig(
-        device_index=0,
-        enabled_axes=(True, True, True, False, False, False),  # Position only
-        pos_sensitivity=1.0,
-        ori_sensitivity=0.0,  # Disabled
-    ))
-    right_device: DeviceConfig = field(default_factory=lambda: DeviceConfig(
-        device_index=1,  # Second physical device (0-based index)
-        enabled_axes=(False, False, False, True, True, True),  # Orientation only
-        pos_sensitivity=0.0,  # Disabled
-        ori_sensitivity=1.0,
-    ))
+    left_device: DeviceConfig = field(
+        default_factory=lambda: DeviceConfig(
+            device_index=0,
+            enabled_axes=(True, True, True, False, False, False),  # Position only
+            pos_sensitivity=1.0,
+            ori_sensitivity=0.0,  # Disabled
+        )
+    )
+    right_device: DeviceConfig = field(
+        default_factory=lambda: DeviceConfig(
+            device_index=1,  # Second physical device (0-based index)
+            enabled_axes=(False, False, False, True, True, True),  # Orientation only
+            pos_sensitivity=0.0,  # Disabled
+            ori_sensitivity=1.0,
+        )
+    )
 
     # Global settings
     filter_window_size: int = 1  # Moving average filter window size (1=disabled for best responsiveness)
@@ -98,11 +103,11 @@ class SpacemouseConfig(TeleoperatorConfig):
     # x: True (SpaceMouse forward=-Y needs inversion to become Robot +X)
     # yaw: True (SpaceMouse yaw needs inversion)
     invert_axes: Tuple[bool, bool, bool, bool, bool, bool] = (
-        False,   # x: no inversion
+        False,  # x: no inversion
         True,  # y: inversion
         False,  # z
         True,  # roll: inversion
         True,  # pitch: inversion
-        True,   # yaw: inversion
+        True,  # yaw: inversion
     )
     swap_gripper_buttons: bool = False  # default left button to close, right button to open

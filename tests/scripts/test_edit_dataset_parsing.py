@@ -52,9 +52,7 @@ class TestOperationTypeParsing:
         ],
     )
     def test_operation_type_resolves_correct_class(self, type_name, expected_cls):
-        cfg = parse_cfg(
-            ["--repo_id", "test/repo", "--new_repo_id", "test/merged", "--operation.type", type_name]
-        )
+        cfg = parse_cfg(["--repo_id", "test/repo", "--new_repo_id", "test/merged", "--operation.type", type_name])
         assert isinstance(cfg.operation, expected_cls), (
             f"Expected {expected_cls.__name__}, got {type(cfg.operation).__name__}"
         )
@@ -82,8 +80,6 @@ class TestOperationTypeParsing:
         ],
     )
     def test_get_choice_name_roundtrips(self, type_name, expected_cls):
-        cfg = parse_cfg(
-            ["--repo_id", "test/repo", "--new_repo_id", "test/merged", "--operation.type", type_name]
-        )
+        cfg = parse_cfg(["--repo_id", "test/repo", "--new_repo_id", "test/merged", "--operation.type", type_name])
         resolved_name = OperationConfig.get_choice_name(type(cfg.operation))
         assert resolved_name == type_name

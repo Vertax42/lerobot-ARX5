@@ -82,9 +82,7 @@ class UploadDataset(PipelineStep):
                 exist_ok=True,
             )
 
-        if not hub_api.file_exists(
-            self.distant_repo_id, REPOCARD_NAME, repo_type="dataset", revision=self.branch
-        ):
+        if not hub_api.file_exists(self.distant_repo_id, REPOCARD_NAME, repo_type="dataset", revision=self.branch):
             card = create_lerobot_dataset_card(
                 tags=self.tags, dataset_info=meta.info, license=self.license, **self.card_kwargs
             )
@@ -172,9 +170,7 @@ class UploadDataset(PipelineStep):
             logging.info(f"{i}: {path}")
 
         meta = LeRobotDatasetMetadata(self.repo_id)
-        additions = [
-            CommitOperationAdd(path_in_repo=path, path_or_fileobj=meta.root / path) for path in file_paths
-        ]
+        additions = [CommitOperationAdd(path_in_repo=path, path_or_fileobj=meta.root / path) for path in file_paths]
         preupload_lfs_files(
             repo_id=self.distant_repo_id, repo_type="dataset", additions=additions, revision=self.branch
         )

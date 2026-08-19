@@ -102,10 +102,20 @@ class FlexivRizon4RT(Robot):
         >>> robot = FlexivRizon4RT(config)
         >>> robot.connect()
         >>> obs = robot.get_observation()
-        >>> robot.send_action({"tcp.x": 0.5, "tcp.y": 0.0, "tcp.z": 0.3,
-        ...     "tcp.r1": 1.0, "tcp.r2": 0.0, "tcp.r3": 0.0,
-        ...     "tcp.r4": 0.0, "tcp.r5": 1.0, "tcp.r6": 0.0,
-        ...     "gripper.pos": 0.8})
+        >>> robot.send_action(
+        ...     {
+        ...         "tcp.x": 0.5,
+        ...         "tcp.y": 0.0,
+        ...         "tcp.z": 0.3,
+        ...         "tcp.r1": 1.0,
+        ...         "tcp.r2": 0.0,
+        ...         "tcp.r3": 0.0,
+        ...         "tcp.r4": 0.0,
+        ...         "tcp.r5": 1.0,
+        ...         "tcp.r6": 0.0,
+        ...         "gripper.pos": 0.8,
+        ...     }
+        ... )
         >>> robot.disconnect()
     """
 
@@ -272,11 +282,7 @@ class FlexivRizon4RT(Robot):
 
     @property
     def is_connected(self) -> bool:
-        return (
-            self._is_connected
-            and self._robot is not None
-            and all(cam.is_connected for cam in self.cameras.values())
-        )
+        return self._is_connected and self._robot is not None and all(cam.is_connected for cam in self.cameras.values())
 
     @property
     def is_calibrated(self) -> bool:
@@ -308,9 +314,7 @@ class FlexivRizon4RT(Robot):
             go_to_start: If True, move to start position before entering RT mode
         """
         if self.is_connected:
-            raise DeviceAlreadyConnectedError(
-                f"{self} already connected, do not run `robot.connect()` twice."
-            )
+            raise DeviceAlreadyConnectedError(f"{self} already connected, do not run `robot.connect()` twice.")
 
         try:
             self.logger.info(f"Connecting to Flexiv robot (RT): {self.config.robot_sn}")
@@ -495,9 +499,7 @@ class FlexivRizon4RT(Robot):
             K_x_nom = robot_info.K_x_nom
             new_kx = list(np.multiply(K_x_nom, self.config.stiffness_ratio))
             self._robot.SetCartesianImpedance(new_kx, self.config.damping_ratio)
-            self.logger.info(
-                f"Cartesian stiffness (ratio={self.config.stiffness_ratio}): {new_kx}"
-            )
+            self.logger.info(f"Cartesian stiffness (ratio={self.config.stiffness_ratio}): {new_kx}")
         else:
             self.logger.info(f"Using nominal Cartesian stiffness: {robot_info.K_x_nom}")
 
@@ -561,8 +563,7 @@ class FlexivRizon4RT(Robot):
 
         actual_mode = self._robot.mode()
         raise RuntimeError(
-            f"Mode switch failed: expected {target_mode}, got {actual_mode}. "
-            f"Robot fault: {self._robot.fault()}"
+            f"Mode switch failed: expected {target_mode}, got {actual_mode}. Robot fault: {self._robot.fault()}"
         )
 
     def _go_to_home(self) -> None:
@@ -585,9 +586,7 @@ class FlexivRizon4RT(Robot):
         # contract (0 = closed, 1 = open) rather than reaching into the vendor
         # handle with millimetres — the two backends measure travel differently.
         if self._gripper is not None:
-            self._gripper.initialize_gripper_position(
-                1.0 if self._gripper.config.init_open else 0.0
-            )
+            self._gripper.initialize_gripper_position(1.0 if self._gripper.config.init_open else 0.0)
 
         # Wait for plan to finish
         timeout = 30.0
@@ -595,8 +594,7 @@ class FlexivRizon4RT(Robot):
         while self._robot.busy():
             if time.time() - start_time > timeout:
                 self.logger.error(
-                    f"PLAN-Home timeout after {timeout}s, "
-                    f"fault={self._robot.fault()}, mode={self._robot.mode()}"
+                    f"PLAN-Home timeout after {timeout}s, fault={self._robot.fault()}, mode={self._robot.mode()}"
                 )
                 raise RuntimeError(f"PLAN-Home did not complete within {timeout}s")
             time.sleep(0.1)
@@ -634,9 +632,7 @@ class FlexivRizon4RT(Robot):
         # contract (0 = closed, 1 = open) rather than reaching into the vendor
         # handle with millimetres — the two backends measure travel differently.
         if self._gripper is not None:
-            self._gripper.initialize_gripper_position(
-                1.0 if self._gripper.config.init_open else 0.0
-            )
+            self._gripper.initialize_gripper_position(1.0 if self._gripper.config.init_open else 0.0)
 
         # Wait for MoveJ to complete.
         # NOTE: Flexiv SDK docs warn that most primitives won't cause busy()
@@ -646,8 +642,7 @@ class FlexivRizon4RT(Robot):
         while True:
             if time.time() - start_time > timeout:
                 self.logger.error(
-                    f"MoveJ timeout after {timeout}s, "
-                    f"fault={self._robot.fault()}, mode={self._robot.mode()}"
+                    f"MoveJ timeout after {timeout}s, fault={self._robot.fault()}, mode={self._robot.mode()}"
                 )
                 raise RuntimeError(f"MoveJ did not complete within {timeout}s")
             try:
@@ -841,14 +836,16 @@ class FlexivRizon4RT(Robot):
         # --- Build target pose [x, y, z, qw, qx, qy, qz] ---
         x, y, z = action["tcp.x"], action["tcp.y"], action["tcp.z"]
 
-        r6d = np.array([
-            action["tcp.r1"],
-            action["tcp.r2"],
-            action["tcp.r3"],
-            action["tcp.r4"],
-            action["tcp.r5"],
-            action["tcp.r6"],
-        ])
+        r6d = np.array(
+            [
+                action["tcp.r1"],
+                action["tcp.r2"],
+                action["tcp.r3"],
+                action["tcp.r4"],
+                action["tcp.r5"],
+                action["tcp.r6"],
+            ]
+        )
         quat = rotation_6d_to_quaternion(r6d)  # [qw, qx, qy, qz]
         target_pose = [x, y, z, float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3])]
 

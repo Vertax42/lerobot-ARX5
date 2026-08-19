@@ -55,9 +55,7 @@ class ARX5FollowerConfig(RobotConfig):
 
     # Control parameters
     controller_dt: float = 0.005  # 200Hz low-level control frequency
-    interpolation_controller_dt: float = (
-        0.02  # 50Hz high-level interpolation control frequency
-    )
+    interpolation_controller_dt: float = 0.02  # 50Hz high-level interpolation control frequency
 
     # default control mode is teach mode
     control_mode: ARX5ControlMode = ARX5ControlMode.CARTESIAN_CONTROL
@@ -76,14 +74,10 @@ class ARX5FollowerConfig(RobotConfig):
     enable_tactile_sensors: bool = False
 
     # Position settings (Joint space: 6 joints + gripper)
-    home_position: list[float] = field(
-        default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    )
+    home_position: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
     # Start position; set in __post_init__ from control_mode.
-    start_position: list[float] = field(
-        default_factory=lambda: [0.0, 0.967, 1.290, -0.970, 0.0, 0.0, 0.0]
-    )
+    start_position: list[float] = field(default_factory=lambda: [0.0, 0.967, 1.290, -0.970, 0.0, 0.0, 0.0])
 
     # Camera configuration
     cameras: dict[str, CameraConfig] = field(default_factory=lambda: {})

@@ -85,7 +85,7 @@ class TaccapFollower(Gripper):
         self.logger = get_logger(f"TaccapFollower-{config.side}")
         self._is_connected: bool = False
         self._gripper = None  # xense.taccap.FollowerGripper
-        self._loop = None     # xense.taccap.ControlLoop
+        self._loop = None  # xense.taccap.ControlLoop
 
         # Seed so get_gripper_position() returns something sane before the loop
         # produces its first observation.
@@ -134,9 +134,7 @@ class TaccapFollower(Gripper):
             self._gripper = taccap.FollowerGripper(device)
         except Exception as e:
             self._gripper = None
-            raise RuntimeError(
-                f"Failed to open TacCap follower (side={self._side}) on {device}: {e}"
-            ) from e
+            raise RuntimeError(f"Failed to open TacCap follower (side={self._side}) on {device}: {e}") from e
 
         # From here the device handle is open. Anything that throws must release it
         # before propagating: _is_connected is still False, so disconnect() would
@@ -229,9 +227,7 @@ class TaccapFollower(Gripper):
             reference values stood in, so callers can label or refuse them.
         """
         if self._gripper is None:
-            raise DeviceNotConnectedError(
-                f"{self} is not connected; cannot read the wrist fisheye calibration."
-            )
+            raise DeviceNotConnectedError(f"{self} is not connected; cannot read the wrist fisheye calibration.")
 
         calibration, is_reference, reason = self._gripper.calibration.resolve_fisheye()
         if is_reference:

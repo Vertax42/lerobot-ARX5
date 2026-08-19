@@ -29,9 +29,7 @@ def assert_episode_and_frame_counts(aggr_ds, expected_episodes, expected_frames)
     assert aggr_ds.num_episodes == expected_episodes, (
         f"Expected {expected_episodes} episodes, got {aggr_ds.num_episodes}"
     )
-    assert aggr_ds.num_frames == expected_frames, (
-        f"Expected {expected_frames} frames, got {aggr_ds.num_frames}"
-    )
+    assert aggr_ds.num_frames == expected_frames, f"Expected {expected_frames} frames, got {aggr_ds.num_frames}"
 
 
 def assert_dataset_content_integrity(aggr_ds, ds_0, ds_1):
@@ -156,9 +154,7 @@ def assert_video_frames_integrity(aggr_ds, ds_0, ds_1):
 
     # Test the section corresponding to the first dataset (ds_0)
     for i in range(len(ds_0)):
-        assert aggr_ds[i]["index"] == i, (
-            f"Frame index at position {i} should be {i}, but got {aggr_ds[i]['index']}"
-        )
+        assert aggr_ds[i]["index"] == i, f"Frame index at position {i} should be {i}, but got {aggr_ds[i]['index']}"
         for key in video_keys:
             assert visual_frames_equal(aggr_ds[i][key], ds_0[i][key]), (
                 f"Visual frames at position {i} should be equal between aggregated and ds_0"
@@ -167,9 +163,7 @@ def assert_video_frames_integrity(aggr_ds, ds_0, ds_1):
     # Test the section corresponding to the second dataset (ds_1)
     for i in range(len(ds_0), len(ds_0) + len(ds_1)):
         # The frame index in the aggregated dataset should also match its position.
-        assert aggr_ds[i]["index"] == i, (
-            f"Frame index at position {i} should be {i}, but got {aggr_ds[i]['index']}"
-        )
+        assert aggr_ds[i]["index"] == i, f"Frame index at position {i} should be {i}, but got {aggr_ds[i]['index']}"
         for key in video_keys:
             assert visual_frames_equal(aggr_ds[i][key], ds_1[i - len(ds_0)][key]), (
                 f"Visual frames at position {i} should be equal between aggregated and ds_1"
@@ -212,9 +206,7 @@ def assert_video_timestamps_within_bounds(aggr_ds):
                 num_frames = len(decoder)
 
                 # Verify timestamps don't exceed video bounds
-                assert from_frame_idx >= 0, (
-                    f"Episode {ep_idx}, {vid_key}: from_frame_idx ({from_frame_idx}) < 0"
-                )
+                assert from_frame_idx >= 0, f"Episode {ep_idx}, {vid_key}: from_frame_idx ({from_frame_idx}) < 0"
                 assert from_frame_idx < num_frames, (
                     f"Episode {ep_idx}, {vid_key}: from_frame_idx ({from_frame_idx}) >= video frames ({num_frames})"
                 )
@@ -225,9 +217,7 @@ def assert_video_timestamps_within_bounds(aggr_ds):
                     f"Episode {ep_idx}, {vid_key}: from_frame_idx ({from_frame_idx}) >= to_frame_idx ({to_frame_idx})"
                 )
             except Exception as e:
-                raise AssertionError(
-                    f"Failed to verify timestamps for episode {ep_idx}, {vid_key}: {e}"
-                ) from e
+                raise AssertionError(f"Failed to verify timestamps for episode {ep_idx}, {vid_key}: {e}") from e
 
 
 def test_aggregate_datasets(tmp_path, lerobot_dataset_factory):
@@ -425,9 +415,7 @@ def assert_image_frames_integrity(aggr_ds, ds_0, ds_1):
 
     # Test the section corresponding to the first dataset (ds_0)
     for i in range(len(ds_0)):
-        assert aggr_ds[i]["index"] == i, (
-            f"Frame index at position {i} should be {i}, but got {aggr_ds[i]['index']}"
-        )
+        assert aggr_ds[i]["index"] == i, f"Frame index at position {i} should be {i}, but got {aggr_ds[i]['index']}"
         for key in image_keys:
             assert images_equal(aggr_ds[i][key], ds_0[i][key]), (
                 f"Image frames at position {i} should be equal between aggregated and ds_0"
@@ -435,9 +423,7 @@ def assert_image_frames_integrity(aggr_ds, ds_0, ds_1):
 
     # Test the section corresponding to the second dataset (ds_1)
     for i in range(len(ds_0), len(ds_0) + len(ds_1)):
-        assert aggr_ds[i]["index"] == i, (
-            f"Frame index at position {i} should be {i}, but got {aggr_ds[i]['index']}"
-        )
+        assert aggr_ds[i]["index"] == i, f"Frame index at position {i} should be {i}, but got {aggr_ds[i]['index']}"
         for key in image_keys:
             assert images_equal(aggr_ds[i][key], ds_1[i - len(ds_0)][key]), (
                 f"Image frames at position {i} should be equal between aggregated and ds_1"

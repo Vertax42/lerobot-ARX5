@@ -150,9 +150,7 @@ def inject_taccap_cameras(
     for side in sides:
         dev = found.get(side)
         if dev is None:
-            raise DeviceNotConnectedError(
-                f"taccap auto-discover: no {side} gripper/wrist camera found."
-            )
+            raise DeviceNotConnectedError(f"taccap auto-discover: no {side} gripper/wrist camera found.")
         _add_side_cameras(
             cameras,
             side,

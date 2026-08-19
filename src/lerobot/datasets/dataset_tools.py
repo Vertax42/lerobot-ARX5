@@ -193,9 +193,7 @@ def split_dataset(
 
         split_repo_id = f"{dataset.repo_id}_{split_name}"
 
-        split_output_dir = (
-            output_dir / split_name if output_dir is not None else HF_LEROBOT_HOME / split_repo_id
-        )
+        split_output_dir = output_dir / split_name if output_dir is not None else HF_LEROBOT_HOME / split_repo_id
 
         episode_mapping = {old_idx: new_idx for new_idx, old_idx in enumerate(sorted(episodes))}
 
@@ -797,9 +795,7 @@ def _copy_and_reindex_videos(
                     episodes_video_metadata[new_idx][f"videos/{video_key}/chunk_index"] = src_chunk_idx
                     episodes_video_metadata[new_idx][f"videos/{video_key}/file_index"] = src_file_idx
                     episodes_video_metadata[new_idx][f"videos/{video_key}/from_timestamp"] = cumulative_ts
-                    episodes_video_metadata[new_idx][f"videos/{video_key}/to_timestamp"] = (
-                        cumulative_ts + ep_duration
-                    )
+                    episodes_video_metadata[new_idx][f"videos/{video_key}/to_timestamp"] = cumulative_ts + ep_duration
 
                     cumulative_ts += ep_duration
 
@@ -1073,9 +1069,7 @@ def _copy_episodes_metadata_and_stats(
     if dst_meta.video_keys and src_dataset.meta.video_keys:
         for key in dst_meta.video_keys:
             if key in src_dataset.meta.features:
-                dst_meta.info["features"][key]["info"] = src_dataset.meta.info["features"][key].get(
-                    "info", {}
-                )
+                dst_meta.info["features"][key]["info"] = src_dataset.meta.info["features"][key].get("info", {})
 
     write_info(dst_meta.info, dst_meta.root)
 
@@ -1494,9 +1488,7 @@ def modify_tasks(
 
         # Build a mapping from episode_index to new task_index for rows in this file
         episode_indices_in_file = df["episode_index"].unique()
-        ep_to_new_task_idx = {
-            ep_idx: task_to_index[episode_to_task[ep_idx]] for ep_idx in episode_indices_in_file
-        }
+        ep_to_new_task_idx = {ep_idx: task_to_index[episode_to_task[ep_idx]] for ep_idx in episode_indices_in_file}
 
         # Update task_index column
         df["task_index"] = df["episode_index"].map(ep_to_new_task_idx)
@@ -1567,9 +1559,7 @@ def convert_image_to_video_dataset(
     """
     # Check that it's an image dataset
     if len(dataset.meta.video_keys) > 0:
-        raise ValueError(
-            f"This operation is for image datasets only. Video dataset provided: {dataset.repo_id}"
-        )
+        raise ValueError(f"This operation is for image datasets only. Video dataset provided: {dataset.repo_id}")
 
     # Get all image keys
     hf_dataset = dataset.hf_dataset.with_format(None)
@@ -1585,9 +1575,7 @@ def convert_image_to_video_dataset(
     if repo_id is None:
         repo_id = f"{dataset.repo_id}_video"
 
-    logging.info(
-        f"Converting {len(episode_indices)} episodes with {len(img_keys)} cameras from {dataset.repo_id}"
-    )
+    logging.info(f"Converting {len(episode_indices)} episodes with {len(img_keys)} cameras from {dataset.repo_id}")
     logging.info(f"Video codec: {vcodec}, pixel format: {pix_fmt}, GOP: {g}, CRF: {crf}")
 
     # Create new features dict, converting image features to video features
@@ -1751,9 +1739,7 @@ def convert_image_to_video_dataset(
         # We need to manually set video info since update_video_info() checks video_keys first
         for img_key in img_keys:
             if not new_meta.features[img_key].get("info", None):
-                video_path = new_meta.root / new_meta.video_path.format(
-                    video_key=img_key, chunk_index=0, file_index=0
-                )
+                video_path = new_meta.root / new_meta.video_path.format(video_key=img_key, chunk_index=0, file_index=0)
                 new_meta.info["features"][img_key]["info"] = get_video_info(video_path)
 
         write_info(new_meta.info, new_meta.root)

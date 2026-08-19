@@ -164,9 +164,7 @@ class RangeSlider:
 
         # brackets
         for x, sign in ((self.min_x, +1), (self.max_x, -1)):
-            pygame.draw.line(
-                surf, HANDLE_COLOR, (x, self.y - BRACKET_H // 2), (x, self.y + BRACKET_H // 2), 2
-            )
+            pygame.draw.line(surf, HANDLE_COLOR, (x, self.y - BRACKET_H // 2), (x, self.y + BRACKET_H // 2), 2)
             pygame.draw.line(
                 surf,
                 HANDLE_COLOR,
@@ -230,9 +228,7 @@ class RangeFinderGUI:
         self.calibration = bus.read_calibration()
         self.res_table = bus.model_resolution_table
         self.present_cache = {
-            m: bus.read("Present_Position", m, normalize=False)
-            for motors in self.groups.values()
-            for m in motors
+            m: bus.read("Present_Position", m, normalize=False) for motors in self.groups.values() for m in motors
         }
 
         pygame.init()
@@ -291,9 +287,7 @@ class RangeFinderGUI:
         pygame.draw.rect(self.screen, DD_COLOR_HL if hover else DD_COLOR, self.dd_btn, border_radius=6)
 
         txt = self.font.render(self.current_group, True, TEXT_COLOR)
-        self.screen.blit(
-            txt, (self.dd_btn.centerx - txt.get_width() // 2, self.dd_btn.centery - txt.get_height() // 2)
-        )
+        self.screen.blit(txt, (self.dd_btn.centerx - txt.get_width() // 2, self.dd_btn.centery - txt.get_height() // 2))
 
         tri_w, tri_h = 12, 6
         cx = self.dd_btn.right - 14
@@ -313,9 +307,7 @@ class RangeFinderGUI:
             clr = DD_COLOR_HL if item_rect.collidepoint(pygame.mouse.get_pos()) else DD_COLOR
             pygame.draw.rect(self.screen, clr, item_rect)
             t = self.font.render(name, True, TEXT_COLOR)
-            self.screen.blit(
-                t, (item_rect.centerx - t.get_width() // 2, item_rect.centery - t.get_height() // 2)
-            )
+            self.screen.blit(t, (item_rect.centerx - t.get_width() // 2, item_rect.centery - t.get_height() // 2))
 
     def _handle_dropdown_event(self, e):
         import pygame

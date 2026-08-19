@@ -16,10 +16,7 @@ with pyspacemouse.open() as device:
     while True:
         state = device.read()
 
-        if any(
-            abs(val) > 0.01
-            for val in [state.x, state.y, state.z, state.roll, state.pitch, state.yaw]
-        ):
+        if any(abs(val) > 0.01 for val in [state.x, state.y, state.z, state.roll, state.pitch, state.yaw]):
             print(
                 f"x={state.x:+.2f} y={state.y:+.2f} z={state.z:+.2f} "
                 f"roll={state.roll:+.2f} pitch={state.pitch:+.2f} yaw={state.yaw:+.2f}"

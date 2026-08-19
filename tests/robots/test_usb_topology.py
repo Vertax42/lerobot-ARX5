@@ -103,9 +103,7 @@ FAKE_VIDEO_NAMES = {
 @pytest.fixture
 def fake_topology(monkeypatch):
     """Patch the two enumerations and the sysfs walk with the layout above."""
-    monkeypatch.setattr(
-        topo, "hub_of_video_node", lambda node: topo.usb_hub_and_port(FAKE_SYSFS[node])
-    )
+    monkeypatch.setattr(topo, "hub_of_video_node", lambda node: topo.usb_hub_and_port(FAKE_SYSFS[node]))
 
     class _Sensor:
         @staticmethod
@@ -132,8 +130,7 @@ def test_video_names_grouped_by_hub(fake_topology):
     by_hub = topo.video_names_by_hub()
     assert [n for _, n in by_hub["3-1"]] == ["TAC_A", "WRIST_L", "TAC_B"]
     assert by_hub["3-8"] == [("/dev/video2", "Some USB webcam")], (
-        "a device on a root port has no hub token; it must fall back to its node "
-        "rather than being grouped with an arm"
+        "a device on a root port has no hub token; it must fall back to its node rather than being grouped with an arm"
     )
 
 
@@ -289,17 +286,23 @@ def test_discovery_sweeps_the_serial_bus_once_for_all_sides(monkeypatch):
 
     # Two well-formed hubs, one per side: a wrist camera plus two tactile pads.
     monkeypatch.setattr(sd, "_scan_port_sns", _counting_scan)
+    monkeypatch.setattr(sd, "hub_of_serial_device", lambda dev: "3-1" if dev.endswith("0") else "3-2")
     monkeypatch.setattr(
-        sd, "hub_of_serial_device", lambda dev: "3-1" if dev.endswith("0") else "3-2"
+        sd,
+        "tactile_sns_by_hub",
+        lambda: {
+            "3-1": [("3-1.2", "TAC_A"), ("3-1.4", "TAC_B")],
+            "3-2": [("3-2.2", "TAC_C"), ("3-2.4", "TAC_D")],
+        },
     )
-    monkeypatch.setattr(sd, "tactile_sns_by_hub", lambda: {
-        "3-1": [("3-1.2", "TAC_A"), ("3-1.4", "TAC_B")],
-        "3-2": [("3-2.2", "TAC_C"), ("3-2.4", "TAC_D")],
-    })
-    monkeypatch.setattr(sd, "video_names_by_hub", lambda: {
-        "3-1": [("3-1.2", "TAC_A"), ("3-1.3", "WRIST_L"), ("3-1.4", "TAC_B")],
-        "3-2": [("3-2.2", "TAC_C"), ("3-2.3", "WRIST_R"), ("3-2.4", "TAC_D")],
-    })
+    monkeypatch.setattr(
+        sd,
+        "video_names_by_hub",
+        lambda: {
+            "3-1": [("3-1.2", "TAC_A"), ("3-1.3", "WRIST_L"), ("3-1.4", "TAC_B")],
+            "3-2": [("3-2.2", "TAC_C"), ("3-2.3", "WRIST_R"), ("3-2.4", "TAC_D")],
+        },
+    )
 
     got = sd.discover_serial_gripper_cameras(sides=("left", "right"))
 

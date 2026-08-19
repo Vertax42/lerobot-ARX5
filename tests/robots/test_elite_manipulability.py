@@ -336,8 +336,8 @@ def test_tool_consistency_about_flange_z_is_position_clean():
     m0 = _se3_to_pose6(flange_se3(*_UR5_DH, _Q_A) @ _rot_z_se3(np.radians(0.0)) @ tool)
     m1 = _se3_to_pose6(flange_se3(*_UR5_DH, _Q_B) @ _rot_z_se3(np.radians(18.0)) @ tool)
     pos_drift_m, rot_drift_deg = tool_consistency(_UR5_DH, _Q_A, m0, _Q_B, m1)
-    assert pos_drift_m < 2e-3       # position gate PASSES — DH is valid for the Jacobian
-    assert rot_drift_deg > 10.0     # rotation "drift" is large but benign (about-Z; not in det(J))
+    assert pos_drift_m < 2e-3  # position gate PASSES — DH is valid for the Jacobian
+    assert rot_drift_deg > 10.0  # rotation "drift" is large but benign (about-Z; not in det(J))
 
 
 def test_tool_consistency_wrong_dh_still_caught_on_position():
@@ -357,10 +357,20 @@ def test_manipulability_is_independent_of_tcp_convention():
     # function of (DH, q) — it never reads the TCP — so no TCP-orientation convention can change
     # it. Locking this makes explicit why the rotation-drift clause is orthogonal to the guard.
     w = manipulability(*_UR5_DH, _Q_A)
-    s, _ = joint_velocity_scale(*_UR5_DH, _Q_A, np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.01]), 0.033,
-                                np.array([2.618, 2.618, 3.142, 4.014, 4.014, 4.014]) * 0.8)
+    s, _ = joint_velocity_scale(
+        *_UR5_DH,
+        _Q_A,
+        np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.01]),
+        0.033,
+        np.array([2.618, 2.618, 3.142, 4.014, 4.014, 4.014]) * 0.8,
+    )
     # Recompute after an arbitrary about-Z change to the (irrelevant) measured TCP — identical.
     assert manipulability(*_UR5_DH, _Q_A) == w
-    s2, _ = joint_velocity_scale(*_UR5_DH, _Q_A, np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.01]), 0.033,
-                                 np.array([2.618, 2.618, 3.142, 4.014, 4.014, 4.014]) * 0.8)
+    s2, _ = joint_velocity_scale(
+        *_UR5_DH,
+        _Q_A,
+        np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.01]),
+        0.033,
+        np.array([2.618, 2.618, 3.142, 4.014, 4.014, 4.014]) * 0.8,
+    )
     assert s2 == s

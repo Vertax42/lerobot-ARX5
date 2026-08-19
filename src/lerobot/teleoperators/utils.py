@@ -32,7 +32,7 @@ class TeleopEvents(Enum):
     IS_INTERVENTION = "is_intervention"
     TERMINATE_EPISODE = "terminate_episode"
     BACK_HOME = "back_home"
-    
+
 
 def make_teleoperator_from_config(config: TeleoperatorConfig) -> "Teleoperator":
     # TODO(Steven): Consider just using the make_device_from_device_class for all types

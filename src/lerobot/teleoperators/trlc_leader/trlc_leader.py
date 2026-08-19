@@ -155,9 +155,7 @@ class TRLCLeader(Teleoperator):
 
         start = time.perf_counter()
 
-        raw = self.bus.sync_read(
-            normalize=False, data_name="Present_Position", num_retry=2
-        )
+        raw = self.bus.sync_read(normalize=False, data_name="Present_Position", num_retry=2)
 
         action = {}
         for motor, val in raw.items():

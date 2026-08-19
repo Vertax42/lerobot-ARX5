@@ -86,22 +86,22 @@ camera.disconnect()
 from lerobot.cameras.xense import XenseOutputType
 
 # Image outputs
-XenseOutputType.RECTIFY          # shape=(700, 400, 3), RGB
-XenseOutputType.DIFFERENCE       # shape=(700, 400, 3), RGB
-XenseOutputType.DEPTH            # shape=(700, 400), unit: mm
+XenseOutputType.RECTIFY  # shape=(700, 400, 3), RGB
+XenseOutputType.DIFFERENCE  # shape=(700, 400, 3), RGB
+XenseOutputType.DEPTH  # shape=(700, 400), unit: mm
 
 # Force outputs
-XenseOutputType.FORCE            # shape=(35, 20, 3), 3D force distribution
-XenseOutputType.FORCE_NORM       # shape=(35, 20, 3), normal force component
+XenseOutputType.FORCE  # shape=(35, 20, 3), 3D force distribution
+XenseOutputType.FORCE_NORM  # shape=(35, 20, 3), normal force component
 XenseOutputType.FORCE_RESULTANT  # shape=(6,), 6D force/torque
 
 # Marker outputs
-XenseOutputType.MARKER_2D        # shape=(35, 20, 2), tangential displacement
+XenseOutputType.MARKER_2D  # shape=(35, 20, 2), tangential displacement
 
 # 3D mesh outputs
-XenseOutputType.MESH_3D          # shape=(35, 20, 3), current frame mesh
-XenseOutputType.MESH_3D_INIT     # shape=(35, 20, 3), initial mesh
-XenseOutputType.MESH_3D_FLOW     # shape=(35, 20, 3), deformation vector
+XenseOutputType.MESH_3D  # shape=(35, 20, 3), current frame mesh
+XenseOutputType.MESH_3D_INIT  # shape=(35, 20, 3), initial mesh
+XenseOutputType.MESH_3D_FLOW  # shape=(35, 20, 3), deformation vector
 ```
 
 ## Testing

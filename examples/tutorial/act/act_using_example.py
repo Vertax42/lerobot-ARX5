@@ -42,9 +42,7 @@ def main():
     for _ in range(MAX_EPISODES):
         for _ in range(MAX_STEPS_PER_EPISODE):
             obs = robot.get_observation()
-            obs_frame = build_inference_frame(
-                observation=obs, ds_features=dataset_metadata.features, device=device
-            )
+            obs_frame = build_inference_frame(observation=obs, ds_features=dataset_metadata.features, device=device)
 
             obs = preprocess(obs_frame)
 

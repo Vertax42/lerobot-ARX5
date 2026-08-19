@@ -148,4 +148,3 @@ class Gripper(abc.ABC):
             f"Gripper did not reach init target {normalized_pos:.3f} within {timeout:.1f}s "
             f"(current={self.get_gripper_position():.3f})."
         )
-

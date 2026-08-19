@@ -214,9 +214,7 @@ def process_camera_image(
             cam_type_str,
         )
     except TimeoutError:
-        logger.warning(
-            f"Timeout reading from {cam_type_str} camera {cam_id_str} at time {current_time:.2f}s."
-        )
+        logger.warning(f"Timeout reading from {cam_type_str} camera {cam_id_str} at time {current_time:.2f}s.")
     except Exception as e:
         logger.error(f"Error reading from {cam_type_str} camera {cam_id_str}: {e}")
     return None

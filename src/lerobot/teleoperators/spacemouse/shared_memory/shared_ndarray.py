@@ -90,9 +90,7 @@ class SharedNDArray(Generic[SharedT]):
     dtype: np.dtype
     lock: Optional[multiprocessing.synchronize.Lock]
 
-    def __init__(
-        self, shm: SharedMemoryLike, shape: Tuple[int, ...], dtype: npt.DTypeLike
-    ):
+    def __init__(self, shm: SharedMemoryLike, shape: Tuple[int, ...], dtype: npt.DTypeLike):
         """Initialize a SharedNDArray object from existing shared memory, object shape, and dtype.
         To initialize a SharedNDArray object from a memory manager and data or shape, use the `from_array()
         or `from_shape()` classmethods.
@@ -134,9 +132,7 @@ class SharedNDArray(Generic[SharedT]):
         return f"{cls_name}({array_repr}, dtype={self.dtype})"
 
     @classmethod
-    def create_from_array(
-        cls, mem_mgr: SharedMemoryManager, arr: npt.NDArray[SharedT]
-    ) -> SharedNDArray[SharedT]:
+    def create_from_array(cls, mem_mgr: SharedMemoryManager, arr: npt.NDArray[SharedT]) -> SharedNDArray[SharedT]:
         """Create a SharedNDArray from a SharedMemoryManager and an existing numpy array.
         Parameters
         ----------
@@ -152,9 +148,7 @@ class SharedNDArray(Generic[SharedT]):
         return shared_arr
 
     @classmethod
-    def create_from_shape(
-        cls, mem_mgr: SharedMemoryManager, shape: Tuple, dtype: npt.DTypeLike
-    ) -> SharedNDArray:
+    def create_from_shape(cls, mem_mgr: SharedMemoryManager, shape: Tuple, dtype: npt.DTypeLike) -> SharedNDArray:
         """Create a SharedNDArray directly from a SharedMemoryManager
         Parameters
         ----------

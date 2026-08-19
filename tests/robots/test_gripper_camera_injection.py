@@ -76,9 +76,7 @@ def test_taccap_injects_wrist_and_tactile_keys(fake_taccap):
     fake_taccap(_two_sides())
     cameras: dict = {}
 
-    ci.inject_taccap_cameras(
-        cameras, sides=("left", "right"), enable_tactile=True, logger=LOGGER
-    )
+    ci.inject_taccap_cameras(cameras, sides=("left", "right"), enable_tactile=True, logger=LOGGER)
 
     assert sorted(cameras) == [
         "left_tactile_0",
@@ -98,12 +96,8 @@ def test_serial_injects_the_same_key_scheme_as_taccap(fake_taccap, fake_serial):
     taccap_cameras: dict = {}
     serial_cameras: dict = {}
 
-    ci.inject_taccap_cameras(
-        taccap_cameras, sides=("left", "right"), enable_tactile=True, logger=LOGGER
-    )
-    ci.inject_serial_gripper_cameras(
-        serial_cameras, sides=("left", "right"), enable_tactile=True, logger=LOGGER
-    )
+    ci.inject_taccap_cameras(taccap_cameras, sides=("left", "right"), enable_tactile=True, logger=LOGGER)
+    ci.inject_serial_gripper_cameras(serial_cameras, sides=("left", "right"), enable_tactile=True, logger=LOGGER)
 
     assert sorted(taccap_cameras) == sorted(serial_cameras)
 
@@ -112,9 +106,7 @@ def test_tactile_sensors_are_skipped_when_disabled(fake_serial):
     fake_serial(_two_sides())
     cameras: dict = {}
 
-    ci.inject_serial_gripper_cameras(
-        cameras, sides=("left", "right"), enable_tactile=False, logger=LOGGER
-    )
+    ci.inject_serial_gripper_cameras(cameras, sides=("left", "right"), enable_tactile=False, logger=LOGGER)
 
     assert sorted(cameras) == ["left_wrist", "right_wrist"]
 
@@ -159,9 +151,7 @@ def test_serial_one_armed_bench_does_not_touch_the_other_side(fake_serial):
     fake_serial({"left": FakeDevice("XCA_LEFT", ["GSPS_L0", "GSPS_L1"])})
     cameras: dict = {}
 
-    ci.inject_serial_gripper_cameras(
-        cameras, sides=("left",), enable_tactile=True, logger=LOGGER
-    )
+    ci.inject_serial_gripper_cameras(cameras, sides=("left",), enable_tactile=True, logger=LOGGER)
 
     assert sorted(cameras) == ["left_tactile_0", "left_tactile_1", "left_wrist"]
 
@@ -179,27 +169,21 @@ def test_missing_side_raises(fake_taccap):
     fake_taccap({"left": FakeDevice("XCA_LEFT", ["GSPS_L0", "GSPS_L1"])})
 
     with pytest.raises(DeviceNotConnectedError, match="no right gripper"):
-        ci.inject_taccap_cameras(
-            {}, sides=("left", "right"), enable_tactile=True, logger=LOGGER
-        )
+        ci.inject_taccap_cameras({}, sides=("left", "right"), enable_tactile=True, logger=LOGGER)
 
 
 def test_too_few_tactile_sensors_raises(fake_serial):
     fake_serial({"left": FakeDevice("XCA_LEFT", ["GSPS_L0"], usb_hub="3-1")})
 
     with pytest.raises(DeviceNotConnectedError, match="expected 2 tactile sensors"):
-        ci.inject_serial_gripper_cameras(
-            {}, sides=("left",), enable_tactile=True, logger=LOGGER
-        )
+        ci.inject_serial_gripper_cameras({}, sides=("left",), enable_tactile=True, logger=LOGGER)
 
 
 def test_too_few_tactile_sensors_is_ignored_when_tactile_disabled(fake_serial):
     fake_serial({"left": FakeDevice("XCA_LEFT", [])})
     cameras: dict = {}
 
-    ci.inject_serial_gripper_cameras(
-        cameras, sides=("left",), enable_tactile=False, logger=LOGGER
-    )
+    ci.inject_serial_gripper_cameras(cameras, sides=("left",), enable_tactile=False, logger=LOGGER)
 
     assert sorted(cameras) == ["left_wrist"]
 
@@ -212,9 +196,7 @@ def test_too_few_tactile_sensors_is_ignored_when_tactile_disabled(fake_serial):
 def test_taccap_returns_mcu_devices_for_adoption(fake_taccap):
     fake_taccap(_two_sides())
 
-    mcu = ci.inject_taccap_cameras(
-        {}, sides=("left", "right"), enable_tactile=False, logger=LOGGER
-    )
+    mcu = ci.inject_taccap_cameras({}, sides=("left", "right"), enable_tactile=False, logger=LOGGER)
 
     assert mcu == {"left": "/dev/left", "right": "/dev/right"}
 

@@ -63,9 +63,9 @@ _TRAILING_DIGITS_RE = re.compile(r"(\d+)\s*$")
 
 @dataclass
 class SerialGripperSideDevice:
-    side: str   # "left" | "right"
-    sn: str     # board serial number, e.g. "000031"
-    port: str   # e.g. "/dev/ttyUSB0"
+    side: str  # "left" | "right"
+    sn: str  # board serial number, e.g. "000031"
+    port: str  # e.g. "/dev/ttyUSB0"
 
 
 # USB (vid, pid) pairs that belong to a *different* gripper family, so probing
@@ -79,9 +79,11 @@ class SerialGripperSideDevice:
 # This is an exclusion of devices positively identified as something else, not a
 # whitelist of known-good ones: a gripper board on an unfamiliar USB-serial chip
 # stays discoverable, which a whitelist would quietly break.
-_OTHER_GRIPPER_FAMILY_IDS = frozenset({
-    ("1a86", "55d2"),  # QinHeng CH343 dual-serial — TacCap follower MCU bridge
-})
+_OTHER_GRIPPER_FAMILY_IDS = frozenset(
+    {
+        ("1a86", "55d2"),  # QinHeng CH343 dual-serial — TacCap follower MCU bridge
+    }
+)
 
 
 def sn_side(sn: str) -> str | None:
@@ -144,8 +146,7 @@ def find_port_by_sn(sn: str, baudrate: int = 115200, device_id: int = 1) -> str:
         if found == sn.strip():
             return port
     raise RuntimeError(
-        f"SerialGripper: could not find a port with SN={sn!r}. "
-        f"Scanned SNs: {ports or '(none responded)'}"
+        f"SerialGripper: could not find a port with SN={sn!r}. Scanned SNs: {ports or '(none responded)'}"
     )
 
 
@@ -194,9 +195,7 @@ def _side_port_and_sn(scanned: dict[str, str], side: str) -> tuple[str, str]:
     return port, sn
 
 
-def discover_serial_gripper_sides(
-    baudrate: int = 115200, device_id: int = 1
-) -> dict[str, SerialGripperSideDevice]:
+def discover_serial_gripper_sides(baudrate: int = 115200, device_id: int = 1) -> dict[str, SerialGripperSideDevice]:
     """Discover both serial-gripper sides at once (diagnostics / find-port helper).
 
     Returns:
@@ -219,10 +218,7 @@ def discover_serial_gripper_sides(
             logger.info(f"No {side} serial gripper found.")
             continue
         if len(entries) > 1:
-            logger.warn(
-                f"Multiple {side}-parity serial grippers found ({entries}); "
-                "side is ambiguous, omitting."
-            )
+            logger.warn(f"Multiple {side}-parity serial grippers found ({entries}); side is ambiguous, omitting.")
             continue
         port, sn = entries[0]
         sides[side] = SerialGripperSideDevice(side=side, sn=sn, port=port)
@@ -239,10 +235,10 @@ def discover_serial_gripper_sides(
 
 @dataclass
 class SerialGripperCameras:
-    side: str                       # "left" | "right"
-    gripper_sn: str                 # board serial number that anchored the hub
-    usb_hub: str                    # e.g. "3-1"
-    wrist_camera_name: str          # v4l2-ctl device name, e.g. "XC000047"
+    side: str  # "left" | "right"
+    gripper_sn: str  # board serial number that anchored the hub
+    usb_hub: str  # e.g. "3-1"
+    wrist_camera_name: str  # v4l2-ctl device name, e.g. "XC000047"
     tactile_sns: list[str] = field(default_factory=list)  # ordered by USB port
 
 
@@ -305,7 +301,5 @@ def discover_serial_gripper_cameras(
             wrist_camera_name=candidates[0],
             tactile_sns=tactile,
         )
-        logger.info(
-            f"[{side}] gripper SN={sn} hub={hub} wrist={candidates[0]} tactile={tactile}"
-        )
+        logger.info(f"[{side}] gripper SN={sn} hub={hub} wrist={candidates[0]} tactile={tactile}")
     return found

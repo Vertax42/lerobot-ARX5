@@ -287,10 +287,10 @@ from lerobot.teleoperators.spacemouse import SpacemouseConfig, SpacemouseTeleop
 
 # Standard single SpaceMouse setup (default)
 config = SpacemouseConfig(
-    pos_sensitivity=0.8,     # Position control sensitivity
-    ori_sensitivity=1.5,     # Orientation control sensitivity
-    deadzone=0.1,           # Deadzone threshold
-    frequency=200,          # Polling frequency (Hz)
+    pos_sensitivity=0.8,  # Position control sensitivity
+    ori_sensitivity=1.5,  # Orientation control sensitivity
+    deadzone=0.1,  # Deadzone threshold
+    frequency=200,  # Polling frequency (Hz)
 )
 
 teleop = SpacemouseTeleop(config)
@@ -313,11 +313,11 @@ config = SpacemouseConfig(
         ori_sensitivity=0.0,  # Disabled
     ),
     right_device=DeviceConfig(
-        device_index=1, 
+        device_index=1,
         enabled_axes=(False, False, False, True, True, True),  # Roll, pitch, yaw only
         pos_sensitivity=0.0,  # Disabled
         ori_sensitivity=1.5,
-    )
+    ),
 )
 
 teleop = SpacemouseTeleop(config)

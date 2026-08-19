@@ -676,9 +676,7 @@ class RTCEvaluator:
         fig_xt, axs_xt = self._create_figure("x_t Denoising: No RTC (left) vs RTC (right)")
         fig_vt, axs_vt = self._create_figure("v_t Denoising: No RTC (left) vs RTC (right)")
         fig_corr, axs_corr = self._create_figure("Correction: No RTC (left) vs RTC (right)")
-        fig_x1t, axs_x1t = self._create_figure(
-            "x1_t Predicted State & Error: No RTC (left - empty) vs RTC (right)"
-        )
+        fig_x1t, axs_x1t = self._create_figure("x1_t Predicted State & Error: No RTC (left - empty) vs RTC (right)")
         self._plot_denoising_steps_from_tracker(
             rtc_tracked_steps,
             axs_xt[:, 1],  # Right column for x_t
@@ -713,13 +711,9 @@ class RTCEvaluator:
         )
 
         # Plot ground truth on x_t axes (no labels for left column)
-        RTCDebugVisualizer.plot_waypoints(
-            axs_xt[:, 0], prev_chunk_left_over, start_from=0, color="red", label=None
-        )
+        RTCDebugVisualizer.plot_waypoints(axs_xt[:, 0], prev_chunk_left_over, start_from=0, color="red", label=None)
 
-        RTCDebugVisualizer.plot_waypoints(
-            axs_x1t[:, 0], prev_chunk_left_over, start_from=0, color="red", label=None
-        )
+        RTCDebugVisualizer.plot_waypoints(axs_x1t[:, 0], prev_chunk_left_over, start_from=0, color="red", label=None)
 
         # Add legends outside the plot area for each figure
         self._add_figure_legend(fig_xt, axs_xt)
@@ -813,15 +807,11 @@ class RTCEvaluator:
 
             # Plot x_t
             if debug_step.x_t is not None:
-                RTCDebugVisualizer.plot_waypoints(
-                    xt_axs, debug_step.x_t, start_from=0, color=color, label=label
-                )
+                RTCDebugVisualizer.plot_waypoints(xt_axs, debug_step.x_t, start_from=0, color=color, label=label)
 
             # Plot v_t
             if debug_step.v_t is not None:
-                RTCDebugVisualizer.plot_waypoints(
-                    vt_axs, debug_step.v_t, start_from=0, color=color, label=label
-                )
+                RTCDebugVisualizer.plot_waypoints(vt_axs, debug_step.v_t, start_from=0, color=color, label=label)
 
             # Plot correction on separate axes
             if debug_step.correction is not None:
@@ -847,9 +837,7 @@ class RTCEvaluator:
             # Plot error in orange dashed
             if x1t_axs is not None and debug_step.err is not None:
                 error_chunk = (
-                    debug_step.err[0].cpu().numpy()
-                    if len(debug_step.err.shape) == 3
-                    else debug_step.err.cpu().numpy()
+                    debug_step.err[0].cpu().numpy() if len(debug_step.err.shape) == 3 else debug_step.err.cpu().numpy()
                 )
 
                 num_dims = min(error_chunk.shape[-1], 6)
@@ -888,9 +876,7 @@ class RTCEvaluator:
 
         if final_step.x_t is not None:
             x_t_chunk = (
-                final_step.x_t[0].cpu().numpy()
-                if len(final_step.x_t.shape) == 3
-                else final_step.x_t.cpu().numpy()
+                final_step.x_t[0].cpu().numpy() if len(final_step.x_t.shape) == 3 else final_step.x_t.cpu().numpy()
             )
 
             num_dims = min(x_t_chunk.shape[-1], 6)

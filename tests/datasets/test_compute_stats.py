@@ -311,9 +311,7 @@ def test_aggregate_stats():
         np.testing.assert_allclose(results[fkey]["min"], expected_agg_stats[fkey]["min"])
         np.testing.assert_allclose(results[fkey]["max"], expected_agg_stats[fkey]["max"])
         np.testing.assert_allclose(results[fkey]["mean"], expected_agg_stats[fkey]["mean"])
-        np.testing.assert_allclose(
-            results[fkey]["std"], expected_agg_stats[fkey]["std"], atol=1e-04, rtol=1e-04
-        )
+        np.testing.assert_allclose(results[fkey]["std"], expected_agg_stats[fkey]["std"], atol=1e-04, rtol=1e-04)
         np.testing.assert_allclose(results[fkey]["count"], expected_agg_stats[fkey]["count"])
 
 

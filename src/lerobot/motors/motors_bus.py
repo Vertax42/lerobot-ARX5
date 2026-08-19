@@ -255,9 +255,7 @@ class GroupSyncRead(Protocol):
     param: list
     data_dict: dict
 
-    def __init__(
-        self, port: PortHandler, ph: PacketHandler, start_address: int, data_length: int
-    ) -> None: ...
+    def __init__(self, port: PortHandler, ph: PacketHandler, start_address: int, data_length: int) -> None: ...
     def makeParam(self): ...
     def addParam(self, id): ...
     def removeParam(self, id): ...
@@ -278,9 +276,7 @@ class GroupSyncWrite(Protocol):
     param: list
     data_dict: dict
 
-    def __init__(
-        self, port: PortHandler, ph: PacketHandler, start_address: int, data_length: int
-    ) -> None: ...
+    def __init__(self, port: PortHandler, ph: PacketHandler, start_address: int, data_length: int) -> None: ...
     def makeParam(self): ...
     def addParam(self, id, data): ...
     def removeParam(self, id): ...
@@ -378,9 +374,7 @@ class SerialMotorsBus(MotorsBusBase):
             return False
 
         first_table = self.model_ctrl_table[self.models[0]]
-        return any(
-            DeepDiff(first_table, get_ctrl_table(self.model_ctrl_table, model)) for model in self.models[1:]
-        )
+        return any(DeepDiff(first_table, get_ctrl_table(self.model_ctrl_table, model)) for model in self.models[1:])
 
     @cached_property
     def models(self) -> list[str]:
@@ -470,9 +464,7 @@ class SerialMotorsBus(MotorsBusBase):
 
             if missing_ids:
                 error_lines.append("\nMissing motor IDs:")
-                error_lines.extend(
-                    f"  - {id_} (expected model: {expected_models[id_]})" for id_ in missing_ids
-                )
+                error_lines.extend(f"  - {id_} (expected model: {expected_models[id_]})" for id_ in missing_ids)
 
             if wrong_models:
                 error_lines.append("\nMotors with incorrect model numbers:")
@@ -573,9 +565,7 @@ class SerialMotorsBus(MotorsBusBase):
         bus.port_handler.closePort()
         return baudrate_ids
 
-    def setup_motor(
-        self, motor: str, initial_baudrate: int | None = None, initial_id: int | None = None
-    ) -> None:
+    def setup_motor(self, motor: str, initial_baudrate: int | None = None, initial_id: int | None = None) -> None:
         """Assign the correct ID and baud-rate to a single motor.
 
         This helper temporarily switches to the motor's current settings, disables torque, sets the desired
@@ -759,9 +749,7 @@ class SerialMotorsBus(MotorsBusBase):
 
         self.calibration = {}
 
-    def set_half_turn_homings(
-        self, motors: NameOrID | Sequence[NameOrID] | None = None
-    ) -> dict[NameOrID, Value]:
+    def set_half_turn_homings(self, motors: NameOrID | Sequence[NameOrID] | None = None) -> dict[NameOrID, Value]:
         """Centre each motor range around its current position.
 
         The function computes and writes a homing offset such that the present position becomes exactly one
@@ -1048,9 +1036,7 @@ class SerialMotorsBus(MotorsBusBase):
         return value, comm, error
 
     @check_if_not_connected
-    def write(
-        self, data_name: str, motor: str, value: Value, *, normalize: bool = True, num_retry: int = 0
-    ) -> None:
+    def write(self, data_name: str, motor: str, value: Value, *, normalize: bool = True, num_retry: int = 0) -> None:
         """Write a value to a single motor's register.
 
         Contrary to :pymeth:`sync_write`, this expects a response status packet emitted by the motor, which
@@ -1239,9 +1225,7 @@ class SerialMotorsBus(MotorsBusBase):
         int_ids_values = self._encode_sign(data_name, int_ids_values)
 
         err_msg = f"Failed to sync write '{data_name}' with ids_values={int_ids_values} after {num_retry + 1} tries."
-        self._sync_write(
-            addr, length, int_ids_values, num_retry=num_retry, raise_on_error=True, err_msg=err_msg
-        )
+        self._sync_write(addr, length, int_ids_values, num_retry=num_retry, raise_on_error=True, err_msg=err_msg)
 
     def _sync_write(
         self,

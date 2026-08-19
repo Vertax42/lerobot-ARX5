@@ -73,14 +73,14 @@ class TaccapFollowerConfig(GripperConfig):
     """
 
     # ── Identification ─────────────────────────────────────────────────────────
-    side: str = "left"                 # "left" | "right" (firmware-SN auto side)
-    mcu_device: str | None = None      # optional explicit device path override
+    side: str = "left"  # "left" | "right" (firmware-SN auto side)
+    mcu_device: str | None = None  # optional explicit device path override
 
     # ── Control (MIT impedance) ────────────────────────────────────────────────
-    kp: float = 8.0                    # Nm/rad
-    kd: float = 1.0                    # Nm·s/rad
-    feedforward_torque: float = 0.0    # Nm; NEGATIVE = closing/clamp, POSITIVE = opening
-    control_hz: int = 200              # ControlLoop resubmit rate
+    kp: float = 8.0  # Nm/rad
+    kd: float = 1.0  # Nm·s/rad
+    feedforward_torque: float = 0.0  # Nm; NEGATIVE = closing/clamp, POSITIVE = opening
+    control_hz: int = 200  # ControlLoop resubmit rate
 
     # ── Behavior ───────────────────────────────────────────────────────────────
     init_open: bool = True
@@ -92,9 +92,7 @@ class TaccapFollowerConfig(GripperConfig):
 
     def __post_init__(self):
         if self.side not in ("left", "right"):
-            raise ValueError(
-                f"TaccapFollowerConfig: side must be 'left' or 'right', got {self.side!r}."
-            )
+            raise ValueError(f"TaccapFollowerConfig: side must be 'left' or 'right', got {self.side!r}.")
         if not self.kp > 0.0:
             raise ValueError(f"TaccapFollowerConfig: kp must be positive, got {self.kp}.")
         if not self.kd >= 0.0:
@@ -107,6 +105,4 @@ class TaccapFollowerConfig(GripperConfig):
                 "~1 Nm are a hard crush (the SDK's gentle-grasp example aborts at 0.30 Nm)."
             )
         if not 0 < self.control_hz <= 500:
-            raise ValueError(
-                f"TaccapFollowerConfig: control_hz must be in (0, 500], got {self.control_hz}."
-            )
+            raise ValueError(f"TaccapFollowerConfig: control_hz must be in (0, 500], got {self.control_hz}.")

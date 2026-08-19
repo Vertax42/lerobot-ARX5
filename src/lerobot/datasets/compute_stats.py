@@ -85,9 +85,7 @@ class RunningQuantileStats:
 
         # Update running mean and mean of squares
         self._mean += (batch_mean - self._mean) * (num_elements / self._count)
-        self._mean_of_squares += (batch_mean_of_squares - self._mean_of_squares) * (
-            num_elements / self._count
-        )
+        self._mean_of_squares += (batch_mean_of_squares - self._mean_of_squares) * (num_elements / self._count)
 
         self._update_histograms(batch)
 
@@ -129,9 +127,7 @@ class RunningQuantileStats:
 
             # Create new edges with small padding to ensure range coverage
             padding = (self._max[i] - self._min[i]) * 1e-10
-            new_edges = np.linspace(
-                self._min[i] - padding, self._max[i] + padding, self._num_quantile_bins + 1
-            )
+            new_edges = np.linspace(self._min[i] - padding, self._max[i] + padding, self._num_quantile_bins + 1)
 
             # Redistribute existing histogram counts to new bins
             # We need to map each old bin center to the new bins
@@ -290,9 +286,7 @@ def _reshape_for_image_stats(value: np.ndarray, keepdims: bool) -> np.ndarray:
     return value
 
 
-def _reshape_for_vector_stats(
-    value: np.ndarray, keepdims: bool, original_shape: tuple[int, ...]
-) -> np.ndarray:
+def _reshape_for_vector_stats(value: np.ndarray, keepdims: bool, original_shape: tuple[int, ...]) -> np.ndarray:
     """Reshape statistics for vector data (axis=0 or axis=(0,))."""
     if not keepdims:
         return value
@@ -316,9 +310,7 @@ def _reshape_for_feature_stats(value: np.ndarray, keepdims: bool) -> np.ndarray:
     return value
 
 
-def _reshape_for_global_stats(
-    value: np.ndarray, keepdims: bool, original_shape: tuple[int, ...]
-) -> np.ndarray | float:
+def _reshape_for_global_stats(value: np.ndarray, keepdims: bool, original_shape: tuple[int, ...]) -> np.ndarray | float:
     """Reshape statistics for global reduction (axis=None)."""
     if keepdims:
         target_shape = tuple(1 for _ in original_shape)
@@ -522,9 +514,7 @@ def compute_episode_stats(
         )
 
         if features[key]["dtype"] in ["image", "video"]:
-            ep_stats[key] = {
-                k: v if k == "count" else np.squeeze(v / 255.0, axis=0) for k, v in ep_stats[key].items()
-            }
+            ep_stats[key] = {k: v if k == "count" else np.squeeze(v / 255.0, axis=0) for k, v in ep_stats[key].items()}
 
     return ep_stats
 

@@ -200,9 +200,7 @@ def test_frames_order_with_shards(tmp_path, lerobot_dataset_factory, shuffle):
     assert first_epoch_indices == expected_indices, "First epoch indices do not match expected indices"
 
     for _ in range(n_epochs):
-        streaming_indices = [
-            frame["index"] for frame in streaming_ds
-        ]  # NOTE: this is the same as first_epoch_indices
+        streaming_indices = [frame["index"] for frame in streaming_ds]  # NOTE: this is the same as first_epoch_indices
         frames_match = all(
             s_index == e_index for s_index, e_index in zip(streaming_indices, expected_indices, strict=True)
         )
@@ -275,11 +273,7 @@ def test_frames_with_delta_consistency(tmp_path, lerobot_dataset_factory, state_
                 check = left == right
 
             elif isinstance(left, torch.Tensor):
-                if (
-                    key not in ds.meta.camera_keys
-                    and "is_pad" not in key
-                    and f"{key}_is_pad" in streaming_frame
-                ):
+                if key not in ds.meta.camera_keys and "is_pad" not in key and f"{key}_is_pad" in streaming_frame:
                     # comparing frames only on non-padded regions. Padding is applied to last-valid broadcasting
                     left = left[~streaming_frame[f"{key}_is_pad"]]
                     right = right[~target_frame[f"{key}_is_pad"]]
@@ -302,9 +296,7 @@ def test_frames_with_delta_consistency(tmp_path, lerobot_dataset_factory, state_
         ([-2, -1, -0.5, 0], [-20, -1.5, -1, -0.5, -0.20, -0.10, 0]),
     ],
 )
-def test_frames_with_delta_consistency_with_shards(
-    tmp_path, lerobot_dataset_factory, state_deltas, action_deltas
-):
+def test_frames_with_delta_consistency_with_shards(tmp_path, lerobot_dataset_factory, state_deltas, action_deltas):
     ds_num_frames = 100
     ds_num_episodes = 10
     buffer_size = 10
@@ -371,11 +363,7 @@ def test_frames_with_delta_consistency_with_shards(
                 check = left == right
 
             elif isinstance(left, torch.Tensor):
-                if (
-                    key not in ds.meta.camera_keys
-                    and "is_pad" not in key
-                    and f"{key}_is_pad" in streaming_frame
-                ):
+                if key not in ds.meta.camera_keys and "is_pad" not in key and f"{key}_is_pad" in streaming_frame:
                     # comparing frames only on non-padded regions. Padding is applied to last-valid broadcasting
                     left = left[~streaming_frame[f"{key}_is_pad"]]
                     right = right[~target_frame[f"{key}_is_pad"]]

@@ -351,9 +351,7 @@ class DamiaoMotorsBus(MotorsBusBase):
         self.canbus.send(msg)
         return self._recv_motor_response(expected_recv_id=recv_id)
 
-    def _recv_motor_response(
-        self, expected_recv_id: int | None = None, timeout: float = 0.001
-    ) -> can.Message | None:
+    def _recv_motor_response(self, expected_recv_id: int | None = None, timeout: float = 0.001) -> can.Message | None:
         """
         Receive a response from a motor.
 
@@ -376,9 +374,7 @@ class DamiaoMotorsBus(MotorsBusBase):
                     messages_seen.append(f"0x{msg.arbitration_id:02X}")
                     if expected_recv_id is None or msg.arbitration_id == expected_recv_id:
                         return msg
-                    logger.debug(
-                        f"Ignoring message from 0x{msg.arbitration_id:02X}, expected 0x{expected_recv_id:02X}"
-                    )
+                    logger.debug(f"Ignoring message from 0x{msg.arbitration_id:02X}, expected 0x{expected_recv_id:02X}")
 
             if logger.isEnabledFor(logging.DEBUG):
                 if messages_seen:
@@ -391,9 +387,7 @@ class DamiaoMotorsBus(MotorsBusBase):
             logger.debug(f"Failed to receive CAN message: {e}")
         return None
 
-    def _recv_all_responses(
-        self, expected_recv_ids: list[int], timeout: float = 0.002
-    ) -> dict[int, can.Message]:
+    def _recv_all_responses(self, expected_recv_ids: list[int], timeout: float = 0.002) -> dict[int, can.Message]:
         """
         Efficiently receive responses from multiple motors at once.
         Uses the OpenArms pattern: collect all available messages within timeout.
@@ -682,9 +676,7 @@ class DamiaoMotorsBus(MotorsBusBase):
         for motor in motors:
             motor_id = self._get_motor_id(motor)
             data = [motor_id & 0xFF, (motor_id >> 8) & 0xFF, CAN_CMD_REFRESH, 0, 0, 0, 0, 0]
-            msg = can.Message(
-                arbitration_id=CAN_PARAM_ID, data=data, is_extended_id=False, is_fd=self.use_can_fd
-            )
+            msg = can.Message(arbitration_id=CAN_PARAM_ID, data=data, is_extended_id=False, is_fd=self.use_can_fd)
             self.canbus.send(msg)
 
         # Collect responses
@@ -725,9 +717,7 @@ class DamiaoMotorsBus(MotorsBusBase):
                 kd = self._gains[motor]["kd"]
 
                 data = self._encode_mit_packet(motor_type, kp, kd, float(value_degrees), 0.0, 0.0)
-                msg = can.Message(
-                    arbitration_id=motor_id, data=data, is_extended_id=False, is_fd=self.use_can_fd
-                )
+                msg = can.Message(arbitration_id=motor_id, data=data, is_extended_id=False, is_fd=self.use_can_fd)
                 self.canbus.send(msg)
                 precise_sleep(PRECISE_TIMEOUT_SEC)
 
@@ -793,9 +783,7 @@ class DamiaoMotorsBus(MotorsBusBase):
                 print("-" * 50)
                 for motor in target_motors:
                     if motor in positions:
-                        print(
-                            f"{motor:<20} | {mins[motor]:>12.1f} | {positions[motor]:>12.1f} | {maxes[motor]:>12.1f}"
-                        )
+                        print(f"{motor:<20} | {mins[motor]:>12.1f} | {positions[motor]:>12.1f} | {maxes[motor]:>12.1f}")
 
             if enter_pressed():
                 user_pressed_enter = True

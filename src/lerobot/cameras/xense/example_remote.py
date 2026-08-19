@@ -24,6 +24,7 @@ def main():
         View2d.setData(Sensor.OutputType.Difference, diff)
         View2d.setData(Sensor.OutputType.Rectify, rectify)
         # View.setDepth(depth)
+
     View.setCallback(callback)
 
     View.show()
@@ -31,5 +32,5 @@ def main():
     sys.exit()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

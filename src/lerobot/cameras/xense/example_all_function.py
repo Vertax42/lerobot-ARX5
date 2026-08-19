@@ -15,9 +15,7 @@ def main():
     try:
         import torch
 
-        print(
-            f"Loaded torch {torch.__version__} with CUDA available: {torch.cuda.is_available()}"
-        )
+        print(f"Loaded torch {torch.__version__} with CUDA available: {torch.cuda.is_available()}")
     except ImportError:
         print("Warning: torch not available, xensesdk may fall back to CPU inference")
 

@@ -50,8 +50,7 @@ def main():
 
     # add image features if they are present
     delta_timestamps |= {
-        k: make_delta_timestamps(cfg.observation_delta_indices, dataset_metadata.fps)
-        for k in cfg.image_features
+        k: make_delta_timestamps(cfg.observation_delta_indices, dataset_metadata.fps) for k in cfg.image_features
     }
 
     # Instantiate the dataset

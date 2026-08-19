@@ -289,9 +289,7 @@ class RewardAnnotator:
 
         return np.vstack(grid_rows)
 
-    def _draw_text_pil(
-        self, frame: np.ndarray, text: str, pos: tuple, color: tuple, font_size: int = 14
-    ) -> np.ndarray:
+    def _draw_text_pil(self, frame: np.ndarray, text: str, pos: tuple, color: tuple, font_size: int = 14) -> np.ndarray:
         """Draw text using PIL with FiraCode font."""
         # Convert BGR to RGB for PIL
         img_pil = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -353,7 +351,7 @@ class RewardAnnotator:
         # Line 4: Status
         status_parts = []
         if self.auto_play:
-            status_parts.append(f"PLAY ({1000/self.play_delay_ms:.0f}fps)")
+            status_parts.append(f"PLAY ({1000 / self.play_delay_ms:.0f}fps)")
         else:
             status_parts.append("PAUSE")
         status_parts.append(f"Skip:{self.skip_step}")
@@ -514,8 +512,7 @@ class RewardAnnotator:
 
         if annotations["total_frames"] != self.total_frames:
             raise ValueError(
-                f"Annotation file has {annotations['total_frames']} frames, "
-                f"but dataset has {self.total_frames} frames"
+                f"Annotation file has {annotations['total_frames']} frames, but dataset has {self.total_frames} frames"
             )
 
         self.rewards = np.array(annotations["rewards"], dtype=np.float32)
@@ -585,6 +582,7 @@ class RewardAnnotator:
         try:
             # Use tkinter to get screen dimensions
             import tkinter as tk
+
             root = tk.Tk()
             root.withdraw()  # Hide the tkinter window
             screen_width = root.winfo_screenwidth()

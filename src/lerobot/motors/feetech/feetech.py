@@ -174,9 +174,7 @@ class FeetechMotorsBus(SerialMotorsBus):
 
     def _find_single_motor_p0(self, motor: str, initial_baudrate: int | None = None) -> tuple[int, int]:
         model = self.motors[motor].model
-        search_baudrates = (
-            [initial_baudrate] if initial_baudrate is not None else self.model_baudrate_table[model]
-        )
+        search_baudrates = [initial_baudrate] if initial_baudrate is not None else self.model_baudrate_table[model]
         expected_model_nb = self.model_number_table[model]
 
         for baudrate in search_baudrates:
@@ -198,9 +196,7 @@ class FeetechMotorsBus(SerialMotorsBus):
         import scservo_sdk as scs
 
         model = self.motors[motor].model
-        search_baudrates = (
-            [initial_baudrate] if initial_baudrate is not None else self.model_baudrate_table[model]
-        )
+        search_baudrates = [initial_baudrate] if initial_baudrate is not None else self.model_baudrate_table[model]
         expected_model_nb = self.model_number_table[model]
 
         for baudrate in search_baudrates:
@@ -235,16 +231,14 @@ class FeetechMotorsBus(SerialMotorsBus):
             return False
 
         same_ranges = all(
-            self.calibration[motor].range_min == cal.range_min
-            and self.calibration[motor].range_max == cal.range_max
+            self.calibration[motor].range_min == cal.range_min and self.calibration[motor].range_max == cal.range_max
             for motor, cal in motors_calibration.items()
         )
         if self.protocol_version == 1:
             return same_ranges
 
         same_offsets = all(
-            self.calibration[motor].homing_offset == cal.homing_offset
-            for motor, cal in motors_calibration.items()
+            self.calibration[motor].homing_offset == cal.homing_offset for motor, cal in motors_calibration.items()
         )
         return same_ranges and same_offsets
 
@@ -253,9 +247,7 @@ class FeetechMotorsBus(SerialMotorsBus):
         for motor in self.motors:
             mins[motor] = self.read("Min_Position_Limit", motor, normalize=False)
             maxes[motor] = self.read("Max_Position_Limit", motor, normalize=False)
-            offsets[motor] = (
-                self.read("Homing_Offset", motor, normalize=False) if self.protocol_version == 0 else 0
-            )
+            offsets[motor] = self.read("Homing_Offset", motor, normalize=False) if self.protocol_version == 0 else 0
 
         calibration = {}
         for motor, m in self.motors.items():
@@ -426,15 +418,11 @@ class FeetechMotorsBus(SerialMotorsBus):
     def _read_firmware_version(self, motor_ids: list[int], raise_on_error: bool = False) -> dict[int, str]:
         firmware_versions = {}
         for id_ in motor_ids:
-            firm_ver_major, comm, error = self._read(
-                *FIRMWARE_MAJOR_VERSION, id_, raise_on_error=raise_on_error
-            )
+            firm_ver_major, comm, error = self._read(*FIRMWARE_MAJOR_VERSION, id_, raise_on_error=raise_on_error)
             if not self._is_comm_success(comm) or self._is_error(error):
                 continue
 
-            firm_ver_minor, comm, error = self._read(
-                *FIRMWARE_MINOR_VERSION, id_, raise_on_error=raise_on_error
-            )
+            firm_ver_minor, comm, error = self._read(*FIRMWARE_MINOR_VERSION, id_, raise_on_error=raise_on_error)
             if not self._is_comm_success(comm) or self._is_error(error):
                 continue
 

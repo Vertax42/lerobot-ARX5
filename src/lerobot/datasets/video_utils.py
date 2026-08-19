@@ -119,9 +119,7 @@ def get_safe_default_codec():
     if importlib.util.find_spec("torchcodec"):
         return "torchcodec"
     else:
-        logging.warning(
-            "'torchcodec' is not available in your platform, falling back to 'pyav' as a default decoder"
-        )
+        logging.warning("'torchcodec' is not available in your platform, falling back to 'pyav' as a default decoder")
         return "pyav"
 
 
@@ -381,9 +379,7 @@ def decode_video_frames_torchcodec(
     closest_frames = (closest_frames / 255.0).type(torch.float32)
 
     if not len(timestamps) == len(closest_frames):
-        raise FrameTimestampError(
-            f"Retrieved timestamps differ from queried {set(closest_frames) - set(timestamps)}"
-        )
+        raise FrameTimestampError(f"Retrieved timestamps differ from queried {set(closest_frames) - set(timestamps)}")
 
     return closest_frames
 
@@ -416,16 +412,12 @@ def encode_video_frames(
 
     # Encoders/pixel formats incompatibility check
     if (vcodec == "libsvtav1" or vcodec == "hevc") and pix_fmt == "yuv444p":
-        logging.warning(
-            f"Incompatible pixel format 'yuv444p' for codec {vcodec}, auto-selecting format 'yuv420p'"
-        )
+        logging.warning(f"Incompatible pixel format 'yuv444p' for codec {vcodec}, auto-selecting format 'yuv420p'")
         pix_fmt = "yuv420p"
 
     # Get input frames
     template = "frame-" + ("[0-9]" * 6) + ".png"
-    input_list = sorted(
-        glob.glob(str(imgs_dir / template)), key=lambda x: int(x.split("-")[-1].split(".")[0])
-    )
+    input_list = sorted(glob.glob(str(imgs_dir / template)), key=lambda x: int(x.split("-")[-1].split(".")[0]))
 
     # Define video output frame size (assuming all input frames are the same size)
     if len(input_list) == 0:
@@ -485,9 +477,7 @@ def encode_video_frames(
         raise OSError(f"Video encoding did not work. File not found: {video_path}.")
 
 
-def concatenate_video_files(
-    input_video_paths: list[Path | str], output_video_path: Path, overwrite: bool = True
-):
+def concatenate_video_files(input_video_paths: list[Path | str], output_video_path: Path, overwrite: bool = True):
     """
     Concatenate multiple video files into a single video file using pyav.
 
@@ -805,9 +795,7 @@ class StreamingVideoEncoder:
         if frame_shapes is not None:
             missing = [vk for vk in video_keys if vk not in frame_shapes]
             if missing:
-                raise ValueError(
-                    "frame_shapes is missing entries for: " + ", ".join(sorted(missing))
-                )
+                raise ValueError("frame_shapes is missing entries for: " + ", ".join(sorted(missing)))
 
         self._dropped_frames.clear()
 
@@ -852,15 +840,11 @@ class StreamingVideoEncoder:
                 remaining = deadline - time.perf_counter()
                 if remaining <= 0 or not thread.ready_event.wait(timeout=remaining):
                     self.cancel_episode()
-                    raise TimeoutError(
-                        f"StreamingVideoEncoder: timed out waiting for '{video_key}' to warm up"
-                    )
+                    raise TimeoutError(f"StreamingVideoEncoder: timed out waiting for '{video_key}' to warm up")
                 if thread.init_error is not None:
                     err = thread.init_error
                     self.cancel_episode()
-                    raise RuntimeError(
-                        f"StreamingVideoEncoder: failed to warm up '{video_key}': {err}"
-                    ) from err
+                    raise RuntimeError(f"StreamingVideoEncoder: failed to warm up '{video_key}': {err}") from err
 
     def feed_frame(self, video_key: str, image: np.ndarray) -> None:
         """Feed a frame to the encoder for a specific camera.

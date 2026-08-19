@@ -59,9 +59,7 @@ def example_1_default_transforms():
             max_num_transforms=2,  # Apply up to 2 transforms per frame
             random_order=False,  # Apply in standard order
         )
-        dataset_with_transforms = LeRobotDataset(
-            repo_id=repo_id, image_transforms=ImageTransforms(transforms_config)
-        )
+        dataset_with_transforms = LeRobotDataset(repo_id=repo_id, image_transforms=ImageTransforms(transforms_config))
 
         # Save original and transformed images for comparison
         if len(dataset_original) > 0:

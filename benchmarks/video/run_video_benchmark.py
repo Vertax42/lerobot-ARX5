@@ -71,9 +71,7 @@ def check_datasets_formats(repo_ids: list) -> None:
     for repo_id in repo_ids:
         dataset = LeRobotDataset(repo_id)
         if len(dataset.meta.video_keys) > 0:
-            raise ValueError(
-                f"Use only image dataset for running this benchmark. Video dataset provided: {repo_id}"
-            )
+            raise ValueError(f"Use only image dataset for running this benchmark. Video dataset provided: {repo_id}")
 
 
 def get_directory_size(directory: Path) -> int:
@@ -123,9 +121,7 @@ def save_first_episode(imgs_dir: Path, dataset: LeRobotDataset) -> None:
     img_keys = [key for key in hf_dataset.features if key.startswith(OBS_IMAGE)]
     imgs_dataset = hf_dataset.select_columns(img_keys[0])
 
-    for i, item in enumerate(
-        tqdm(imgs_dataset, desc=f"saving {dataset.repo_id} first episode images", leave=False)
-    ):
+    for i, item in enumerate(tqdm(imgs_dataset, desc=f"saving {dataset.repo_id} first episode images", leave=False)):
         img = item[img_keys[0]]
         img.save(str(imgs_dir / f"frame-{i:06d}.png"), quality=100)
 
@@ -183,9 +179,7 @@ def benchmark_decoding(
         frames_np, original_frames_np = frames.numpy(), original_frames.numpy()
         for i in range(num_frames):
             result["mse_values"].append(mean_squared_error(original_frames_np[i], frames_np[i]))
-            result["psnr_values"].append(
-                peak_signal_noise_ratio(original_frames_np[i], frames_np[i], data_range=1.0)
-            )
+            result["psnr_values"].append(peak_signal_noise_ratio(original_frames_np[i], frames_np[i], data_range=1.0))
             result["ssim_values"].append(
                 structural_similarity(original_frames_np[i], frames_np[i], data_range=1.0, channel_axis=0)
             )
@@ -269,9 +263,7 @@ def benchmark_encoding_decoding(
 
     random.seed(seed)
     benchmark_table = []
-    for timestamps_mode in tqdm(
-        decoding_cfg["timestamps_modes"], desc="decodings (timestamps_modes)", leave=False
-    ):
+    for timestamps_mode in tqdm(decoding_cfg["timestamps_modes"], desc="decodings (timestamps_modes)", leave=False):
         for backend in tqdm(decoding_cfg["backends"], desc="decodings (backends)", leave=False):
             benchmark_row = benchmark_decoding(
                 imgs_dir,
@@ -376,8 +368,7 @@ def main(
             benchmark_df = pd.DataFrame(benchmark_table, columns=headers)
             now = dt.datetime.now()
             csv_path = (
-                output_dir
-                / f"{now:%Y-%m-%d}_{now:%H-%M-%S}_{video_codec}_{pixel_format}_{num_samples}-samples.csv"
+                output_dir / f"{now:%Y-%m-%d}_{now:%H-%M-%S}_{video_codec}_{pixel_format}_{num_samples}-samples.csv"
             )
             benchmark_df.to_csv(csv_path, header=True, index=False)
             file_paths.append(csv_path)

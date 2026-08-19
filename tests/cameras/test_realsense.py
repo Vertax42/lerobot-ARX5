@@ -50,9 +50,7 @@ def mock_rs_config_enable_device_bad_file(rs_config_instance, _sn):
 @pytest.fixture(name="patch_realsense", autouse=True)
 def fixture_patch_realsense():
     """Automatically mock pyrealsense2.config.enable_device for all tests."""
-    with patch(
-        "pyrealsense2.config.enable_device", side_effect=mock_rs_config_enable_device_from_file
-    ) as mock:
+    with patch("pyrealsense2.config.enable_device", side_effect=mock_rs_config_enable_device_from_file) as mock:
         yield mock
 
 

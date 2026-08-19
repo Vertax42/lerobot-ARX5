@@ -54,7 +54,11 @@ class Pico4Config(TeleoperatorConfig):
     gripper_width: float = 1.0  # Maximum gripper position in control space [0, 1]
     grip_enable_threshold: float = 0.5  # Threshold for grip to enable control (must exceed to enable)
     grip_disable_threshold: float = 0.3  # Threshold for grip to disable control (must drop below to disable)
-    orientation_offset_warning_deg: float = 180.0  # Warning threshold for orientation offset (degrees). Set to 180 to disable check.
-    position_jump_threshold: float = 0.1  # Max allowed position change per frame (meters). Larger jumps are filtered out.
+    orientation_offset_warning_deg: float = (
+        180.0  # Warning threshold for orientation offset (degrees). Set to 180 to disable check.
+    )
+    position_jump_threshold: float = (
+        0.1  # Max allowed position change per frame (meters). Larger jumps are filtered out.
+    )
     max_pos_velocity: float = 1.0  # Max allowed position velocity (m/s) for output rate limiter. 0 = disabled.
     max_rot_velocity: float = 6.28  # Max allowed angular velocity (rad/s) for output rate limiter. 0 = disabled.

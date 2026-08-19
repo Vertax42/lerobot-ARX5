@@ -251,8 +251,7 @@ class RobstrideMotorsBus(MotorsBusBase):
             fault_bits = int.from_bytes(msg.data[1:5], "little")
             if fault_bits != 0 and msg.data[5] == msg.data[6] == msg.data[7] == 0:
                 logger.error(
-                    f"Motor fault received from CAN ID 0x{msg.arbitration_id:02X}: "
-                    f"fault_bits=0x{fault_bits:08X}"
+                    f"Motor fault received from CAN ID 0x{msg.arbitration_id:02X}: fault_bits=0x{fault_bits:08X}"
                 )
                 return True, msg
 
@@ -431,9 +430,7 @@ class RobstrideMotorsBus(MotorsBusBase):
             self._recv_motor_response(expected_recv_id=recv_id)
             time.sleep(0.01)
 
-    def _recv_motor_response(
-        self, expected_recv_id: int | None = None, timeout: float = 0.001
-    ) -> can.Message | None:
+    def _recv_motor_response(self, expected_recv_id: int | None = None, timeout: float = 0.001) -> can.Message | None:
         """
         Receive a response from a motor.
 
@@ -474,9 +471,7 @@ class RobstrideMotorsBus(MotorsBusBase):
             logger.debug(f"Failed to receive CAN message: {e}")
         return None
 
-    def _recv_all_responses(
-        self, expected_recv_ids: list[int], timeout: float = 0.002
-    ) -> dict[int, can.Message]:
+    def _recv_all_responses(self, expected_recv_ids: list[int], timeout: float = 0.002) -> dict[int, can.Message]:
         """
         Efficiently receive responses from multiple motors at once.
         Uses the OpenArms pattern: collect all available messages within timeout.
@@ -737,10 +732,7 @@ class RobstrideMotorsBus(MotorsBusBase):
 
         # Refresh motor to get latest state
         t_init = time.time()
-        if (
-            self.last_feedback_time[motor] is None
-            or t_init - (self.last_feedback_time[motor] or 0) > STATE_CACHE_TTL_S
-        ):
+        if self.last_feedback_time[motor] is None or t_init - (self.last_feedback_time[motor] or 0) > STATE_CACHE_TTL_S:
             self.update_motor_state(motor)
 
         return self._get_cached_value(motor, data_name)
@@ -923,9 +915,7 @@ class RobstrideMotorsBus(MotorsBusBase):
                 print("-" * 50)
                 for motor in target_motors:
                     if motor in positions:
-                        print(
-                            f"{motor:<20} | {mins[motor]:>12.1f} | {positions[motor]:>12.1f} | {maxes[motor]:>12.1f}"
-                        )
+                        print(f"{motor:<20} | {mins[motor]:>12.1f} | {positions[motor]:>12.1f} | {maxes[motor]:>12.1f}")
 
             if enter_pressed():
                 user_pressed_enter = True

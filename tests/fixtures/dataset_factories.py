@@ -133,9 +133,7 @@ def features_factory():
         use_videos: bool = True,
     ) -> dict:
         if use_videos:
-            camera_ft = {
-                key: {"dtype": "video", **ft, **DUMMY_VIDEO_INFO} for key, ft in camera_features.items()
-            }
+            camera_ft = {key: {"dtype": "video", **ft, **DUMMY_VIDEO_INFO} for key, ft in camera_features.items()}
         else:
             camera_ft = {key: {"dtype": "image", **ft} for key, ft in camera_features.items()}
         return {
@@ -328,9 +326,7 @@ def create_videos(info_factory, img_array_factory):
         total_tasks: int = 1,
     ):
         if info is None:
-            info = info_factory(
-                total_episodes=total_episodes, total_frames=total_frames, total_tasks=total_tasks
-            )
+            info = info_factory(total_episodes=total_episodes, total_frames=total_frames, total_tasks=total_tasks)
 
         video_feats = {key: feats for key, feats in info["features"].items() if feats["dtype"] == "video"}
         for key, ft in video_feats.items():

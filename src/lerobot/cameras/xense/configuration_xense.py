@@ -72,16 +72,12 @@ class XenseTactileCameraConfig(CameraConfig):
     ```python
     # Basic force sensing configuration
     XenseTactileCameraConfig(
-        serial_number="OG000344",
-        fps=60,
-        output_types=[XenseOutputType.FORCE, XenseOutputType.FORCE_RESULTANT]
+        serial_number="OG000344", fps=60, output_types=[XenseOutputType.FORCE, XenseOutputType.FORCE_RESULTANT]
     )
 
     # Multi-modal configuration with depth
     XenseTactileCameraConfig(
-        serial_number="OG000352",
-        fps=30,
-        output_types=[XenseOutputType.FORCE, XenseOutputType.DEPTH]
+        serial_number="OG000352", fps=30, output_types=[XenseOutputType.FORCE, XenseOutputType.DEPTH]
     )
 
     # High-performance configuration with reduced resolution
@@ -90,7 +86,7 @@ class XenseTactileCameraConfig(CameraConfig):
         fps=30,
         output_types=[XenseOutputType.DIFFERENCE],
         rectify_size=(200, 350),  # Reduced from (400, 700) for better performance
-        raw_size=(320, 240)       # Raw sensor resolution
+        raw_size=(320, 240),  # Raw sensor resolution
     )
     ```
 
@@ -166,15 +162,12 @@ class XenseTactileCameraConfig(CameraConfig):
                         break
                 if matched is None:
                     raise ValueError(
-                        f"Invalid output_type: {output_type}. "
-                        f"Valid values: {[v.value for v in XenseOutputType]}"
+                        f"Invalid output_type: {output_type}. Valid values: {[v.value for v in XenseOutputType]}"
                     )
                 normalized.append(matched)
                 continue
 
-            raise ValueError(
-                f"Invalid output_type: {output_type}. Must be a XenseOutputType (or str)."
-            )
+            raise ValueError(f"Invalid output_type: {output_type}. Must be a XenseOutputType (or str).")
         self.output_types = normalized
 
         # Set default FPS if not provided

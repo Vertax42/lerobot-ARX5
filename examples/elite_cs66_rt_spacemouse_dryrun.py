@@ -79,19 +79,13 @@ class _FakeDriver:
     def writeTrajectoryControlAction(self, action, point_number, timeout_ms):
         # On NOOP after START with our 1 point, fire the success callback once
         # we've seen at least one writeTrajectoryPoint.
-        if (
-            action == _TrajectoryControlAction.NOOP
-            and self.trajectory_points
-            and self._trajectory_cb is not None
-        ):
+        if action == _TrajectoryControlAction.NOOP and self.trajectory_points and self._trajectory_cb is not None:
             cb, self._trajectory_cb = self._trajectory_cb, None
             cb(_TrajectoryMotionResult.SUCCESS)
         return True
 
     def writeTrajectoryPoint(self, positions, duration_s, blend_radius, cartesian):
-        self.trajectory_points.append(
-            (tuple(positions), float(duration_s), float(blend_radius), bool(cartesian))
-        )
+        self.trajectory_points.append((tuple(positions), float(duration_s), float(blend_radius), bool(cartesian)))
         return True
 
 
@@ -259,10 +253,10 @@ def main():
         "tcp.x": 0.52,
         "tcp.y": 0.01,
         "tcp.z": 0.30,
-        **{f"tcp.r{i+1}": float(r6d[i]) for i in range(6)},
+        **{f"tcp.r{i + 1}": float(r6d[i]) for i in range(6)},
     }
     sent = robot.send_action(action)
-    assert set(sent) >= {f"tcp.r{i+1}" for i in range(6)}, sent
+    assert set(sent) >= {f"tcp.r{i + 1}" for i in range(6)}, sent
     print("[ok] send_action accepts Cartesian 6D action; keys:", sorted(sent))
 
     # Drive the SpaceMouse + loop --------------------------------------------

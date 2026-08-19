@@ -132,8 +132,7 @@ class BiPico4(Teleoperator):
             import xensevr_pc_service_sdk as xrt
         except ImportError as e:
             raise ImportError(
-                "xensevr_pc_service_sdk is required. "
-                "Please install it according to the Pico4 SDK documentation."
+                "xensevr_pc_service_sdk is required. Please install it according to the Pico4 SDK documentation."
             ) from e
 
         xrt.init()
@@ -154,8 +153,7 @@ class BiPico4(Teleoperator):
 
         self._xrt = None
         raise DeviceNotConnectedError(
-            "Pico4 controllers not detected after waiting. "
-            "Ensure the VR client app is running and controllers are on."
+            "Pico4 controllers not detected after waiting. Ensure the VR client app is running and controllers are on."
         )
 
     @property
@@ -225,8 +223,7 @@ class BiPico4(Teleoperator):
             import xensevr_pc_service_sdk as xrt
         except ImportError as e:
             raise ImportError(
-                "xensevr_pc_service_sdk is required. "
-                "Please install it according to the Pico4 SDK documentation."
+                "xensevr_pc_service_sdk is required. Please install it according to the Pico4 SDK documentation."
             ) from e
 
         try:
@@ -280,9 +277,7 @@ class BiPico4(Teleoperator):
             self._xrt = None
             raise DeviceNotConnectedError(f"Failed to connect BiPico4: {e}") from e
 
-    def _init_pico4_instance(
-        self, pico4: Pico4, xrt, tcp_pose_quat: np.ndarray
-    ) -> None:
+    def _init_pico4_instance(self, pico4: Pico4, xrt, tcp_pose_quat: np.ndarray) -> None:
         """Inject shared xrt handle and seed initial pose into a Pico4 instance.
 
         This mirrors what Pico4.connect() does after xrt.init(), so we avoid
@@ -332,9 +327,7 @@ class BiPico4(Teleoperator):
         left_action = self._left_pico4.get_action()
         right_action = self._right_pico4.get_action()
 
-        return {f"left_{k}": v for k, v in left_action.items()} | {
-            f"right_{k}": v for k, v in right_action.items()
-        }
+        return {f"left_{k}": v for k, v in left_action.items()} | {f"right_{k}": v for k, v in right_action.items()}
 
     def reset_to_pose(
         self,

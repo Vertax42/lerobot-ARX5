@@ -68,10 +68,7 @@ class SharedMemoryRingBuffer:
         # these k items, which takes maximum of get_time_budget seconds,
         # we need enough empty slots to make sure put_desired_frequency Hz
         # of put can be sustaied.
-        buffer_size = (
-            int(np.ceil(put_desired_frequency * get_time_budget * safety_margin))
-            + get_max_k
-        )
+        buffer_size = int(np.ceil(put_desired_frequency * get_time_budget * safety_margin)) + get_max_k
 
         # allocate shared memory
         shared_arrays = dict()
@@ -86,9 +83,7 @@ class SharedMemoryRingBuffer:
             shared_arrays[key] = array
 
         # allocate timestamp array
-        timestamp_array = SharedNDArray.create_from_shape(
-            mem_mgr=shm_manager, shape=(buffer_size,), dtype=np.float64
-        )
+        timestamp_array = SharedNDArray.create_from_shape(mem_mgr=shm_manager, shape=(buffer_size,), dtype=np.float64)
         timestamp_array.get()[:] = -np.inf
 
         self.buffer_size = buffer_size
@@ -167,11 +162,7 @@ class SharedMemoryRingBuffer:
                 # throw an error
                 past_iters = self.buffer_size - self.get_max_k
                 hz = past_iters / deltat
-                raise TimeoutError(
-                    "Put executed too fast {}items/{:.4f}s ~= {}Hz".format(
-                        past_iters, deltat, hz
-                    )
-                )
+                raise TimeoutError("Put executed too fast {}items/{:.4f}s ~= {}Hz".format(past_iters, deltat, hz))
 
         # write to shared memory
         for key, value in data.items():

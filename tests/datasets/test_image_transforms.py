@@ -153,11 +153,7 @@ def test_get_image_transforms_affine(img_tensor_factory, degrees, translate):
     img_tensor = img_tensor_factory()
     tf_cfg = ImageTransformsConfig(
         enable=True,
-        tfs={
-            "affine": ImageTransformConfig(
-                type="RandomAffine", kwargs={"degrees": degrees, "translate": translate}
-            )
-        },
+        tfs={"affine": ImageTransformConfig(type="RandomAffine", kwargs={"degrees": degrees, "translate": translate})},
     )
     tf = ImageTransforms(tf_cfg)
     output = tf(img_tensor)
@@ -274,9 +270,7 @@ def test_get_image_transforms_random_order(img_tensor_factory):
         ("SharpnessJitter", "sharpness", [(0.5, 0.5), (2.0, 2.0)]),
     ],
 )
-def test_backward_compatibility_single_transforms(
-    img_tensor, tf_type, tf_name, min_max_values, single_transforms
-):
+def test_backward_compatibility_single_transforms(img_tensor, tf_type, tf_name, min_max_values, single_transforms):
     for min_max in min_max_values:
         tf_cfg = ImageTransformConfig(type=tf_type, kwargs={tf_name: min_max})
         tf = make_transform_from_config(tf_cfg)
@@ -438,13 +432,9 @@ def test_save_all_transforms(img_tensor_factory, tmp_path):
     # Check if the combined transforms directory exists and contains the right files
     combined_transforms_dir = tmp_path / "all"
     assert combined_transforms_dir.exists(), "Combined transforms directory was not created."
-    assert any(combined_transforms_dir.iterdir()), (
-        "No transformed images found in combined transforms directory."
-    )
+    assert any(combined_transforms_dir.iterdir()), "No transformed images found in combined transforms directory."
     for i in range(1, n_examples + 1):
-        assert (combined_transforms_dir / f"{i}.png").exists(), (
-            f"Combined transform image {i}.png was not found."
-        )
+        assert (combined_transforms_dir / f"{i}.png").exists(), f"Combined transform image {i}.png was not found."
 
 
 def test_save_each_transform(img_tensor_factory, tmp_path):
@@ -464,6 +454,4 @@ def test_save_each_transform(img_tensor_factory, tmp_path):
         # Check for specific files within each transform directory
         expected_files = [f"{i}.png" for i in range(1, n_examples + 1)] + ["min.png", "max.png", "mean.png"]
         for file_name in expected_files:
-            assert (transform_dir / file_name).exists(), (
-                f"{file_name} was not found in {transform} directory."
-            )
+            assert (transform_dir / file_name).exists(), f"{file_name} was not found in {transform} directory."

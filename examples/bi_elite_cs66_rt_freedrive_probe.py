@@ -106,16 +106,19 @@ def main() -> None:
     cfg.start_position_rad = list(getattr(bicfg, f"{side}_start_position_rad"))
     cfg.home_position_rad = list(getattr(bicfg, f"{side}_home_position_rad"))
 
-    print("\n⚠️  The arm will go LIMP (freedrive). Support it / keep clear. "
-          "Requires REMOTE mode. Ctrl-C to stop (arm returns to start).")
+    print(
+        "\n⚠️  The arm will go LIMP (freedrive). Support it / keep clear. "
+        "Requires REMOTE mode. Ctrl-C to stop (arm returns to start)."
+    )
     if input("Type 'yes' to proceed: ").strip().lower() != "yes":
         print("Aborted.")
         return
 
     log_path = args.log or f"freedrive_{side}_{int(time.time())}.csv"
     log = open(log_path, "w")
-    log.write("seg,t_s,base_x,base_y,base_z,base_rx,base_ry,base_rz,"
-              "world_x,world_y,world_z,world_rx,world_ry,world_rz\n")
+    log.write(
+        "seg,t_s,base_x,base_y,base_z,base_rx,base_ry,base_rz,world_x,world_y,world_z,world_rx,world_ry,world_rz\n"
+    )
     print(f"Logging to: {log_path}")
 
     robot = EliteCS66RT(cfg)
@@ -160,8 +163,13 @@ def main() -> None:
             now = time.monotonic()
             if now - last_print >= print_dt:
                 last_print = now
-                log.write(f"{seg},{now - t0:.3f}," + ",".join(f"{v:.5f}" for v in base) + "," +
-                          ",".join(f"{v:.5f}" for v in world) + "\n")
+                log.write(
+                    f"{seg},{now - t0:.3f},"
+                    + ",".join(f"{v:.5f}" for v in base)
+                    + ","
+                    + ",".join(f"{v:.5f}" for v in world)
+                    + "\n"
+                )
                 log.flush()
                 db = base[:3] - baseline[:3]
                 dw = world[:3] - baseline[3:]

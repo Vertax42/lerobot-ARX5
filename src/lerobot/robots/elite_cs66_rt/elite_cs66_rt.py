@@ -435,9 +435,7 @@ class EliteCS66RT(Robot):
             # reverse socket. We collapse that into a "minimum total elapsed
             # time since EliteDriver construction" check — fast handshakes
             # don't pay the full second twice.
-            remaining = self.config.external_control_settle_s - (
-                time.monotonic() - driver_construct_time
-            )
+            remaining = self.config.external_control_settle_s - (time.monotonic() - driver_construct_time)
             if remaining > 0:
                 time.sleep(remaining)
 
@@ -458,12 +456,8 @@ class EliteCS66RT(Robot):
         # inferred flange->TCP tool transform can be cross-checked for consistency.
         premove_sample = None
         if (
-            (
-                self.config.singularity_w_high is not None
-                or self.config.joint_vel_limits_rad_s is not None
-            )
-            and self.config.control_mode == EliteCS66RTControlMode.CARTESIAN_SERVO
-        ):
+            self.config.singularity_w_high is not None or self.config.joint_vel_limits_rad_s is not None
+        ) and self.config.control_mode == EliteCS66RTControlMode.CARTESIAN_SERVO:
             try:
                 premove_sample = (
                     np.asarray(self._rtsi.getActualJointPositions(), dtype=np.float64),
@@ -479,8 +473,7 @@ class EliteCS66RT(Robot):
         if go_to_start:
             try:
                 self.logger.info(
-                    "Elite CS66 moving to start_position over "
-                    f"{self.config.start_move_duration_s:.1f}s..."
+                    f"Elite CS66 moving to start_position over {self.config.start_move_duration_s:.1f}s..."
                 )
                 self._move_j_blocking(
                     list(self.config.start_position_rad),
@@ -499,10 +492,7 @@ class EliteCS66RT(Robot):
             self._last_action_time = time.monotonic()
             if self.config.use_background_servo_loop:
                 self._start_servo_loop()
-            if (
-                self.config.singularity_w_high is not None
-                or self.config.joint_vel_limits_rad_s is not None
-            ):
+            if self.config.singularity_w_high is not None or self.config.joint_vel_limits_rad_s is not None:
                 self._setup_singularity_damping(premove_sample)
 
     def _cleanup_after_failed_connect(self) -> None:
@@ -573,9 +563,7 @@ class EliteCS66RT(Robot):
         """
         assert self._driver is not None
         if len(target_joints) != 6:
-            raise ValueError(
-                f"_move_j_blocking expects 6 joint angles, got {len(target_joints)}"
-            )
+            raise ValueError(f"_move_j_blocking expects 6 joint angles, got {len(target_joints)}")
 
         servo_was_running = self._servo_thread is not None and self._servo_thread.is_alive()
         if servo_was_running:
@@ -592,28 +580,19 @@ class EliteCS66RT(Robot):
         timeout_ms = self.config.move_j_timeout_ms
 
         try:
-            if not self._driver.writeTrajectoryControlAction(
-                self._cs.TrajectoryControlAction.START, 1, timeout_ms
-            ):
+            if not self._driver.writeTrajectoryControlAction(self._cs.TrajectoryControlAction.START, 1, timeout_ms):
                 raise RuntimeError("writeTrajectoryControlAction(START) failed")
-            if not self._driver.writeTrajectoryPoint(
-                list(target_joints), float(duration_s), 0.0, False
-            ):
+            if not self._driver.writeTrajectoryPoint(list(target_joints), float(duration_s), 0.0, False):
                 raise RuntimeError("writeTrajectoryPoint failed")
 
             deadline = time.monotonic() + duration_s + 5.0
             while not done_event.is_set():
                 # Keep the controller alive: NOOP heartbeat so the reverse
                 # socket doesn't time out during the long blocking wait.
-                if not self._driver.writeTrajectoryControlAction(
-                    self._cs.TrajectoryControlAction.NOOP, 0, timeout_ms
-                ):
+                if not self._driver.writeTrajectoryControlAction(self._cs.TrajectoryControlAction.NOOP, 0, timeout_ms):
                     raise RuntimeError("writeTrajectoryControlAction(NOOP) failed")
                 if time.monotonic() > deadline:
-                    raise TimeoutError(
-                        f"MoveJ to {target_joints} did not complete within "
-                        f"{duration_s + 5.0:.1f} s"
-                    )
+                    raise TimeoutError(f"MoveJ to {target_joints} did not complete within {duration_s + 5.0:.1f} s")
                 time.sleep(0.02)
 
             result = result_box.get("result")
@@ -629,9 +608,7 @@ class EliteCS66RT(Robot):
                 # Re-seed the servo target so the loop holds the current pose
                 # rather than replaying the pre-MoveJ snapshot.
                 try:
-                    current_tcp = np.asarray(
-                        self._rtsi.getActualTCPPose(), dtype=np.float64
-                    )
+                    current_tcp = np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64)
                     with self._servo_lock:
                         self._last_tcp_command = current_tcp.copy()
                         self._target_tcp_command = current_tcp.copy()
@@ -656,9 +633,7 @@ class EliteCS66RT(Robot):
 
         start_quat = _rotvec_to_quaternion(start[3:6])
         target_quat = _rotvec_to_quaternion(target[3:6])
-        interp_principal = _quaternion_to_rotvec(
-            _slerp_quaternion_wxyz(start_quat, target_quat, alpha)
-        )
+        interp_principal = _quaternion_to_rotvec(_slerp_quaternion_wxyz(start_quat, target_quat, alpha))
         # Keep every interp step on the same ±2π·axis branch as ``start``,
         # so consecutive servoj rotvecs along the trajectory are smooth.
         pose[3:6] = _rotvec_continuity_shift(interp_principal, start[3:6])
@@ -743,8 +718,7 @@ class EliteCS66RT(Robot):
                             consecutive_failures += 1
                             if consecutive_failures > max_consecutive_failures:
                                 raise RuntimeError(
-                                    f"Elite writeServoj(cartesian=True) failed "
-                                    f"{consecutive_failures} ticks in a row."
+                                    f"Elite writeServoj(cartesian=True) failed {consecutive_failures} ticks in a row."
                                 )
                         else:
                             consecutive_failures = 0
@@ -845,8 +819,7 @@ class EliteCS66RT(Robot):
             return
         if dh is None:
             self.logger.warn(
-                "Singularity damping disabled: no DH (controller fetch returned nothing and no "
-                "dh_params override)."
+                "Singularity damping disabled: no DH (controller fetch returned nothing and no dh_params override)."
             )
             return
 
@@ -894,9 +867,7 @@ class EliteCS66RT(Robot):
             guards.append("joint-vel-limit")
         guard_str = "+".join(guards)
         if validated:
-            self.logger.info(
-                f"Kinematic scaling enabled [{guard_str}] (FK validated; start w={w1:.4f})."
-            )
+            self.logger.info(f"Kinematic scaling enabled [{guard_str}] (FK validated; start w={w1:.4f}).")
         else:
             self.logger.info(
                 f"Kinematic scaling enabled [{guard_str}] (FK unvalidated by motion — relying on "
@@ -946,8 +917,7 @@ class EliteCS66RT(Robot):
 
         if self.config.joint_vel_limits_rad_s is not None:
             qdot_limit = (
-                np.asarray(self.config.joint_vel_limits_rad_s, dtype=np.float64)
-                * self.config.joint_vel_limit_margin
+                np.asarray(self.config.joint_vel_limits_rad_s, dtype=np.float64) * self.config.joint_vel_limit_margin
             )
             s_jv, _ = joint_velocity_scale(
                 *self._dh,
@@ -1043,11 +1013,7 @@ class EliteCS66RT(Robot):
             current = np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64)
         except Exception:
             return
-        last = (
-            self._last_tcp_command.copy()
-            if self._last_tcp_command is not None
-            else current.copy()
-        )
+        last = self._last_tcp_command.copy() if self._last_tcp_command is not None else current.copy()
 
         d_lin_vs_current = float(np.linalg.norm(target_tcp[:3] - current[:3]))
         d_lin_vs_last = float(np.linalg.norm(target_tcp[:3] - last[:3]))
@@ -1055,17 +1021,13 @@ class EliteCS66RT(Robot):
         cur_rot = Rotation.from_rotvec(current[3:6])
         tgt_rot = Rotation.from_rotvec(target_tcp[3:6])
         last_rot = Rotation.from_rotvec(last[3:6])
-        d_ang_vs_current = float(
-            np.linalg.norm((tgt_rot * cur_rot.inv()).as_rotvec())
-        )
+        d_ang_vs_current = float(np.linalg.norm((tgt_rot * cur_rot.inv()).as_rotvec()))
         d_ang_vs_last = float(np.linalg.norm((tgt_rot * last_rot.inv()).as_rotvec()))
 
         r1 = float(action.get("tcp.r1", float("nan")))
         r2 = float(action.get("tcp.r2", float("nan")))
         r6d_norms = (
-            np.linalg.norm([action.get(f"tcp.r{i+1}", 0.0) for i in range(3)])
-            if "tcp.r1" in action
-            else float("nan")
+            np.linalg.norm([action.get(f"tcp.r{i + 1}", 0.0) for i in range(3)]) if "tcp.r1" in action else float("nan")
         )
 
         msg = (
@@ -1073,7 +1035,7 @@ class EliteCS66RT(Robot):
             f"rv=[{target_tcp[3]:+.3f},{target_tcp[4]:+.3f},{target_tcp[5]:+.3f}]) "
             f"cur=({current[0]:+.4f},{current[1]:+.4f},{current[2]:+.4f},"
             f"rv=[{current[3]:+.3f},{current[4]:+.3f},{current[5]:+.3f}]) "
-            f"d_lin(vs_cur={d_lin_vs_current*1000:.2f}mm,vs_last={d_lin_vs_last*1000:.2f}mm) "
+            f"d_lin(vs_cur={d_lin_vs_current * 1000:.2f}mm,vs_last={d_lin_vs_last * 1000:.2f}mm) "
             f"d_ang(vs_cur={np.rad2deg(d_ang_vs_current):.2f}deg,vs_last={np.rad2deg(d_ang_vs_last):.2f}deg) "
             f"r6d_col1_norm={r6d_norms:.3f} r1={r1:+.3f} r2={r2:+.3f}"
         )
@@ -1084,17 +1046,11 @@ class EliteCS66RT(Robot):
         # noise; alarming on that drowns the log in false warnings while the
         # robot is in fact tracking smoothly.
         if (
-            self.config.trace_translation_threshold > 0
-            and d_lin_vs_last > self.config.trace_translation_threshold
-        ) or (
-            self.config.trace_rotation_threshold > 0
-            and d_ang_vs_last > self.config.trace_rotation_threshold
-        ):
+            self.config.trace_translation_threshold > 0 and d_lin_vs_last > self.config.trace_translation_threshold
+        ) or (self.config.trace_rotation_threshold > 0 and d_ang_vs_last > self.config.trace_rotation_threshold):
             self.logger.warn(f"LARGE STEP {msg}")
 
-    def _trace_send_action_joint(
-        self, target_joints: list[float], current_joints: list[float]
-    ) -> None:
+    def _trace_send_action_joint(self, target_joints: list[float], current_joints: list[float]) -> None:
         """Joint-mode counterpart to ``_trace_send_action``.
 
         RTSI joint readings are clean (no SO(3) branch-cut noise), so unlike
@@ -1114,10 +1070,7 @@ class EliteCS66RT(Robot):
         )
         self.logger.debug(msg)
 
-        if (
-            self.config.trace_joint_threshold > 0
-            and max_abs_delta > self.config.trace_joint_threshold
-        ):
+        if self.config.trace_joint_threshold > 0 and max_abs_delta > self.config.trace_joint_threshold:
             self.logger.warn(f"LARGE JOINT STEP {msg}")
 
     def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
@@ -1190,17 +1143,14 @@ class EliteCS66RT(Robot):
         if self._driver is not None and self._rtsi is not None:
             try:
                 self.logger.info(
-                    "Elite CS66 returning to home_position over "
-                    f"{self.config.home_move_duration_s:.1f}s..."
+                    f"Elite CS66 returning to home_position over {self.config.home_move_duration_s:.1f}s..."
                 )
                 self._move_j_blocking(
                     list(self.config.home_position_rad),
                     self.config.home_move_duration_s,
                 )
             except Exception as exc:
-                self.logger.warn(
-                    f"Return-to-home failed; proceeding with shutdown anyway: {exc}"
-                )
+                self.logger.warn(f"Return-to-home failed; proceeding with shutdown anyway: {exc}")
             # MoveJ may have restarted the servo loop in its finally block; kill
             # it again before stopControl.
             self._stop_servo_loop()
@@ -1303,9 +1253,7 @@ class EliteCS66RT(Robot):
             # loop blocks for ~reset_duration_s, then teleop resumes against
             # the new joint pose. No background loop / rt_moving signaling
             # exists in joint mode, so this is intentionally synchronous.
-            self._move_j_blocking(
-                list(self.config.start_position_rad), self.config.reset_duration_s
-            )
+            self._move_j_blocking(list(self.config.start_position_rad), self.config.reset_duration_s)
             return
 
         if self._start_tcp_pose is None:
@@ -1327,19 +1275,13 @@ class EliteCS66RT(Robot):
                 if self._last_tcp_command is not None:
                     self._reset_start_tcp_pose = self._last_tcp_command.copy()
                 else:
-                    self._reset_start_tcp_pose = np.asarray(
-                        self._rtsi.getActualTCPPose(), dtype=np.float64
-                    )
+                    self._reset_start_tcp_pose = np.asarray(self._rtsi.getActualTCPPose(), dtype=np.float64)
                 # Express the reset target's rotvec on the same ±2π branch as
                 # the start, so the slerp output stays in a single branch
                 # throughout the trajectory.
                 target_pose = self._start_tcp_pose.copy()
-                target_principal = _quaternion_to_rotvec(
-                    _rotvec_to_quaternion(target_pose[3:6])
-                )
-                target_pose[3:6] = _rotvec_continuity_shift(
-                    target_principal, self._reset_start_tcp_pose[3:6]
-                )
+                target_principal = _quaternion_to_rotvec(_rotvec_to_quaternion(target_pose[3:6]))
+                target_pose[3:6] = _rotvec_continuity_shift(target_principal, self._reset_start_tcp_pose[3:6])
                 self._reset_target_tcp_pose = target_pose
                 self._reset_start_time = now
                 self._reset_end_time = now + self.config.reset_duration_s

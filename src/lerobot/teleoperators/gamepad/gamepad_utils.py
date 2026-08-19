@@ -350,9 +350,7 @@ class GamepadControllerHID(InputController):
             if any(controller in device_name for controller in ["Logitech", "Xbox", "PS4", "PS5"]):
                 return device
 
-        logging.error(
-            "No gamepad found, check the connection and the product string in HID to add your gamepad"
-        )
+        logging.error("No gamepad found, check the connection and the product string in HID to add your gamepad")
         return None
 
     def start(self):

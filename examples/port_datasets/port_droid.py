@@ -329,9 +329,7 @@ def port_droid(
                 f"We only shard over the fixed number of shards provided by tensorflow dataset ({tfds_num_shards}), but {num_shards} shards provided instead."
             )
         if shard_index >= tfds_num_shards:
-            raise ValueError(
-                f"Shard index is greater than the num of shards ({shard_index} >= {num_shards})."
-            )
+            raise ValueError(f"Shard index is greater than the num of shards ({shard_index} >= {num_shards}).")
 
         raw_dataset = builder.as_dataset(split=f"train[{shard_index}shard]")
     else:
