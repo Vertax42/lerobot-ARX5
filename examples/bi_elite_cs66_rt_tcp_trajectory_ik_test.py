@@ -298,7 +298,7 @@ def main() -> None:
         if args.joint_vel_guard and not robot._damping_enabled[side]:
             print(
                 f"\n[ABORT] --joint-vel-guard requested but the guard is NOT active on '{side}'\n"
-                "        (connect-time DH self-check failed — see ~/xenselogs). This usually means\n"
+                "        (connect-time DH self-check failed — see ~/.xenselogs). This usually means\n"
                 "        the arm was sitting on/near a singularity when connect() sampled its pose\n"
                 "        (e.g. frozen there by a previous trip), making the TCP rotvec reading\n"
                 "        unreliable. Refusing to drive toward the singularity UNPROTECTED.\n"

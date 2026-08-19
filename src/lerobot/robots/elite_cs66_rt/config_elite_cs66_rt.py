@@ -19,7 +19,11 @@ from lerobot.grippers import GripperConfig
 from lerobot.robots.config import RobotConfig
 
 
-class EliteCS66RTControlMode(str, Enum):
+# Not StrEnum, which UP042 suggests: StrEnum changes what str() returns —
+# "cartesian_servo" instead of "EliteCS66RTControlMode.CARTESIAN_SERVO" — and
+# this value round-trips through draccus into recipe YAML. A serialisation
+# change is not a lint fix.
+class EliteCS66RTControlMode(str, Enum):  # noqa: UP042
     CARTESIAN_SERVO = "cartesian_servo"
     JOINT_SERVO = "joint_servo"
 
@@ -27,12 +31,13 @@ class EliteCS66RTControlMode(str, Enum):
 def _validate_singularity_params(cfg) -> None:
     """Validate the singularity-damping fields. Shared by the single-arm and bimanual configs
     (duck-typed on the common attribute names)."""
-    if cfg.singularity_w_high is not None:
-        if cfg.singularity_w_low < 0 or cfg.singularity_w_high <= cfg.singularity_w_low:
-            raise ValueError(
-                "require singularity_w_high > singularity_w_low >= 0, got "
-                f"w_high={cfg.singularity_w_high}, w_low={cfg.singularity_w_low}"
-            )
+    if cfg.singularity_w_high is not None and (
+        cfg.singularity_w_low < 0 or cfg.singularity_w_high <= cfg.singularity_w_low
+    ):
+        raise ValueError(
+            "require singularity_w_high > singularity_w_low >= 0, got "
+            f"w_high={cfg.singularity_w_high}, w_low={cfg.singularity_w_low}"
+        )
     # min_scale is the damping floor. A NON-directional guard must keep it > 0 so the operator can
     # always creep out of a singularity. A directional guard handles escape separately (it returns
     # s=1 for any move that raises w), so it may use min_scale == 0 for a TRUE hold — the fix for the
@@ -45,17 +50,17 @@ def _validate_singularity_params(cfg) -> None:
             "singularity_min_scale must be in (0, 1] for a non-directional guard (0 would trap the "
             f"arm; set singularity_directional=true to allow a full hold), got {cfg.singularity_min_scale}"
         )
-    if cfg.dh_params is not None:
-        if len(cfg.dh_params) != 3 or any(len(v) != 6 for v in cfg.dh_params):
-            raise ValueError("dh_params must be a 3-tuple (alpha, a, d) of length-6 lists")
+    if cfg.dh_params is not None and (len(cfg.dh_params) != 3 or any(len(v) != 6 for v in cfg.dh_params)):
+        raise ValueError("dh_params must be a 3-tuple (alpha, a, d) of length-6 lists")
     if cfg.primary_timeout_ms < 5:
         raise ValueError(f"primary_timeout_ms must be >= 5, got {cfg.primary_timeout_ms}")
-    if cfg.joint_vel_limits_rad_s is not None:
-        if len(cfg.joint_vel_limits_rad_s) != 6 or any(v <= 0 for v in cfg.joint_vel_limits_rad_s):
-            raise ValueError(
-                "joint_vel_limits_rad_s must be a length-6 list of positive per-joint velocity "
-                f"limits (rad/s), got {cfg.joint_vel_limits_rad_s}"
-            )
+    if cfg.joint_vel_limits_rad_s is not None and (
+        len(cfg.joint_vel_limits_rad_s) != 6 or any(v <= 0 for v in cfg.joint_vel_limits_rad_s)
+    ):
+        raise ValueError(
+            "joint_vel_limits_rad_s must be a length-6 list of positive per-joint velocity "
+            f"limits (rad/s), got {cfg.joint_vel_limits_rad_s}"
+        )
     if not (0.0 < cfg.joint_vel_limit_margin <= 1.0):
         raise ValueError(f"joint_vel_limit_margin must be in (0, 1], got {cfg.joint_vel_limit_margin}")
     if cfg.joint_vel_horizon_s <= 0:
@@ -162,7 +167,7 @@ class EliteCS66RTConfig(RobotConfig):
     servo_failure_tolerance_ticks: int = 250
 
     # Trace every send_action and large per-step deltas to the spdlog file
-    # sink (~/xenselogs). Doesn't touch console; safe to leave enabled.
+    # sink (~/.xenselogs). Doesn't touch console; safe to leave enabled.
     trace_servoj: bool = True
     # Per-step delta thresholds above which the trace promotes to WARNING (also
     # captured in the file log). 5 cm or 0.5 rad in a single send_action call
