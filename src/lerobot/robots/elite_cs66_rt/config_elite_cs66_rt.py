@@ -255,12 +255,10 @@ class EliteCS66RTConfig(RobotConfig):
     joint_vel_dls_lambda: float = 1e-4
 
     # ── Gripper ── A typed block in the recipe, e.g.
-    #   | gripper:
-    #   |   type: serial            # or taccap_follower
-    #   |   side: left
-    #   |   gripper_f_max: 30.0
-    # (the `|` gutter keeps the `type:` line from reading as a PEP 484 type
-    # comment, which mypy cannot parse and which stops it checking the package)
+    #     gripper:
+    #       type: serial            # or taccap_follower
+    #       side: left
+    #       gripper_f_max: 30.0
     # Decoded through lerobot.grippers.GripperConfig, so a knob belonging to the
     # other backend (or a typo) is rejected at parse time rather than ignored.
     # None = no gripper; gripper.pos is then absent from the feature schema.

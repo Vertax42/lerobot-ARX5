@@ -83,17 +83,30 @@ repos:
       additional_dependencies: ["bandit[toml]"]
 
   ##### Static Analysis & Typing #####
-  # pass_filenames: false — mypy needs the whole package in one run. Checking a
-  # file at a time loses cross-module context and invents `has-type` errors on
-  # attributes a base class assigns. The scope of what is actually checked is
-  # the per-package `ignore_errors` in [tool.mypy]; widen it there.
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
-    hooks:
-      - id: mypy
-        args: [--config-file=pyproject.toml, src/lerobot]
-        pass_filenames: false
-        exclude: ^(examples|benchmarks|tests)/
+  # Off by choice: ruff is the linter here. The config below works — it was run
+  # clean over src/lerobot — so re-enabling is uncommenting, plus two things
+  # that were undone when it was switched off:
+  #
+  #   1. A comment line beginning `type:` reads as a PEP 484 type comment.
+  #      config_elite_cs66_rt.py and config_flexiv_rizon4_rt.py document a
+  #      recipe's `gripper:` block, whose first key is `type`; mypy cannot parse
+  #      `serial   # or taccap_follower` as a type expression, and a syntax
+  #      error aborts the build — so it checks nothing and blames a comment.
+  #      Prefix such example blocks with a `|` gutter.
+  #   2. pass_filenames: false is not optional. Per-file runs lose cross-module
+  #      context and invent `has-type` errors on attributes a base class
+  #      assigns; none of them appear in a package-level run.
+  #
+  # Scope is the per-package `ignore_errors` in [tool.mypy]: configs, cameras
+  # and motors are opted in, the rest of the tree is not.
+  #
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.19.1
+  #   hooks:
+  #     - id: mypy
+  #       args: [--config-file=pyproject.toml, src/lerobot]
+  #       pass_filenames: false
+  #       exclude: ^(examples|benchmarks|tests)/
 
   ##### Docstring Checks #####
   # - repo: https://github.com/akaihola/darglint2
