@@ -34,8 +34,9 @@ Side comes from the firmware-burned gripper SN via the TacCap SDK, never guessed
 
 from dataclasses import dataclass, field
 
-from ..usb_topology import hub_of_serial_device, tactile_sns_by_hub
 from lerobot.utils.robot_utils import get_logger
+
+from ..usb_topology import hub_of_serial_device, tactile_sns_by_hub
 
 logger = get_logger("TaccapDiscovery")
 

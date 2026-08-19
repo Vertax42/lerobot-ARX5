@@ -45,6 +45,7 @@ from lerobot.utils.robot_utils import get_logger
 from ..usb_topology import (
     hub_of_serial_device,
     tactile_sns_by_hub,
+    usb_vid_pid,
     video_names_by_hub,
 )
 
@@ -65,6 +66,22 @@ class SerialGripperSideDevice:
     side: str   # "left" | "right"
     sn: str     # board serial number, e.g. "000031"
     port: str   # e.g. "/dev/ttyUSB0"
+
+
+# USB (vid, pid) pairs that belong to a *different* gripper family, so probing
+# them for a board SN can only ever time out. A TacCap follower bridges its MCU
+# through a CH343 dual-serial device and is found by discover_taccap_sides, not
+# by board-SN parity — but it still exposes two /dev/ttyACM* nodes each, and each
+# one costs read_board_sn's full retry budget (~2.1s) before giving up. A bench
+# with both families plugged in spent 8.4s per sweep on ports that were never
+# going to answer.
+#
+# This is an exclusion of devices positively identified as something else, not a
+# whitelist of known-good ones: a gripper board on an unfamiliar USB-serial chip
+# stays discoverable, which a whitelist would quietly break.
+_OTHER_GRIPPER_FAMILY_IDS = frozenset({
+    ("1a86", "55d2"),  # QinHeng CH343 dual-serial — TacCap follower MCU bridge
+})
 
 
 def sn_side(sn: str) -> str | None:
@@ -93,7 +110,11 @@ def _scan_port_sns(baudrate: int = 115200, device_id: int = 1) -> dict[str, str]
     """
     found: dict[str, str] = {}
     with _scan_lock:
-        candidates = sorted(glob("/dev/ttyUSB*") + glob("/dev/ttyACM*"))
+        candidates = [
+            port
+            for port in sorted(glob("/dev/ttyUSB*") + glob("/dev/ttyACM*"))
+            if usb_vid_pid(port) not in _OTHER_GRIPPER_FAMILY_IDS
+        ]
         for port in candidates:
             try:
                 sn = read_board_sn(port, baudrate=baudrate, device_id=device_id)

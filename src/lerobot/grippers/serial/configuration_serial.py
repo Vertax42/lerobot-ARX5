@@ -107,7 +107,7 @@ class SerialGripperConfig(GripperConfig):
             raise ValueError(
                 f"SerialGripperConfig: side must be 'left' or 'right', got {self.side!r}."
             )
-        if not 0 < self.baudrate:
+        if not self.baudrate > 0:
             raise ValueError(f"SerialGripperConfig: baudrate must be positive, got {self.baudrate}.")
         if not 0.0 <= self.gripper_min_pos < self.gripper_max_pos:
             raise ValueError(

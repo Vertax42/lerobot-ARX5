@@ -312,3 +312,57 @@ def test_discovery_sweeps_the_serial_bus_once_for_all_sides(monkeypatch):
     assert got["right"].wrist_camera_name == "WRIST_R"
     assert got["left"].tactile_sns == ["TAC_A", "TAC_B"]
     assert got["right"].tactile_sns == ["TAC_C", "TAC_D"]
+
+
+def test_scan_skips_ports_belonging_to_another_gripper_family(monkeypatch):
+    """A TacCap's serial nodes must not be probed for a board SN.
+
+    They never answer, and each one costs read_board_sn's full retry budget
+    (~2.1s) before giving up. On a bench with both gripper families plugged in
+    that was 8.4s of every sweep, and startup ran three sweeps.
+    """
+    from lerobot.grippers.serial import discovery as sd
+
+    probed = []
+
+    def _fake_read_board_sn(port, **kw):
+        probed.append(port)
+        return "000031" if port.endswith("USB0") else None
+
+    ids = {
+        "/dev/ttyACM0": ("1a86", "55d2"),  # TacCap dual-serial
+        "/dev/ttyACM1": ("1a86", "55d2"),
+        "/dev/ttyUSB0": ("1a86", "7523"),  # gripper board
+    }
+    monkeypatch.setattr(sd, "read_board_sn", _fake_read_board_sn)
+    monkeypatch.setattr(sd, "usb_vid_pid", lambda port: ids.get(port))
+    monkeypatch.setattr(sd, "glob", lambda pat: [p for p in ids if p.startswith(pat[:-1])])
+
+    found = sd._scan_port_sns()
+
+    assert probed == ["/dev/ttyUSB0"], f"probed ports that cannot answer: {probed}"
+    assert found == {"/dev/ttyUSB0": "000031"}
+
+
+def test_scan_still_probes_an_unrecognised_usb_serial_chip(monkeypatch):
+    """The filter excludes known-other devices, it is not a whitelist.
+
+    A gripper board on an unfamiliar bridge chip has to stay discoverable — a
+    whitelist would make it silently invisible instead of merely slow.
+    """
+    from lerobot.grippers.serial import discovery as sd
+
+    probed = []
+
+    def _fake_read_board_sn(port, **kw):
+        probed.append(port)
+        return "000031"
+
+    monkeypatch.setattr(sd, "read_board_sn", _fake_read_board_sn)
+    monkeypatch.setattr(sd, "usb_vid_pid", lambda port: ("dead", "beef"))  # unknown
+    monkeypatch.setattr(sd, "glob", lambda pat: ["/dev/ttyUSB9"] if "USB" in pat else [])
+
+    found = sd._scan_port_sns()
+
+    assert probed == ["/dev/ttyUSB9"]
+    assert found == {"/dev/ttyUSB9": "000031"}

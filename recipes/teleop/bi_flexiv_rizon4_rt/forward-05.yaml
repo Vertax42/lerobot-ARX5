@@ -10,8 +10,8 @@
 # which is what the old station file's camera list implied — but nothing confirms
 # what is actually bolted to this bench. If it has TacCap followers, this will
 # hang at connect scanning /dev/ttyACM* for serial gripper boards that aren't
-# there; switch to the taccap form (see forward-01.yaml / forward-04.yaml, where
-# only `head` is pinned and the wrist + tactile cameras are auto-discovered).
+# there; switch to the taccap form (see forward-01-taccap.yaml / forward-04.yaml,
+# where only `head` is pinned and the wrist + tactile cameras are auto-discovered).
 # Everything under "Control" is copied from forward-04 and unvalidated here.
 #
 # Self-contained: this file carries both the bench hardware and the run's tuning.
