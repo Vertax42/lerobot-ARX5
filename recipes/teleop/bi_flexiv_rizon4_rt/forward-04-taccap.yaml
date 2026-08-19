@@ -1,0 +1,68 @@
+# Teleop recipe — bimanual Flexiv Rizon4 RT (forward mount, bench 04) + Bi-Pico4,
+# with TacCap follower grippers (bi_taccap).
+#   lerobot-teleoperate --config_path=recipes/teleop/bi_flexiv_rizon4_rt/forward-04-taccap.yaml
+#
+# Self-contained: this file carries both the bench hardware and the run's tuning.
+# Anything not listed uses the dataclass default.
+#
+# Gripper variant: taccap. The sibling forward-04-xgripper.yaml is the same bench
+# with the other gripper family — the two differ only in `gripper:`.
+
+
+robot:
+  type: bi_flexiv_rizon4_rt
+
+  # ── Bench hardware (forward-04) ─────────────────────────────────────────────
+  left_robot_sn: Rizon4-063774
+  right_robot_sn: Rizon4R-062090
+  # Joint angles in DEGREES (J1..J7), the units flexiv_rt takes.
+  left_start_position_degree: [86.9, 68.22, 23.55, 109.63, -3.01, 89.52, 2.96]
+  right_start_position_degree: [83.07, 67.85, 24.64, 107.57, 6.39, 95.96, 15.24]
+  left_home_position_degree: [86.9, 68.22, 23.55, 109.63, -3.01, 89.52, 2.96]
+  right_home_position_degree: [83.07, 67.85, 24.64, 107.57, 6.39, 95.96, 15.24]
+
+  # ── Cameras ─────────────────────────────────────────────────────────────────
+  # Only the head is pinned: taccap_auto_discover_cameras (below) sniffs the
+  # per-side wrist + GSPS tactile cameras off the gripper's USB hub at connect.
+  cameras:
+    head:
+      type: intelrealsense
+      serial_number_or_name: "344522070461"
+      fps: 30
+      width: 640
+      height: 480
+      warmup_s: 1
+      use_depth: false
+
+  # ── Control ─────────────────────────────────────────────────────────────────
+  use_force: false
+  log_level: INFO
+  enable_tactile_sensors: true
+
+  # ── Gripper ── One block for both arms; `side` is stamped per arm at build time.
+  # Both grippers -> xense.taccap FollowerGripper (matched pair, single switch).
+  # auto_discover_cameras sniffs the wrist + GSPS tactile SNs off each gripper's
+  # USB hub at connect, which is why only the head camera is pinned above.
+  gripper:
+    type: taccap_follower
+    kp: 8.0                 # MIT impedance stiffness (Nm/rad)
+    kd: 1.0                 # MIT impedance damping (Nm·s/rad)
+    feedforward_torque: 0.0     # Nm; negative = clamp harder. |ff| <= 3.5
+    control_hz: 200         # ControlLoop resubmit rate
+    auto_discover_cameras: true
+    require_calibrated: true
+    init_open: true
+    # Everything else worth tuning, at its default — uncomment to change.
+    # side: left                          # stamped automatically per arm — do not set here
+    # mcu_device: null                    # explicit MCU path; the arm fills this from discovery
+  left_use_gripper: true
+  right_use_gripper: true
+
+teleop:
+  type: bi_pico4
+  pos_sensitivity: 1.0
+  ori_sensitivity: 1.0
+
+# ── Teleoperate loop (top level) ──
+fps: 30
+display_data: true

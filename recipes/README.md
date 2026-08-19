@@ -6,20 +6,20 @@ path — both CLIs accept `--config_path` (they share the same draccus parser).
 
 ```bash
 # Teleoperate
-lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-08.yaml
+lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-08-xgripper.yaml
 
 # Record
-lerobot-record --config_path=recipes/record/bi_elite_cs66_rt/test.yaml
+lerobot-record --config_path=recipes/record/bi_elite_cs66_rt/test-xgripper.yaml
 ```
 
 CLI flags still work and **override** the YAML, so you don't edit the file for
 one-off tweaks:
 
 ```bash
-lerobot-record --config_path=recipes/record/bi_elite_cs66_rt/test.yaml \
+lerobot-record --config_path=recipes/record/bi_elite_cs66_rt/test-xgripper.yaml \
     --dataset.num_episodes=1 --resume=true
 
-lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-08.yaml --dryrun=true
+lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-08-xgripper.yaml --dryrun=true
 ```
 
 ## Layout
@@ -35,11 +35,11 @@ recipes/
 ```
 recipes/
   teleop/
-    bi_elite_cs66_rt/diagonal-08.yaml   # one recipe per physical bench
-    bi_flexiv_rizon4_rt/forward-04.yaml
+    bi_elite_cs66_rt/diagonal-08-{taccap,xgripper}.yaml   # one recipe per physical bench
+    bi_flexiv_rizon4_rt/forward-04-{taccap,xgripper}.yaml
   record/
-    bi_elite_cs66_rt/test.yaml
-    bi_flexiv_rizon4_rt/assemble_box.yaml
+    bi_elite_cs66_rt/test-{taccap,xgripper}.yaml
+    bi_flexiv_rizon4_rt/assemble_box-{taccap,xgripper}.yaml
 ```
 
 ## What goes in a recipe
@@ -89,7 +89,7 @@ dataclass default  <  recipe YAML  <  CLI --robot.xxx=
 
 The cost of self-containment is duplication: two recipes on the same bench each
 hold their own copy of that bench's hardware (today `diagonal-08` is shared by
-`teleop/bi_elite_cs66_rt/diagonal-08.yaml` and `record/bi_elite_cs66_rt/test.yaml`).
+`teleop/bi_elite_cs66_rt/diagonal-08-{taccap,xgripper}.yaml` and `record/bi_elite_cs66_rt/test-{taccap,xgripper}.yaml`).
 **When a bench changes — a swapped camera, a re-mounted arm, a new controller
 address — grep every recipe naming that bench and update all of them.** A missed
 copy does not fail loudly; it silently records with the wrong serial.
@@ -128,9 +128,9 @@ that selects the robot / teleop class. Enums use their string value
 ## Naming convention
 
 - `teleop/<robot_type>/<variant>.yaml` — one recipe **per physical bench**;
-  variant = mount + bench number, e.g. `diagonal-08.yaml`, `forward-05.yaml`.
+  variant = mount + bench number, e.g. `diagonal-08-xgripper.yaml`, `forward-05-taccap.yaml`.
 - `record/<robot_type>/<task>.yaml` — one per dataset/campaign, e.g.
-  `assemble_box.yaml`. Keep a `test.yaml` smoke-test per robot (2 short
+  `assemble_box-<family>.yaml`. Keep a `test-<family>.yaml` smoke-test per robot (2 short
   episodes, `push_to_hub: false`).
 
 ## Why this over copy-pasting from a markdown file

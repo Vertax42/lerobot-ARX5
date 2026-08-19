@@ -189,8 +189,8 @@ Teleoperation and recording are driven by **recipe** YAML files under
 guide). Pass one with `--config_path`:
 
 ```bash
-lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-07.yaml
-lerobot-record     --config_path=recipes/record/bi_flexiv_rizon4_rt/assemble_box.yaml
+lerobot-teleoperate --config_path=recipes/teleop/bi_elite_cs66_rt/diagonal-07-taccap.yaml
+lerobot-record     --config_path=recipes/record/bi_flexiv_rizon4_rt/assemble_box-xgripper.yaml
 ```
 
 A recipe is **self-contained**: it carries both the bench hardware (controller

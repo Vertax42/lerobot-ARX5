@@ -1,8 +1,12 @@
 # Record recipe — bimanual Flexiv Rizon4 RT (forward mount, bench 06) + Bi-Pico4.
-#   lerobot-record --config_path=recipes/record/bi_flexiv_rizon4_rt/assemble_box.yaml
+#   lerobot-record --config_path=recipes/record/bi_flexiv_rizon4_rt/assemble_box-xgripper.yaml
 #
 # Self-contained: this file carries both the bench hardware and the run's tuning.
 # Anything not listed uses the dataclass default.
+#
+# Gripper variant: xgripper. The sibling assemble_box-taccap.yaml is the same bench
+# with the other gripper family — the two differ only in `gripper:`.
+
 
 robot:
   type: bi_flexiv_rizon4_rt
@@ -40,16 +44,19 @@ robot:
   use_force: false
   log_level: INFO
   # ── Gripper ── One block for both arms; `side` is stamped per arm at build time.
+  # Both grippers -> XenseSerialGripper over USB serial (no IP / MAC / network).
+  # Neither port nor sn is pinned: parity discovery reads each board's SN and
+  # resolves the side from it, which then anchors the camera sniff above.
   gripper:
     type: serial
     gripper_v_max: 100.0    # mm/s
-    gripper_f_max: 40.0    # N
+    gripper_f_max: 30.0     # N
     gripper_min_pos: 0.0    # mm — fully closed
     gripper_max_pos: 85.0   # mm — fully open
     serial_timeout: 1.0
     init_open: true
+    auto_discover_cameras: true   # sniff wrist + tactile off this gripper's USB hub
     # Everything else worth tuning, at its default — uncomment to change.
-    # auto_discover_cameras: true        # sniff wrist + tactile off this gripper's USB hub
     # port: ""                            # explicit /dev path; overrides sn + side
     # sn: null                            # board SN; scanned across ports when port unset
     # side: null                          # stamped automatically per arm — do not set here
