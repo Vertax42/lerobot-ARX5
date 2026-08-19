@@ -93,11 +93,15 @@ def _resync_from_quat(robot: Robot, teleop: Teleoperator) -> None:
     teleop.reset_to_pose(pose[:7], pose[7])
 
 
-def _resync_from_euler(robot: Robot, teleop: Teleoperator) -> None:
+def _resync_from_euler(robot: Robot, teleop: Teleoperator) -> np.ndarray:
     # Prefer the commanded pose when the arm exposes one: it is where the
     # controller believes it is heading, which is what the teleop integrates
-    # from. Falling back to the measured pose costs one servo cycle of lag.
-    source = getattr(robot, "get_commanded_tcp_pose_euler", None) or robot.get_current_tcp_pose
+    # from. Near an orientation singularity the measured rotvec is unstable and
+    # can read 100°+ off what has actually been commanded, which would make the
+    # next send_action jump and trip the joint-velocity limit. Only elite_cs66_rt
+    # and bi_elite_cs66_rt expose the commanded pose; flexiv and arx5 fall back
+    # to the measured one and pay a servo cycle of lag.
+    source = getattr(robot, "get_commanded_tcp_pose_euler", None) or robot.get_current_tcp_pose_euler
     pose = source()
     teleop.reset_to_pose(pose[:6], pose[6])
     return pose

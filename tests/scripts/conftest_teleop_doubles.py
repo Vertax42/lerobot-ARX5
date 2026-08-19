@@ -122,7 +122,10 @@ class FakeRobot:
         self.calls.append(("get_current_tcp_pose_euler",))
         return np.array([0.1, 0.2, 0.3, 0.0, 0.0, 0.0, 0.5])
 
-    get_current_tcp_pose = get_current_tcp_pose_euler
+    # Deliberately NOT aliased to other spellings. An alias here would let the
+    # loop reach for a getter no real robot defines and still pass: the call is
+    # recorded under whichever name the aliased function hardcodes, so the
+    # "which pose flavour" test would assert nothing. A wrong name must raise.
 
     # -- trace helpers -------------------------------------------------------
     def names(self) -> list[str]:
