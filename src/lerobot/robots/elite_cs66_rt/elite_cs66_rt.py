@@ -22,6 +22,12 @@ import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
 from lerobot.grippers import Gripper, make_gripper_from_config
+from lerobot.grippers.camera_injection import (
+    adopt_taccap_mcu_device,
+    attach_wrist_fisheye_calibration,
+    inject_serial_gripper_cameras,
+    inject_taccap_cameras,
+)
 from lerobot.robots.elite_cs66_rt.config_elite_cs66_rt import (
     EliteCS66RTConfig,
     EliteCS66RTControlMode,
@@ -250,7 +256,50 @@ class EliteCS66RT(Robot):
         self._reset_moving = False
         self._external_command_received = False
 
+        # External cameras — with the gripper's cameras auto-discovered, resolve
+        # the wrist camera + GSPS tactile SNs from hardware and inject them into
+        # config.cameras before building, so the feature schema sees them.
+        if getattr(config, "_taccap_autodiscover", False):
+            self._inject_taccap_cameras()
+        elif getattr(config, "_serial_autodiscover", False):
+            self._inject_serial_gripper_cameras()
         self.cameras = make_cameras_from_configs(config.cameras)
+
+    @property
+    def _gripper_side(self) -> str:
+        """The side this arm's gripper reports itself as.
+
+        A single arm has no side of its own, but the gripper does — it is stamped
+        on the block in the recipe and burned into the unit's firmware SN. Camera
+        keys follow it (``<side>_wrist``), which is what keeps a single-arm
+        dataset's schema interchangeable with a bimanual one's.
+        """
+        return getattr(self.config.gripper, "side", "left")
+
+    def _inject_taccap_cameras(self) -> None:
+        """Auto-discover this arm's TacCap wrist + GSPS tactile devices into
+        ``config.cameras``. Called only in taccap_follower auto-discover mode."""
+        mcu_devices = inject_taccap_cameras(
+            self.config.cameras,
+            sides=(self._gripper_side,),
+            enable_tactile=self.config.enable_tactile_sensors,
+            logger=self.logger,
+            undistort_wrist=self.config.undistort_wrist_cameras,
+            fisheye_balance=self.config.wrist_fisheye_balance,
+        )
+        # The sweep already resolved the gripper's MCU path; pin it so the
+        # driver's connect() skips a second scan of the same bus.
+        for found_side, mcu_device in mcu_devices.items():
+            adopt_taccap_mcu_device(self._gripper, found_side, mcu_device, self.logger)
+
+    def _inject_serial_gripper_cameras(self) -> None:
+        """Same as _inject_taccap_cameras for serial (parallel-jaw) grippers."""
+        inject_serial_gripper_cameras(
+            self.config.cameras,
+            sides=(self._gripper_side,),
+            enable_tactile=self.config.enable_tactile_sensors,
+            logger=self.logger,
+        )
 
     @cached_property
     def observation_features(self) -> dict[str, type | tuple[int, int, int]]:
@@ -440,12 +489,20 @@ class EliteCS66RT(Robot):
             if remaining > 0:
                 time.sleep(remaining)
 
-            for cam in self.cameras.values():
-                cam.connect()
-
+            # Gripper before cameras, which is the order the other three arms
+            # use. It is not cosmetic here: the wrist fisheye intrinsics live in
+            # the gripper's MCU flash, so the gripper has to be open to be read,
+            # and a wrist camera has to hold the calibration before its own
+            # connect() builds the remap tables. Connecting cameras first left
+            # no point at which the calibration could be handed over.
             if self._gripper is not None:
                 self.logger.info(f"Connecting gripper ({type(self._gripper).__name__})...")
                 self._gripper.connect()
+
+            attach_wrist_fisheye_calibration(self.cameras, {self._gripper_side: self._gripper}, self.logger)
+
+            for cam in self.cameras.values():
+                cam.connect()
         except BaseException:
             self._cleanup_after_failed_connect()
             raise
