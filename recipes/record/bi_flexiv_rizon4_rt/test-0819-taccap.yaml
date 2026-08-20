@@ -44,21 +44,6 @@ robot:
   # ── Control ─────────────────────────────────────────────────────────────────
   use_force: false
   log_level: INFO
-  enable_tactile_sensors: true
-
-  # ── Wrist fisheye rectification ── TacCap only; the XGripper family has no
-  # firmware calibration to read. Reaches the auto-discovered wrist cameras only
-  # (a wrist camera pinned by hand carries its own `undistort` field instead).
-  #
-  # Intrinsics come off each gripper's MCU flash. A unit whose firmware holds
-  # none falls back to the SDK's shared reference values and warns; those are
-  # close but not this unit's, so calibrate before measuring in pixels off a
-  # rectified frame. Needs the calibrated 640x480 — any other size is refused at
-  # connect rather than silently mis-rectified.
-  #
-  # Off here, as it has been on every bench so far. Uncomment to turn it on.
-  # undistort_wrist_cameras: false
-  # wrist_fisheye_balance: 0.0          # 0 = calibrated focal length; 1 = 0.70x, widest FOV
 
   # ── Gripper ── One block for both arms; `side` is stamped per arm at build time.
   # Both grippers -> xense.taccap FollowerGripper (matched pair, single switch).
@@ -71,6 +56,15 @@ robot:
     feedforward_torque: 0.0 # Nm; negative = clamp harder. |ff| <= 3.5
     control_hz: 200 # ControlLoop resubmit rate
     auto_discover_cameras: true
+    enable_tactile: true
+    # ── Wrist fisheye rectification ── the intrinsics live in THIS gripper's MCU
+    # flash, so the switch travels with the gripper. Needs auto_discover_cameras
+    # on (it is applied to the wrist camera as it is discovered); a recipe that
+    # pins cameras by hand sets `undistort:` on the wrist camera block instead.
+    # An uncalibrated unit falls back to the SDK's shared reference intrinsics
+    # with a warning — close, but not this unit's.
+    undistort_wrist: false
+    # fisheye_balance: 0.0                # 0 = calibrated focal length; 1 = 0.70x, widest FOV
     require_calibrated: true
     init_open: true
     # Everything else worth tuning, at its default — uncomment to change.

@@ -11,7 +11,6 @@
 # NOT yet run on this bench with serial grippers — the arm block is inherited
 # from the diagonal-02-taccap.yaml recipe, the gripper block is the fleet default.
 
-
 robot:
   type: bi_flexiv_rizon4_rt
 
@@ -40,7 +39,6 @@ robot:
   # ── Control ─────────────────────────────────────────────────────────────────
   use_force: false
   log_level: INFO
-  enable_tactile_sensors: true
 
   # ── Gripper ── One block for both arms; `side` is stamped per arm at build time.
   # Both grippers -> XenseSerialGripper over USB serial (no IP / MAC / network).
@@ -55,6 +53,7 @@ robot:
     serial_timeout: 1.0
     init_open: true
     auto_discover_cameras: true   # sniff wrist + tactile off this gripper's USB hub
+    enable_tactile: true
     # Everything else worth tuning, at its default — uncomment to change.
     # port: ""                            # explicit /dev path; overrides sn + side
     # sn: null                            # board SN; scanned across ports when port unset

@@ -9,7 +9,6 @@
 # Gripper variant: taccap. The sibling diagonal-07-xgripper.yaml is the same bench
 # with the other gripper family — the two differ only in `gripper:`.
 
-
 robot:
   type: bi_elite_cs66_rt
 
@@ -87,26 +86,12 @@ robot:
   # ── Control ─────────────────────────────────────────────────────────────────
   control_mode: cartesian_servo # cartesian_servo | joint_servo
   servoj_gain: 300 # [100, 2000]
-  enable_tactile_sensors: true
   # ── Payload (tool + gripper) ── declared via setPayload so the F/T-less collision
   # detection doesn't read the tool's own weight/inertia as external force and stop on
   # light contact (e.g. wiping). Verified fleet value; raise mass if the tool is heavier.
   # (Collision *sensitivity/threshold* itself is a controller safety setting — pendant.)
   payload_mass: 0.7           # kg
   payload_cog: [0.0, 0.0, 0.19] # m, relative to flange
-  # ── Wrist fisheye rectification ── TacCap only; the XGripper family has no
-  # firmware calibration to read. Reaches the auto-discovered wrist cameras only
-  # (a wrist camera pinned by hand carries its own `undistort` field instead).
-  #
-  # Intrinsics come off each gripper's MCU flash. A unit whose firmware holds
-  # none falls back to the SDK's shared reference values and warns; those are
-  # close but not this unit's, so calibrate before measuring in pixels off a
-  # rectified frame. Needs the calibrated 640x480 — any other size is refused at
-  # connect rather than silently mis-rectified.
-  #
-  # Off here, as it has been on every bench so far. Uncomment to turn it on.
-  # undistort_wrist_cameras: false
-  # wrist_fisheye_balance: 0.0          # 0 = calibrated focal length; 1 = 0.70x, widest FOV
 
   # ── Gripper ── One block for both arms; `side` is stamped per arm at build time.
   # Both grippers -> xense.taccap FollowerGripper (matched pair, single switch).
@@ -124,6 +109,15 @@ robot:
     feedforward_torque: -3.0    # Nm, negative = closing
     control_hz: 200         # ControlLoop resubmit rate
     auto_discover_cameras: true
+    enable_tactile: true
+    # ── Wrist fisheye rectification ── the intrinsics live in THIS gripper's MCU
+    # flash, so the switch travels with the gripper. Needs auto_discover_cameras
+    # on (it is applied to the wrist camera as it is discovered); a recipe that
+    # pins cameras by hand sets `undistort:` on the wrist camera block instead.
+    # An uncalibrated unit falls back to the SDK's shared reference intrinsics
+    # with a warning — close, but not this unit's.
+    undistort_wrist: false
+    # fisheye_balance: 0.0                # 0 = calibrated focal length; 1 = 0.70x, widest FOV
     require_calibrated: true
     init_open: true
     # Everything else worth tuning, at its default — uncomment to change.

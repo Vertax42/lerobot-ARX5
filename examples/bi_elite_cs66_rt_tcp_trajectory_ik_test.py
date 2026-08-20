@@ -243,7 +243,6 @@ def main() -> None:
     cfg.cameras = {}
     cfg.left_gripper = None
     cfg.right_gripper = None
-    cfg.enable_tactile_sensors = False
     if args.joint_vel_guard:
         cfg.joint_vel_limits_rad_s = CS66_QDOT_LIMIT.tolist()
         cfg.joint_vel_limit_margin = args.margin

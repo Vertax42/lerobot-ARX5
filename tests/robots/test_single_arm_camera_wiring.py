@@ -32,6 +32,7 @@ from importlib.util import find_spec
 
 import draccus
 import pytest
+from draccus.utils import DecodingError
 
 # The Flexiv config imports `flexiv_rt` at module scope, and that SDK is not on
 # PyPI — so on a host without it, importing the config to read its *dataclass
@@ -77,10 +78,18 @@ def _load(arm, body: str):
     return draccus.load(_cls(arm), io.StringIO(body))
 
 
-def _gripper(gtype: str = "taccap_follower", *, discover: bool = True, side: str | None = "left") -> str:
+def _gripper(
+    gtype: str = "taccap_follower",
+    *,
+    discover: bool = True,
+    side: str | None = "left",
+    extra: str = "",
+) -> str:
     block = f"gripper:\n  type: {gtype}\n  auto_discover_cameras: {str(discover).lower()}\n"
     if side is not None:
         block += f"  side: {side}\n"
+    if extra:
+        block += f"  {extra}"
     return block
 
 
@@ -97,19 +106,55 @@ SINGLE_IDS = [a[0] for a in SINGLE]
 def test_the_fisheye_knobs_are_settable_from_a_recipe(arm):
     """They are the whole operator-facing surface of this feature. A knob that
     cannot be reached from YAML cannot be turned on at all."""
-    cfg = _load(arm, "undistort_wrist_cameras: true\nwrist_fisheye_balance: 0.35\n")
+    cfg = _load(arm, _gripper(side=None, extra="undistort_wrist: true\n  fisheye_balance: 0.35\n"))
 
-    assert cfg.undistort_wrist_cameras is True
-    assert cfg.wrist_fisheye_balance == 0.35
+    assert cfg.gripper.undistort_wrist is True
+    assert cfg.gripper.fisheye_balance == 0.35
 
 
 @pytest.mark.parametrize("arm", ARMS, ids=IDS)
 def test_rectification_is_off_unless_a_recipe_asks(arm):
     """Nothing changes for a rig that has not opted in."""
-    cfg = _load(arm, "{}\n")
+    cfg = _load(arm, _gripper(side=None))
 
-    assert cfg.undistort_wrist_cameras is False
-    assert cfg.wrist_fisheye_balance == 0.0
+    assert cfg.gripper.undistort_wrist is False
+    assert cfg.gripper.fisheye_balance == 0.0
+
+
+def _chain(exc: BaseException) -> str:
+    """Every message in the cause chain.
+
+    draccus reports a dataclass whose ``__post_init__`` raised as a flat
+    "Couldn't instantiate class ...", so the reason only survives on the chained
+    cause. Asserting on the top-level message would pass for any rejection at
+    all, including the wrong one.
+    """
+    parts = []
+    while exc is not None:
+        parts.append(str(exc))
+        exc = exc.__cause__ or exc.__context__
+    return "\n".join(parts)
+
+
+@pytest.mark.parametrize("arm", ARMS, ids=IDS)
+def test_rectification_without_discovery_is_refused_not_ignored(arm):
+    """This pair used to be accepted and do nothing: the switch is applied to the
+    wrist camera as it is discovered, so with discovery off it reached no camera
+    and the rig recorded raw fisheye frames with the knob reading as on."""
+    with pytest.raises(Exception) as caught:
+        _load(arm, _gripper(side=None, discover=False, extra="undistort_wrist: true\n"))
+
+    assert "auto_discover_cameras" in _chain(caught.value)
+
+
+@pytest.mark.parametrize("arm", ARMS, ids=IDS)
+def test_the_serial_family_has_no_rectification_knob_to_set(arm):
+    """XGripper holds no firmware intrinsics. Writing the knob on its block is a
+    mistake worth catching at parse, not a no-op worth tolerating — and the
+    message has to name the field, or the operator is left guessing which of the
+    block's lines the parser objected to."""
+    with pytest.raises(DecodingError, match="undistort_wrist"):
+        _load(arm, _gripper("serial", side=None, extra="undistort_wrist: true\n"))
 
 
 @pytest.mark.parametrize("arm", ARMS, ids=IDS)
@@ -187,9 +232,9 @@ def test_a_single_arm_defaults_to_the_left_gripper(arm):
     assert cfg.gripper.side == "left"
 
 
-@pytest.mark.parametrize("arm", SINGLE, ids=SINGLE_IDS)
-def test_a_single_arm_can_still_wire_its_tactile_sensors(arm):
-    """Discovery needs this flag, and it did not exist on the single arms before
-    they had discovery at all."""
-    assert _load(arm, "{}\n").enable_tactile_sensors is True
-    assert _load(arm, "enable_tactile_sensors: false\n").enable_tactile_sensors is False
+@pytest.mark.parametrize("arm", ARMS, ids=IDS)
+def test_the_tactile_switch_rides_on_the_gripper_too(arm):
+    """What a gripper carries is a property of the gripper: swapping one changes
+    which sensors are on the hub, and the arm is unchanged."""
+    assert _load(arm, _gripper(side=None)).gripper.enable_tactile is True
+    assert _load(arm, _gripper(side=None, extra="enable_tactile: false\n")).gripper.enable_tactile is False

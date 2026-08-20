@@ -223,11 +223,21 @@ robot:
     type: taccap_follower
     kp: 8.0
     feedforward_torque: -3.0 # negative = clamp harder
-    auto_discover_cameras: true
+    auto_discover_cameras: true # sniff wrist + tactile off this gripper's hub
+    enable_tactile: true
+    undistort_wrist: true # rectify the wrist fisheye from the MCU's intrinsics
+    fisheye_balance: 0.0 # 0 = calibrated focal length; 1 = 0.70x, widest FOV
 ```
+
+What the gripper carries is configured on the gripper, not on the arm — swap a
+TacCap for an XGripper and the sensors on the hub change while the arm does not.
+`undistort_wrist` and `fisheye_balance` are taccap-only, because the wrist lens'
+intrinsics live in that gripper's own MCU flash.
 
 The block is decoded through the gripper registry, so a knob belonging to the other
 backend — or a typo — is **rejected at parse time** rather than silently ignored.
+That is not cosmetic here: `undistort_wrist` on an XGripper block, or with
+`auto_discover_cameras` off, is refused rather than accepted and quietly ignored.
 See [`src/lerobot/grippers/README.md`](src/lerobot/grippers/README.md) for the full
 field lists and the driver contract.
 

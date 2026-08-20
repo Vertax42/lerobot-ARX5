@@ -12,7 +12,6 @@
 # NOT yet run on this bench with serial grippers — the arm block is inherited
 # from the diagonal-07-taccap.yaml recipe, the gripper block is the fleet default.
 
-
 robot:
   type: bi_elite_cs66_rt
 
@@ -90,7 +89,6 @@ robot:
   # ── Control ─────────────────────────────────────────────────────────────────
   control_mode: cartesian_servo # cartesian_servo | joint_servo
   servoj_gain: 300 # [100, 2000]
-  enable_tactile_sensors: true
   # ── Payload (tool + gripper) ── declared via setPayload so the F/T-less collision
   # detection doesn't read the tool's own weight/inertia as external force and stop on
   # light contact (e.g. wiping). Verified fleet value; raise mass if the tool is heavier.
@@ -110,6 +108,7 @@ robot:
     serial_timeout: 1.0
     init_open: true
     auto_discover_cameras: true   # sniff wrist + tactile off this gripper's USB hub
+    enable_tactile: true
     # Everything else worth tuning, at its default — uncomment to change.
     # port: ""                            # explicit /dev path; overrides sn + side
     # sn: null                            # board SN; scanned across ports when port unset
