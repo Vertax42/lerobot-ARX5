@@ -40,7 +40,7 @@ robot:
     kp: 8.0 # MIT impedance stiffness (Nm/rad)
     kd: 1.0 # damping (Nm·s/rad)
     feedforward_torque: -3.0 # constant bias; NEGATIVE = clamp harder, |ff| <= 3.5
-    control_hz: 200
+    control_hz: 100
     auto_discover_cameras: true
 ```
 

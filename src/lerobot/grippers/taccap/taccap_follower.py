@@ -159,8 +159,12 @@ class TaccapFollower(Gripper):
             self._gripper.motor.clear_fault()
             self._gripper.motor.enable()
 
-            # Background control loop: resubmits latest target at control_hz, keeps a
-            # fresh thread-safe observation. start() seeds target = current pos (no jump).
+            # Background control loop: keeps a fresh thread-safe observation and
+            # resubmits the latest target once per received motor-status frame
+            # (~100 Hz). It phase-locks rather than running on its own clock
+            # because a submit landing inside the MCU's own transmission makes
+            # the MCU drop bytes from the frame it is sending; control_hz is
+            # passed through but the SDK's default phase ignores it. start() seeds target = current pos (no jump).
             # feedforward_torque is a CONSTANT bias added to every MIT frame (negative =
             # closing/clamp); with a non-zero clamp bias the jaw settles ~ff/kp rad short
             # of any commanded open, and init_open below will warn on the timeout — expected.
