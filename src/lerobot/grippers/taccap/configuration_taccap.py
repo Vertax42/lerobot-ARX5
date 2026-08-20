@@ -63,7 +63,14 @@ class TaccapFollowerConfig(GripperConfig):
                      typos; the SDK's own gentle-grasp example treats 0.30 Nm as
                      an abort threshold, so values past ~1 Nm are a hard crush.
         control_hz:  Rate of the background ControlLoop that resubmits the latest
-                     normalized target to the firmware.
+                     normalized target to the firmware. **Ignored under the SDK's
+                     default submit phase.** ControlLoop now phase-locks its
+                     submits to the motor-status stream (one frame per received
+                     status frame, ~100 Hz), because a submit that overlaps the
+                     MCU's own transmission makes it drop bytes out of the frame
+                     it is sending -- which cost us status frames at random.
+                     Kept because it still drives the SDK's free-running phase,
+                     which this config does not currently select.
 
     Behavior:
         init_open:       If True, drive fully open on ``connect()``.
@@ -80,7 +87,7 @@ class TaccapFollowerConfig(GripperConfig):
     kp: float = 8.0  # Nm/rad
     kd: float = 1.0  # Nm·s/rad
     feedforward_torque: float = 0.0  # Nm; NEGATIVE = closing/clamp, POSITIVE = opening
-    control_hz: int = 200  # ControlLoop resubmit rate
+    control_hz: int = 100  # ControlLoop resubmit rate (ignored while phase-locked)
 
     # ── Behavior ───────────────────────────────────────────────────────────────
     init_open: bool = True
@@ -123,8 +130,20 @@ class TaccapFollowerConfig(GripperConfig):
                 "Sign: negative = closing/clamp, positive = opening. Values past "
                 "~1 Nm are a hard crush (the SDK's gentle-grasp example aborts at 0.30 Nm)."
             )
-        if not 0 < self.control_hz <= 500:
-            raise ValueError(f"TaccapFollowerConfig: control_hz must be in (0, 500], got {self.control_hz}.")
+        # The old ceiling was 500, taken from the firmware's slave control rate.
+        # Measured against hw v1.1.2.0, free-running submits at 250 Hz cost
+        # status frames on every run and 500 Hz collapsed the stream to 24
+        # frames/s, so that ceiling was never safe to actually use. 200 is the
+        # highest rate we tested without observing loss -- which is not the same
+        # as proving it safe, since the collision is phase-dependent rather than
+        # rate-dependent.
+        if not 0 < self.control_hz <= 200:
+            raise ValueError(
+                f"TaccapFollowerConfig: control_hz must be in (0, 200], got {self.control_hz}. "
+                "Rates at or above 250 Hz measurably cost motor-status frames when the SDK's "
+                "control loop runs free (see tc-gu-01 issue #1); the default phase ignores this "
+                "value entirely and submits at the status-stream rate."
+            )
         if not 0.0 <= self.fisheye_balance <= 1.0:
             raise ValueError(f"TaccapFollowerConfig: fisheye_balance must be in [0, 1], got {self.fisheye_balance}.")
         if self.undistort_wrist and not self.auto_discover_cameras:
