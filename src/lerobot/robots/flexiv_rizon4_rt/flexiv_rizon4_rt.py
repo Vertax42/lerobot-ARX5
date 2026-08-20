@@ -66,6 +66,12 @@ import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
 from lerobot.grippers import Gripper, make_gripper_from_config
+from lerobot.grippers.camera_injection import (
+    adopt_taccap_mcu_device,
+    attach_wrist_fisheye_calibration,
+    inject_serial_gripper_cameras,
+    inject_taccap_cameras,
+)
 from lerobot.robots.flexiv_rizon4_rt.config_flexiv_rizon4_rt import FlexivRizon4RTConfig
 from lerobot.robots.robot import Robot
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
@@ -153,9 +159,52 @@ class FlexivRizon4RT(Robot):
         # Initialize observation/action keys for Cartesian mode
         self._init_cartesian_mode()
 
-        # External cameras
+        # External cameras — with the gripper's cameras auto-discovered, resolve
+        # the wrist camera + GSPS tactile SNs from hardware and inject them into
+        # config.cameras before building, so the feature schema sees them.
+        if getattr(config, "_taccap_autodiscover", False):
+            self._inject_taccap_cameras()
+        elif getattr(config, "_serial_autodiscover", False):
+            self._inject_serial_gripper_cameras()
         self.cameras = make_cameras_from_configs(config.cameras)
         np.set_printoptions(precision=6, suppress=True)
+
+    @property
+    def _gripper_side(self) -> str:
+        """The side this arm's gripper reports itself as.
+
+        A single arm has no side of its own, but the gripper does — it is stamped
+        on the block in the recipe and burned into the unit's firmware SN. Camera
+        keys follow it (``<side>_wrist``), which is what keeps a single-arm
+        dataset's schema interchangeable with a bimanual one's.
+        """
+        return getattr(self.config.gripper, "side", "left")
+
+    def _inject_taccap_cameras(self) -> None:
+        """Auto-discover this arm's TacCap wrist + GSPS tactile devices into
+        ``config.cameras``. Called only in taccap_follower auto-discover mode."""
+        side = self._gripper_side
+        mcu_devices = inject_taccap_cameras(
+            self.config.cameras,
+            sides=(side,),
+            enable_tactile=self.config.enable_tactile_sensors,
+            logger=self.logger,
+            undistort_wrist=self.config.undistort_wrist_cameras,
+            fisheye_balance=self.config.wrist_fisheye_balance,
+        )
+        # The sweep already resolved the gripper's MCU path; pin it so the
+        # driver's connect() skips a second scan of the same bus.
+        for found_side, mcu_device in mcu_devices.items():
+            adopt_taccap_mcu_device(self._gripper, found_side, mcu_device, self.logger)
+
+    def _inject_serial_gripper_cameras(self) -> None:
+        """Same as _inject_taccap_cameras for serial (parallel-jaw) grippers."""
+        inject_serial_gripper_cameras(
+            self.config.cameras,
+            sides=(self._gripper_side,),
+            enable_tactile=self.config.enable_tactile_sensors,
+            logger=self.logger,
+        )
 
     # =========================================================================
     # Key initialization
@@ -257,8 +306,10 @@ class FlexivRizon4RT(Robot):
 
         Nothing comes through the gripper: neither backend carries a camera. A
         TacCap gripper's wrist and tactile sensors are ordinary cameras, wired
-        into ``cameras`` (auto-discovered off the gripper's USB hub when the
-        gripper block asks for it).
+        into ``cameras`` — auto-discovered off the gripper's USB hub when the
+        gripper block sets ``auto_discover_cameras``, pinned by the recipe
+        otherwise. Either way they are keyed ``<side>_wrist`` /
+        ``<side>_tactile_<i>`` after the gripper's own side.
         """
         features = {}
 
@@ -350,6 +401,10 @@ class FlexivRizon4RT(Robot):
             if self._gripper is not None:
                 self.logger.info("Connecting Flare Gripper...")
                 self._gripper.connect()
+
+            # Read the wrist fisheye intrinsics off the gripper's MCU while it is
+            # open, before the cameras build their remap tables.
+            attach_wrist_fisheye_calibration(self.cameras, {self._gripper_side: self._gripper}, self.logger)
 
             for cam in self.cameras.values():
                 cam.connect()

@@ -10,11 +10,16 @@
 
 """Pin down what gripper auto-discovery writes into ``config.cameras``.
 
-Both bimanual arms now share one implementation of this wiring, and it only ever
-executes with hardware attached — so without these tests a change to the key
-scheme or the camera settings would first show up as a dataset recorded with the
-wrong keys. Faking the discovery sweep is what makes the mapping testable on a
-bare host.
+All four arms — both bimanual and both single — share one implementation of this
+wiring, and it only ever executes with hardware attached, so without these tests
+a change to the key scheme or the camera settings would first show up as a
+dataset recorded with the wrong keys. Faking the discovery sweep is what makes
+the mapping testable on a bare host.
+
+The single-arm cases matter for the same reason the bimanual ones do, plus one
+of their own: a single arm has no side, so its camera keys are named after the
+*gripper's* side. Get that wrong and a single-arm dataset stops lining up with a
+bimanual one.
 """
 
 from dataclasses import dataclass, field
@@ -231,3 +236,148 @@ def test_adopt_never_overrides_an_explicit_config_value():
 
 def test_adopt_on_a_side_without_a_gripper_is_a_no_op():
     ci.adopt_taccap_mcu_device(None, "left", "/dev/discovered", LOGGER)
+
+
+# --------------------------------------------------------------------------- #
+# Single-arm shape — one side, named after the gripper
+# --------------------------------------------------------------------------- #
+
+
+def _one_side(side: str) -> dict[str, FakeDevice]:
+    """Discovery on a bench where only ``side`` is plugged in."""
+    return {side: FakeDevice(f"XCA_{side.upper()}", [f"GSPS_{side[0].upper()}0", f"GSPS_{side[0].upper()}1"])}
+
+
+@pytest.mark.parametrize("side", ["left", "right"])
+def test_a_single_arm_gets_exactly_its_own_gripper_side(fake_taccap, side):
+    """The keys follow the gripper's side, not a hardcoded 'left'."""
+    other = "right" if side == "left" else "left"
+    fake_taccap(_two_sides())
+    cameras: dict = {}
+
+    ci.inject_taccap_cameras(cameras, sides=(side,), enable_tactile=True, logger=LOGGER)
+
+    assert set(cameras) == {f"{side}_wrist", f"{side}_tactile_0", f"{side}_tactile_1"}
+    assert not [k for k in cameras if k.startswith(other)]
+
+
+@pytest.mark.parametrize("side", ["left", "right"])
+def test_a_single_arm_bench_needs_only_its_own_side_present(fake_taccap, side):
+    """A one-armed bench has one gripper on the bus; asking for it must not
+    require the other to be there."""
+    fake_taccap(_one_side(side))
+    cameras: dict = {}
+
+    ci.inject_taccap_cameras(cameras, sides=(side,), enable_tactile=True, logger=LOGGER)
+
+    assert f"{side}_wrist" in cameras
+
+
+def test_a_single_arm_asking_for_the_side_that_is_not_plugged_in_raises(fake_taccap):
+    fake_taccap(_one_side("left"))
+
+    with pytest.raises(DeviceNotConnectedError):
+        ci.inject_taccap_cameras({}, sides=("right",), enable_tactile=True, logger=LOGGER)
+
+
+def test_the_single_arm_key_scheme_matches_the_bimanual_one(fake_taccap):
+    """A single-arm recording and one arm of a bimanual recording must be
+    interchangeable, which they are only if the keys are identical."""
+    fake_taccap(_two_sides())
+    single: dict = {}
+    bimanual: dict = {}
+
+    ci.inject_taccap_cameras(single, sides=("left",), enable_tactile=True, logger=LOGGER)
+    ci.inject_taccap_cameras(bimanual, sides=("left", "right"), enable_tactile=True, logger=LOGGER)
+
+    assert set(single) == {k for k in bimanual if k.startswith("left")}
+    for key in single:
+        assert single[key] == bimanual[key]
+
+
+def test_a_single_arm_undistort_flag_reaches_its_wrist_camera(fake_taccap):
+    fake_taccap(_two_sides())
+    cameras: dict = {}
+
+    ci.inject_taccap_cameras(
+        cameras,
+        sides=("right",),
+        enable_tactile=False,
+        logger=LOGGER,
+        undistort_wrist=True,
+        fisheye_balance=0.25,
+    )
+
+    assert cameras["right_wrist"].undistort is True
+    assert cameras["right_wrist"].fisheye_balance == 0.25
+
+
+# --------------------------------------------------------------------------- #
+# Handing the calibration over — the single-arm dict has one entry
+# --------------------------------------------------------------------------- #
+
+
+class FakeWristCamera:
+    def __init__(self, undistort: bool = True):
+        self.undistort = undistort
+        self.calibration = None
+        self.is_reference = None
+
+    def set_fisheye_calibration(self, calibration, *, is_reference: bool = False) -> None:
+        self.calibration = calibration
+        self.is_reference = is_reference
+
+
+class FakeCalibratedGripper:
+    def __init__(self, cal="CAL", is_reference=False):
+        self._cal = cal
+        self._is_reference = is_reference
+
+    def read_wrist_fisheye_calibration(self):
+        return self._cal, self._is_reference
+
+
+@pytest.mark.parametrize("side", ["left", "right"])
+def test_a_one_entry_gripper_dict_still_reaches_the_camera(side):
+    cam = FakeWristCamera()
+
+    ci.attach_wrist_fisheye_calibration({f"{side}_wrist": cam}, {side: FakeCalibratedGripper()}, LOGGER)
+
+    assert cam.calibration == "CAL"
+    assert cam.is_reference is False
+
+
+def test_the_reference_fallback_flag_is_carried_through():
+    """A dataset rectified from shared reference intrinsics has to be
+    distinguishable from one rectified from the unit's own."""
+    cam = FakeWristCamera()
+
+    ci.attach_wrist_fisheye_calibration({"left_wrist": cam}, {"left": FakeCalibratedGripper(is_reference=True)}, LOGGER)
+
+    assert cam.is_reference is True
+
+
+def test_a_camera_that_did_not_ask_for_undistort_is_left_alone():
+    cam = FakeWristCamera(undistort=False)
+
+    ci.attach_wrist_fisheye_calibration({"left_wrist": cam}, {"left": FakeCalibratedGripper()}, LOGGER)
+
+    assert cam.calibration is None
+
+
+def test_a_serial_gripper_has_no_calibration_to_hand_over():
+    """The serial family holds no firmware intrinsics. The camera is left for
+    its own connect() to refuse, where the error can name the camera."""
+    cam = FakeWristCamera()
+
+    ci.attach_wrist_fisheye_calibration({"left_wrist": cam}, {"left": FakeGripper()}, LOGGER)
+
+    assert cam.calibration is None
+
+
+def test_a_side_without_a_gripper_at_all_is_left_alone():
+    cam = FakeWristCamera()
+
+    ci.attach_wrist_fisheye_calibration({"left_wrist": cam}, {"left": None}, LOGGER)
+
+    assert cam.calibration is None
