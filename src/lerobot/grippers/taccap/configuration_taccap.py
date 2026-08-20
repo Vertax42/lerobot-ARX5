@@ -90,6 +90,25 @@ class TaccapFollowerConfig(GripperConfig):
     # cheaper to sniff than to pin per bench.
     auto_discover_cameras: bool = True
 
+    # ── Wrist fisheye rectification ────────────────────────────────────────────
+    # The wrist lens is a fisheye and its intrinsics are burned into this
+    # gripper's own MCU flash, which is why the switch belongs here rather than
+    # on the arm: swap the gripper and both the lens and its calibration go with
+    # it. The serial (XGripper) family holds no such record, so it has neither
+    # field — a recipe that writes them on an XGripper block is refused at parse
+    # rather than quietly ignored.
+    #
+    # Off by default: nothing changes for a rig that has not opted in. When a
+    # unit's firmware holds no calibration, the SDK's shared reference intrinsics
+    # are used with a warning — close, but not this unit's, so calibrate before
+    # measuring in pixels off a rectified frame.
+    undistort_wrist: bool = False
+    # 0.0 keeps the calibrated focal length (natural view, the PC tool's default);
+    # 1.0 shortens it to 0.70x for the widest field of view, with more black
+    # border. Only fx/fy move — the principal point stays put, so the view does
+    # not drift as this turns.
+    fisheye_balance: float = 0.0
+
     def __post_init__(self):
         if self.side not in ("left", "right"):
             raise ValueError(f"TaccapFollowerConfig: side must be 'left' or 'right', got {self.side!r}.")
@@ -106,3 +125,18 @@ class TaccapFollowerConfig(GripperConfig):
             )
         if not 0 < self.control_hz <= 500:
             raise ValueError(f"TaccapFollowerConfig: control_hz must be in (0, 500], got {self.control_hz}.")
+        if not 0.0 <= self.fisheye_balance <= 1.0:
+            raise ValueError(f"TaccapFollowerConfig: fisheye_balance must be in [0, 1], got {self.fisheye_balance}.")
+        if self.undistort_wrist and not self.auto_discover_cameras:
+            # This combination used to be accepted and do nothing at all: the
+            # switch is applied to the wrist camera as it is discovered, so with
+            # discovery off there is no camera for it to reach and the rig
+            # recorded raw fisheye frames with the knob reading as on. A recipe
+            # that pins its cameras by hand sets `undistort` on the wrist camera
+            # block instead, where it is next to the resolution it constrains.
+            raise ValueError(
+                "TaccapFollowerConfig: undistort_wrist=True needs "
+                "auto_discover_cameras=True — it is applied to the wrist camera "
+                "as it is discovered. With cameras pinned by hand, set "
+                "`undistort: true` on the wrist camera block itself."
+            )

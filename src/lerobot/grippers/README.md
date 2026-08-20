@@ -92,6 +92,18 @@ Finding the _gripper_ is separate, always on, and not switchable: `serial` resol
 its side from the board SN's parity (odd → left), `taccap_follower` from the
 firmware-burned SN. That is why no recipe pins a gripper SN.
 
+`enable_tactile` lives here for the same reason: what a gripper carries is a
+property of the gripper. Swap a TacCap for an XGripper and the sensors on the hub
+change; the arm does not.
+
+`undistort_wrist` and `fisheye_balance` are **taccap-only**, because the wrist
+lens' intrinsics are burned into that gripper's own MCU flash and travel with it.
+The serial family has no such record and therefore no such fields — writing them
+on an XGripper block is refused at parse rather than quietly ignored. Both are
+applied to the wrist camera _as it is discovered_, so `undistort_wrist` requires
+`auto_discover_cameras`; a recipe that pins its cameras by hand sets `undistort:`
+on the wrist camera block instead, next to the resolution it constrains.
+
 When a gripper or its cameras do not show up, run the discovery by hand — it
 prints what it found and how it classified each side:
 

@@ -65,6 +65,18 @@ class GripperConfig(draccus.ChoiceRegistry, abc.ABC):  # type: ignore  # TODO: a
     checked against it there.
     """
 
+    enable_tactile: bool = True
+    """Wire this gripper's two tactile sensors as cameras alongside its wrist.
+
+    Lives here for the same reason ``auto_discover_cameras`` does: what a gripper
+    carries is a property of the gripper, not of the arm holding it. Swapping a
+    TacCap gripper for an XGripper changes which sensors are on the hub; the arm
+    is unchanged.
+
+    Only consulted when the cameras are discovered — a recipe that pins them by
+    hand simply lists the ones it wants.
+    """
+
     @property
     def type(self) -> str:
         return str(self.get_choice_name(self.__class__))

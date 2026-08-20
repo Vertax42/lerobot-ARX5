@@ -125,24 +125,6 @@ class FlexivRizon4RTConfig(RobotConfig):
     # in the block for the serial backend to find its board.
     gripper: GripperConfig | None = None
 
-    # Separate tactile sensors (XenseTactileCamera), wired at the camera level
-    # when the gripper's cameras are auto-discovered.
-    enable_tactile_sensors: bool = True
-
-    # ── Wrist fisheye rectification ─────────────────────────────────────────────
-    # Only reaches auto-discovered wrist cameras; a wrist camera pinned by hand
-    # in the recipe carries its own `undistort` field instead. TacCap only — the
-    # serial (XGripper) family has no firmware calibration to read.
-    #
-    # Falls back to the SDK's reference intrinsics, with a warning, when this
-    # unit's firmware holds none. Those are shared across units, so the principal
-    # point drifts with lens placement: calibrate the unit before taking pixel
-    # measurements off a rectified frame.
-    undistort_wrist_cameras: bool = False
-    # 0.0 keeps the calibrated focal length (natural view); 1.0 uses 0.70x for the
-    # widest field of view, with more black border. Clamped to [0, 1].
-    wrist_fisheye_balance: float = 0.0
-
     # Set in __post_init__ from the gripper block's own auto_discover_cameras flag:
     # when on, the wrist/tactile cameras are sniffed by the robot at connect rather
     # than pinned in the recipe. Derived, not settable from a recipe.

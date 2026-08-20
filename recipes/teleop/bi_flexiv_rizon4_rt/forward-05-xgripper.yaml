@@ -19,7 +19,6 @@
 # Gripper variant: xgripper. The sibling forward-05-taccap.yaml is the same bench
 # with the other gripper family — the two differ only in `gripper:`.
 
-
 robot:
   type: bi_flexiv_rizon4_rt
 
@@ -68,13 +67,13 @@ robot:
     serial_timeout: 1.0
     init_open: true
     auto_discover_cameras: true   # sniff wrist + tactile off this gripper's USB hub
+    enable_tactile: true
     # Everything else worth tuning, at its default — uncomment to change.
     # port: ""                            # explicit /dev path; overrides sn + side
     # sn: null                            # board SN; scanned across ports when port unset
     # side: null                          # stamped automatically per arm — do not set here
   left_use_gripper: true
   right_use_gripper: true
-  enable_tactile_sensors: true
 
 teleop:
   type: bi_pico4

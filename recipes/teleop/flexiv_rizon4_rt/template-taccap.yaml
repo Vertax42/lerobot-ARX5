@@ -43,18 +43,6 @@ robot:
 
   # ── Control ─────────────────────────────────────────────────────────────────
   use_force: false
-  enable_tactile_sensors: true
-
-  # ── Wrist fisheye rectification ─────────────────────────────────────────────
-  # Reaches the auto-discovered wrist camera only. The intrinsics come off this
-  # gripper's MCU flash; an uncalibrated unit falls back to the SDK's shared
-  # reference values and says so in the log. Those are close but not this unit's,
-  # so calibrate before measuring anything in pixels off a rectified frame.
-  #
-  # Rectification needs the calibrated 640x480 — a wrist camera configured for
-  # any other size is refused at connect rather than silently mis-rectified.
-  undistort_wrist_cameras: true
-  wrist_fisheye_balance: 0.0 # 0 = calibrated focal length; 1 = 0.70x, widest FOV
 
   # ── Gripper ── A single arm has no side of its own, so `side` here is what
   # names the discovered camera keys. It must match the unit's firmware SN.
@@ -66,6 +54,15 @@ robot:
     feedforward_torque: 0.0 # Nm; negative = clamp harder. |ff| <= 3.5
     control_hz: 200 # ControlLoop resubmit rate
     auto_discover_cameras: true
+    enable_tactile: true
+    # ── Wrist fisheye rectification ── the intrinsics live in THIS gripper's MCU
+    # flash, so the switch travels with the gripper. Needs auto_discover_cameras
+    # on (it is applied to the wrist camera as it is discovered); a recipe that
+    # pins cameras by hand sets `undistort:` on the wrist camera block instead.
+    # An uncalibrated unit falls back to the SDK's shared reference intrinsics
+    # with a warning — close, but not this unit's.
+    undistort_wrist: true
+    # fisheye_balance: 0.0                # 0 = calibrated focal length; 1 = 0.70x, widest FOV
     require_calibrated: true
     init_open: true
     # Everything else worth tuning, at its default — uncomment to change.
