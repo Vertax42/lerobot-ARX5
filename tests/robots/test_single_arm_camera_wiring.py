@@ -28,38 +28,53 @@ testing only the two new ones would let them drift right back apart.
 
 import dataclasses
 import io
+from importlib.util import find_spec
 
 import draccus
 import pytest
 
-# (id, config class path, the YAML keys that config cannot be built without)
+# The Flexiv config imports `flexiv_rt` at module scope, and that SDK is not on
+# PyPI — so on a host without it, importing the config to read its *dataclass
+# fields* fails. Same guard the rest of tests/robots uses. The Elite config has
+# no such import and needs no guard: its cases run everywhere, which is worth
+# keeping, since skipping is how coverage quietly disappears.
+
+# (id, config module, config class, vendor SDK needed to import it — or None)
 ARMS = [
-    ("flexiv_rizon4_rt", "lerobot.robots.flexiv_rizon4_rt.config_flexiv_rizon4_rt", "FlexivRizon4RTConfig", ""),
-    ("elite_cs66_rt", "lerobot.robots.elite_cs66_rt.config_elite_cs66_rt", "EliteCS66RTConfig", ""),
+    (
+        "flexiv_rizon4_rt",
+        "lerobot.robots.flexiv_rizon4_rt.config_flexiv_rizon4_rt",
+        "FlexivRizon4RTConfig",
+        "flexiv_rt",
+    ),
+    ("elite_cs66_rt", "lerobot.robots.elite_cs66_rt.config_elite_cs66_rt", "EliteCS66RTConfig", None),
     (
         "bi_flexiv_rizon4_rt",
         "lerobot.robots.bi_flexiv_rizon4_rt.config_bi_flexiv_rizon4_rt",
         "BiFlexivRizon4RTConfig",
-        "",
+        "flexiv_rt",
     ),
     (
         "bi_elite_cs66_rt",
         "lerobot.robots.bi_elite_cs66_rt.config_bi_elite_cs66_rt",
         "BiEliteCS66RTConfig",
-        "",
+        None,
     ),
 ]
 
 SINGLE = [a for a in ARMS if not a[0].startswith("bi_")]
 
 
-def _cls(module: str, name: str):
+def _cls(arm):
+    """Import an arm's config class, skipping when its vendor SDK is absent."""
+    _, module, name, sdk = arm
+    if sdk is not None and find_spec(sdk) is None:
+        pytest.skip(f"{sdk} not importable")
     return getattr(__import__(module, fromlist=[name]), name)
 
 
 def _load(arm, body: str):
-    _, module, name, preamble = arm
-    return draccus.load(_cls(module, name), io.StringIO(preamble + body))
+    return draccus.load(_cls(arm), io.StringIO(body))
 
 
 def _gripper(gtype: str = "taccap_follower", *, discover: bool = True, side: str | None = "left") -> str:
@@ -101,7 +116,7 @@ def test_rectification_is_off_unless_a_recipe_asks(arm):
 def test_the_derived_discovery_flags_are_not_settable_from_a_recipe(arm):
     """They are derived from the gripper block. A recipe that could set them
     directly could put them at odds with the block they describe."""
-    fields = {f.name: f for f in dataclasses.fields(_cls(arm[1], arm[2]))}
+    fields = {f.name: f for f in dataclasses.fields(_cls(arm))}
 
     for name in ("_taccap_autodiscover", "_serial_autodiscover"):
         assert name in fields, f"{arm[0]} lost {name}"
