@@ -14,7 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import traceback
+
+# Same ordering constraint the hardware entry scripts carry, for the same
+# reason: torchvision ships a libjpeg that claims the LIBJPEG_8.0 symbol version
+# but carries none of the jpeg12_* symbols conda's libtiff needs, so whichever
+# loads first wins. pytest pulls torchvision in through the lerobot imports
+# below, which would leave every `import xense.taccap` in the suite failing with
+# an undefined-symbol ImportError — the SDK-backed tests then look broken when
+# only the load order is.
+with contextlib.suppress(ImportError):  # SDK absent: those tests skip themselves
+    import xense.taccap  # noqa: F401
 
 import pytest
 from serial import SerialException

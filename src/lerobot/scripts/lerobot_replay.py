@@ -39,10 +39,23 @@ lerobot-replay \
 
 """
 
+import contextlib
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from pprint import pformat
+
+# Load TacCap native libs before cv2/Pillow/torchvision. Those packages may
+# preload vendored JPEG/TIFF libraries that conflict with the conda OpenCV libs
+# used by xense.taccap. Concretely: torchvision ships a libjpeg that claims the
+# LIBJPEG_8.0 symbol version but carries none of the jpeg12_* symbols conda's
+# libtiff needs, so whichever loads first wins — and when that is torchvision,
+# every later `import xense.taccap` dies with an undefined-symbol ImportError.
+# Importing it here, above every lerobot import, is what fixes the order; moving
+# this below them puts the bug back.
+with contextlib.suppress(ImportError):  # SDK absent: the TacCap paths fail later with a clear error
+    import xense.taccap  # noqa: F401
+
 
 from lerobot.configs import parser
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
