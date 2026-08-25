@@ -25,9 +25,11 @@ right), the identifiers the existing LeRobot camera stack needs:
                    gripper firmware SN (product prefix "TCGU01" → "XC"). Consumed
                    by OpenCVCameraConfig, which resolves names via v4l2-ctl.
   - tactile      : the two GSPS sensor serial numbers (e.g. "GSPS01A27Z0094"),
-                   enumerated by xensesdk and matched to the side by USB topology
-                   (same USB hub as that side's gripper MCU). GSPS serials do not
-                   encode left/right, so topology is the only reliable mapping.
+                   enumerated by xensesdk and matched to the *side* by USB
+                   topology (same USB hub as that side's gripper MCU). Which
+                   *finger* of that gripper each one sits on is a separate
+                   question, answered by the serial's own trailing-digit parity
+                   when the keys are built — see ``camera_injection``.
 
 Side comes from the firmware-burned gripper SN via the TacCap SDK, never guessed.
 """

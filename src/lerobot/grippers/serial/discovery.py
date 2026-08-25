@@ -33,7 +33,6 @@ each other on the RS-485 bus (parallel per-side ``connect()`` calls must not
 interleave their status queries).
 """
 
-import re
 from dataclasses import dataclass, field
 from glob import glob
 from threading import Lock
@@ -42,6 +41,7 @@ from xgripper import read_board_sn
 
 from lerobot.utils.robot_utils import get_logger
 
+from ..side_rules import side_of_serial
 from ..usb_topology import (
     hub_of_serial_device,
     tactile_sns_by_hub,
@@ -56,9 +56,6 @@ logger = get_logger("SerialGripperDiscovery")
 _scan_lock = Lock()
 
 _SIDES = ("left", "right")
-
-# Trailing run of digits in a board SN, e.g. "000031" -> "000031", "XG0042" -> "0042".
-_TRAILING_DIGITS_RE = re.compile(r"(\d+)\s*$")
 
 
 @dataclass
@@ -89,16 +86,13 @@ _OTHER_GRIPPER_FAMILY_IDS = frozenset(
 def sn_side(sn: str) -> str | None:
     """Classify a board SN to a side by parity: odd → left, even → right.
 
-    The parity is taken from the trailing run of digits in the SN, so both
-    pure-numeric SNs (``"000031"``) and prefixed SNs (``"XG0042"``) work. Returns
-    ``None`` when the SN has no digits to classify.
+    The fleet-wide rule, shared with the tactile sensors' finger assignment —
+    :func:`lerobot.grippers.side_rules.side_of_serial` is where it is documented.
+    Kept under this name because it reads as the *board SN*'s side at every call
+    site here. Returns ``None`` when the SN has no digits to classify, which a
+    bus scan treats as "not a gripper" rather than an error.
     """
-    if not sn:
-        return None
-    match = _TRAILING_DIGITS_RE.search(sn.strip())
-    if match is None:
-        return None
-    return "left" if int(match.group(1)) % 2 == 1 else "right"
+    return side_of_serial(sn)
 
 
 def _scan_port_sns(baudrate: int = 115200, device_id: int = 1) -> dict[str, str]:

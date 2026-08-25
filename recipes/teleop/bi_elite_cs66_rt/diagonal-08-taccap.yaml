@@ -66,11 +66,11 @@ robot:
     # Wrist + tactile are discovered off each gripper's USB hub at connect
     # (gripper.auto_discover_cameras). What this bench had when the pins were
     # removed, for cross-checking the first discovery run:
-    #   left_tactile_0: OG001349
-    #   left_tactile_1: OG001350
+    #   left_tactile_left: OG001349
+    #   left_tactile_right: OG001350
     #   left_wrist: XC000045
-    #   right_tactile_0: OG001351
-    #   right_tactile_1: OG001352
+    #   right_tactile_left: OG001351
+    #   right_tactile_right: OG001352
     #   right_wrist: XC000046
 
   # ── Control ─────────────────────────────────────────────────────────────────

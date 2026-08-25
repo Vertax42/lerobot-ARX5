@@ -106,8 +106,11 @@ def tactile_sns_by_hub() -> dict[str, list[tuple[str, str]]]:
 
     Returns:
         ``{hub: [(usb_port, serial), ...]}``, each list sorted by USB port so a
-        side's sensors come back in a stable order run to run (which is what makes
-        ``*_tactile_0`` / ``*_tactile_1`` mean the same physical pad every time).
+        side's sensors come back in a stable order run to run — which keeps logs
+        and error messages comparable between runs. It is *not* what names the
+        pads: the ``left`` / ``right`` in ``*_tactile_<finger>`` comes from each
+        serial's own parity (``camera_injection.tactile_finger``), so a sensor
+        moved to the other USB port keeps its key.
 
     Raises:
         RuntimeError: If xensesdk is unavailable or the scan fails.

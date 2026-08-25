@@ -309,7 +309,7 @@ class FlexivRizon4RT(Robot):
         into ``cameras`` — auto-discovered off the gripper's USB hub when the
         gripper block sets ``auto_discover_cameras``, pinned by the recipe
         otherwise. Either way they are keyed ``<side>_wrist`` /
-        ``<side>_tactile_<i>`` after the gripper's own side.
+        ``<side>_tactile_<finger>`` after the gripper's own side.
         """
         features = {}
 

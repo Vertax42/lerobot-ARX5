@@ -36,6 +36,8 @@ from logging import Logger
 from lerobot.cameras.xense import XenseOutputType, XenseTactileCameraConfig, XenseWristCameraConfig
 from lerobot.utils.errors import DeviceNotConnectedError
 
+from .side_rules import side_of_serial
+
 # Wrist camera: MJPG so the USB bus carries compressed frames.
 WRIST_FOURCC = "MJPG"
 WRIST_WIDTH = 640
@@ -80,6 +82,50 @@ def _tactile_camera_config(serial_number: str) -> XenseTactileCameraConfig:
     )
 
 
+def tactile_finger(sn: str, side: str) -> str:
+    """Which jaw a tactile sensor sits on: ``left`` or ``right``.
+
+    The fleet's serial rule — odd trailing digit → left, even → right
+    (:func:`lerobot.grippers.side_rules.side_of_serial`), the same rule that
+    sorts gripper boards into arms. A sensor that cannot be classified is a hard
+    error rather than a fallback to position, because guessing which jaw a pad is
+    on mislabels a dataset in a way nobody notices until it is trained on.
+
+    Raises:
+        ValueError: If ``sn`` has no trailing digits to read a parity from.
+    """
+    finger = side_of_serial(sn)
+    if finger is None:
+        raise ValueError(
+            f"Tactile sensor {sn!r} on the {side} gripper has no trailing digits, "
+            "so which finger it sits on cannot be derived (odd → left, even → "
+            "right). Check the serial is burned to the fleet convention."
+        )
+    return finger
+
+
+def _tactile_by_finger(tactile_sns: Sequence[str], side: str) -> dict[str, str]:
+    """``{finger: serial}`` for one gripper's sensors, one per jaw.
+
+    Raises:
+        ValueError: If a serial is unclassifiable, or if the pair does not come
+            out as exactly one left and one right sensor — two odd serials on one
+            gripper is a mis-installed or mis-burned pad, and silently keeping one
+            would drop half the tactile stream from the schema.
+    """
+    by_finger: dict[str, str] = {}
+    for sn in tactile_sns:
+        finger = tactile_finger(sn, side)
+        if finger in by_finger:
+            raise ValueError(
+                f"Two tactile sensors on the {side} gripper resolve to the {finger} "
+                f"finger (odd → left, even → right): {by_finger[finger]!r} and {sn!r}. "
+                "Each gripper must carry one odd- and one even-numbered sensor."
+            )
+        by_finger[finger] = sn
+    return by_finger
+
+
 def _add_side_cameras(
     cameras: dict,
     side: str,
@@ -92,14 +138,19 @@ def _add_side_cameras(
     fisheye_balance: float = 0.0,
 ) -> None:
     """Add one side's wrist (and optionally tactile) cameras under the shared key
-    scheme ``<side>_wrist`` / ``<side>_tactile_<i>``.
+    scheme ``<side>_wrist`` / ``<side>_tactile_<finger>``.
 
-    The keys match the station-driven wiring, so datasets recorded with
-    discovery on stay compatible with ones recorded from a hand-written recipe.
+    ``side`` is which *arm* the gripper is on; ``finger`` is which *jaw* of that
+    gripper the pad sits on, so a bimanual rig keys ``left_tactile_left`` …
+    ``right_tactile_right``. Both halves come from serial parity, never from
+    enumeration order — which is what makes the key name the same physical pad on
+    every bench, and what keeps these keys identical to the ones the sister repo
+    ``xense-taccap-lerobot`` records under.
 
     Raises:
         DeviceNotConnectedError: If tactile sensors are enabled but the sweep
             found fewer than ``TACTILE_PER_SIDE`` of them on this side.
+        ValueError: If the sensors found do not resolve to one per finger.
     """
     cameras[f"{side}_wrist"] = _wrist_camera_config(
         wrist_camera_name, undistort=undistort, fisheye_balance=fisheye_balance
@@ -111,8 +162,8 @@ def _add_side_cameras(
     if len(tactile_sns) < TACTILE_PER_SIDE:
         raise DeviceNotConnectedError(too_few_tactile_msg)
 
-    for i, sn in enumerate(tactile_sns):
-        cameras[f"{side}_tactile_{i}"] = _tactile_camera_config(sn)
+    for finger, sn in sorted(_tactile_by_finger(tactile_sns, side).items()):
+        cameras[f"{side}_tactile_{finger}"] = _tactile_camera_config(sn)
 
 
 def inject_taccap_cameras(

@@ -117,8 +117,13 @@ def fake_topology(monkeypatch):
 
 
 def test_tactile_grouped_by_hub_and_ordered_by_port(fake_topology):
-    """Sensor order must follow USB port, not enumeration order — that is what
-    makes *_tactile_0 the same physical pad on every run."""
+    """Sensor order must follow USB port, not enumeration order, so a hub's
+    sensors read back the same way run to run in logs and errors.
+
+    Ordering no longer *names* a pad — the ``left``/``right`` in
+    ``*_tactile_<finger>`` comes from the serial's own parity
+    (``camera_injection.tactile_finger``) — but a stable order is still what makes
+    two discovery runs comparable when a bench is being diagnosed."""
     by_hub = topo.tactile_sns_by_hub()
     assert set(by_hub) == {"3-1", "3-7"}
     assert [sn for _, sn in by_hub["3-1"]] == ["TAC_A", "TAC_B"]  # 3-1.2 before 3-1.4

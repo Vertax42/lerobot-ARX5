@@ -32,7 +32,9 @@ robot:
   # Only the scene camera is pinned: with auto_discover_cameras on (below) the
   # arm sniffs the wrist + GSPS tactile cameras off the gripper's USB hub at
   # connect and keys them after the gripper's own side — `left_wrist`,
-  # `left_tactile_0`, `left_tactile_1` for the block below.
+  # `left_tactile_left`, `left_tactile_right` for the block below (the
+  # trailing `left`/`right` is which jaw the pad sits on, from its serial's
+  # trailing-digit parity: odd → left jaw, even → right).
   cameras:
     head:
       type: intelrealsense

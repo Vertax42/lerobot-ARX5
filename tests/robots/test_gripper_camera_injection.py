@@ -20,6 +20,11 @@ The single-arm cases matter for the same reason the bimanual ones do, plus one
 of their own: a single arm has no side, so its camera keys are named after the
 *gripper's* side. Get that wrong and a single-arm dataset stops lining up with a
 bimanual one.
+
+Tactile keys are ``<side>_tactile_<finger>``: the arm the gripper is on, then
+which jaw the pad sits on, the latter read off the sensor serial's trailing-digit
+parity. That is the scheme the sister repo ``xense-taccap-lerobot`` records under,
+so these assertions are also what keeps the two fleets' datasets interchangeable.
 """
 
 from dataclasses import dataclass, field
@@ -44,10 +49,13 @@ class FakeDevice:
     usb_hub: str = "1-3"
 
 
+# Tactile serials carry the finger in their trailing digit (odd -> left jaw,
+# even -> right), so the fakes have to be numbered like real ones: a positional
+# placeholder would let a regression back to enumeration-order keys pass.
 def _two_sides() -> dict[str, FakeDevice]:
     return {
-        "left": FakeDevice("XCA_LEFT", ["GSPS_L0", "GSPS_L1"], mcu_device="/dev/left"),
-        "right": FakeDevice("XCA_RIGHT", ["GSPS_R0", "GSPS_R1"], mcu_device="/dev/right"),
+        "left": FakeDevice("XCA_LEFT", ["OG001349", "OG001350"], mcu_device="/dev/left"),
+        "right": FakeDevice("XCA_RIGHT", ["OG001351", "OG001352"], mcu_device="/dev/right"),
     }
 
 
@@ -85,11 +93,11 @@ def test_taccap_injects_wrist_and_tactile_keys(fake_taccap):
     ci.inject_taccap_cameras(cameras, sides=("left", "right"), enable_tactile=True, logger=LOGGER)
 
     assert sorted(cameras) == [
-        "left_tactile_0",
-        "left_tactile_1",
+        "left_tactile_left",
+        "left_tactile_right",
         "left_wrist",
-        "right_tactile_0",
-        "right_tactile_1",
+        "right_tactile_left",
+        "right_tactile_right",
         "right_wrist",
     ]
 
@@ -107,6 +115,43 @@ def test_serial_injects_the_same_key_scheme_as_taccap(fake_taccap, fake_serial):
     ci.inject_serial_gripper_cameras(serial_cameras, sides=("left", "right"), enable_tactile=True, logger=LOGGER)
 
     assert sorted(taccap_cameras) == sorted(serial_cameras)
+
+
+def test_the_finger_comes_from_the_serial_not_the_discovery_order(fake_taccap):
+    """Reversing the order discovery hands the sensors back must not move a key.
+
+    USB port order is a stable *ordering*, not an identity — re-cabling the two
+    pads swaps it. The key has to follow the serial, or a dataset silently ends
+    up with the jaws transposed against every earlier recording.
+    """
+    forward: dict = {}
+    reversed_: dict = {}
+    fake_taccap({"left": FakeDevice("XCA_LEFT", ["OG001349", "OG001350"])})
+    ci.inject_taccap_cameras(forward, sides=("left",), enable_tactile=True, logger=LOGGER)
+    fake_taccap({"left": FakeDevice("XCA_LEFT", ["OG001350", "OG001349"])})
+    ci.inject_taccap_cameras(reversed_, sides=("left",), enable_tactile=True, logger=LOGGER)
+
+    assert forward["left_tactile_left"].serial_number == "OG001349"
+    assert forward["left_tactile_right"].serial_number == "OG001350"
+    assert {k: v.serial_number for k, v in reversed_.items() if "tactile" in k} == {
+        k: v.serial_number for k, v in forward.items() if "tactile" in k
+    }
+
+
+def test_two_sensors_on_the_same_finger_raise(fake_taccap):
+    """Both pads odd-numbered is a mis-burned or mis-installed sensor. Keeping
+    one would drop half the tactile stream from the schema with nothing to see."""
+    fake_taccap({"left": FakeDevice("XCA_LEFT", ["OG001349", "OG001351"])})
+
+    with pytest.raises(ValueError, match="resolve to the left finger"):
+        ci.inject_taccap_cameras({}, sides=("left",), enable_tactile=True, logger=LOGGER)
+
+
+def test_a_serial_with_no_digits_raises(fake_taccap):
+    fake_taccap({"left": FakeDevice("XCA_LEFT", ["OG00134A", "OG001350"])})
+
+    with pytest.raises(ValueError, match="no trailing digits"):
+        ci.inject_taccap_cameras({}, sides=("left",), enable_tactile=True, logger=LOGGER)
 
 
 @require_package("xgripper")
@@ -143,8 +188,8 @@ def test_tactile_camera_settings_are_frozen(fake_taccap):
 
     ci.inject_taccap_cameras(cameras, sides=("left",), enable_tactile=True, logger=LOGGER)
 
-    tactile = cameras["left_tactile_0"]
-    assert tactile.serial_number == "GSPS_L0"
+    tactile = cameras["left_tactile_left"]
+    assert tactile.serial_number == "OG001349"
     assert tactile.fps == 30
     assert tactile.warmup_s == 0.05
 
@@ -157,12 +202,12 @@ def test_tactile_camera_settings_are_frozen(fake_taccap):
 @require_package("xgripper")
 def test_serial_one_armed_bench_does_not_touch_the_other_side(fake_serial):
     """A bench with a gripper on one arm only must not fail for the other."""
-    fake_serial({"left": FakeDevice("XCA_LEFT", ["GSPS_L0", "GSPS_L1"])})
+    fake_serial({"left": FakeDevice("XCA_LEFT", ["OG001349", "OG001350"])})
     cameras: dict = {}
 
     ci.inject_serial_gripper_cameras(cameras, sides=("left",), enable_tactile=True, logger=LOGGER)
 
-    assert sorted(cameras) == ["left_tactile_0", "left_tactile_1", "left_wrist"]
+    assert sorted(cameras) == ["left_tactile_left", "left_tactile_right", "left_wrist"]
 
 
 @require_package("xgripper")
@@ -176,7 +221,7 @@ def test_serial_no_gripper_at_all_is_a_no_op(fake_serial):
 
 
 def test_missing_side_raises(fake_taccap):
-    fake_taccap({"left": FakeDevice("XCA_LEFT", ["GSPS_L0", "GSPS_L1"])})
+    fake_taccap({"left": FakeDevice("XCA_LEFT", ["OG001349", "OG001350"])})
 
     with pytest.raises(DeviceNotConnectedError, match="no right gripper"):
         ci.inject_taccap_cameras({}, sides=("left", "right"), enable_tactile=True, logger=LOGGER)
@@ -184,7 +229,7 @@ def test_missing_side_raises(fake_taccap):
 
 @require_package("xgripper")
 def test_too_few_tactile_sensors_raises(fake_serial):
-    fake_serial({"left": FakeDevice("XCA_LEFT", ["GSPS_L0"], usb_hub="3-1")})
+    fake_serial({"left": FakeDevice("XCA_LEFT", ["OG001349"], usb_hub="3-1")})
 
     with pytest.raises(DeviceNotConnectedError, match="expected 2 tactile sensors"):
         ci.inject_serial_gripper_cameras({}, sides=("left",), enable_tactile=True, logger=LOGGER)
@@ -245,7 +290,7 @@ def test_adopt_on_a_side_without_a_gripper_is_a_no_op():
 
 def _one_side(side: str) -> dict[str, FakeDevice]:
     """Discovery on a bench where only ``side`` is plugged in."""
-    return {side: FakeDevice(f"XCA_{side.upper()}", [f"GSPS_{side[0].upper()}0", f"GSPS_{side[0].upper()}1"])}
+    return {side: FakeDevice(f"XCA_{side.upper()}", ["OG001349", "OG001350"])}
 
 
 @pytest.mark.parametrize("side", ["left", "right"])
@@ -257,7 +302,7 @@ def test_a_single_arm_gets_exactly_its_own_gripper_side(fake_taccap, side):
 
     ci.inject_taccap_cameras(cameras, sides=(side,), enable_tactile=True, logger=LOGGER)
 
-    assert set(cameras) == {f"{side}_wrist", f"{side}_tactile_0", f"{side}_tactile_1"}
+    assert set(cameras) == {f"{side}_wrist", f"{side}_tactile_left", f"{side}_tactile_right"}
     assert not [k for k in cameras if k.startswith(other)]
 
 

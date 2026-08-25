@@ -106,6 +106,13 @@ a sensor is swapped.
 Set `auto_discover_cameras: false` and pin all seven if a bench genuinely needs it
 (e.g. something else shares the hub, which discovery refuses to guess through).
 
+Discovered cameras are keyed `<side>_wrist` and `<side>_tactile_<finger>` — the
+arm the gripper is on, then which jaw the pad sits on, e.g. `left_tactile_right`.
+Both halves come from serial parity (odd → left, even → right), never from USB
+enumeration order, so re-cabling a sensor does not move its key and these names
+match what the sister repo `xense-taccap-lerobot` records. Pin the same names if
+you turn discovery off.
+
 Tactile cameras take their tuned exposure from the `XenseTactileCameraConfig`
 default (`camera_properties`), so a recipe entry stays short. Pass
 `camera_properties: null` on a camera to fall back to its xpack template.

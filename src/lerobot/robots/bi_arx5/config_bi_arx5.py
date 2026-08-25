@@ -84,7 +84,10 @@ class BiARX5Config(RobotConfig):
     cameras: dict[str, CameraConfig] = field(default_factory=lambda: {})
 
     def __post_init__(self):
-        # Camera configuration based on tactile sensors setting
+        # Camera configuration based on tactile sensors setting.
+        # Tactile keys are `<arm>_tactile_<finger>`; the finger is the sensor
+        # serial's trailing-digit parity (odd -> left jaw, even -> right), the
+        # same rule auto-discovery applies (`grippers.side_rules`).
         if self.enable_tactile_sensors:
             self.cameras = {
                 "head": RealSenseCameraConfig(
@@ -108,25 +111,25 @@ class BiARX5Config(RobotConfig):
                     height=480,
                     warmup_s=1.0,
                 ),
-                "right_tactile_0": XenseTactileCameraConfig(
+                "right_tactile_left": XenseTactileCameraConfig(
                     serial_number="OG000339",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
-                "right_tactile_1": XenseTactileCameraConfig(
+                "right_tactile_right": XenseTactileCameraConfig(
                     serial_number="OG000344",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
-                "left_tactile_0": XenseTactileCameraConfig(
+                "left_tactile_left": XenseTactileCameraConfig(
                     serial_number="OG000337",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
                     warmup_s=1.0,
                 ),
-                "left_tactile_1": XenseTactileCameraConfig(
+                "left_tactile_right": XenseTactileCameraConfig(
                     serial_number="OG000352",
                     fps=30,
                     output_types=[XenseOutputType.RECTIFY],
