@@ -71,7 +71,9 @@ class ARX5FollowerConfig(RobotConfig):
 
     # Gripper calibration (calibrated value from calibrate.py)
     gripper_open_readout: float = -3.4
-    enable_tactile_sensors: bool = False
+    # Declared for parity with BiARX5Config, but nothing on this single-arm path
+    # reads it yet: __post_init__ pins head + wrist unconditionally.
+    enable_tactile: bool = False
 
     # Position settings (Joint space: 6 joints + gripper)
     home_position: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
