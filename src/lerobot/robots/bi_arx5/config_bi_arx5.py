@@ -74,7 +74,7 @@ class BiARX5Config(RobotConfig):
 
     # Gripper calibration (calibrated values from calibrate.py for left and right arms)
     gripper_open_readout: list[float] = field(default_factory=lambda: [-3.4, -3.4])
-    enable_tactile_sensors: bool = True
+    enable_tactile: bool = True
 
     # Position settings (Joint space: 6 joints + gripper)
     home_position: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
@@ -88,7 +88,7 @@ class BiARX5Config(RobotConfig):
         # Tactile keys are `<arm>_tactile_<finger>`; the finger is the sensor
         # serial's trailing-digit parity (odd -> left jaw, even -> right), the
         # same rule auto-discovery applies (`grippers.side_rules`).
-        if self.enable_tactile_sensors:
+        if self.enable_tactile:
             self.cameras = {
                 "head": RealSenseCameraConfig(
                     serial_number_or_name="230322271365",

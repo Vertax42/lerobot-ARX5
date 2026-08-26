@@ -50,7 +50,7 @@ the arm identity; a real run needs the full hardware block a recipe carries.
 ```bash
 lerobot-teleoperate \
     --robot.type=bi_arx5 \
-    --robot.enable_tactile_sensors=true \
+    --robot.enable_tactile=true \
     --teleop.type=mock_teleop \
     --fps=30 \
     --debug_timing=false \
