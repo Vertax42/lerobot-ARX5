@@ -873,6 +873,40 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 if dataset is not None:
                     dataset.prepare_episode_recording()
 
+                # Discard any exit request that arrived while nothing was
+                # reading events. The keyboard listener runs for the whole
+                # session, but only the record/reset loops consume these flags —
+                # between the reset loop ending and the next episode starting
+                # there is a gap (save_episode + the encoder warm-up above) with
+                # no consumer, ~2s with streaming encoding and much longer
+                # without it.
+                #
+                # A right arrow in that gap — the natural double-press when the
+                # reset happens to time out on its own just as the operator
+                # reaches for the key — is still set when this episode's first
+                # iteration checks it. The episode ends after zero frames, the
+                # reset then runs its full duration (the flag was consumed by
+                # that break), and `save_episode()` below hits
+                # `validate_episode_buffer`, which raises on an empty buffer:
+                # "You must add one or several frames with `add_frame`". That
+                # kills the session, mid-collection, minutes after the press —
+                # with a normal-looking reset in between, which is what makes it
+                # hard to connect back to a key someone pressed. Both record-loop
+                # variants below reach it: the generic one breaks on `exit_early`
+                # alone, the RT one on all three flags.
+                #
+                # `rerecord_episode` has a related hole — the RT loop breaks on it
+                # without clearing it — but that one is self-correcting: the empty
+                # buffer reaches `clear_episode_buffer()` instead of
+                # `save_episode()` and the episode is simply retried. Cleared here
+                # anyway so the operator does not see a "Re-record episode" for an
+                # episode that never started.
+                #
+                # `stop_recording` is deliberately NOT cleared: that one should
+                # survive the gap, and the `while` above has already acted on it.
+                events["exit_early"] = False
+                events["rerecord_episode"] = False
+
                 log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
 
                 # Dispatch the record loop by robot type
