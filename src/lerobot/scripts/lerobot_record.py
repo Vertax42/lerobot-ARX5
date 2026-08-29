@@ -567,14 +567,22 @@ def run_rt_record_loop(
         reset_triggered = False
         refresh_listener_events(events)
 
-        if events["stop_recording"]:
-            logger.info("Stop recording requested, exiting record loop early")
-            break
-
-        if events["rerecord_episode"]:
-            logger.info("Re-record episode requested, exiting record loop early")
-            break
-
+        # `exit_early` is the only break condition, matching the generic
+        # `record_loop` above and upstream lerobot. It is always consumed by the
+        # loop that breaks on it; `stop_recording` and `rerecord_episode` are
+        # intent flags owned by `record()`, and this loop must not break on them
+        # or clear them.
+        #
+        # Every keypress that should end this loop sets `exit_early` too
+        # (`control_utils.on_press`), so one condition covers all three. Breaking
+        # on `rerecord_episode` here left `exit_early` unconsumed, and the reset
+        # phase — `record_loop`, whose first check is `exit_early` — then broke in
+        # its own first iteration: a retake got 0s of reset while "Reset the
+        # environment" was still playing, so the operator put the scene back
+        # *into* the next take. RT robots only; the non-RT path runs `record_loop`
+        # for both phases and that one already ignores `rerecord_episode`.
+        # Nothing ever sets `stop_recording` on its own either — ESC sets both —
+        # so that branch was dead code whose only effect was which line it logged.
         if events["exit_early"]:
             events["exit_early"] = False
             logger.info("Exit early requested, exiting record loop early")
