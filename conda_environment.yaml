@@ -8,7 +8,10 @@ dependencies:
   - python=3.12
   # ── Build tools (required for ARX5 / Flexiv C++ builds) ──────────────────
   - cxx-compiler
-  - cmake>=3.25
+  # Pinned <4.2 to agree with pyproject.toml's `cmake>=3.29.0.1,<4.2.0`. Without
+  # the upper bound conda resolves 4.3.x, then `uv pip install -e .` downgrades
+  # to the PyPI cmake and overwrites conda's bin/cmake, ccmake, cpack, ctest.
+  - cmake>=3.29,<4.2
   - ninja
   # ── C++ libraries (ARX5 / Flexiv Python bindings) ─────────────────────────
   - pybind11
@@ -40,7 +43,11 @@ dependencies:
   # PyAV/torchcodec are installed from wheels later in setup_env.sh. Keeping
   # ffmpeg out of the conda solve avoids ICU/libxml2 conflicts with Robostack.
   # ── Python base tools ─────────────────────────────────────────────────────
-  - numpy>=1.26.4 # robostack resolves to 1.26; pip-only installs can use 2.x
+  # Upper bound must match the wheel stack: opencv-python pins numpy<2.3.0 and
+  # xensesdk pins <=2.2.4, so uv always lands on 2.2.6. Leaving conda unbounded
+  # makes it resolve 2.4.6, which uv then overwrites in place -- and 2.4.x turned
+  # numpy/ctypeslib.py into a package, so the leftovers shadow each other.
+  - numpy>=1.26.4,<2.3 # robostack resolves to 1.26; wheel stack needs 2.2.x
   - pip
   - wheel
   - pip:
