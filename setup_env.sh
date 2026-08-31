@@ -316,6 +316,118 @@ PY
     fi
 }
 
+# Report packages that conda and uv both own at different versions.
+#
+# conda tracks its files in conda-meta/<pkg>.json; uv/pip track theirs in
+# <pkg>.dist-info/RECORD, and neither reads the other's ledger. uv CAN see
+# conda's dist-info, so `uv pip install` over a conda package uninstalls it
+# cleanly on the pip side -- but conda-meta still claims ownership. conda
+# cannot see RECORD at all, so the next `mamba env update` relinks conda's
+# copy over uv's and leaves every file uv added that conda's list omits.
+# When the two versions moved a module into a package (pip's build_env.py ->
+# build_env/, numpy's ctypeslib.py -> ctypeslib/) the leftover package
+# shadows the module and the import dies.
+#
+# Only flags packages whose file sets actually overlap: conda's C++ spdlog
+# (include/, lib/) and the PyPI spdlog Python binding (site-packages/) share
+# a name but no files, and that is fine.
+check_conda_uv_consistency() {
+    python - "$CONDA_PREFIX" <<'PYEOF'
+import csv, glob, json, os, re, sys
+
+prefix = sys.argv[1]
+sp = f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/"
+
+def conda_pkgs():
+    for meta in glob.glob(os.path.join(prefix, "conda-meta", "*.json")):
+        try:
+            d = json.load(open(meta))
+        except Exception:
+            continue
+        if d.get("name"):
+            yield d["name"], d.get("version"), {
+                f for f in d.get("files", []) if not f.endswith(".pyc")
+            }
+
+def dist_infos(name):
+    pats = {name, name.replace("-", "_"), name.replace("_", "-")}
+    seen = {}
+    for pat in pats:
+        for di in glob.glob(os.path.join(prefix, sp + pat + "-*.dist-info")):
+            m = re.match(r".*-([^-]+)\.dist-info$", os.path.basename(di))
+            rec = os.path.join(di, "RECORD")
+            if not m or not os.path.exists(rec):
+                continue
+            files = set()
+            with open(rec, newline="") as fh:
+                for row in csv.reader(fh):
+                    if row and row[0] and not row[0].endswith(".pyc"):
+                        files.add(os.path.normpath(os.path.join(sp, row[0])))
+            seen[m.group(1)] = files
+    return seen
+
+bad = []
+for name, cver, cfiles in conda_pkgs():
+    for uver, ufiles in dist_infos(name).items():
+        if uver == cver or not (cfiles & ufiles):
+            continue
+        missing = sum(1 for f in cfiles if not os.path.exists(os.path.join(prefix, f)))
+        bad.append((name, cver, uver, len(cfiles & ufiles), missing, len(cfiles)))
+
+# The per-user site directory (~/.local/lib/pythonX.Y/site-packages) is not part
+# of this env but conda envs inherit it, so a `pip install --user` anywhere on the
+# host can shadow env packages. setup_env.sh sets PYTHONNOUSERSITE=1 to keep it off
+# sys.path; this catches the case where that has been lost or overridden.
+import site
+
+shadow = []
+usersite = site.getusersitepackages()
+if site.ENABLE_USER_SITE and usersite in sys.path and os.path.isdir(usersite):
+    def scan(d):
+        found = {}
+        for pat in ("*.dist-info", "*.egg-info"):
+            for path in glob.glob(os.path.join(d, pat)):
+                m = re.match(r"(.+)-([^-]+)\.(?:dist|egg)-info$", os.path.basename(path))
+                if m:
+                    found[m.group(1).lower().replace("_", "-")] = m.group(2)
+        return found
+    env_pkgs, user_pkgs = scan(os.path.join(prefix, sp)), scan(usersite)
+    for name, uver in sorted(user_pkgs.items()):
+        ever = env_pkgs.get(name)
+        if ever != uver:
+            shadow.append((name, ever or "-- (only in ~/.local)", uver))
+
+if not bad and not shadow:
+    print("[OK]    conda/uv package ownership is consistent.")
+    print("[OK]    ~/.local site-packages is not on sys.path.")
+    sys.exit(0)
+
+if shadow:
+    print("[WARN]  ~/.local/lib site-packages is on sys.path and disagrees with the env.")
+    print("[WARN]  Whichever sorts first on sys.path wins, which is not something to")
+    print("[WARN]  rely on. Re-run setup_env.sh, or set PYTHONNOUSERSITE=1 by hand:")
+    print("[WARN]    conda env config vars set PYTHONNOUSERSITE=1 -n $CONDA_DEFAULT_ENV")
+    print(f"[WARN]  {'package':22s} {'in env':22s} {'in ~/.local'}")
+    for name, ever, uver in shadow:
+        print(f"[WARN]  {name:22s} {ever:22s} {uver}")
+    if bad:
+        print("[WARN]")
+
+if not bad:
+    sys.exit(0)
+
+print("[WARN]  These packages are owned by BOTH conda and uv at different versions.")
+print("[WARN]  The next `mamba env update` will relink conda's copy over uv's and")
+print("[WARN]  leave uv's extra files behind, which is how pip broke with")
+print("[WARN]  \"ImportError: cannot import name 'get_runnable_pip'\".")
+print(f"[WARN]  {'package':22s} {'conda-meta':12s} {'on disk':12s} {'shared':>7s} {'conda files gone':>17s}")
+for name, cver, uver, shared, missing, total in sorted(bad):
+    print(f"[WARN]  {name:22s} {cver:12s} {uver:12s} {shared:7d} {f'{missing}/{total}':>17s}")
+print("[WARN]  Fix by making one side own each: pin it in conda_environment.yaml to")
+print("[WARN]  the version the wheel stack needs, or stop uv from upgrading it.")
+PYEOF
+}
+
 # ── Hardware module: ARX5 ─────────────────────────────────────────────────────
 
 install_arx5() {
@@ -739,7 +851,13 @@ install_elite() {
     #   sudo apt install -y build-essential cmake libboost-all-dev libssh-dev \
     #                        libeigen3-dev liborocos-kdl-dev
     # Python build deps — the python_wheel target builds with --no-build-isolation.
-    uv pip install --upgrade pybind11 pybind11-stubgen build setuptools wheel
+    # Only the packages conda does NOT provide. pybind11, setuptools and wheel
+    # all come from conda_environment.yaml; `uv pip install --upgrade` on them
+    # overwrites conda's files in place, leaving conda-meta claiming a version
+    # that is no longer on disk. The next `mamba env update` then relinks conda's
+    # copy over uv's and leaves uv's extra files behind -- exactly how pip broke
+    # with `ImportError: cannot import name 'get_runnable_pip'`.
+    uv pip install --upgrade pybind11-stubgen build
 
     # Build the pybind wheel, pointing the Python SDK at our LOCAL C++ SDK
     # submodule (ELITE_CS_SDK_REPO is required and must be a local path — the
@@ -938,7 +1056,37 @@ USAGE
     fi
 
     echo -e "\n[INFO] Conda dependencies installed/updated for '$ENV_NAME'.\n"
-    uv pip install --upgrade pip
+
+    # Keep ~/.local/lib/pythonX.Y/site-packages off this env's sys.path.
+    #
+    # conda envs inherit the per-user site directory, and this host has one:
+    # a `pip install --user pillow-heif` on 2026-07-25 left 12 packages there,
+    # six of which also exist in the env at different versions (pillow 12.3.0
+    # vs 12.2.0, tqdm 4.68.4 vs 4.68.3, fsspec, huggingface-hub, filelock).
+    # The env's site-packages currently sorts first so the env copy wins, but
+    # that ordering is not something to rely on, and pillow-heif exists ONLY in
+    # ~/.local -- so it is importable here despite not being a dependency of
+    # this project. Deleting ~/.local is not an option: the system python3.12
+    # shares it, and it belongs to the user, not to this repo.
+    #
+    # Exported as well as recorded, so the rest of THIS run also ignores it --
+    # otherwise uv can see a ~/.local copy, consider the requirement satisfied,
+    # and skip installing the package into the env.
+    $CONDA_CMD env config vars set PYTHONNOUSERSITE=1 -n "$ENV_NAME" >/dev/null
+    export PYTHONNOUSERSITE=1
+    echo "[INFO] PYTHONNOUSERSITE=1 set for '$ENV_NAME' (ignores ~/.local site-packages)."
+    # NOTE: do NOT upgrade pip here. `pip` is a conda dependency
+    # (conda_environment.yaml), so conda owns those files. `uv pip install
+    # --upgrade pip` writes a newer pip over them without conda knowing; the
+    # next `conda env update` then relinks conda's older pip on top, leaving the
+    # newer version's extra files behind (e.g. pip 26.2.1's `_internal/build_env/`
+    # package shadowing 26.1.2's `_internal/build_env.py`). The result is a pip
+    # that cannot import itself:
+    #   ImportError: cannot import name 'get_runnable_pip' from 'pip._internal.utils.misc'
+    # Nothing in this script calls `python -m pip` — every install below goes
+    # through `uv pip` — so conda's pip is only there for the yaml `pip:` section.
+    # If pip really must be upgraded, do it with conda/mamba, not uv.
+
     # Ensure editable installs (PEP 660) work without downgrading newer compatible packages.
     ensure_python_package_min_version setuptools 71.0.0
     ensure_python_package_min_version wheel 0.40.0
@@ -1044,6 +1192,9 @@ USAGE
     else
         echo "[ERROR] Some packages failed verification. Review the [ERROR] lines above."
     fi
+
+    echo ""
+    check_conda_uv_consistency
 
     echo ""
     echo "[INFO] Lerobot-Xense installation complete."
