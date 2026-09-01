@@ -643,7 +643,11 @@ install_pico4() {
 
     if [[ ! -d "$SDK_SRC" ]]; then
         echo "ERROR: $SDK_SRC not found."
-        echo "  Run: git submodule update --init third_party/XenseVR-PC-Service"
+        # Full history is ~277 MiB for a 136 MiB tip tree: the bulk is binaries
+        # upstream has already deleted (win VC redists, Unity demo players,
+        # older libPXREARobotSDK.so builds). Nothing here reads that history,
+        # so shallow-fetch — 33 MiB of .git instead of 279 MiB.
+        echo "  Run: git submodule update --init --depth 1 third_party/XenseVR-PC-Service"
         return 1
     fi
 
