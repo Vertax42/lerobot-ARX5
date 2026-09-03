@@ -1,7 +1,7 @@
 # Internal GitLab submodule URLs.
 #
 # The committed .gitmodules points every third_party submodule at its public
-# GitHub mirror (git@github.com:Vertax42/*). This file keeps the equivalent
+# GitHub mirror (git@github.com:XenseRobotics-AI/*). This file keeps the equivalent
 # internal GitLab URLs for use on the company network.
 #
 # The GitLab host is NOT written here — this repository is public, and the host

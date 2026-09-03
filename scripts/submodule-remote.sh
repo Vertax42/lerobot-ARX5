@@ -5,7 +5,7 @@
 # (.gitmodules.gitlab).
 #
 # Usage:
-#   scripts/submodule-remote.sh github                          # public GitHub (git@github.com:Vertax42/*)
+#   scripts/submodule-remote.sh github                          # public GitHub (git@github.com:XenseRobotics-AI/*)
 #   XENSE_GITLAB_HOST=<host> scripts/submodule-remote.sh gitlab # internal GitLab (git@<host>:physical-ai/*)
 #
 # Then fetch/checkout the submodules:
