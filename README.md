@@ -30,7 +30,7 @@ bash Miniforge3-$(uname)-$(uname -m).sh
 ```bash
 git clone \
   --recurse-submodules \
-  https://github.com/Vertax42/lerobot-xense.git
+  https://github.com/XenseRobotics-AI/lerobot-xense.git
 cd lerobot-xense
 ```
 
@@ -41,7 +41,7 @@ cd lerobot-xense
 > ```
 
 > **Optional — internal network (GitLab mirror).** The default clone above uses
-> the public GitHub mirrors (`git@github.com:Vertax42/*`). Company-network
+> the public GitHub mirrors (`git@github.com:XenseRobotics-AI/*`). Company-network
 > developers can instead point the submodules at the internal GitLab server;
 > the internal URLs live in [`.gitmodules.gitlab`](.gitmodules.gitlab) and a
 > helper repoints your **local** remotes without touching the committed
@@ -577,7 +577,7 @@ If you use this fork (LeRobot-Xense) specifically, please also cite:
 @misc{vertax2026lerobotxense,
     author = {vertax42 and Xense Robotics Team},
     title = {LeRobot-Xense: LeRobot with Xense Tactile Robotics Support},
-    howpublished = "\url{https://github.com/Vertax42/lerobot-xense}",
+    howpublished = "\url{https://github.com/XenseRobotics-AI/lerobot-xense}",
     year = {2026}
 }
 ```
