@@ -135,19 +135,19 @@ bash ./setup_env.sh --install --core
 bash ./setup_env.sh --install --help
 ```
 
-| Selector                  | Builds                                    | Robots / teleoperators enabled            |
-| ------------------------- | ----------------------------------------- | ----------------------------------------- |
-| `--flexiv`, `--bi_flexiv` | `flexiv_rt` (+ `xense`)                   | `flexiv_rizon4_rt`, `bi_flexiv_rizon4_rt` |
-| `--elite`, `--bi_elite`   | `elite_cs_sdk` (+ `xense`)                | `elite_cs66_rt`, `bi_elite_cs66_rt`       |
-| `--taccap`, `--bi_taccap` | `xense.taccap` (+ `xense`)                | `taccap_follower` gripper (on any arm)    |
-| `--xense`                 | `xensesdk` + `xgripper` (XGripper)        | `serial` gripper + tactile sensors        |
-| `--arx5`, `--bi_arx5`     | `pyarx`                                   | `arx5_follower`, `bi_arx5`                |
-| `--pico4`, `--bi_pico4`   | `xensevr_pc_service_sdk` (+ PC Service `.deb`) | `pico4`, `bi_pico4` teleop           |
-| `--spacemouse`            | `pyspacemouse`                            | `spacemouse` teleop                       |
-| `--dynamixel`, `--trlc`   | `dynamixel-sdk`                           | `trlc_leader`, `bi_trlc` teleop           |
-| `--all`                   | everything (explicit)                     | —                                         |
-| `--core`, `--none`        | nothing (core only)                       | —                                         |
-| _(no selector)_           | everything (default, backward compatible) | —                                         |
+| Selector                  | Builds                                         | Robots / teleoperators enabled            |
+| ------------------------- | ---------------------------------------------- | ----------------------------------------- |
+| `--flexiv`, `--bi_flexiv` | `flexiv_rt` (+ `xense`)                        | `flexiv_rizon4_rt`, `bi_flexiv_rizon4_rt` |
+| `--elite`, `--bi_elite`   | `elite_cs_sdk` (+ `xense`)                     | `elite_cs66_rt`, `bi_elite_cs66_rt`       |
+| `--taccap`, `--bi_taccap` | `xense.taccap` (+ `xense`)                     | `taccap_follower` gripper (on any arm)    |
+| `--xense`                 | `xensesdk` + `xgripper` (XGripper)             | `serial` gripper + tactile sensors        |
+| `--arx5`, `--bi_arx5`     | `pyarx`                                        | `arx5_follower`, `bi_arx5`                |
+| `--pico4`, `--bi_pico4`   | `xensevr_pc_service_sdk` (+ PC Service `.deb`) | `pico4`, `bi_pico4` teleop                |
+| `--spacemouse`            | `pyspacemouse`                                 | `spacemouse` teleop                       |
+| `--dynamixel`, `--trlc`   | `dynamixel-sdk`                                | `trlc_leader`, `bi_trlc` teleop           |
+| `--all`                   | everything (explicit)                          | —                                         |
+| `--core`, `--none`        | nothing (core only)                            | —                                         |
+| _(no selector)_           | everything (default, backward compatible)      | —                                         |
 
 Notes:
 

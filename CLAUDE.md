@@ -182,7 +182,7 @@ Three consequences worth remembering:
 `install_xensevr_service()` is deliberately non-fatal on a failed download — it
 warns and returns 0, and `install_pico4()` is what refuses to continue, because
 the missing-SDK message there names the actual files it could not find. Also
-note the `.part` staging on the curl: handing a *complete* file to `curl -C -`
+note the `.part` staging on the curl: handing a _complete_ file to `curl -C -`
 asks for a range starting at EOF, the server answers 416, and
 `--retry-all-errors` then retries that five times before giving up.
 
