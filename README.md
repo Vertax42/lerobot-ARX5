@@ -62,7 +62,6 @@ This repository uses `third_party/` git submodules to manage hardware SDK depend
 | ---------------------------------------- | ----------------------------------------------- |
 | `third_party/ARX5_SDK`                   | `pyarx`                                         |
 | `third_party/libpyflexiv`                | `flexiv_rt`                                     |
-| `third_party/XenseVR-PC-Service`         | `xensevr_pc_service_sdk`                        |
 | `third_party/XGripper`                   | `xgripper`                                      |
 | `third_party/elite-robots-cs-sdk`        | Elite CS C++ SDK (builds `elite_cs_sdk`)        |
 | `third_party/elite-robots-cs-sdk-python` | `elite_cs_sdk` (Elite CS Python bindings)       |
@@ -72,6 +71,16 @@ This repository uses `third_party/` git submodules to manage hardware SDK depend
 > the published cp312 manylinux wheel, which bundles the patched `libxense_c.so`
 > flash reader). The Elite Python SDK is built against the local
 > `third_party/elite-robots-cs-sdk` C++ submodule (no network fetch of the C++ source).
+
+> **`xensevr_pc_service_sdk` (Pico4 teleop/tracker) has no submodule either.** Its
+> pybind11 sources live in-repo under
+> `src/lerobot/teleoperators/pico4/xensevr-pc-service-pybind/`, and the C SDK
+> they link against — `PXREARobotSDK.h` plus `libPXREARobotSDK.so` — is copied
+> straight out of the `xensevr-pc-service` `.deb` that `--install` fetches
+> (see Step 3). The daemon in that `.deb` is what the teleop talks to at
+> runtime anyway, so it was never optional; carrying a 33 MiB checkout of the
+> service's Qt tree and prebuilt gRPC archives just to rebuild a library we
+> were already downloading was the part that was.
 
 **Step 2:** 🐍 Create and activate the mamba environment:
 
@@ -96,7 +105,11 @@ This step will:
 - Update the conda environment from `conda_environment.yaml`
 - Install the main package from `pyproject.toml`
 - Install `xensesdk` from PyPI (`xensesdk==2.1.2`)
-- Build and install all `third_party` SDK packages: `pyarx`, `flexiv_rt`, `xensevr_pc_service_sdk`, `xgripper`, `elite_cs_sdk` (Elite CS — built from the C++ + Python submodules), and `xense.taccap` (TacCap UMI gripper)
+- Install the XenseVR PC Service daemon from its `.deb` (~116 MB, fetched from the
+  [v0.2.1 release](https://github.com/XenseRobotics-AI/XenseVR-PC-Service/releases/tag/v0.2.1)
+  into `/opt/apps/roboticsservice`; override with `XENSEVR_DEB_URL`, or point
+  `XENSEVR_DEB` at a local file for offline installs) — only with `--pico4` / `--bi_pico4` or a full install
+- Build and install all `third_party` SDK packages: `pyarx`, `flexiv_rt`, `xensevr_pc_service_sdk` (built against the `.deb`'s client SDK), `xgripper`, `elite_cs_sdk` (Elite CS — built from the C++ + Python submodules), and `xense.taccap` (TacCap UMI gripper)
 - Configure SpaceMouse udev rules and HID permissions automatically
 
 > You will be prompted for `sudo` password during installation (for ARX5 real-time capability and udev rules).
@@ -129,7 +142,7 @@ bash ./setup_env.sh --install --help
 | `--taccap`, `--bi_taccap` | `xense.taccap` (+ `xense`)                | `taccap_follower` gripper (on any arm)    |
 | `--xense`                 | `xensesdk` + `xgripper` (XGripper)        | `serial` gripper + tactile sensors        |
 | `--arx5`, `--bi_arx5`     | `pyarx`                                   | `arx5_follower`, `bi_arx5`                |
-| `--pico4`, `--bi_pico4`   | `xensevr_pc_service_sdk`                  | `pico4`, `bi_pico4` teleop                |
+| `--pico4`, `--bi_pico4`   | `xensevr_pc_service_sdk` (+ PC Service `.deb`) | `pico4`, `bi_pico4` teleop           |
 | `--spacemouse`            | `pyspacemouse`                            | `spacemouse` teleop                       |
 | `--dynamixel`, `--trlc`   | `dynamixel-sdk`                           | `trlc_leader`, `bi_trlc` teleop           |
 | `--all`                   | everything (explicit)                     | —                                         |

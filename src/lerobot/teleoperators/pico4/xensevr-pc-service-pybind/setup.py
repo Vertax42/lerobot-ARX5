@@ -9,6 +9,42 @@ from distutils.version import LooseVersion
 from setuptools import Command, Extension, find_packages, setup  # Added Command
 from setuptools.command.build_ext import build_ext
 
+#: Fallback when the package version cannot be read — see :func:`sdk_version`.
+FALLBACK_VERSION = "0.2.1"
+
+#: The Debian package that ships the client SDK this extension links against.
+SDK_PACKAGE = "xensevr-pc-service"
+
+
+def sdk_version():
+    """Version of the XenseVR-PC-Service SDK these bindings were built against.
+
+    Derived, not declared. The native side of this package is not its own
+    artifact: setup_env.sh copies ``PXREARobotSDK.h`` and
+    ``libPXREARobotSDK.so`` out of the installed ``xensevr-pc-service`` .deb
+    before this build runs, so what the extension can do is decided entirely by
+    which release of that package is on the host. A hand-written string here
+    duplicates that fact and drifts from it — it sat at 0.1.0 through the 0.2.0
+    bump that added the Pico camera calls, so `pip list` denied a capability
+    the module had.
+
+    Asking dpkg is the right question: the .deb is not a proxy for the SDK, it
+    *is* where the SDK came from.
+    """
+    try:
+        version = subprocess.check_output(  # nosec B607
+            ["dpkg-query", "-W", "-f=${Version}", SDK_PACKAGE],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        # No dpkg (non-Debian host), or the package is not installed. Better a
+        # stale-but-plausible version than a failed build; setup_env.sh has
+        # already refused to get this far without the SDK on disk.
+        print(f"[pybind] cannot read {SDK_PACKAGE} version from dpkg; falling back to {FALLBACK_VERSION}")
+        return FALLBACK_VERSION
+    return version or FALLBACK_VERSION
+
 
 class CMakeExtension(Extension):
     def __init__(self, name, sourcedir=""):
@@ -127,7 +163,7 @@ class UninstallCommand(Command):
 
 setup(
     name="xensevr_pc_service_sdk",
-    version="0.1.0",
+    version=sdk_version(),
     author="Vertax",
     author_email="yangxincheng@xenserobotics.com",
     description="A Python binding for XenseVR PC Service SDK using pybind11 and CMake",

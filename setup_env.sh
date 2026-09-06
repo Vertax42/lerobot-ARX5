@@ -632,34 +632,155 @@ install_flexiv() {
 
 # ── Hardware module: Pico4 ────────────────────────────────────────────────────
 
+# Install the XenseVR PC Service daemon from its .deb. The package (~116 MB) is
+# the binary service the Pico4 teleop/tracker talks to (installs to
+# /opt/apps/roboticsservice); it is NOT vendored in-repo. By default,
+# setup_env.sh downloads the matching-arch asset directly from the GitHub release
+# ($XENSEVR_DEB_URL overrides the default release URL).
+# $XENSEVR_DEB remains an explicit path override for offline/patched builds; no
+# implicit dist/ or ~/Downloads cache lookup is done.
+# Non-fatal on download failure: install_pico4() checks for the SDK afterwards
+# and reports the real problem there. Idempotent: same installed version is skipped.
+install_xensevr_service() {
+    echo ""
+    echo "── XenseVR PC Service (.deb daemon) ──"
+
+    local ARCH DEB_VER DEB_URL DEB
+    ARCH="$(dpkg --print-architecture 2>/dev/null || echo amd64)"   # amd64 | arm64
+    DEB_VER="0.2.1"
+
+    # 0.2.x ships amd64 only. Without this, an arm64 host would build a URL
+    # for an asset that does not exist and fail with a bare 404 — pinning it
+    # to the last release that has an arm64 build is both truthful and
+    # working, at the cost of no Pico camera support there.
+    if [[ "$ARCH" == "arm64" && -z "${XENSEVR_DEB_URL:-}${XENSEVR_DEB:-}" ]]; then
+        DEB_VER="0.1.0"
+        echo "  NOTE: arm64 detected — pinning to v${DEB_VER}, the newest release with"
+        echo "        an arm64 asset. 0.2.x (Pico camera support) is amd64-only, and"
+        echo "        XenseVR-PC-Service dropped its aarch64 tree, so building one is"
+        echo "        no longer a matter of running a script in that repository."
+    fi
+
+    DEB_URL="${XENSEVR_DEB_URL:-https://github.com/XenseRobotics-AI/XenseVR-PC-Service/releases/download/v${DEB_VER}/XenseVR-PC-Service_${DEB_VER}_${ARCH}.deb}"
+
+    local WANT INSTALLED STATUS
+    # Check the status, not just the version. `dpkg -r` leaves the package in
+    # `deinstall ok config-files`, and dpkg-query still reports its version
+    # there — so matching on the version alone declares a daemon installed
+    # when /opt/apps/roboticsservice is gone, skips the install, and fails
+    # later somewhere far less obvious.
+    STATUS="$(dpkg-query -W -f='${Status}' xensevr-pc-service 2>/dev/null || true)"
+    INSTALLED="$(dpkg-query -W -f='${Version}' xensevr-pc-service 2>/dev/null || true)"
+
+    # Decide before downloading. DEB_VER already names the version this script
+    # would install, so fetching 116 MB only to read the same number back out of
+    # the package is waste on every re-run of --install. An explicit override is
+    # exempt: it can be a different build carrying the same version, and only
+    # the file itself can say.
+    if [[ -z "${XENSEVR_DEB:-}${XENSEVR_DEB_URL:-}" && "$STATUS" == "install ok installed" && "$INSTALLED" == "$DEB_VER" ]]; then
+        echo "  xensevr-pc-service $INSTALLED already installed — skipping."
+        return 0
+    fi
+
+    DEB="${XENSEVR_DEB:-}"
+    if [[ -n "$DEB" ]]; then
+        if [[ ! -f "$DEB" ]]; then
+            echo "  WARN: XENSEVR_DEB points to a missing file: $DEB"
+            echo "  WARN: skipping service install."
+            return 0
+        fi
+        echo "  Using explicit .deb override: $DEB"
+    else
+        DEB="${TMPDIR:-/tmp}/XenseVR-PC-Service_${DEB_VER}_${ARCH}.deb"
+        if [[ -f "$DEB" ]] && dpkg-deb -f "$DEB" Version >/dev/null 2>&1; then
+            echo "  Reusing previously downloaded $DEB"
+        else
+            # An unreadable leftover is worth less than the bandwidth to replace it.
+            rm -f "$DEB"
+            echo "  Downloading ${ARCH} asset from:"
+            echo "    $DEB_URL"
+            # ~116 MB. Retry and resume rather than losing the whole transfer to
+            # one dropped connection — this package is now the only source of the
+            # client SDK the Python bindings link against, so a failure here is
+            # not something a local build can paper over.
+            #
+            # Staged through .part deliberately: handing a *complete* file to
+            # `curl -C -` asks for a range that starts at EOF, the server answers
+            # 416, and --retry-all-errors then retries that five times before
+            # giving up. Only a partial transfer is ever resumed.
+            local RETRY=(--retry 5 --retry-delay 2)
+            if curl --help all 2>/dev/null | grep -q -- '--retry-all-errors'; then
+                RETRY+=(--retry-all-errors)   # curl >= 7.71; covers a mid-transfer drop
+            fi
+            if ! curl -fL "${RETRY[@]}" -C - "$DEB_URL" -o "$DEB.part"; then
+                echo "  WARN: download failed — skipping service install."
+                echo "  The partial file is kept at $DEB.part — re-run to resume it."
+                echo "  Or get it from https://github.com/XenseRobotics-AI/XenseVR-PC-Service/releases"
+                echo "  then: sudo dpkg -i XenseVR-PC-Service_*_${ARCH}.deb"
+                return 0
+            fi
+            mv "$DEB.part" "$DEB"
+        fi
+    fi
+
+    WANT="$(dpkg-deb -f "$DEB" Version 2>/dev/null)"
+    if [[ "$STATUS" == "install ok installed" && "$INSTALLED" == "$WANT" ]]; then
+        echo "  xensevr-pc-service $INSTALLED already installed — skipping."
+        return 0
+    fi
+
+    echo "  Installing xensevr-pc-service ${WANT:-?} from: $DEB"
+    sudo dpkg -i "$DEB" || sudo apt-get install -f -y
+    echo "  Installed to /opt/apps/roboticsservice. Start the service with:"
+    echo "    /opt/apps/roboticsservice/runService.sh"
+}
+
 install_pico4() {
     echo ""
     echo "══════════════════════════════════════════"
     echo " XenseVR-PC-Service  →  xensevr_pc_service_sdk"
     echo "══════════════════════════════════════════"
 
-    local SDK_SRC="$PROJECT_ROOT/third_party/XenseVR-PC-Service"
     local PYBIND_DIR="$PROJECT_ROOT/src/lerobot/teleoperators/pico4/xensevr-pc-service-pybind"
 
-    if [[ ! -d "$SDK_SRC" ]]; then
-        echo "ERROR: $SDK_SRC not found."
-        # Full history is ~277 MiB for a 136 MiB tip tree: the bulk is binaries
-        # upstream has already deleted (win VC redists, Unity demo players,
-        # older libPXREARobotSDK.so builds). Nothing here reads that history,
-        # so shallow-fetch — 33 MiB of .git instead of 279 MiB.
-        echo "  Run: git submodule update --init --depth 1 third_party/XenseVR-PC-Service"
+    # Install the PC Service daemon (.deb) the Python SDK will talk to. It also
+    # ships the client SDK the bindings link against, which is why there is no
+    # longer a XenseVR-PC-Service submodule to compile: the .deb's
+    # libPXREARobotSDK.so is the same artifact that build used to produce, and
+    # keeping a 33 MiB shallow checkout of prebuilt gRPC archives around to
+    # rebuild it cost more than it was worth. The trade is that an SDK source
+    # fix now has to travel through a .deb release rather than through
+    # `--install`.
+    install_xensevr_service
+
+    # Take the header and .so straight out of the installed package. SDK/x64 on
+    # amd64, SDK/arm64 on arm64 — the names come from the service's own install
+    # step, not from dpkg's architecture strings.
+    local SDK_ROOT="/opt/apps/roboticsservice/SDK"
+    local SDK_LIBDIR
+    case "$(dpkg --print-architecture 2>/dev/null || echo amd64)" in
+        arm64) SDK_LIBDIR="$SDK_ROOT/arm64" ;;
+        *)     SDK_LIBDIR="$SDK_ROOT/x64" ;;
+    esac
+
+    if [[ ! -f "$SDK_ROOT/include/PXREARobotSDK.h" || ! -f "$SDK_LIBDIR/libPXREARobotSDK.so" ]]; then
+        echo "ERROR: the XenseVR PC Service SDK is not on this host."
+        echo "  Expected:"
+        echo "    $SDK_ROOT/include/PXREARobotSDK.h"
+        echo "    $SDK_LIBDIR/libPXREARobotSDK.so"
+        echo "  Both come from the xensevr-pc-service .deb, which the step above"
+        echo "  installs. If that step warned about a failed download, fix that"
+        echo "  first — the bindings cannot be built without it."
         return 1
     fi
 
-    # Build the C SDK
-    bash "$SDK_SRC/RoboticsService/PXREARobotSDK/build.sh"
-
-    # Copy headers and .so into the pybind directory
-    local CSDK_DIR="$SDK_SRC/RoboticsService/PXREARobotSDK"
+    # Both architectures stage flat into include/ and lib/; the pybind
+    # CMakeLists looks there on every UNIX host. nlohmann is not in the .deb —
+    # it comes from conda (nlohmann_json in conda_environment.yaml) and the
+    # CMakeLists find_package()s it.
     mkdir -p "$PYBIND_DIR/include" "$PYBIND_DIR/lib"
-    cp "$CSDK_DIR/PXREARobotSDK.h" "$PYBIND_DIR/include/"
-    cp -r "$CSDK_DIR/nlohmann" "$PYBIND_DIR/include/"
-    cp "$CSDK_DIR/build/libPXREARobotSDK.so" "$PYBIND_DIR/lib/"
+    cp "$SDK_ROOT/include/PXREARobotSDK.h" "$PYBIND_DIR/include/"
+    cp "$SDK_LIBDIR/libPXREARobotSDK.so" "$PYBIND_DIR/lib/"
 
     # Build and install the Python bindings
     pushd "$PYBIND_DIR" > /dev/null

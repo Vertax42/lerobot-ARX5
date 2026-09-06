@@ -11,11 +11,18 @@ message(STATUS "OS_PLATFORM (ISA_NAME): ${ISA_NAME}")
 include(GNUInstallDirs) # Add this line
 find_package(pybind11 REQUIRED)
 
+# py_bindings.cpp parses the device state JSON with nlohmann. This used to
+# resolve by accident: setup_env.sh copied a vendored nlohmann/ out of the
+# XenseVR-PC-Service submodule into include/ alongside the SDK header. That
+# submodule is gone — the SDK now comes from the installed .deb, which does not
+# carry nlohmann — so the dependency has to be declared and comes from conda.
+find_package(nlohmann_json CONFIG REQUIRED)
+
 # Python Bindings for py_bindings.cpp
 pybind11_add_module(xensevr_pc_service_sdk MODULE bindings/py_bindings.cpp)
 
 # Link xensevr_pc_service_sdk module against pybind11
-target_link_libraries(xensevr_pc_service_sdk PRIVATE pybind11::module)
+target_link_libraries(xensevr_pc_service_sdk PRIVATE pybind11::module nlohmann_json::nlohmann_json)
 
 # Add include directories and link libraries for PXREARobotSDK to xensevr_pc_service_sdk target
 if(WIN32)
@@ -29,18 +36,15 @@ if(WIN32)
 endif()
 
 if(UNIX)
-  # ISA_NAME is set by cmake_host_system_information above
-  if(ISA_NAME STREQUAL "aarch64")
-    target_include_directories(xensevr_pc_service_sdk PUBLIC
-        ${PROJECT_SOURCE_DIR}/include/aarch64
-    )
-    target_link_directories(xensevr_pc_service_sdk PUBLIC ${PROJECT_SOURCE_DIR}/lib/aarch64)
-  else()
-    target_include_directories(xensevr_pc_service_sdk PUBLIC
-        ${PROJECT_SOURCE_DIR}/include
-    )
-    target_link_directories(xensevr_pc_service_sdk PUBLIC ${PROJECT_SOURCE_DIR}/lib)
-  endif()
+  # No per-architecture subdirectory: setup_env.sh picks SDK/x64 or SDK/arm64
+  # out of the installed .deb and stages the result flat into include/ and
+  # lib/, so what lands here is already the right build for this host. The
+  # aarch64 branch that used to live here looked in include/aarch64, which
+  # nothing creates any more.
+  target_include_directories(xensevr_pc_service_sdk PUBLIC
+      ${PROJECT_SOURCE_DIR}/include
+  )
+  target_link_directories(xensevr_pc_service_sdk PUBLIC ${PROJECT_SOURCE_DIR}/lib)
   target_link_libraries(xensevr_pc_service_sdk PUBLIC
       PXREARobotSDK
   )
