@@ -4,9 +4,6 @@
 [submodule "third_party/libpyflexiv"]
 	path = third_party/libpyflexiv
 	url = git@github.com:XenseRobotics-AI/libpyflexiv.git
-[submodule "third_party/XenseVR-PC-Service"]
-	path = third_party/XenseVR-PC-Service
-	url = git@github.com:XenseRobotics-AI/XenseVR-PC-Service.git
 [submodule "third_party/XGripper"]
 	path = third_party/XGripper
 	url = git@github.com:XenseRobotics-AI/XGripper.git

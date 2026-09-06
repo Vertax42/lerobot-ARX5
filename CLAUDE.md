@@ -140,6 +140,55 @@ Things that do **not** work, so nobody re-tries them:
   `packaging 26.3`. For those the fix is the other direction: stop uv from
   upgrading them and let conda's version stand.
 
+## The Pico4 client SDK comes from the `.deb`, not from a submodule
+
+**There is no `third_party/XenseVR-PC-Service` submodule.**
+`xensevr_pc_service_sdk` is built from **our** pybind under
+`src/lerobot/teleoperators/pico4/xensevr-pc-service-pybind/`, and the C SDK it
+links — `PXREARobotSDK.h` + `libPXREARobotSDK.so` — is copied by `setup_env.sh`
+out of the installed `xensevr-pc-service` `.deb`
+(`/opt/apps/roboticsservice/SDK/{include,x64}`; `arm64` on arm64 hosts). The
+pybind's `include/` and `lib/` are gitignored staging, not sources.
+
+The submodule was a 279 MiB `.git` (33 MiB with `--depth 1`) of Qt service
+sources and prebuilt gRPC archives, cloned purely to rebuild a library the
+`.deb` already shipped — and the `.deb` was never optional, because its daemon
+is what the teleop talks to at runtime. The header in the package is
+byte-identical to the one the submodule built against, and the extension built
+from it exports the same 36 symbols.
+
+**The trade:** an SDK _source_ fix now has to travel through a `.deb` release —
+bump `debPack/control`, rebuild, publish, and bump `DEB_VER` in `setup_env.sh`.
+Re-releasing the same version number does not work: `install_xensevr_service()`
+skips a `.deb` whose version already matches what dpkg reports, so a host would
+keep the old SDK and silently build its bindings against it.
+
+Three consequences worth remembering:
+
+- **nlohmann comes from conda** (`nlohmann_json=3.11.3` in
+  `conda_environment.yaml`, `find_package`d by the pybind CMakeLists).
+  `py_bindings.cpp` needs `<nlohmann/json.hpp>`; it used to resolve by accident
+  because the submodule vendored a copy that `setup_env.sh` shovelled into
+  `include/`. The `.deb` does not carry it.
+- **`setup.py:sdk_version()` asks dpkg**, not a hardcoded string. It sat at
+  `0.1.0` through the 0.2.0 bump that added the Pico camera calls, so `pip list`
+  denied a capability the module had. The `.deb` is not a proxy for the SDK, it
+  _is_ where the SDK came from.
+- **The pybind CMakeLists no longer branches on `aarch64`.** It used to point an
+  arm64 build at `include/aarch64` / `lib/aarch64`; `install_pico4()` picks
+  `SDK/x64` or `SDK/arm64` itself and stages the result flat, so what lands in
+  `include/` is already the right build for the host.
+
+`install_xensevr_service()` is deliberately non-fatal on a failed download — it
+warns and returns 0, and `install_pico4()` is what refuses to continue, because
+the missing-SDK message there names the actual files it could not find. Also
+note the `.part` staging on the curl: handing a _complete_ file to `curl -C -`
+asks for a range starting at EOF, the server answers 416, and
+`--retry-all-errors` then retries that five times before giving up.
+
+To work on the C SDK itself, clone `XenseRobotics-AI/XenseVR-PC-Service`
+separately.
+
 ## Repo weight: attribute it to a ref, not to a path
 
 The repo was 324 MiB against an 8.8 MiB working tree until 2026-08-25. All of it
@@ -191,7 +240,8 @@ Things that do **not** work, so nobody re-tries them:
   immediately, server size does not.
 - **`filter-repo` on `main` for the residual 13 MiB.** What is left is
   `libPXREARobotSDK.so` (8 MiB) and `arx5_interface.cpython-311-*.so` (5 MiB),
-  historical residue from before those SDKs became the `third_party/XenseVR-PC-Service`
-  and `third_party/ARX5_SDK` submodules — neither is in `HEAD` any more. Rewriting
+  historical residue from before those SDKs moved out of the tree — ARX5 to the
+  `third_party/ARX5_SDK` submodule, the Pico4 client SDK to the
+  `xensevr-pc-service` `.deb` (see above) — neither is in `HEAD` any more. Rewriting
   `main` breaks every outstanding clone and PR to land 13 MiB on a 45 MiB repo,
   which is already the same order as the sister repo's 36 MiB.
